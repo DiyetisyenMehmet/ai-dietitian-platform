@@ -1,27 +1,49 @@
 # AI Dietitian Platform
 
-Kurumsal AI Diyetisyen Platformu.
+Kurumsal, AI destekli diyetisyen platformu. Modular Monolith + Domain-Driven Design.
 
-## Durum (Mevcut İçerik)
+## Depo Yapısı
 
-Bu depo şu anda projenin **mimari ve planlama dokümantasyonunu** içermektedir.
-Uygulama kaynak kodu (frontend/backend) henüz bu çalışma alanında üretilmemiştir;
-dolayısıyla depoya import edilecek frontend/backend kaynak dosyası bulunmamaktadır.
+```
+.
+├── docs/                     # Mimari & planlama dokümantasyonu (FROZEN)
+├── frontend/                 # Next.js 15 web uygulaması (App Router, TypeScript)
+├── PROJECT_MEMORY.md         # Proje hafızası ve faz özetleri
+├── ARCHITECTURE_DECISIONS.md # Mimari kararlar (AD-001 ... AD-045)
+└── TODO_MASTER.md            # Faz bazlı ana görev listesi
+```
 
-### İçerik
+## Frontend (Sprint 1 — Foundation)
 
-- `PROJECT_MEMORY.md` — Proje hafızası, faz özetleri ve çalışma kuralları.
-- `ARCHITECTURE_DECISIONS.md` — Mimari kararlar kaydı (AD-001 … AD-045).
-- `TODO_MASTER.md` — Faz bazlı ana görev listesi ve ilerleme durumu.
-- `docs/Uygulama Projesi.pdf` — Uygulama proje spesifikasyonu.
+Teknoloji: **Next.js 15** · TypeScript · App Router · Tailwind CSS v3 · shadcn/ui tabanlı
+bileşenler · next-themes · ESLint · Prettier.
 
-## Mimari Özet
+Domain odaklı katmanlı klasör mimarisi:
 
-- Modular Monolith (ileride seçici mikroservisleşme) — AD-002.
-- Domain-Driven Design; her modül Application / Domain / Infrastructure katmanlarına sahip.
-- AI Application (kullanıcıya dönük) ile AI Orchestrator (yürütme/routing/policy) ayrı.
-- Production-grade platform modülleri: Background Jobs, Cache, Feature Flags,
-  Consent Management, Prompt Registry, Rate Limiting vb.
-- Sağlık verisi için PHI minimization zorunlu (AD-039).
+```
+frontend/src/
+├── app/                      # App Router (route + layout)
+├── presentation/            # UI katmanı (components, layout, providers, hooks)
+│   ├── components/ui/         #   Reusable UI: Button, Card, Input, Modal, Skeleton...
+│   ├── components/layout/     #   AppShell, Header, BottomNavigation, ThemeToggle
+│   ├── components/feedback/   #   Loading, ErrorState, EmptyState
+│   └── providers/             #   ThemeProvider, AppProviders
+├── application/             # Uygulama katmanı (config, services)
+├── domain/                  # Domain katmanı (iş kuralları — sonraki sprintler)
+├── infrastructure/          # Dış dünya (API http-client)
+└── shared/                  # Ortak yardımcılar (lib, constants, types)
+```
 
-Ayrıntılar için `ARCHITECTURE_DECISIONS.md` ve `PROJECT_MEMORY.md` dosyalarına bakınız.
+### Geliştirme
+
+```bash
+cd frontend
+npm install
+npm run dev          # http://localhost:3000
+npm run lint
+npm run type-check
+npm run build
+```
+
+Backend API adresi `frontend/.env` içinde `NEXT_PUBLIC_API_BASE_URL` ile yapılandırılır
+(bkz. `.env.example`).
