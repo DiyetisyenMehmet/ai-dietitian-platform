@@ -1,0 +1,25 @@
+# TODO_MASTER
+
+- [x] Faz 1 Doküman Analizi
+- [x] Faz 2 Modül Tasarımı (ilk sürüm)
+- [x] Faz 2 Revizyonu: büyük ölçekli SaaS teknik modüllerinin yeniden değerlendirilmesi
+- [x] Faz 2 Revizyonu: ek platform/mimari bileşenlerin bağımsız değerlendirilmesi
+- [ ] Faz 2 onayı
+- [x] Faz 3 Yazılım Mimarisi (Production-Grade Baseline)
+- [ ] Faz 4 Frontend Mimarisi
+- [ ] Faz 5 Backend Mimarisi
+- [ ] Faz 6 Veritabanı Şeması
+- [ ] Faz 7 AI Mimarisi
+- [ ] Faz 8 API Mimarisi
+- [ ] Faz 9 Authentication & Authorization
+- [ ] Faz 10 Cloud Infrastructure
+- [ ] Faz 11 DevOps Workflow
+- [ ] Faz 12 Monitoring & Logging
+- [ ] Faz 13 Security Architecture
+- [ ] Faz 14 RAG / Knowledge Base Architecture
+- [ ] Faz 15 Project Folder Structure
+- [ ] Faz 16 Development Roadmap
+- [ ] Faz 17 Milestones
+- [ ] Faz 18 Implementation Order
+- [ ] Faz 19 Complexity Estimation
+- [ ] Faz 20 Module Dependencies

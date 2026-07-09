@@ -1,0 +1,52 @@
+# ARCHITECTURE_DECISIONS
+
+- AD-001: Domain-Driven modüler mimari uygulanacak.
+- AD-002: Başlangıçta Modular Monolith, ileride seçici mikroservisleşme.
+- AD-003: Modüller düşük bağlılık, yüksek uyum ilkesiyle tasarlanacak.
+- AD-004: Business domain modüllerine ek olarak production-grade platform modülleri açıkça tanımlanacak.
+- AD-005: AI özellikleri ile AI yürütme katmanı ayrılacak.
+  - User-facing AI capabilities => AI Application domain
+  - Model execution, routing, policy, fallback => AI Orchestrator
+- AD-006: Prompt Registry mantıksal modül olarak tanımlanacak; prompt versiyonlama ve audit zorunlu kabul edilecek.
+- AD-007: Workflow Engine gerekli kabul edildi; MVP'de sınırlı kapsamla uygulanacak.
+- AD-008: Background Jobs, OCR, bildirim, senkronizasyon, raporlama ve AI işlemleri için zorunlu platform modülüdür.
+- AD-009: Cache, performans ve maliyet optimizasyonu için shared platform capability olarak tasarlanacak.
+- AD-010: Feature Flags & Runtime Configuration, kontrollü rollout ve kill switch için gerekli kabul edildi.
+- AD-011: Consent Management, sağlık verisi ve regülasyon gereksinimleri nedeniyle ayrı mantıksal modüldür.
+- AD-012: API Gateway ileriki fazlarda edge architecture bileşeni olarak tasarlanacak; Faz 2'de domain modülü sayılmayacak.
+- AD-013: Experiment Management, sağlık bağlamındaki riskler nedeniyle kontrollü şekilde v2+ aşamasında devreye alınacak.
+- AD-014: Tenant & Organization Management, gelecekteki B2B/B2B2C ve kurumsal senaryoları desteklemek için mantıksal modül olarak tanımlanacak; MVP'de minimal tenant context ile başlayacak.
+- AD-015: Policy Engine, ayrı top-level modül yerine merkezi policy evaluation capability olarak tasarlanacak.
+- AD-016: Secrets Management, ayrı business/domain modülü değil; cloud/security platform bileşeni olarak zorunlu kabul edildi.
+- AD-017: Domain Events yaklaşımı mimari karar olarak kabul edildi.
+  - Başlangıçta in-process event dispatch
+  - Gerekirse outbox pattern ile external event bus'a evrilebilir
+- AD-018: Event Bus, MVP'de ayrı top-level platform modülü olarak zorunlu değildir; olay tabanlı iletişim için kademeli yaklaşım uygulanacak.
+- AD-019: Scheduler, Background Jobs modülünün alt capability'si olarak ele alınacak.
+- AD-020: Rate Limiting, public API ve AI çağrıları için zorunlu platform capability'dir.
+- AD-021: API Versioning Strategy yüksek seviyeli mimari karar olarak şimdi kaydedilecek; detay tasarım Faz 8'de yapılacak.
+
+- AD-022: Sistem, katı sınırlarla tasarlanmış Modular Monolith olarak başlayacaktır.
+- AD-023: Her modül kendi içinde Application, Domain, Infrastructure katmanlarına sahip olacaktır.
+- AD-024: Modüller arası iletişim yalnızca public application contracts ve domain events üzerinden yapılacaktır.
+- AD-025: Domain katmanı hiçbir şekilde infrastructure veya framework bağımlılığı taşımayacaktır.
+- AD-026: AI Application ile AI Orchestrator ayrı mimari sorumluluklar olarak korunacaktır.
+- AD-027: Background Jobs & Scheduler, ana asenkron yürütme modeli olacaktır.
+- AD-028: File Storage, binary içerik ile metadata yönetimini ayrıştıracaktır.
+- AD-029: Cache, source of truth olmayacak; performans ve maliyet odaklı kullanılacaktır.
+- AD-030: Monitoring & Observability; edge, app, worker ve AI katmanlarına yerleştirilecektir.
+- AD-031: Feature Flags & Runtime Configuration, rollout ve kill switch amacıyla merkezi kullanılacaktır.
+- AD-032: Mimari, outbox-compatible domain events yaklaşımıyla tasarlanacaktır.
+- AD-033: Mikroservise geçiş yalnızca ihtiyaç kanıtlandığında, seçici yapılacaktır.
+- AD-034: Modül sınırları architecture fitness checks ile doğrulanacaktır.
+- AD-035: Dependency Matrix mimari sözleşmesi olarak uygulanacaktır.
+- AD-036: Domain Events versiyonlanabilir ve idempotent olacaktır.
+- AD-037: Veri sınıflandırması (PHI/PII vb.) mimarinin parçasıdır.
+- AD-038: Secrets yalnızca merkezi yönetim (Vault vb.) üzerinden kullanılacaktır.
+- AD-039: Harici AI çağrılarında PHI minimization zorunludur.
+- AD-040: Dış bağımlılıklar resilience (Circuit Breaker vb.) politikalarına uymalıdır.
+- AD-041: Job Handler'ları idempotent olmak zorundadır.
+- AD-042: Güvenlik kararları cache üzerinden verilmeyecektir.
+- AD-043: Tüm kritik işlemler correlation ID ile uçtan uca izlenebilir olacaktır.
+- AD-044: Mimari risk kaydı canlı bir doküman olarak tutulacaktır.
+- AD-045: "Thin Slice Architecture" prensibi uygulanacaktır.
