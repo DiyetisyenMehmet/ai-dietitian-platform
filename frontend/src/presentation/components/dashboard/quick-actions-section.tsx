@@ -22,7 +22,7 @@ const QUICK_ACTIONS: readonly QuickAction[] = [
   },
   {
     id: "chat-ai",
-    label: "AI ile Sohbet",
+    label: "Asistanla Sohbet",
     icon: Sparkles,
     className: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
   },

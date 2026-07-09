@@ -20,7 +20,7 @@ export function WelcomeScreen({ userName, onSelect }: WelcomeScreenProps) {
         Merhaba {userName}! <span aria-hidden="true">👋</span>
       </h2>
       <p className="mt-1 max-w-sm text-muted-foreground">
-        Ben senin AI Diyetisyenin. Bugün sana nasıl yardımcı olabilirim?
+        Ben senin diyetisyen asistanınım. Bugün sana nasıl yardımcı olabilirim?
       </p>
 
       <div className="mt-8 grid w-full max-w-xl grid-cols-1 gap-3 sm:grid-cols-2">

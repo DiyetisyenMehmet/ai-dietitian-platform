@@ -64,7 +64,7 @@ export function ChatView() {
         <div className="flex flex-1 items-center gap-2">
           <AiAvatar />
           <div className="leading-tight">
-            <p className="text-sm font-semibold">AI Diyetisyen</p>
+            <p className="text-sm font-semibold">Diyetisyen Asistanı</p>
             <p className="text-[11px] text-muted-foreground">
               {isResponding ? "yazıyor..." : "çevrimiçi"}
             </p>
