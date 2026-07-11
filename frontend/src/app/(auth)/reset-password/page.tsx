@@ -35,7 +35,7 @@ function ResetPasswordForm() {
       if (!token) return;
       const result = await authService.resetPassword(token, values);
       if (result.ok) {
-        toast.success("Şifreniz güncellendi. Giriş yapabilirsiniz.");
+        toast.success("Şifreniz güncellendi! Şimdi giriş yapabilirsiniz.");
         router.push("/login");
         return;
       }

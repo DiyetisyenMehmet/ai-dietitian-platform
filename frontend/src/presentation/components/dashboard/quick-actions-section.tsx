@@ -22,7 +22,7 @@ const QUICK_ACTIONS: readonly QuickAction[] = [
   },
   {
     id: "chat-ai",
-    label: "Asistanla Sohbet",
+    label: "Sohbet Et",
     icon: Sparkles,
     className: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
   },
@@ -38,7 +38,7 @@ const QUICK_ACTIONS: readonly QuickAction[] = [
 export function QuickActionsSection() {
   return (
     <section className="space-y-3">
-      <h3 className="text-base font-semibold">Hızlı İşlemler</h3>
+      <h3 className="text-base font-semibold">Hızlı Erişim</h3>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {QUICK_ACTIONS.map((action) => {
           const Icon = action.icon;

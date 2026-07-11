@@ -1,7 +1,7 @@
 /** Three-dot "assistant is typing" animation. */
 export function TypingIndicator() {
   return (
-    <div className="flex items-center gap-1.5 py-1" aria-label="Asistan yazıyor" role="status">
+    <div className="flex items-center gap-1.5 py-1" aria-label="Yanıt hazırlanıyor" role="status">
       {[0, 1, 2].map((i) => (
         <span
           key={i}

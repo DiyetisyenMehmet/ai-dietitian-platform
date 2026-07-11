@@ -18,7 +18,7 @@ export interface NavigationItem {
 export const PRIMARY_NAVIGATION: readonly NavigationItem[] = [
   { id: "home", label: "Ana Sayfa", href: "/", icon: Home },
   { id: "meals", label: "Öğünler", href: "/meals", icon: UtensilsCrossed },
-  { id: "ai", label: "Asistan", href: "/ai", icon: Sparkles },
+  { id: "ai", label: "Sohbet", href: "/ai", icon: Sparkles },
   { id: "goals", label: "Hedefler", href: "/goals", icon: Target },
   { id: "profile", label: "Profil", href: "/profile", icon: User },
 ] as const;

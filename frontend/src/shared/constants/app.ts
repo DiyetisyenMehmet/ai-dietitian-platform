@@ -1,6 +1,7 @@
 /** Static application metadata used across presentation surfaces. */
 export const APP_CONFIG = {
-  name: "Diyetisyen Asistanı",
-  shortName: "Diyetisyen Asistanı",
-  description: "Kişiselleştirilmiş beslenme ve diyet takip platformu.",
+  name: "Diewish",
+  shortName: "Diewish",
+  tagline: "Your Nutrition Companion",
+  description: "Beslenme yolculuğunda yanında olan kişisel sağlık ve beslenme platformu.",
 } as const;

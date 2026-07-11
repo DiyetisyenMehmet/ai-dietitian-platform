@@ -17,10 +17,10 @@ export function WelcomeScreen({ userName, onSelect }: WelcomeScreenProps) {
     <div className="flex animate-fade-in flex-col items-center px-2 py-8 text-center">
       <AiAvatar className="size-14 [&_svg]:size-7" />
       <h2 className="mt-4 text-2xl font-bold tracking-tight">
-        Merhaba {userName}! <span aria-hidden="true">👋</span>
+        Merhaba {userName} <span aria-hidden="true">👋</span>
       </h2>
       <p className="mt-1 max-w-sm text-muted-foreground">
-        Ben senin diyetisyen asistanınım. Bugün sana nasıl yardımcı olabilirim?
+        Tekrar hoş geldin. Bugün neyi geliştirmek istersin?
       </p>
 
       <div className="mt-8 grid w-full max-w-xl grid-cols-1 gap-3 sm:grid-cols-2">

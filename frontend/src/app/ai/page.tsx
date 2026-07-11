@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { ChatView } from "@/presentation/components/chat/chat-view";
 
 export const metadata: Metadata = {
-  title: "Diyetisyen Asistanı",
+  title: "Beslenme Koçun",
 };
 
 export default function AiChatPage() {

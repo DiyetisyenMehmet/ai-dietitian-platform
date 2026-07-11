@@ -35,7 +35,7 @@ export default function LoginPage() {
     async (values: LoginInput) => {
       const result = await authService.login(values);
       if (result.ok) {
-        toast.success("Giriş başarılı. Yönlendiriliyorsunuz...");
+        toast.success("Hoş geldiniz! Sizi yönlendiriyoruz...");
         router.push("/");
         return;
       }

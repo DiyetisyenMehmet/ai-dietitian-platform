@@ -30,7 +30,7 @@ export default function ForgotPasswordPage() {
     const result = await authService.forgotPassword(values);
     if (result.ok) {
       setSentTo(values.email);
-      toast.success("Sıfırlama bağlantısı gönderildi.");
+      toast.success("Sıfırlama bağlantısını e-postanıza gönderdik.");
       return;
     }
     toast.error(result.error);

@@ -41,7 +41,7 @@ export default function RegisterPage() {
     async (values: RegisterInput) => {
       const result = await authService.register(values);
       if (result.ok) {
-        toast.success("Hesabınız oluşturuldu. E-postanızı doğrulayın.");
+        toast.success("Aramıza hoş geldiniz! Şimdi e-postanızı doğrulayalım.");
         router.push("/verify-email");
         return;
       }

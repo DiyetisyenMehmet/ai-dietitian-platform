@@ -38,8 +38,8 @@ export default function MealsPage() {
         ) : (
           <EmptyState
             icon={UtensilsCrossed}
-            title="Henüz öğün eklemediniz"
-            description="Günlük beslenmenizi takip etmeye başlamak için ilk besininizi ekleyin."
+            title="Bugün henüz öğün eklemedin"
+            description="İlk besinini ekleyerek günlük beslenme takibine başlayabilirsin."
             className="rounded-2xl border border-dashed border-border"
           />
         )}
@@ -49,7 +49,7 @@ export default function MealsPage() {
             <Button asChild>
               <Link href="/meals/add">
                 <Plus aria-hidden="true" />
-                İlk öğününüzü ekleyin
+                İlk öğününü ekle
               </Link>
             </Button>
           </div>

@@ -50,7 +50,7 @@ export const MessageBubble = React.memo(function MessageBubble({
         await navigator.share({ text: message.content });
       } else {
         await navigator.clipboard.writeText(message.content);
-        toast.success("Paylaşım desteklenmiyor, mesaj kopyalandı");
+        toast.success("Paylaşım bu cihazda desteklenmiyor, mesajı kopyaladık");
       }
     } catch {
       /* user cancelled share — no-op */

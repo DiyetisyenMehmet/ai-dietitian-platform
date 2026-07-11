@@ -107,9 +107,9 @@ export function getDashboardData(): DashboardData {
       { id: "g4", label: "Kilo", current: 78.4, target: 75, unit: "kg" },
     ],
     aiInsight: {
-      title: "Bugünkü İçgörü",
+      title: "Proteini biraz artıralım",
       message:
-        "Bugün protein alımınız hedefin altında görünüyor. Öğününüze yoğurt veya yumurta eklemeyi düşünebilirsiniz.",
+        "Bugün protein hedefinin biraz altında kaldın. Öğününe yoğurt veya yumurta ekleyerek hedefini kolayca yakalayabilirsin. 💪",
     },
     weight: {
       current: 78.4,

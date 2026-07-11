@@ -25,11 +25,16 @@ export function AuthLayout({ title, subtitle, footer, children }: AuthLayoutProp
   return (
     <div className="flex min-h-dvh flex-col bg-background">
       <header className="flex items-center justify-between px-4 py-4">
-        <Link href="/" className="flex items-center gap-2 font-semibold">
+        <Link href="/" className="flex items-center gap-2">
           <span className="flex size-8 items-center justify-center rounded-xl bg-primary/10">
             <Leaf className="size-4 text-primary" aria-hidden="true" />
           </span>
-          {APP_CONFIG.name}
+          <span className="flex flex-col leading-none">
+            <span className="font-semibold">{APP_CONFIG.name}</span>
+            <span className="text-[11px] font-normal text-muted-foreground">
+              {APP_CONFIG.tagline}
+            </span>
+          </span>
         </Link>
         <ThemeToggle />
       </header>
