@@ -1,0 +1,27 @@
+// Prisma schema — AI Dietitian Platform (backend foundation).
+//
+// This is the initial, default setup only. No business/domain models are
+// defined here yet; domain models are introduced in later sprints. Keeping
+// this baseline lets us wire up the client, connection and migration flow
+// without committing to any schema decisions prematurely.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Infrastructure baseline table (NOT a business/domain model).
+///
+/// It exists solely so the initial migration and generated client are
+/// meaningful, and so the readiness probe can exercise a real table round-trip.
+/// Domain models are introduced in later sprints.
+model HealthCheck {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  @@map("health_checks")
+}
