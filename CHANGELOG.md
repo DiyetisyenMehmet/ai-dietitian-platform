@@ -1,0 +1,55 @@
+# Changelog
+
+Bu projedeki tüm önemli değişiklikler bu dosyada belgelenir.
+Format [Keep a Changelog](https://keepachangelog.com/) temel alınır ve proje [Semantic Versioning](https://semver.org/lang/tr/) izler.
+
+---
+
+## [Unreleased]
+
+### Added
+- Proje yönetim dokümanları: `ROADMAP.md` ve `CHANGELOG.md` oluşturuldu.
+- `TODO_MASTER.md` sprint bazlı takip, öncelikler (Critical/High/Medium/Low), efor tahminleri, blocker ve teknik borç bölümleriyle yeniden yapılandırıldı.
+- `PROJECT_MEMORY.md`'ye tam "Güncel Proje Durumu" snapshot bölümü eklendi (sprint, commit, sürüm, modül/bileşen durumları, teknolojiler, kararlar, sonraki sprint).
+- `README.md` backend, veritabanı, kalite kapıları ve deployment bilgileriyle güncellendi.
+
+### Changed
+- Dokümantasyon dört dosya (`TODO_MASTER`, `PROJECT_MEMORY`, `ROADMAP`, `CHANGELOG`) arasında senkron hale getirildi.
+
+### Improved
+- Kalite kapıları uçtan uca doğrulandı: frontend ve backend için lint, type-check ve build sıfır hata/uyarı ile geçti.
+- Mimari doğrulama yapıldı: build artefaktlarının (`dist/`, `.next/`, `*.tsbuildinfo`, `node_modules/`) git'e alınmadığı, `.env` sızıntısı olmadığı, ölü kod/TODO işareti bulunmadığı teyit edildi.
+
+### Fixed
+- VM yeniden başlatması sonrası eksik PostgreSQL 17 sunucusu yeniden kuruldu; `dietitian` rolü ve `ai_dietitian` veritabanı oluşturuldu, `20260711213135_init` migration yeniden uygulandı.
+- Frontend/backend geliştirme sunucuları yeniden başlatıldı; Preview URL yeniden erişilebilir (HTTP 200) hale getirildi.
+
+### Removed
+- Yok.
+
+### Breaking Changes
+- Yok.
+
+---
+
+## [0.1.0] — 2026-07-11
+
+İlk temel sürüm (frontend MVP + backend foundation). Son commit: `15e4bc1`.
+
+### Added
+- **Sprint 7 — Backend Foundation** (`15e4bc1`): Express + TypeScript, Pino logging, correlation ID, standart JSON envelope, ApiError hata yönetimi, Zod env/validate middleware, PostgreSQL 17 + Prisma (HealthCheck modeli + ilk migration), health endpoint'leri (`/api/health`, `/api/health/ready`), Swagger `/docs`, CORS/Helmet/compression/rate-limit güvenlik katmanı.
+- **Sprint 6 — Goals** (`7e5f519`): 8 hedef tipi, Zod validation (Türkçe), `useSyncExternalStore` state yönetimi, dashboard + detay (dairesel ilerleme, haftalık grafik) + form (unsaved-changes guard).
+- **Sprint 5 — AI Chat** (`2472914`): sohbet arayüzü (frontend/mock).
+- **Sprint 4 — Meals** (`f159d39`): öğün listesi + öğün ekleme.
+- **Sprint 3 — Dashboard** (`ed86348`): kalori/makro görselleştiricileri.
+- **Sprint 2 — Authentication (Frontend)** (`94386f6`): login, register, forgot/reset password, verify email ekranları.
+- **Sprint 1 — Frontend Foundation** (`b2201eb`): Next.js 15 + App Router + TypeScript + Tailwind + shadcn/ui, katmanlı domain mimarisi, tema ve navigasyon.
+- Proje dokümantasyonu ve mimari kararlar (`2e68e75`): `ARCHITECTURE_DECISIONS.md` (AD-001…AD-045), `PROJECT_MEMORY.md`, `TODO_MASTER.md`.
+
+### Changed
+- UI dil/ürün geçişleri (`eaac0f9`, `ad30451`, `736985f`): görünür "AI" ifadelerinin doğal terminolojiyle değiştirilmesi ve premium UX iyileştirmeleri.
+
+---
+
+[Unreleased]: https://github.com/DiyetisyenMehmet/ai-dietitian-platform/compare/15e4bc1...HEAD
+[0.1.0]: https://github.com/DiyetisyenMehmet/ai-dietitian-platform/releases/tag/v0.1.0

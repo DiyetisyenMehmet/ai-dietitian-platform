@@ -1,0 +1,16 @@
+# Platform metadata (managed by Abacus.AI)
+.abacus.donotdelete
+
+# Auto-generated document previews of Markdown files
+*.pdf
+*.docx
+# Keep the frozen project spec PDF under docs/
+!docs/*.pdf
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# Logs
+*.log
