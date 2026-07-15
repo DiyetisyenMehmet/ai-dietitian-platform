@@ -59,22 +59,22 @@
 > **Ürün adı: Diewish** (resmi). Eski geçici ad "AI Dietitian Platform" kullanımdan kaldırıldı.
 
 ### Genel
-- **Aktif Sprint:** Sprint 10 (Hesap Yaşam Döngüsü — backend) **tamamlandı** → Sprint 11 (domain backend API'leri / kalıcılık) sıradaki.
-- **Son Commit Hash:** bkz. `git log` — `feat(account): Sprint 10 account lifecycle`
+- **Aktif Sprint:** Sprint 11 (Kan Tahlili Yükleme Altyapısı — backend) **tamamlandı** → Sprint 12 (kan tahlili AI analizi — yüklenen dosyaları tüketir) sıradaki.
+- **Son Commit Hash:** bkz. `git log` — `feat(blood-test): Sprint 11 blood test upload infrastructure`
 - **Aktif Branch:** `main`
-- **Sürüm:** Frontend `0.1.0` · Backend `0.3.0` (auth + onboarding + account lifecycle modülleri)
-- **Genel Tamamlanma:** ~%55
+- **Sürüm:** Frontend `0.1.0` · Backend `0.3.0` (auth + onboarding + account lifecycle + blood-test upload modülleri)
+- **Genel Tamamlanma:** ~%58
 - **V1 Stratejisi:** Launch Blocker / Post-Launch / Future Vision önceliklendirmesi `ROADMAP.md`'de (V1 = mümkün olan en kısa sürede kararlı, güvenli, production-ready yayın).
 
 ### Modüller
-- **Tamamlanan Modüller:** Frontend Foundation, Auth UI, Dashboard, Meals (UI), AI Chat (UI/mock), Goals (tam), Backend Foundation, **Backend Auth (Sprint 8: register/login/refresh-token/logout/me + rotation/reuse-detection + auth rate-limit)**, **Onboarding (Sprint 9: UserProfile + zorunlu çok adımlı onboarding, frontend auth entegrasyonu + session store + route guard)**, **Account Lifecycle (Sprint 10 — backend: e-posta doğrulama, şifre sıfırlama/değiştirme, hesap silme talebi + kalıcı silme, tek kullanımlık/süreli token'lar, denetim günlüğü)**.
-- **Kalan Modüller:** Account Lifecycle frontend UI (Sprint 10 backend hazır, ekranlar sonraki), domain backend API'leri (Meals/Goals/Dashboard/Chat kalıcılığı), gerçek AI Orchestrator, kan tahlili analizi, 30/60 gün plan, abonelik + iyzico, yasal/uyum katmanı, CI/CD, Monitoring, Deployment.
+- **Tamamlanan Modüller:** Frontend Foundation, Auth UI, Dashboard, Meals (UI), AI Chat (UI/mock), Goals (tam), Backend Foundation, **Backend Auth (Sprint 8: register/login/refresh-token/logout/me + rotation/reuse-detection + auth rate-limit)**, **Onboarding (Sprint 9: UserProfile + zorunlu çok adımlı onboarding, frontend auth entegrasyonu + session store + route guard)**, **Account Lifecycle (Sprint 10 — backend: e-posta doğrulama, şifre sıfırlama/değiştirme, hesap silme talebi + kalıcı silme, tek kullanımlık/süreli token'lar, denetim günlüğü)**, **Blood Test Upload (Sprint 11 — backend: sağlayıcı-bağımsız depolama soyutlaması + yerel depolama, PDF/JPEG/PNG/WebP magic-byte doğrulama, boyut/tek-dosya limiti, yükle/listele/indir/değiştir/sil + metadata + sahiplik-kapsamı + denetim günlüğü)**.
+- **Kalan Modüller:** Account Lifecycle frontend UI (Sprint 10 backend hazır, ekranlar sonraki), Blood Test frontend UI (Sprint 11 backend hazır, ekranlar sonraki), kan tahlili AI analizi (Sprint 12 — yüklenen dosyaları tüketir), domain backend API'leri (Meals/Goals/Dashboard/Chat kalıcılığı), gerçek AI Orchestrator, 30/60 gün plan, abonelik + iyzico, yasal/uyum katmanı, CI/CD, Monitoring, Deployment.
 
 ### Bileşen Durumları
 - **Frontend Status:** ✅ Kod tamam (port 3000). Sprint 9 doğrulaması: **lint ✓ (0 uyarı), type-check ✓ (0 hata)**. Auth session store + route guard + onboarding sihirbazı eklendi. ⚠️ Bu sprint kredi optimizasyonuyla `build` ve `preview` **alınmadı**.
-- **Backend Status:** ✅ Kod tamam (port 4000). Sprint 10 doğrulaması: **lint ✓ (0 uyarı), type-check ✓ (0 hata)**. Account lifecycle modülü + `mailer`/`audit` lib'leri eklendi. ⚠️ Bu sprint kredi optimizasyonuyla `build` ve `preview` **alınmadı**.
-- **Database Status:** ✅ PostgreSQL 17 · `ai_dietitian` DB · `dietitian` kullanıcısı (CREATEDB verildi). Migration'lar: `20260711213135_init`, `20260715202355_add_auth_user_refresh_token`, `20260715203846_add_user_profile_onboarding`, `20260715205703_add_account_lifecycle` (account_tokens + audit_logs + AccountTokenType/AuditAction enum + `users.deletionRequestedAt`). ⚠️ VM restart sonrası Postgres kalıcı değil (yeniden kurulum + migrate gerekir).
-- **API Status:** ✅ `/api/health`, `/api/health/ready` · **Auth: `POST /api/auth/{register,login,refresh-token,logout}` + `GET /api/auth/me`** · **Account: `POST /api/account/email/verify/{request,confirm}` + `/password/{forgot,reset,change}` + `/deletion/{request,cancel}` + `DELETE /api/account`** · **Onboarding: `POST /api/onboarding` + `GET /api/onboarding`** · Swagger `/docs` (Auth + Account + Onboarding tag + bearerAuth). Diğer domain endpoint'leri henüz yok.
+- **Backend Status:** ✅ Kod tamam (port 4000). Sprint 11 doğrulaması: **lint ✓ (0 uyarı), type-check ✓ (0 hata)**. Blood-test upload modülü + `storage` (sağlayıcı-bağımsız) soyutlaması eklendi; `multer` bağımlılığı eklendi. ⚠️ Bu sprint kredi optimizasyonuyla `build` ve `preview` **alınmadı**.
+- **Database Status:** ✅ PostgreSQL 17 · `ai_dietitian` DB · `dietitian` kullanıcısı (CREATEDB verildi). Migration'lar: `20260711213135_init`, `20260715202355_add_auth_user_refresh_token`, `20260715203846_add_user_profile_onboarding`, `20260715205703_add_account_lifecycle`, `20260715210742_add_blood_test_uploads` (blood_test_uploads + BloodTestStatus enum + AuditAction'a 3 değer). ⚠️ VM restart sonrası Postgres kalıcı değil (yeniden kurulum + migrate gerekir).
+- **API Status:** ✅ `/api/health`, `/api/health/ready` · **Auth: `POST /api/auth/{register,login,refresh-token,logout}` + `GET /api/auth/me`** · **Account: `POST /api/account/email/verify/{request,confirm}` + `/password/{forgot,reset,change}` + `/deletion/{request,cancel}` + `DELETE /api/account`** · **Onboarding: `POST /api/onboarding` + `GET /api/onboarding`** · **BloodTests: `POST /api/blood-tests` + `GET /api/blood-tests` + `GET /api/blood-tests/:id` + `GET /api/blood-tests/:id/file` + `PUT /api/blood-tests/:id/file` + `DELETE /api/blood-tests/:id`** · Swagger `/docs` (Auth + Account + Onboarding + BloodTests tag + bearerAuth). Diğer domain endpoint'leri henüz yok.
 - **AI Status:** ⚠️ Yalnızca frontend sohbet arayüzü (mock). Gerçek AI orchestrator/model entegrasyonu yok.
 - **Deployment Status:** ⚠️ Sadece dev/preview. Preview URL: https://685bf5caa.na115.preview.abacusai.app (HTTP 200). CI/CD ve production deployment yok.
 
@@ -98,7 +98,7 @@ ai-dietitian-platform/
 
 ### Aktif Teknolojiler
 - **Frontend:** Next.js 15.5, React, TypeScript, Tailwind CSS v3, shadcn/ui + Radix, lucide-react, react-hook-form, Zod, next-themes.
-- **Backend:** Node 22, Express 4.21, TypeScript, Prisma 6.2 + PostgreSQL 17, Pino/pino-http, Helmet, express-rate-limit, compression, Zod, swagger-jsdoc/swagger-ui-express, **bcryptjs**, **jsonwebtoken**, tsx.
+- **Backend:** Node 22, Express 4.21, TypeScript, Prisma 6.2 + PostgreSQL 17, Pino/pino-http, Helmet, express-rate-limit, compression, Zod, swagger-jsdoc/swagger-ui-express, **bcryptjs**, **jsonwebtoken**, **multer**, tsx.
 - **Tooling:** ESLint, Prettier, npm.
 
 ### Bilinen Sorunlar (Known Issues)

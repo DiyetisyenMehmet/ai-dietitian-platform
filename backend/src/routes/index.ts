@@ -2,6 +2,7 @@ import { Router } from "express";
 
 import { accountRouter } from "../modules/account/account.routes";
 import { authRouter } from "../modules/auth/auth.routes";
+import { bloodTestRouter } from "../modules/blood-test/blood-test.routes";
 import { onboardingRouter } from "../modules/onboarding/onboarding.routes";
 import { healthRouter } from "./health.route";
 
@@ -16,3 +17,4 @@ apiRouter.use("/health", healthRouter);
 apiRouter.use("/auth", authRouter);
 apiRouter.use("/account", accountRouter);
 apiRouter.use("/onboarding", onboardingRouter);
+apiRouter.use("/blood-tests", bloodTestRouter);

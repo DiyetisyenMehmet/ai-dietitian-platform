@@ -63,6 +63,16 @@ const envSchema = z.object({
   // Grace period between an account-deletion request and eligibility for
   // permanent deletion, during which the request can be canceled.
   ACCOUNT_DELETION_GRACE_DAYS: z.coerce.number().int().nonnegative().default(30),
+
+  // --- File storage / blood-test uploads (Sprint 11) ---
+  // Storage backend selector. Only "local" ships now; the abstraction lets a
+  // cloud provider (e.g. "s3") be added without touching callers.
+  STORAGE_PROVIDER: z.enum(["local"]).default("local"),
+  // Root directory for the local disk storage backend. Kept outside the repo
+  // by default; created on demand. Ignored by non-local providers.
+  STORAGE_LOCAL_ROOT: z.string().default("./storage/uploads"),
+  // Maximum accepted blood-test file size, in megabytes.
+  BLOOD_TEST_MAX_FILE_SIZE_MB: z.coerce.number().int().positive().default(15),
 });
 
 export type Env = z.infer<typeof envSchema>;

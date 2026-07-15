@@ -60,9 +60,10 @@ model User {
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
-  refreshTokens RefreshToken[]
-  profile       UserProfile?
-  accountTokens AccountToken[]
+  refreshTokens    RefreshToken[]
+  profile          UserProfile?
+  accountTokens    AccountToken[]
+  bloodTestUploads BloodTestUpload[]
 
   @@map("users")
 }
@@ -197,6 +198,9 @@ enum AuditAction {
   ACCOUNT_DELETION_REQUESTED
   ACCOUNT_DELETION_CANCELED
   ACCOUNT_DELETED
+  BLOOD_TEST_UPLOADED
+  BLOOD_TEST_REPLACED
+  BLOOD_TEST_DELETED
 }
 
 /// Append-only audit log for security-related account actions.
@@ -216,4 +220,59 @@ model AuditLog {
   @@index([userId])
   @@index([action])
   @@map("audit_logs")
+}
+
+// ---------------------------------------------------------------------------
+// Blood test upload domain (Sprint 11)
+// ---------------------------------------------------------------------------
+
+/// Lifecycle status of an uploaded blood-test file.
+///
+/// This sprint only ever sets `UPLOADED`. The remaining values exist so the
+/// AI-analysis sprint can advance a record through processing without a schema
+/// migration or breaking changes — the upload infrastructure is intentionally
+/// forward-compatible with a downstream consumer.
+enum BloodTestStatus {
+  UPLOADED
+  ANALYZING
+  ANALYZED
+  FAILED
+}
+
+/// A single uploaded blood-test document (PDF lab report or image).
+///
+/// The binary is never stored in the database — it lives in the configured
+/// storage backend and is referenced here by `storageProvider` + `storageKey`,
+/// so the provider can change without touching this contract. Only metadata and
+/// integrity fields are persisted. `checksumSha256` lets a later stage verify
+/// the fetched bytes match what was uploaded. `metadata` is a small, extensible
+/// JSON bag for optional user-supplied context (e.g. lab name); it never holds
+/// extracted medical values.
+model BloodTestUpload {
+  id               String          @id @default(uuid())
+  userId           String
+  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status           BloodTestStatus @default(UPLOADED)
+  /// Storage backend identifier (e.g. "local", "s3") that owns `storageKey`.
+  storageProvider  String
+  /// Opaque key/path locating the object within the storage backend.
+  storageKey       String
+  /// Original client-provided filename (sanitized), for display/download.
+  originalFilename String
+  mimeType         String
+  fileSizeBytes    Int
+  /// SHA-256 hex digest of the stored bytes (integrity verification).
+  checksumSha256   String
+  /// Optional user-provided label for the upload.
+  label            String?
+  /// Optional date the blood test was taken (not the upload time).
+  testDate         DateTime?       @db.Date
+  /// Small, non-sensitive extensible context. Never extracted medical values.
+  metadata         Json?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([userId])
+  @@index([userId, status])
+  @@map("blood_test_uploads")
 }

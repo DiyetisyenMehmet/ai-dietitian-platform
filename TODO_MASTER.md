@@ -107,6 +107,16 @@ Durum simgeleri: `[x]` tamam · `[~]` kısmen · `[ ]` beklemede
 
 > Not: Sprint 10 backend-odaklıdır (kapsam frontend içermiyor); kredi optimizasyonu gereği **build/preview alınmadan** tamamlandı. Doğrulama: backend `type-check` + `lint` (0 hata/0 uyarı) + Prisma migration'ın canlı DB'ye uygulanması.
 
+### Sprint 11 — Kan Tahlili Yükleme Altyapısı (Backend) ✅ (Tamamlandı)
+- [x] Prisma `BloodTestUpload` modeli + `BloodTestStatus` enum (`UPLOADED`; `ANALYZING`/`ANALYZED`/`FAILED` AI için ileriye dönük) + `AuditAction`'a 3 değer + migration (`20260715210742_add_blood_test_uploads`) — **(Critical)**
+- [x] Sağlayıcı-bağımsız depolama soyutlaması (`StorageProvider` arayüzü + `LocalStorageProvider`, path-traversal korumalı; `STORAGE_PROVIDER`/`STORAGE_LOCAL_ROOT`/`BLOOD_TEST_MAX_FILE_SIZE_MB` env) — **(Critical)**
+- [x] BloodTest modülü (DDD): `schemas` (Zod), `repository` (sahiplik-kapsamlı), `service` (magic-byte MIME doğrulama + sha256 checksum + rollback'li yükleme), `controller`, `routes` — **(Critical)**
+- [x] `multer` memory storage + boyut/tek-dosya limiti + `fileFilter`; gerçek tip doğrulama magic-byte ile (PDF/JPEG/PNG/WebP) — **(Critical)**
+- [x] Endpoint'ler: `POST /api/blood-tests` (yükle), `GET /api/blood-tests` (geçmiş), `GET /:id` (metadata), `GET /:id/file` (indir), `PUT /:id/file` (değiştir), `DELETE /:id` (sil) — **(Critical)**
+- [x] Sahiplik-kapsamı (yetkisiz erişimde varlık sızdırmayan 404), rastgele UUID storage key, tüm yaşam döngüsü için denetim günlüğü, `BloodTests` Swagger tag'i — **(High)**
+
+> Not: Sprint 11 backend-odaklıdır (kapsam frontend/OCR/AI analizi içermiyor — yalnızca yükleme altyapısı); kredi optimizasyonu gereği **build/preview alınmadan** tamamlandı. Doğrulama: backend `type-check` + `lint` (0 hata/0 uyarı) + Prisma migration'ın canlı DB'ye uygulanması. Altyapı, Sprint 12'deki AI analizinin dosyaları `getFile` stream'i + `status` alanı üzerinden büyük değişiklik olmadan tüketebilmesi için tasarlandı.
+
 ---
 
 ## Kalan İş Tahminleri (Sprint bazında)

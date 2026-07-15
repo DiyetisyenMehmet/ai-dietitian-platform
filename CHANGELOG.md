@@ -8,6 +8,12 @@ Format [Keep a Changelog](https://keepachangelog.com/) temel alınır ve proje [
 ## [Unreleased]
 
 ### Added
+- **Sprint 11 — Kan Tahlili Yükleme Altyapısı (backend):** Kullanıcıların PDF laboratuvar raporu veya yüksek kaliteli görsel yükleyebildiği, production-kalite güvenli dosya yükleme altyapısı (AI analizi bir sonraki sprint'te bu altyapıyı değişiklik gerektirmeden tüketecek şekilde tasarlandı).
+  - Prisma `BloodTestUpload` modeli (kullanıcıya `onDelete: Cascade` bağlı, checksum + metadata alanları), `BloodTestStatus` enum'ı (`UPLOADED` kullanılıyor; `ANALYZING`/`ANALYZED`/`FAILED` AI için ileriye dönük ayrıldı), `AuditAction`'a `BLOOD_TEST_UPLOADED`/`BLOOD_TEST_REPLACED`/`BLOOD_TEST_DELETED` değerleri ve migration (`20260715210742_add_blood_test_uploads`).
+  - Sağlayıcı-bağımsız depolama soyutlaması (`StorageProvider` arayüzü + `LocalStorageProvider`; `STORAGE_PROVIDER` env ile seçilir, ileride S3 vb. eklenebilir), path-traversal korumalı yerel depolama.
+  - BloodTest modülü (DDD): `schemas` (Zod; metadata + param), `repository` (sahiplik-kapsamlı sorgular), `service` (magic-byte tip doğrulama, sha256 checksum, rollback'li yükleme), `controller`, `routes`.
+  - Endpoint'ler: `POST /api/blood-tests` (yükleme), `GET /api/blood-tests` (geçmiş), `GET /api/blood-tests/:id` (metadata), `GET /api/blood-tests/:id/file` (indirme), `PUT /api/blood-tests/:id/file` (değiştirme), `DELETE /api/blood-tests/:id` (silme); Swagger'a `BloodTests` tag'i.
+  - Güvenlik: `multer` memory storage + boyut limiti (`BLOOD_TEST_MAX_FILE_SIZE_MB`, varsayılan 15MB) + tek dosya limiti, magic-byte ile gerçek MIME doğrulama (PDF/JPEG/PNG/WebP), rastgele UUID storage key (orijinal ad yalnızca gösterim/indirme için), kullanıcı bazlı sahiplik-kapsamı (yetkisiz erişimde varlık sızdırmayan 404), tüm yaşam döngüsü işlemleri için denetim günlüğü.
 - **Sprint 10 — Hesap Yaşam Döngüsü (backend):** E-posta doğrulama, şifre sıfırlama/değiştirme ve hesap silme akışlarının uçtan uca uygulanması.
   - Prisma `AccountToken` (tek kullanımlık, süreli token; yalnızca SHA-256 hash saklanır) + `AuditLog` (silme sonrası da kalan, FK'siz denetim kaydı) modelleri, `AccountTokenType`/`AuditAction` enum'ları, `User.deletionRequestedAt` alanı ve migration (`20260715205703_add_account_lifecycle`).
   - Account modülü (DDD): `account.schemas` (Zod), `repository` (guard'lı `usedAt: null` ile yarış-güvenli tek kullanım, atomik transaction'lar), `service`, `controller`, `routes`.

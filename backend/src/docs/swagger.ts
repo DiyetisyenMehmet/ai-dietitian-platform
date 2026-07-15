@@ -69,6 +69,11 @@ const options: swaggerJSDoc.Options = {
           "Account lifecycle: email verification, password reset/change and account deletion",
       },
       { name: "Onboarding", description: "Mandatory user onboarding profile" },
+      {
+        name: "BloodTests",
+        description:
+          "Blood-test file uploads (PDF/image), history and file lifecycle",
+      },
     ],
   },
   // Glob patterns support both TS (dev via tsx) and compiled JS (prod), and
