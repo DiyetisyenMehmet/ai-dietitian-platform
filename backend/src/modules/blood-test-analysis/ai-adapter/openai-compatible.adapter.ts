@@ -6,6 +6,7 @@ import {
   EXTRACTION_SYSTEM_PROMPT,
   FORBIDDEN_AI_TERMS,
 } from "../constants";
+import { NUTRITION_PLAN_SYSTEM_PROMPT } from "../../nutrition-plan/constants";
 import type {
   AnalysisContext,
   BiomarkerExplanation,
@@ -15,6 +16,14 @@ import type {
   NormalizedBloodTestValue,
   NutritionImplication,
 } from "../types";
+import type {
+  DailyPlan,
+  NutritionPlanAIInput,
+  NutritionPlanAIOutput,
+  PlannedFood,
+  PlannedMeal,
+  PlanExplanations,
+} from "../../nutrition-plan/types";
 import type { AIAdapterInfo, IAIAdapter } from "./ai-adapter.interface";
 
 /** Configuration for an OpenAI-compatible endpoint. */
@@ -269,5 +278,124 @@ export class OpenAICompatibleAdapter implements IAIAdapter {
     const summary = `${summaryBase}\n\n${DISCLAIMER}`.trim();
 
     return { explanations, nutritionImplications, overallRecommendations, summary };
+  }
+
+  /** Coerces an unknown value to a finite number, defaulting to 0. */
+  private num(value: unknown): number {
+    const n = typeof value === "number" ? value : Number(value);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  /** Sanitizes and shapes a single generated meal. */
+  private normalizeMeal(meal: Partial<PlannedMeal> | undefined): PlannedMeal {
+    const foods: PlannedFood[] = Array.isArray(meal?.foods)
+      ? meal.foods
+          .filter((f): f is PlannedFood => Boolean(f && f.name))
+          .map((f) => ({
+            name: this.sanitizeText(String(f.name)),
+            portion: this.sanitizeText(String(f.portion ?? "")),
+            calories: this.num(f.calories),
+          }))
+      : [];
+
+    return {
+      name: this.sanitizeText(String(meal?.name ?? "")),
+      time: String(meal?.time ?? ""),
+      foods,
+      calories: this.num(meal?.calories),
+      proteinGrams: this.num(meal?.proteinGrams),
+      carbsGrams: this.num(meal?.carbsGrams),
+      fatGrams: this.num(meal?.fatGrams),
+      explanation: this.sanitizeText(String(meal?.explanation ?? "")),
+    };
+  }
+
+  /** Sanitizes and shapes a single generated daily plan. */
+  private normalizeDailyPlan(day: Partial<DailyPlan> | undefined, index: number): DailyPlan {
+    const meals = Array.isArray(day?.meals)
+      ? day.meals.map((m) => this.normalizeMeal(m as Partial<PlannedMeal>))
+      : [];
+    return {
+      dayLabel: this.sanitizeText(String(day?.dayLabel ?? `Day ${index + 1}`)),
+      meals,
+      totalCalories: this.num(day?.totalCalories),
+      totalProteinGrams: this.num(day?.totalProteinGrams),
+      totalCarbsGrams: this.num(day?.totalCarbsGrams),
+      totalFatGrams: this.num(day?.totalFatGrams),
+      ...(day?.notes ? { notes: this.sanitizeText(String(day.notes)) } : {}),
+    };
+  }
+
+  /** @inheritdoc */
+  async generateNutritionPlan(input: NutritionPlanAIInput): Promise<NutritionPlanAIOutput> {
+    const schemaHint = [
+      "Return JSON with this exact shape:",
+      "{",
+      '  "cycle": [{',
+      '    "dayLabel": "Day 1",',
+      '    "meals": [{',
+      '      "name": "Breakfast", "time": "08:00",',
+      '      "foods": [{"name": "string", "portion": "string", "calories": 0}],',
+      '      "calories": 0, "proteinGrams": 0, "carbsGrams": 0, "fatGrams": 0,',
+      '      "explanation": "why this meal fits the user"',
+      "    }],",
+      '    "totalCalories": 0, "totalProteinGrams": 0, "totalCarbsGrams": 0, "totalFatGrams": 0,',
+      '    "notes": "optional short note"',
+      "  }],",
+      '  "explanations": {"calories": "string", "macros": "string", "water": "string", "mealTiming": "string", "overall": "string"},',
+      '  "recommendations": ["string"],',
+      '  "summary": "string"',
+      "}",
+      `Generate exactly ${input.cycleLengthDays} unique days in "cycle".`,
+      "Each day's meals must sum close to the daily calorie and macro targets.",
+      "Honor every allergy as a HARD exclusion — no allergen in any food, ever.",
+    ].join("\n");
+
+    const payload = {
+      goal: input.goal,
+      targets: {
+        dailyCalories: input.dailyCalories,
+        proteinGrams: input.proteinGrams,
+        carbsGrams: input.carbsGrams,
+        fatGrams: input.fatGrams,
+        waterMl: input.waterMl,
+      },
+      mealTiming: input.mealTiming,
+      dietaryPreference: input.dietaryPreference,
+      allergies: input.allergies,
+      healthConditions: input.healthConditions,
+      bloodTestImplications: input.bloodTestImplications,
+      cycleLengthDays: input.cycleLengthDays,
+    };
+
+    const messages: ChatMessage[] = [
+      { role: "system", content: NUTRITION_PLAN_SYSTEM_PROMPT },
+      { role: "user", content: `${schemaHint}\n\nPlan inputs:\n${JSON.stringify(payload)}` },
+    ];
+
+    const raw = await this.chat(messages);
+    const parsed = this.parseJson<Partial<NutritionPlanAIOutput>>(raw);
+
+    const cycle: DailyPlan[] = Array.isArray(parsed.cycle)
+      ? parsed.cycle.map((day, index) => this.normalizeDailyPlan(day as Partial<DailyPlan>, index))
+      : [];
+
+    const rawExplanations = (parsed.explanations ?? {}) as Partial<PlanExplanations>;
+    const explanations: PlanExplanations = {
+      calories: this.sanitizeText(String(rawExplanations.calories ?? "")),
+      macros: this.sanitizeText(String(rawExplanations.macros ?? "")),
+      water: this.sanitizeText(String(rawExplanations.water ?? "")),
+      mealTiming: this.sanitizeText(String(rawExplanations.mealTiming ?? "")),
+      overall: this.sanitizeText(String(rawExplanations.overall ?? "")),
+    };
+
+    const recommendations: string[] = Array.isArray(parsed.recommendations)
+      ? parsed.recommendations.map((r) => this.sanitizeText(String(r)))
+      : [];
+
+    const summaryBase = this.sanitizeText(String(parsed.summary ?? ""));
+    const summary = `${summaryBase}\n\n${DISCLAIMER}`.trim();
+
+    return { cycle, explanations, recommendations, summary };
   }
 }

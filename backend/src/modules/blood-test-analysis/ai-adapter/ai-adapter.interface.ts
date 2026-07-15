@@ -12,6 +12,10 @@ import type {
   ExtractedBloodTestValues,
   NormalizedBloodTestValue,
 } from "../types";
+// Sprint 13: the same provider-agnostic adapter also powers nutrition-plan
+// generation. Type-only import (erased at runtime) so there is no cross-module
+// runtime dependency cycle.
+import type { NutritionPlanAIInput, NutritionPlanAIOutput } from "../../nutrition-plan/types";
 
 // Re-export the shared types so consumers of the adapter get everything from
 // a single import site.
@@ -69,4 +73,18 @@ export interface IAIAdapter {
     normalizedValues: NormalizedBloodTestValue[],
     context: AnalysisContext,
   ): Promise<BloodTestAnalysisResult>;
+
+  /**
+   * Generates a personalized nutrition plan (meal rotation cycle, per-meal and
+   * per-recommendation explanations, and a summary) from pre-computed calorie /
+   * macro targets and the user's constraints.
+   *
+   * Implementations MUST honor every allergen as a hard exclusion and MUST stay
+   * strictly within nutrition guidance (no diagnosis/treatment/prescription).
+   *
+   * @param input - Calculated targets plus dietary/allergy/condition constraints
+   *                and optional blood-test nutrition implications.
+   * @returns The structured nutrition-plan content.
+   */
+  generateNutritionPlan(input: NutritionPlanAIInput): Promise<NutritionPlanAIOutput>;
 }

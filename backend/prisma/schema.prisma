@@ -65,6 +65,7 @@ model User {
   accountTokens     AccountToken[]
   bloodTestUploads  BloodTestUpload[]
   bloodTestAnalyses BloodTestAnalysis[]
+  nutritionPlans    NutritionPlan[]
 
   @@map("users")
 }
@@ -393,4 +394,87 @@ model BloodTestReferenceRange {
   @@index([biomarkerCode])
   @@index([isActive])
   @@map("blood_test_reference_ranges")
+}
+
+// ---------------------------------------------------------------------------
+// Personalized nutrition plan domain (Sprint 13)
+// ---------------------------------------------------------------------------
+
+/// Plan horizon. Diewish generates 30- and 60-day personalized plans.
+enum NutritionPlanDuration {
+  THIRTY_DAY
+  SIXTY_DAY
+}
+
+/// Lifecycle status of a nutrition-plan generation run.
+enum NutritionPlanStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+/// A generated personalized nutrition plan produced by Diewish's Nutrition Plan
+/// Engine (Sprint 13).
+///
+/// A plan combines the mandatory onboarding profile (Sprint 9) with the optional
+/// latest blood-test analysis (Sprint 12): deterministic calorie/macro/water/
+/// meal-timing calculations plus AI-generated meal content and plain-language
+/// explanations. Plans are IMMUTABLE and VERSIONED — regenerating creates a new
+/// row (version N+1) and only the newest per (user, duration) is `isActive`;
+/// previous plans are retained so history is never lost. The JSON columns are
+/// intentionally reusable by downstream features (dashboard, dietitian chat,
+/// progress tracking, future health reports).
+///
+/// Safety: nothing here is medical diagnosis, treatment, or prescription; all
+/// content is educational/nutritional and carries a disclaimer.
+model NutritionPlan {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Optional soft link to the Sprint 12 blood-test analysis used as input.
+  /// Kept as a plain column (not a FK relation) so the Sprint 12 model is left
+  /// untouched and deleting an analysis never cascades into plan history.
+  bloodTestAnalysisId String?
+
+  duration NutritionPlanDuration
+  version  Int                   @default(1)
+  isActive Boolean               @default(true)
+  status   NutritionPlanStatus   @default(COMPLETED)
+
+  // --- Deterministic calculation outputs ---
+  bmr           Float
+  tdee          Float
+  dailyCalories Float
+  proteinGrams  Float
+  carbsGrams    Float
+  fatGrams      Float
+  waterMl       Float
+  mealsPerDay   Int
+
+  // --- Structured content (reusable JSON) ---
+  /// MealTimingRecommendation — recommended meal slots and times.
+  mealTiming      Json
+  /// NutritionPlanContent — the weekly rotation cycle mapped across all days.
+  dailyPlans      Json
+  /// PlanExplanations — plain-language rationale per recommendation.
+  explanations    Json
+  /// Ordered list of overall nutrition recommendations.
+  recommendations Json
+
+  /// 2-3 sentence plain-language summary (with disclaimer).
+  summary String? @db.Text
+
+  aiProvider       String?
+  aiModel          String?
+  processingTimeMs Int?
+  errorMessage     String?
+
+  @@index([userId])
+  @@index([userId, duration, isActive])
+  @@map("nutrition_plans")
 }
