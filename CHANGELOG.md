@@ -8,6 +8,16 @@ Format [Keep a Changelog](https://keepachangelog.com/) temel alınır ve proje [
 ## [Unreleased]
 
 ### Added
+- **Sprint 8 — Authentication (backend):** Ürün adı **Diewish** altında production-kalite kimlik doğrulama altyapısı.
+  - Prisma `User` + `RefreshToken` modelleri, `UserRole` enum ve migration (`20260715202355_add_auth_user_refresh_token`).
+  - `bcryptjs` ile şifre hashleme (yapılandırılabilir maliyet), ayrı access/refresh JWT secret'ları, TTL ve issuer.
+  - Auth modülü (DDD): `auth.schemas` (Zod DTO), `auth.repository`, `auth.service`, `auth.controller`, `auth.routes`.
+  - Endpoint'ler: `POST /api/auth/register`, `/login`, `/refresh-token`, `/logout`, `GET /api/auth/me`.
+  - `authenticate` + `authorize` (rol guard) middleware; auth'a özel sıkı rate limiter (brute-force koruması).
+  - Refresh token **rotation + reuse detection** (yeniden kullanım tespitinde tüm oturumların iptali) ve SHA-256 token-hash saklama.
+  - Swagger'a `Auth` tag'i + `bearerAuth` security scheme; modül route glob'u eklendi.
+- **Ürün markası:** Geçici "AI Dietitian Platform" adı **Diewish** ile değiştirildi (README, Swagger başlığı, frontend metadata/`APP_CONFIG`, package adları, dokümanlar).
+- **V1 yol haritası optimizasyonu:** `ROADMAP.md` üç kovaya göre yeniden yapılandırıldı — 🚀 Launch Blocker / 📮 Post-Launch / 🔭 Future Vision — her maddenin V1'de kalma/ertelenme gerekçesiyle.
 - Proje yönetim dokümanları: `ROADMAP.md` ve `CHANGELOG.md` oluşturuldu.
 - `TODO_MASTER.md` sprint bazlı takip, öncelikler (Critical/High/Medium/Low), efor tahminleri, blocker ve teknik borç bölümleriyle yeniden yapılandırıldı.
 - `PROJECT_MEMORY.md`'ye tam "Güncel Proje Durumu" snapshot bölümü eklendi (sprint, commit, sürüm, modül/bileşen durumları, teknolojiler, kararlar, sonraki sprint).

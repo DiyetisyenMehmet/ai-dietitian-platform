@@ -53,26 +53,28 @@
 
 ---
 
-## 📌 GÜNCEL PROJE DURUMU (Snapshot · 2026-07-13)
+## 📌 GÜNCEL PROJE DURUMU (Snapshot · 2026-07-15)
 
 > Bu bölüm, gelecekteki bir oturumun projeyi sıfırdan anlayabilmesi için tam durum özetidir.
+> **Ürün adı: Diewish** (resmi). Eski geçici ad "AI Dietitian Platform" kullanımdan kaldırıldı.
 
 ### Genel
-- **Aktif Sprint:** Sprint 7 tamamlandı → **Sprint 8 (Backend Authentication Infrastructure)** sıradaki.
-- **Son Commit Hash:** `15e4bc1` — `feat(backend): scaffold backend foundation`
+- **Aktif Sprint:** Sprint 8 (Backend Authentication) **tamamlandı** → Sprint 9 (Hesap yaşam döngüsü + e-posta) sıradaki.
+- **Son Commit Hash:** bkz. `git log` — `feat(auth): Diewish rebrand + Sprint 8 authentication`
 - **Aktif Branch:** `main`
-- **Sürüm:** Frontend `0.1.0` · Backend `0.1.0` (SemVer başlangıç)
-- **Genel Tamamlanma:** ~%42
+- **Sürüm:** Frontend `0.1.0` · Backend `0.2.0` (auth modülü)
+- **Genel Tamamlanma:** ~%46
+- **V1 Stratejisi:** Launch Blocker / Post-Launch / Future Vision önceliklendirmesi `ROADMAP.md`'de (V1 = mümkün olan en kısa sürede kararlı, güvenli, production-ready yayın).
 
 ### Modüller
-- **Tamamlanan Modüller:** Frontend Foundation, Auth UI (backend'siz), Dashboard, Meals (UI), AI Chat (UI/mock), Goals (tam), Backend Foundation (Express + Prisma + health + Swagger).
-- **Kalan Modüller:** Backend Auth (Sprint 8), domain backend API'leri (Meals/Goals/Dashboard/Chat kalıcılığı), gerçek AI Orchestrator, Profile modülü, CI/CD, Monitoring, Deployment.
+- **Tamamlanan Modüller:** Frontend Foundation, Auth UI, Dashboard, Meals (UI), AI Chat (UI/mock), Goals (tam), Backend Foundation, **Backend Auth (Sprint 8: register/login/refresh-token/logout/me + rotation/reuse-detection + auth rate-limit)**.
+- **Kalan Modüller:** Frontend↔Backend auth entegrasyonu, domain backend API'leri (Meals/Goals/Dashboard/Chat kalıcılığı), Profile + zorunlu onboarding, gerçek AI Orchestrator, kan tahlili analizi, 30/60 gün plan, abonelik + iyzico, yasal/uyum katmanı, CI/CD, Monitoring, Deployment.
 
 ### Bileşen Durumları
 - **Frontend Status:** ✅ Çalışıyor (port 3000). Lint ✓, type-check ✓, build ✓. 14 route derleniyor.
-- **Backend Status:** ✅ Çalışıyor (port 4000). Lint ✓, type-check ✓, build ✓.
-- **Database Status:** ✅ PostgreSQL 17 · `ai_dietitian` DB · `dietitian` kullanıcısı · migration `20260711213135_init` uygulandı. ⚠️ VM restart sonrası Postgres kalıcı değil (yeniden kurulum + migrate gerekir).
-- **API Status:** ✅ `/api/health` → ok · `/api/health/ready` → database: up · Swagger `/docs` yayında. Domain endpoint'leri henüz yok.
+- **Backend Status:** ✅ Kod tamam (port 4000). Sprint 8 doğrulaması: **lint ✓ (0 uyarı), type-check ✓ (0 hata)**. ⚠️ Bu sprint kullanıcı talimatıyla `build` ve `preview` **alınmadı**.
+- **Database Status:** ✅ PostgreSQL 17 · `ai_dietitian` DB · `dietitian` kullanıcısı (CREATEDB verildi). Migration'lar: `20260711213135_init`, `20260715202355_add_auth_user_refresh_token` (users + refresh_tokens + UserRole). ⚠️ VM restart sonrası Postgres kalıcı değil (yeniden kurulum + migrate gerekir).
+- **API Status:** ✅ `/api/health`, `/api/health/ready` · **Auth: `POST /api/auth/{register,login,refresh-token,logout}` + `GET /api/auth/me`** · Swagger `/docs` (Auth tag + bearerAuth). Diğer domain endpoint'leri henüz yok.
 - **AI Status:** ⚠️ Yalnızca frontend sohbet arayüzü (mock). Gerçek AI orchestrator/model entegrasyonu yok.
 - **Deployment Status:** ⚠️ Sadece dev/preview. Preview URL: https://685bf5caa.na115.preview.abacusai.app (HTTP 200). CI/CD ve production deployment yok.
 
@@ -96,7 +98,7 @@ ai-dietitian-platform/
 
 ### Aktif Teknolojiler
 - **Frontend:** Next.js 15.5, React, TypeScript, Tailwind CSS v3, shadcn/ui + Radix, lucide-react, react-hook-form, Zod, next-themes.
-- **Backend:** Node 22, Express 4.21, TypeScript, Prisma 6.2 + PostgreSQL 17, Pino/pino-http, Helmet, express-rate-limit, compression, Zod, swagger-jsdoc/swagger-ui-express, tsx.
+- **Backend:** Node 22, Express 4.21, TypeScript, Prisma 6.2 + PostgreSQL 17, Pino/pino-http, Helmet, express-rate-limit, compression, Zod, swagger-jsdoc/swagger-ui-express, **bcryptjs**, **jsonwebtoken**, tsx.
 - **Tooling:** ESLint, Prettier, npm.
 
 ### Bilinen Sorunlar (Known Issues)

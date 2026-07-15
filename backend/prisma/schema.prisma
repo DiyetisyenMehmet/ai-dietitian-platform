@@ -25,3 +25,64 @@ model HealthCheck {
 
   @@map("health_checks")
 }
+
+// ---------------------------------------------------------------------------
+// Auth domain (Sprint 8)
+// ---------------------------------------------------------------------------
+
+/// Application-level roles. Coarse-grained authorization for V1; finer
+/// permissions can be layered later without breaking this contract.
+enum UserRole {
+  USER
+  ADMIN
+}
+
+/// A registered account. Only authentication-relevant fields live here; the
+/// richer nutrition profile (onboarding: age, height, allergies, etc.) is a
+/// separate domain model introduced in a later sprint. `onboardingCompleted`
+/// is kept here so the mandatory-onboarding gate can be enforced cheaply on
+/// every authenticated request without a join.
+model User {
+  id                  String    @id @default(uuid())
+  email               String    @unique
+  /// bcrypt hash — the plaintext password is never stored.
+  passwordHash        String
+  fullName            String?
+  role                UserRole  @default(USER)
+  isActive            Boolean   @default(true)
+  emailVerifiedAt     DateTime?
+  onboardingCompleted Boolean   @default(false)
+  lastLoginAt         DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  refreshTokens RefreshToken[]
+
+  @@map("users")
+}
+
+/// Persisted refresh-token records enabling rotation and reuse detection.
+///
+/// The token handed to the client is a signed JWT; its `jti` maps to `id`
+/// here. We also store a SHA-256 hash of the exact token string for
+/// defense-in-depth (a leaked DB alone cannot reconstruct a usable token).
+/// On refresh the presented token is rotated: the old record is revoked and
+/// `replacedById` points to its successor, so replaying a revoked token is
+/// detectable as reuse and triggers revocation of the whole lineage.
+model RefreshToken {
+  id           String    @id @default(uuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// SHA-256 hash of the issued refresh-token string.
+  tokenHash    String    @unique
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  /// Successor token id after rotation (reuse-detection lineage).
+  replacedById String?
+  userAgent    String?
+  ipAddress    String?
+  createdAt    DateTime  @default(now())
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}

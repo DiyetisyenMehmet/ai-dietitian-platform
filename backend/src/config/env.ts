@@ -25,7 +25,32 @@ const envSchema = z.object({
     .default(15 * 60 * 1000),
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(100),
 
+  // Stricter limiter for auth endpoints (login/register/refresh) to blunt
+  // credential-stuffing and brute-force attempts (Gap: I-13 / A2).
+  AUTH_RATE_LIMIT_WINDOW_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(15 * 60 * 1000),
+  AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
+
   DATABASE_URL: z.string().url({ message: "DATABASE_URL must be a valid connection string" }),
+
+  // --- Authentication (Sprint 8) ---
+  // Secrets MUST be provided in every environment; a minimum length is enforced
+  // so a weak/placeholder secret cannot silently ship. Access and refresh use
+  // separate secrets so leaking one does not compromise the other.
+  JWT_ACCESS_SECRET: z.string().min(32, "JWT_ACCESS_SECRET must be at least 32 characters"),
+  JWT_REFRESH_SECRET: z.string().min(32, "JWT_REFRESH_SECRET must be at least 32 characters"),
+  // Human-friendly TTLs (e.g. "15m", "7d") consumed by jsonwebtoken.
+  JWT_ACCESS_TTL: z.string().default("15m"),
+  JWT_REFRESH_TTL: z.string().default("7d"),
+  // Refresh-token lifetime in days — used to compute the DB `expiresAt`; keep
+  // in sync with JWT_REFRESH_TTL.
+  REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(7),
+  JWT_ISSUER: z.string().default("diewish"),
+  // bcrypt cost factor. 12 is a sane production default; higher = slower.
+  BCRYPT_ROUNDS: z.coerce.number().int().min(10).max(15).default(12),
 });
 
 export type Env = z.infer<typeof envSchema>;

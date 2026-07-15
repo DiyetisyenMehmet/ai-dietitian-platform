@@ -11,11 +11,12 @@ const options: swaggerJSDoc.Options = {
   definition: {
     openapi: "3.0.3",
     info: {
-      title: "AI Dietitian Platform API",
-      version: "0.1.0",
+      title: "Diewish API",
+      version: "0.2.0",
       description:
-        "Backend API for the AI Dietitian Platform. This is the foundation baseline; " +
-        "domain endpoints are added in later sprints.",
+        "Backend API for Diewish — a personal health & nutrition platform. " +
+        "Includes the foundation baseline plus the authentication module; " +
+        "additional domain endpoints are added in later sprints.",
     },
     servers: [
       {
@@ -24,6 +25,13 @@ const options: swaggerJSDoc.Options = {
       },
     ],
     components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: "http",
+          scheme: "bearer",
+          bearerFormat: "JWT",
+        },
+      },
       schemas: {
         SuccessResponse: {
           type: "object",
@@ -52,10 +60,19 @@ const options: swaggerJSDoc.Options = {
         },
       },
     },
-    tags: [{ name: "Health", description: "Service health and readiness checks" }],
+    tags: [
+      { name: "Health", description: "Service health and readiness checks" },
+      { name: "Auth", description: "Authentication, registration and session management" },
+    ],
   },
-  // Glob patterns support both TS (dev via tsx) and compiled JS (prod).
-  apis: ["./src/routes/*.ts", "./dist/routes/*.js"],
+  // Glob patterns support both TS (dev via tsx) and compiled JS (prod), and
+  // cover both top-level routes and per-module routers under `modules/`.
+  apis: [
+    "./src/routes/*.ts",
+    "./src/modules/**/*.routes.ts",
+    "./dist/routes/*.js",
+    "./dist/modules/**/*.routes.js",
+  ],
 };
 
 export const swaggerSpec = swaggerJSDoc(options);

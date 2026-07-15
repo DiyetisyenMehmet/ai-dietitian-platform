@@ -1,4 +1,4 @@
-# V1 GAP ANALYSIS — AI Dietitian Platform
+# V1 GAP ANALYSIS — Diewish
 
 > **Belge Türü:** Production Launch Readiness — Gap Analysis
 > **Sürüm:** 1.0 · **Tarih:** 2026-07-15 · **Durum:** İnceleme (Review)
@@ -26,7 +26,7 @@
 
 ### 1.1 Genel Değerlendirme
 
-AI Dietitian Platform teknik temel açısından **sağlam bir mühendislik zemini** üzerine kurulmuştur: Modular Monolith + DDD mimarisi, katmanlı frontend (Next.js 15), disiplinli backend foundation (Express + Prisma + Pino + Swagger), ve tutarlı kalite kapıları (lint / type-check / build). Ancak proje şu anda **~%42 tamamlanma** seviyesindedir ve **herkese açık bir V1 yayınına hazır değildir.**
+Diewish teknik temel açısından **sağlam bir mühendislik zemini** üzerine kurulmuştur: Modular Monolith + DDD mimarisi, katmanlı frontend (Next.js 15), disiplinli backend foundation (Express + Prisma + Pino + Swagger), ve tutarlı kalite kapıları (lint / type-check / build). Ancak proje şu anda **~%42 tamamlanma** seviyesindedir ve **herkese açık bir V1 yayınına hazır değildir.**
 
 Kritik nokta şudur: mevcut roadmap ağırlıklı olarak **fonksiyonel özelliklere** (auth, meals, goals, chat, ödeme) odaklanmış; ancak bir uygulamanın **App Store / Google Play mağaza incelemesinden geçmesi** ve **Türkiye'de yasal olarak yayınlanabilmesi** için gereken **yasal, operasyonel ve uyumluluk katmanı** roadmap'te ya hiç yok ya da dağınık durumda. Bu platform **sağlık verisi** (kan tahlili, kronik hastalık, alerji, ilaç etkileşimi) işlediği için, bu gap'ler **"sonra yaparız" denebilecek" iyileştirmeler değil, launch blocker** seviyesindedir.
 

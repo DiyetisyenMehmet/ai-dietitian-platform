@@ -73,14 +73,18 @@ Durum simgeleri: `[x]` tamam · `[~]` kısmen · `[ ]` beklemede
 - [x] Güvenlik: CORS, Helmet, compression, rate-limit — **(High)**
 - [x] Health endpoint'leri (`/api/health`, `/api/health/ready`) + Swagger `/docs` — **(High)**
 
-### Sprint 8 — Authentication Infrastructure (Backend) ⏭️ SIRADAKİ
-- [ ] `User` + `RefreshToken` Prisma modelleri + migration — **(Critical)**
-- [ ] bcrypt password hashing — **(Critical)**
-- [ ] JWT (access + refresh) konfigürasyonu — **(Critical)**
-- [ ] Auth service/controller: register, login, logout, current-user, refresh — **(Critical)**
-- [ ] Auth middleware (route koruma) + rol/claim yapısı — **(High)**
-- [ ] Frontend auth akışının backend'e bağlanması — **(Critical)**
-- [ ] Auth endpoint entegrasyon testleri — **(High)**
+### Sprint 8 — Authentication Infrastructure (Backend) ✅ (Tamamlandı)
+- [x] `User` + `RefreshToken` Prisma modelleri + migration (`20260715202355_add_auth_user_refresh_token`) — **(Critical)**
+- [x] bcrypt password hashing (`bcryptjs`, configurable cost) — **(Critical)**
+- [x] JWT (access + refresh) konfigürasyonu — ayrı secret'lar, TTL, issuer — **(Critical)**
+- [x] Auth service/controller: register, login, refresh-token, logout, current-user (`/me`) — **(Critical)**
+- [x] Auth middleware (`authenticate` + `authorize` rol guard) — **(High)**
+- [x] Refresh token rotation + reuse detection — **(High)**
+- [x] Auth'a özel rate limiting (brute-force koruması) — **(High)**
+- [ ] Frontend auth akışının backend'e bağlanması — **(Critical)** *(Sprint 9'a taşındı)*
+- [ ] Auth endpoint entegrasyon testleri — **(High)** *(test altyapısı Sprint 18'de)*
+
+> Not: Bu sprint kullanıcı talimatıyla **build/preview alınmadan** tamamlandı; doğrulama `type-check` (tsc --noEmit) + `lint` (0 hata/0 uyarı) + Prisma migration'ın canlı DB'ye uygulanması ile yapıldı.
 
 ---
 

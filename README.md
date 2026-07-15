@@ -1,4 +1,4 @@
-# AI Dietitian Platform
+# Diewish
 
 Kurumsal, AI destekli diyetisyen platformu. Modular Monolith + Domain-Driven Design.
 

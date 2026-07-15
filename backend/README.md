@@ -1,6 +1,6 @@
-# AI Dietitian Platform — Backend
+# Diewish — Backend
 
-Backend **foundation** for the AI Dietitian Platform. This sprint delivers only
+Backend **foundation** for Diewish. This sprint delivers only
 the infrastructure baseline (no business logic, no auth, no domain models).
 
 ## Stack
