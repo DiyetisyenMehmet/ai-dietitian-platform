@@ -38,7 +38,7 @@ export const QUOTA_MATRIX: QuotaMatrix = {
     BLOOD_TEST_ANALYSIS: { perDay: 15, perMonth: 100 },
     NUTRITION_PLAN: { perDay: 15, perMonth: 100 },
   },
-  PRO: {
+  PREMIUM_PLUS: {
     DIETITIAN_CHAT: { perDay: 500, perMonth: 10000 },
     BLOOD_TEST_ANALYSIS: { perDay: 60, perMonth: 600 },
     NUTRITION_PLAN: { perDay: 60, perMonth: 600 },

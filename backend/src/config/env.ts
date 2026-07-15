@@ -87,6 +87,36 @@ const envSchema = z.object({
   // Minimum meaningful character count required from text extraction before
   // OCR fallback is triggered by the hybrid extraction pipeline.
   BLOOD_TEST_TEXT_MIN_CHARS: z.coerce.number().int().positive().default(100),
+
+  // --- Payments / iyzico (Sprint 15, D2) ---
+  // Payment provider selector. Only "iyzico" ships now; the modular payment
+  // layer lets an additional provider be added later without touching callers.
+  PAYMENT_PROVIDER: z.enum(["iyzico"]).default("iyzico"),
+  // iyzico environment. "sandbox" targets the sandbox base URL by default so a
+  // misconfigured deployment cannot accidentally charge real cards.
+  IYZICO_ENV: z.enum(["sandbox", "production"]).default("sandbox"),
+  // iyzico REST base URL. Defaults to the sandbox endpoint; set the production
+  // URL (https://api.iyzipay.com) only alongside IYZICO_ENV=production.
+  IYZICO_BASE_URL: z.string().url().default("https://sandbox-api.iyzipay.com"),
+  // API credentials. Optional at startup so the app boots without them; the
+  // payment service surfaces a clear error only when a payment is attempted.
+  IYZICO_API_KEY: z.string().optional(),
+  IYZICO_SECRET_KEY: z.string().optional(),
+  // Secret used to verify inbound webhook signatures. Falls back to the API
+  // secret when unset (iyzico signs notifications with the account secret).
+  IYZICO_WEBHOOK_SECRET: z.string().optional(),
+  // Public callback URL iyzico redirects to after a hosted-checkout payment.
+  IYZICO_CALLBACK_URL: z.string().url().default("http://localhost:3000/billing/callback"),
+  // Billing currency (ISO 4217). TRY for the Turkish market.
+  BILLING_CURRENCY: z.string().length(3).default("TRY"),
+
+  // --- Legal / consent (Sprint 15, B1–B4) ---
+  // Current published version of each legal document. Bumping a version marks
+  // existing user consents stale and forces re-consent on the next gated action.
+  LEGAL_PRIVACY_POLICY_VERSION: z.string().default("2026-07-01"),
+  LEGAL_TERMS_OF_SERVICE_VERSION: z.string().default("2026-07-01"),
+  LEGAL_MEDICAL_DISCLAIMER_VERSION: z.string().default("2026-07-01"),
+  LEGAL_KVKK_CONSENT_VERSION: z.string().default("2026-07-01"),
 });
 
 export type Env = z.infer<typeof envSchema>;

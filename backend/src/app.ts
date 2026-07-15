@@ -38,8 +38,17 @@ export function createApp(): Application {
   // Response compression.
   app.use(compression());
 
-  // Body parsing with sane size limits.
-  app.use(express.json({ limit: "1mb" }));
+  // Body parsing with sane size limits. The JSON parser also stashes the raw
+  // request bytes on `req.rawBody` so the payment-webhook route can verify the
+  // provider's signature against exactly what was signed.
+  app.use(
+    express.json({
+      limit: "1mb",
+      verify: (req, _res, buf) => {
+        (req as express.Request).rawBody = buf.length ? Buffer.from(buf) : undefined;
+      },
+    }),
+  );
   app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
   // Observability: correlation ID first, then request logging.
