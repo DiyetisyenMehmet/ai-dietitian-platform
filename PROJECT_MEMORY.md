@@ -59,22 +59,22 @@
 > **Ürün adı: Diewish** (resmi). Eski geçici ad "AI Dietitian Platform" kullanımdan kaldırıldı.
 
 ### Genel
-- **Aktif Sprint:** Sprint 8 (Backend Authentication) **tamamlandı** → Sprint 9 (Hesap yaşam döngüsü + e-posta) sıradaki.
-- **Son Commit Hash:** bkz. `git log` — `feat(auth): Diewish rebrand + Sprint 8 authentication`
+- **Aktif Sprint:** Sprint 9 (Zorunlu Kullanıcı Onboarding'i) **tamamlandı** → Sprint 10 (Hesap yaşam döngüsü: e-posta doğrulama + şifre sıfırlama) sıradaki.
+- **Son Commit Hash:** bkz. `git log` — `feat(onboarding): Sprint 9 mandatory user onboarding`
 - **Aktif Branch:** `main`
-- **Sürüm:** Frontend `0.1.0` · Backend `0.2.0` (auth modülü)
-- **Genel Tamamlanma:** ~%46
+- **Sürüm:** Frontend `0.1.0` · Backend `0.2.0` (auth + onboarding modülleri)
+- **Genel Tamamlanma:** ~%50
 - **V1 Stratejisi:** Launch Blocker / Post-Launch / Future Vision önceliklendirmesi `ROADMAP.md`'de (V1 = mümkün olan en kısa sürede kararlı, güvenli, production-ready yayın).
 
 ### Modüller
-- **Tamamlanan Modüller:** Frontend Foundation, Auth UI, Dashboard, Meals (UI), AI Chat (UI/mock), Goals (tam), Backend Foundation, **Backend Auth (Sprint 8: register/login/refresh-token/logout/me + rotation/reuse-detection + auth rate-limit)**.
-- **Kalan Modüller:** Frontend↔Backend auth entegrasyonu, domain backend API'leri (Meals/Goals/Dashboard/Chat kalıcılığı), Profile + zorunlu onboarding, gerçek AI Orchestrator, kan tahlili analizi, 30/60 gün plan, abonelik + iyzico, yasal/uyum katmanı, CI/CD, Monitoring, Deployment.
+- **Tamamlanan Modüller:** Frontend Foundation, Auth UI, Dashboard, Meals (UI), AI Chat (UI/mock), Goals (tam), Backend Foundation, **Backend Auth (Sprint 8: register/login/refresh-token/logout/me + rotation/reuse-detection + auth rate-limit)**, **Onboarding (Sprint 9: UserProfile + zorunlu çok adımlı onboarding, frontend auth entegrasyonu + session store + route guard)**.
+- **Kalan Modüller:** Hesap yaşam döngüsü (e-posta doğrulama, şifre sıfırlama, hesap silme), domain backend API'leri (Meals/Goals/Dashboard/Chat kalıcılığı), gerçek AI Orchestrator, kan tahlili analizi, 30/60 gün plan, abonelik + iyzico, yasal/uyum katmanı, CI/CD, Monitoring, Deployment.
 
 ### Bileşen Durumları
-- **Frontend Status:** ✅ Çalışıyor (port 3000). Lint ✓, type-check ✓, build ✓. 14 route derleniyor.
-- **Backend Status:** ✅ Kod tamam (port 4000). Sprint 8 doğrulaması: **lint ✓ (0 uyarı), type-check ✓ (0 hata)**. ⚠️ Bu sprint kullanıcı talimatıyla `build` ve `preview` **alınmadı**.
-- **Database Status:** ✅ PostgreSQL 17 · `ai_dietitian` DB · `dietitian` kullanıcısı (CREATEDB verildi). Migration'lar: `20260711213135_init`, `20260715202355_add_auth_user_refresh_token` (users + refresh_tokens + UserRole). ⚠️ VM restart sonrası Postgres kalıcı değil (yeniden kurulum + migrate gerekir).
-- **API Status:** ✅ `/api/health`, `/api/health/ready` · **Auth: `POST /api/auth/{register,login,refresh-token,logout}` + `GET /api/auth/me`** · Swagger `/docs` (Auth tag + bearerAuth). Diğer domain endpoint'leri henüz yok.
+- **Frontend Status:** ✅ Kod tamam (port 3000). Sprint 9 doğrulaması: **lint ✓ (0 uyarı), type-check ✓ (0 hata)**. Auth session store + route guard + onboarding sihirbazı eklendi. ⚠️ Bu sprint kredi optimizasyonuyla `build` ve `preview` **alınmadı**.
+- **Backend Status:** ✅ Kod tamam (port 4000). Sprint 9 doğrulaması: **lint ✓ (0 uyarı), type-check ✓ (0 hata)**. ⚠️ Bu sprint kredi optimizasyonuyla `build` ve `preview` **alınmadı**.
+- **Database Status:** ✅ PostgreSQL 17 · `ai_dietitian` DB · `dietitian` kullanıcısı (CREATEDB verildi). Migration'lar: `20260711213135_init`, `20260715202355_add_auth_user_refresh_token`, `20260715203846_add_user_profile_onboarding` (user_profiles + Gender/ActivityLevel/DietaryPreference enum). ⚠️ VM restart sonrası Postgres kalıcı değil (yeniden kurulum + migrate gerekir).
+- **API Status:** ✅ `/api/health`, `/api/health/ready` · **Auth: `POST /api/auth/{register,login,refresh-token,logout}` + `GET /api/auth/me`** · **Onboarding: `POST /api/onboarding` + `GET /api/onboarding`** · Swagger `/docs` (Auth + Onboarding tag + bearerAuth). Diğer domain endpoint'leri henüz yok.
 - **AI Status:** ⚠️ Yalnızca frontend sohbet arayüzü (mock). Gerçek AI orchestrator/model entegrasyonu yok.
 - **Deployment Status:** ⚠️ Sadece dev/preview. Preview URL: https://685bf5caa.na115.preview.abacusai.app (HTTP 200). CI/CD ve production deployment yok.
 

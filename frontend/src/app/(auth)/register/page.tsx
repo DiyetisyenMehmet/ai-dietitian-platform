@@ -9,6 +9,7 @@ import { toast } from "sonner";
 
 import { registerSchema, type RegisterInput } from "@/domain/auth/validation";
 import { authService } from "@/application/auth/auth-service";
+import { authStore } from "@/application/auth/auth-store";
 import { AuthLayout } from "@/presentation/components/layout/auth-layout";
 import { FormField } from "@/presentation/components/ui/form-field";
 import { Input } from "@/presentation/components/ui/input";
@@ -41,8 +42,9 @@ export default function RegisterPage() {
     async (values: RegisterInput) => {
       const result = await authService.register(values);
       if (result.ok) {
-        toast.success("Aramıza hoş geldiniz! Şimdi e-postanızı doğrulayalım.");
-        router.push("/verify-email");
+        authStore.setSession(result.data);
+        toast.success("Aramıza hoş geldiniz! Şimdi profilinizi oluşturalım.");
+        router.replace("/onboarding");
         return;
       }
       toast.error(result.error);

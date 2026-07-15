@@ -57,8 +57,71 @@ model User {
   updatedAt           DateTime  @updatedAt
 
   refreshTokens RefreshToken[]
+  profile       UserProfile?
 
   @@map("users")
+}
+
+// ---------------------------------------------------------------------------
+// Onboarding / nutrition profile domain (Sprint 9)
+// ---------------------------------------------------------------------------
+
+/// Biological sex / gender used for calorie & macro baselines. `PREFER_NOT_TO_SAY`
+/// is offered for user comfort; downstream calculations fall back to a neutral
+/// baseline when it is selected.
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  PREFER_NOT_TO_SAY
+}
+
+/// Physical activity level — maps to a standard activity multiplier used later
+/// when estimating energy expenditure.
+enum ActivityLevel {
+  SEDENTARY
+  LIGHT
+  MODERATE
+  ACTIVE
+  VERY_ACTIVE
+}
+
+/// High-level dietary pattern guiding meal/plan generation in later sprints.
+enum DietaryPreference {
+  OMNIVORE
+  VEGETARIAN
+  VEGAN
+  PESCATARIAN
+  KETO
+  PALEO
+  MEDITERRANEAN
+  GLUTEN_FREE
+  OTHER
+}
+
+/// The mandatory onboarding profile captured on first login/registration.
+///
+/// One-to-one with `User`. Age is intentionally NOT stored — it is derived from
+/// `dateOfBirth` on read so it never drifts. `healthConditions` and `allergies`
+/// are free-form string lists (presets + custom entries) kept simple for V1.
+model UserProfile {
+  id                String            @id @default(uuid())
+  userId            String            @unique
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dateOfBirth       DateTime          @db.Date
+  gender            Gender
+  heightCm          Float
+  currentWeightKg   Float
+  targetWeightKg    Float
+  activityLevel     ActivityLevel
+  healthConditions  String[]
+  allergies         String[]
+  dietaryPreference DietaryPreference
+  dailyWaterGoalMl  Int
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@map("user_profiles")
 }
 
 /// Persisted refresh-token records enabling rotation and reuse detection.

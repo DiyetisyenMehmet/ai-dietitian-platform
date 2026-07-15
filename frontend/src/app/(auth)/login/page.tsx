@@ -9,6 +9,7 @@ import { toast } from "sonner";
 
 import { loginSchema, type LoginInput } from "@/domain/auth/validation";
 import { authService } from "@/application/auth/auth-service";
+import { authStore } from "@/application/auth/auth-store";
 import { AuthLayout } from "@/presentation/components/layout/auth-layout";
 import { FormField } from "@/presentation/components/ui/form-field";
 import { Input } from "@/presentation/components/ui/input";
@@ -35,8 +36,9 @@ export default function LoginPage() {
     async (values: LoginInput) => {
       const result = await authService.login(values);
       if (result.ok) {
+        authStore.setSession(result.data);
         toast.success("Hoş geldiniz! Sizi yönlendiriyoruz...");
-        router.push("/");
+        router.replace(result.data.user.onboardingCompleted ? "/" : "/onboarding");
         return;
       }
       toast.error(result.error);

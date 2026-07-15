@@ -33,7 +33,7 @@ function toFriendlyError(error: unknown): string {
 export const authService = {
   async login(input: LoginInput): Promise<AuthResult<AuthSession>> {
     try {
-      const data = await authClient.login(input);
+      const data = await authClient.login({ email: input.email, password: input.password });
       return { ok: true, data };
     } catch (error) {
       return { ok: false, error: toFriendlyError(error) };
@@ -50,6 +50,15 @@ export const authService = {
       return { ok: true, data };
     } catch (error) {
       return { ok: false, error: toFriendlyError(error) };
+    }
+  },
+
+  /** Revokes the refresh token server-side. Best-effort: never throws to the UI. */
+  async logout(refreshToken: string): Promise<void> {
+    try {
+      await authClient.logout({ refreshToken });
+    } catch {
+      // Ignore — local session is cleared regardless by the caller.
     }
   },
 

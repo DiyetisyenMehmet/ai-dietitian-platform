@@ -1,17 +1,21 @@
 /**
- * Auth endpoint paths (relative to NEXT_PUBLIC_API_BASE_URL).
- *
- * NOTE: The backend REST contract is not yet frozen in this repository.
- * These paths follow conventional REST auth naming and are each overridable
- * via environment variables so they can be aligned with the real backend
- * WITHOUT code changes. Until confirmed against the backend they are treated
- * as configurable defaults (see README / Open Questions), not invented
- * business endpoints.
+ * Auth & onboarding endpoint paths (relative to NEXT_PUBLIC_API_BASE_URL).
+ * These match the backend REST contract delivered in Sprints 8–9.
  */
 export const AUTH_ENDPOINTS = {
-  login: process.env.NEXT_PUBLIC_AUTH_LOGIN_PATH ?? "/auth/login",
-  register: process.env.NEXT_PUBLIC_AUTH_REGISTER_PATH ?? "/auth/register",
-  forgotPassword: process.env.NEXT_PUBLIC_AUTH_FORGOT_PASSWORD_PATH ?? "/auth/forgot-password",
-  resetPassword: process.env.NEXT_PUBLIC_AUTH_RESET_PASSWORD_PATH ?? "/auth/reset-password",
-  verifyEmail: process.env.NEXT_PUBLIC_AUTH_VERIFY_EMAIL_PATH ?? "/auth/verify-email",
+  login: "/auth/login",
+  register: "/auth/register",
+  refresh: "/auth/refresh-token",
+  logout: "/auth/logout",
+  me: "/auth/me",
+  // Account-lifecycle flows (password reset / email verification) are delivered
+  // in a later sprint; paths are kept so existing placeholder screens compile.
+  forgotPassword: "/auth/forgot-password",
+  resetPassword: "/auth/reset-password",
+  verifyEmail: "/auth/verify-email",
+} as const;
+
+export const ONBOARDING_ENDPOINTS = {
+  /** GET current profile / POST to complete onboarding. */
+  base: "/onboarding",
 } as const;

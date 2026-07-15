@@ -8,6 +8,13 @@ Format [Keep a Changelog](https://keepachangelog.com/) temel alınır ve proje [
 ## [Unreleased]
 
 ### Added
+- **Sprint 9 — Zorunlu Kullanıcı Onboarding'i:** Kayıt/giriş sonrası, uygulama özelliklerine erişimden önce tamamlanması zorunlu, çok adımlı onboarding akışı.
+  - Prisma `UserProfile` modeli (1:1 `User`), `Gender`/`ActivityLevel`/`DietaryPreference` enum'ları ve migration (`20260715203846_add_user_profile_onboarding`).
+  - Onboarding modülü (DDD): `onboarding.schemas` (Zod, yaş sınırı doğrulama), `repository` (tek transaction'da profil upsert + `onboardingCompleted` flag), `service` (doğum tarihinden yaş türetme), `controller`, `routes`.
+  - Endpoint'ler: `POST /api/onboarding` (profili kaydeder ve uygulama kilidini açar), `GET /api/onboarding`; Swagger'a `Onboarding` tag'i.
+  - Frontend auth entegrasyonu: localStorage tabanlı session store, HTTP client'a bearer-token ekleme + `{success,data}` envelope çözme, `authClient` (login/register/refresh/logout/me), login/register akışları backend'e bağlandı.
+  - Toplanan alanlar: ad soyad, doğum tarihi (otomatik yaş), cinsiyet, boy, mevcut/hedef kilo, aktivite seviyesi, sağlık durumları, alerjiler, beslenme tercihi, günlük su hedefi.
+  - Mobile-first, 5 adımlı sihirbaz (adım başı doğrulama, ilerleme çubuğu) ve global **route guard** — onboarding tamamlanana kadar tüm özellikler kilitli.
 - **Sprint 8 — Authentication (backend):** Ürün adı **Diewish** altında production-kalite kimlik doğrulama altyapısı.
   - Prisma `User` + `RefreshToken` modelleri, `UserRole` enum ve migration (`20260715202355_add_auth_user_refresh_token`).
   - `bcryptjs` ile şifre hashleme (yapılandırılabilir maliyet), ayrı access/refresh JWT secret'ları, TTL ve issuer.

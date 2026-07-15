@@ -63,6 +63,7 @@ const options: swaggerJSDoc.Options = {
     tags: [
       { name: "Health", description: "Service health and readiness checks" },
       { name: "Auth", description: "Authentication, registration and session management" },
+      { name: "Onboarding", description: "Mandatory user onboarding profile" },
     ],
   },
   // Glob patterns support both TS (dev via tsx) and compiled JS (prod), and

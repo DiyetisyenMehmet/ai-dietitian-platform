@@ -81,10 +81,20 @@ Durum simgeleri: `[x]` tamam · `[~]` kısmen · `[ ]` beklemede
 - [x] Auth middleware (`authenticate` + `authorize` rol guard) — **(High)**
 - [x] Refresh token rotation + reuse detection — **(High)**
 - [x] Auth'a özel rate limiting (brute-force koruması) — **(High)**
-- [ ] Frontend auth akışının backend'e bağlanması — **(Critical)** *(Sprint 9'a taşındı)*
+- [x] Frontend auth akışının backend'e bağlanması — **(Critical)** *(Sprint 9'da tamamlandı)*
 - [ ] Auth endpoint entegrasyon testleri — **(High)** *(test altyapısı Sprint 18'de)*
 
 > Not: Bu sprint kullanıcı talimatıyla **build/preview alınmadan** tamamlandı; doğrulama `type-check` (tsc --noEmit) + `lint` (0 hata/0 uyarı) + Prisma migration'ın canlı DB'ye uygulanması ile yapıldı.
+
+### Sprint 9 — Zorunlu Kullanıcı Onboarding'i ✅ (Tamamlandı)
+- [x] Prisma `UserProfile` modeli + `Gender`/`ActivityLevel`/`DietaryPreference` enum'ları + migration (`20260715203846_add_user_profile_onboarding`) — **(Critical)**
+- [x] Onboarding modülü (DDD): `onboarding.schemas` (Zod), `repository` (transaction'lı upsert + `onboardingCompleted` flag), `service` (yaş türetme), `controller`, `routes` — **(Critical)**
+- [x] Endpoint'ler: `POST /api/onboarding` (profil kaydı + uygulama kilidini açar), `GET /api/onboarding` — **(Critical)**
+- [x] Frontend auth entegrasyonu: session store (localStorage), HTTP client bearer-token + envelope unwrap, `authClient` (login/register/refresh/logout/me) — **(Critical)**
+- [x] Çok adımlı, mobile-first onboarding sihirbazı (5 adım; ad, doğum tarihi/yaş, cinsiyet, boy, mevcut/hedef kilo, aktivite, sağlık durumu, alerji, beslenme tercihi, günlük su hedefi) — **(Critical)**
+- [x] Route guard: onboarding tamamlanana kadar tüm uygulama özellikleri kilitli — **(Critical)**
+
+> Not: Sprint 9 da kredi optimizasyonu gereği **build/preview alınmadan** tamamlandı; doğrulama backend + frontend `type-check` + `lint` (0 hata/0 uyarı) + Prisma migration'ın canlı DB'ye uygulanması ile yapıldı.
 
 ---
 
