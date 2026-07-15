@@ -63,6 +63,11 @@ const options: swaggerJSDoc.Options = {
     tags: [
       { name: "Health", description: "Service health and readiness checks" },
       { name: "Auth", description: "Authentication, registration and session management" },
+      {
+        name: "Account",
+        description:
+          "Account lifecycle: email verification, password reset/change and account deletion",
+      },
       { name: "Onboarding", description: "Mandatory user onboarding profile" },
     ],
   },

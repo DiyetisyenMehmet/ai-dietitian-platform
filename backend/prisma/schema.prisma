@@ -53,11 +53,16 @@ model User {
   emailVerifiedAt     DateTime?
   onboardingCompleted Boolean   @default(false)
   lastLoginAt         DateTime?
+  /// Set when the user requests account deletion. The account enters a grace
+  /// period during which the request can be canceled; after it elapses the
+  /// account is eligible for permanent deletion. `null` means no pending request.
+  deletionRequestedAt DateTime?
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
   refreshTokens RefreshToken[]
   profile       UserProfile?
+  accountTokens AccountToken[]
 
   @@map("users")
 }
@@ -148,4 +153,67 @@ model RefreshToken {
 
   @@index([userId])
   @@map("refresh_tokens")
+}
+
+// ---------------------------------------------------------------------------
+// Account lifecycle domain (Sprint 10)
+// ---------------------------------------------------------------------------
+
+/// The purpose of a single-use account token.
+enum AccountTokenType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
+/// Single-use, expiring tokens for email verification and password reset.
+///
+/// Only a SHA-256 hash of the opaque token is stored (never the raw token), so
+/// a leaked database cannot be used to forge a valid token. A token is valid
+/// only while `usedAt` is null and `expiresAt` is in the future — enforcing
+/// both one-time usage and expiration. Rows are retained after use as a short
+/// audit trail and can be pruned by a later maintenance job.
+model AccountToken {
+  id        String           @id @default(uuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      AccountTokenType
+  /// SHA-256 hash of the issued opaque token string.
+  tokenHash String           @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  @@index([userId, type])
+  @@map("account_tokens")
+}
+
+/// Security-relevant account actions worth auditing.
+enum AuditAction {
+  EMAIL_VERIFICATION_REQUESTED
+  EMAIL_VERIFIED
+  PASSWORD_RESET_REQUESTED
+  PASSWORD_RESET_COMPLETED
+  PASSWORD_CHANGED
+  ACCOUNT_DELETION_REQUESTED
+  ACCOUNT_DELETION_CANCELED
+  ACCOUNT_DELETED
+}
+
+/// Append-only audit log for security-related account actions.
+///
+/// `userId` is a plain (non-foreign-key) column on purpose: audit records must
+/// survive permanent account deletion, so no cascade relation is declared.
+/// `metadata` carries small, non-sensitive contextual details (never secrets).
+model AuditLog {
+  id        String      @id @default(uuid())
+  userId    String?
+  action    AuditAction
+  ipAddress String?
+  userAgent String?
+  metadata  Json?
+  createdAt DateTime    @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@map("audit_logs")
 }

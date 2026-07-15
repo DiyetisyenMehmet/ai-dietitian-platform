@@ -51,6 +51,18 @@ const envSchema = z.object({
   JWT_ISSUER: z.string().default("diewish"),
   // bcrypt cost factor. 12 is a sane production default; higher = slower.
   BCRYPT_ROUNDS: z.coerce.number().int().min(10).max(15).default(12),
+
+  // --- Account lifecycle (Sprint 10) ---
+  // Public base URL of the web frontend, used to build the links embedded in
+  // verification / password-reset emails.
+  APP_WEB_URL: z.string().url().default("http://localhost:3000"),
+  // Single-use token lifetimes. Verification links are long-lived; reset links
+  // are deliberately short so a leaked link expires quickly.
+  EMAIL_VERIFICATION_TTL_HOURS: z.coerce.number().int().positive().default(24),
+  PASSWORD_RESET_TTL_MINUTES: z.coerce.number().int().positive().default(60),
+  // Grace period between an account-deletion request and eligibility for
+  // permanent deletion, during which the request can be canceled.
+  ACCOUNT_DELETION_GRACE_DAYS: z.coerce.number().int().nonnegative().default(30),
 });
 
 export type Env = z.infer<typeof envSchema>;

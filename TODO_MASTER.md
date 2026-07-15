@@ -96,6 +96,17 @@ Durum simgeleri: `[x]` tamam · `[~]` kısmen · `[ ]` beklemede
 
 > Not: Sprint 9 da kredi optimizasyonu gereği **build/preview alınmadan** tamamlandı; doğrulama backend + frontend `type-check` + `lint` (0 hata/0 uyarı) + Prisma migration'ın canlı DB'ye uygulanması ile yapıldı.
 
+### Sprint 10 — Hesap Yaşam Döngüsü (Backend) ✅ (Tamamlandı)
+- [x] Prisma `AccountToken` + `AuditLog` modelleri, `AccountTokenType`/`AuditAction` enum'ları, `User.deletionRequestedAt` + migration (`20260715205703_add_account_lifecycle`) — **(Critical)**
+- [x] Account modülü (DDD): `account.schemas` (Zod), `repository` (yarış-güvenli tek kullanım + atomik transaction'lar), `service`, `controller`, `routes` — **(Critical)**
+- [x] E-posta doğrulama: `POST /api/account/email/verify/request` + `/confirm` — **(Critical)**
+- [x] Şifre sıfırlama/değiştirme: `/password/forgot` + `/reset` + `/change` (sıfırlama/değiştirmede tüm oturumlar iptal) — **(Critical)**
+- [x] Hesap silme talebi + iptal + kalıcı silme: `/deletion/request` + `/deletion/cancel` + `DELETE /api/account` (şifre ile yeniden kimlik doğrulama) — **(Critical)**
+- [x] Güvenli token'lar (256-bit opak, yalnızca SHA-256 hash saklanır), süre dolumu, tek kullanım, enumerasyon önleme, güvenlik olayları için denetim günlüğü — **(Critical)**
+- [x] Sağlayıcı-bağımsız `mailer` soyutlaması (dev log transport) + `audit` lib + `Account` Swagger tag'i — **(High)**
+
+> Not: Sprint 10 backend-odaklıdır (kapsam frontend içermiyor); kredi optimizasyonu gereği **build/preview alınmadan** tamamlandı. Doğrulama: backend `type-check` + `lint` (0 hata/0 uyarı) + Prisma migration'ın canlı DB'ye uygulanması.
+
 ---
 
 ## Kalan İş Tahminleri (Sprint bazında)

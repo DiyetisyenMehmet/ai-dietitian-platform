@@ -8,6 +8,12 @@ Format [Keep a Changelog](https://keepachangelog.com/) temel alınır ve proje [
 ## [Unreleased]
 
 ### Added
+- **Sprint 10 — Hesap Yaşam Döngüsü (backend):** E-posta doğrulama, şifre sıfırlama/değiştirme ve hesap silme akışlarının uçtan uca uygulanması.
+  - Prisma `AccountToken` (tek kullanımlık, süreli token; yalnızca SHA-256 hash saklanır) + `AuditLog` (silme sonrası da kalan, FK'siz denetim kaydı) modelleri, `AccountTokenType`/`AuditAction` enum'ları, `User.deletionRequestedAt` alanı ve migration (`20260715205703_add_account_lifecycle`).
+  - Account modülü (DDD): `account.schemas` (Zod), `repository` (guard'lı `usedAt: null` ile yarış-güvenli tek kullanım, atomik transaction'lar), `service`, `controller`, `routes`.
+  - Endpoint'ler: `POST /api/account/email/verify/request` + `/email/verify/confirm`, `/password/forgot` + `/password/reset` + `/password/change`, `/deletion/request` + `/deletion/cancel`, `DELETE /api/account`; Swagger'a `Account` tag'i.
+  - Güvenlik: 256-bit opak token'lar, token süre dolumu + tek kullanım, hesap-enumerasyonu önleyen tek-tip yanıtlar, yıkıcı işlemlerde şifre ile yeniden kimlik doğrulama, şifre sıfırlama/değiştirmede tüm oturumların iptali, güvenlik olayları için denetim günlüğü.
+  - E-posta teslimi için sağlayıcı-bağımsız `mailer` soyutlaması (dev'de log transport; production sağlayıcı entegrasyonu sonraki sprint'e bırakıldı).
 - **Sprint 9 — Zorunlu Kullanıcı Onboarding'i:** Kayıt/giriş sonrası, uygulama özelliklerine erişimden önce tamamlanması zorunlu, çok adımlı onboarding akışı.
   - Prisma `UserProfile` modeli (1:1 `User`), `Gender`/`ActivityLevel`/`DietaryPreference` enum'ları ve migration (`20260715203846_add_user_profile_onboarding`).
   - Onboarding modülü (DDD): `onboarding.schemas` (Zod, yaş sınırı doğrulama), `repository` (tek transaction'da profil upsert + `onboardingCompleted` flag), `service` (doğum tarihinden yaş türetme), `controller`, `routes`.

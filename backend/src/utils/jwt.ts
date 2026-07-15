@@ -89,3 +89,12 @@ export function verifyRefreshToken(token: string): RefreshTokenClaims {
 export function hashToken(token: string): string {
   return crypto.createHash("sha256").update(token).digest("hex");
 }
+
+/**
+ * Generates a cryptographically-strong, URL-safe opaque token. Used for
+ * single-use account tokens (email verification, password reset). 32 random
+ * bytes give 256 bits of entropy — infeasible to guess or brute-force.
+ */
+export function generateOpaqueToken(): string {
+  return crypto.randomBytes(32).toString("base64url");
+}

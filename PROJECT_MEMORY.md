@@ -59,22 +59,22 @@
 > **Ürün adı: Diewish** (resmi). Eski geçici ad "AI Dietitian Platform" kullanımdan kaldırıldı.
 
 ### Genel
-- **Aktif Sprint:** Sprint 9 (Zorunlu Kullanıcı Onboarding'i) **tamamlandı** → Sprint 10 (Hesap yaşam döngüsü: e-posta doğrulama + şifre sıfırlama) sıradaki.
-- **Son Commit Hash:** bkz. `git log` — `feat(onboarding): Sprint 9 mandatory user onboarding`
+- **Aktif Sprint:** Sprint 10 (Hesap Yaşam Döngüsü — backend) **tamamlandı** → Sprint 11 (domain backend API'leri / kalıcılık) sıradaki.
+- **Son Commit Hash:** bkz. `git log` — `feat(account): Sprint 10 account lifecycle`
 - **Aktif Branch:** `main`
-- **Sürüm:** Frontend `0.1.0` · Backend `0.2.0` (auth + onboarding modülleri)
-- **Genel Tamamlanma:** ~%50
+- **Sürüm:** Frontend `0.1.0` · Backend `0.3.0` (auth + onboarding + account lifecycle modülleri)
+- **Genel Tamamlanma:** ~%55
 - **V1 Stratejisi:** Launch Blocker / Post-Launch / Future Vision önceliklendirmesi `ROADMAP.md`'de (V1 = mümkün olan en kısa sürede kararlı, güvenli, production-ready yayın).
 
 ### Modüller
-- **Tamamlanan Modüller:** Frontend Foundation, Auth UI, Dashboard, Meals (UI), AI Chat (UI/mock), Goals (tam), Backend Foundation, **Backend Auth (Sprint 8: register/login/refresh-token/logout/me + rotation/reuse-detection + auth rate-limit)**, **Onboarding (Sprint 9: UserProfile + zorunlu çok adımlı onboarding, frontend auth entegrasyonu + session store + route guard)**.
-- **Kalan Modüller:** Hesap yaşam döngüsü (e-posta doğrulama, şifre sıfırlama, hesap silme), domain backend API'leri (Meals/Goals/Dashboard/Chat kalıcılığı), gerçek AI Orchestrator, kan tahlili analizi, 30/60 gün plan, abonelik + iyzico, yasal/uyum katmanı, CI/CD, Monitoring, Deployment.
+- **Tamamlanan Modüller:** Frontend Foundation, Auth UI, Dashboard, Meals (UI), AI Chat (UI/mock), Goals (tam), Backend Foundation, **Backend Auth (Sprint 8: register/login/refresh-token/logout/me + rotation/reuse-detection + auth rate-limit)**, **Onboarding (Sprint 9: UserProfile + zorunlu çok adımlı onboarding, frontend auth entegrasyonu + session store + route guard)**, **Account Lifecycle (Sprint 10 — backend: e-posta doğrulama, şifre sıfırlama/değiştirme, hesap silme talebi + kalıcı silme, tek kullanımlık/süreli token'lar, denetim günlüğü)**.
+- **Kalan Modüller:** Account Lifecycle frontend UI (Sprint 10 backend hazır, ekranlar sonraki), domain backend API'leri (Meals/Goals/Dashboard/Chat kalıcılığı), gerçek AI Orchestrator, kan tahlili analizi, 30/60 gün plan, abonelik + iyzico, yasal/uyum katmanı, CI/CD, Monitoring, Deployment.
 
 ### Bileşen Durumları
 - **Frontend Status:** ✅ Kod tamam (port 3000). Sprint 9 doğrulaması: **lint ✓ (0 uyarı), type-check ✓ (0 hata)**. Auth session store + route guard + onboarding sihirbazı eklendi. ⚠️ Bu sprint kredi optimizasyonuyla `build` ve `preview` **alınmadı**.
-- **Backend Status:** ✅ Kod tamam (port 4000). Sprint 9 doğrulaması: **lint ✓ (0 uyarı), type-check ✓ (0 hata)**. ⚠️ Bu sprint kredi optimizasyonuyla `build` ve `preview` **alınmadı**.
-- **Database Status:** ✅ PostgreSQL 17 · `ai_dietitian` DB · `dietitian` kullanıcısı (CREATEDB verildi). Migration'lar: `20260711213135_init`, `20260715202355_add_auth_user_refresh_token`, `20260715203846_add_user_profile_onboarding` (user_profiles + Gender/ActivityLevel/DietaryPreference enum). ⚠️ VM restart sonrası Postgres kalıcı değil (yeniden kurulum + migrate gerekir).
-- **API Status:** ✅ `/api/health`, `/api/health/ready` · **Auth: `POST /api/auth/{register,login,refresh-token,logout}` + `GET /api/auth/me`** · **Onboarding: `POST /api/onboarding` + `GET /api/onboarding`** · Swagger `/docs` (Auth + Onboarding tag + bearerAuth). Diğer domain endpoint'leri henüz yok.
+- **Backend Status:** ✅ Kod tamam (port 4000). Sprint 10 doğrulaması: **lint ✓ (0 uyarı), type-check ✓ (0 hata)**. Account lifecycle modülü + `mailer`/`audit` lib'leri eklendi. ⚠️ Bu sprint kredi optimizasyonuyla `build` ve `preview` **alınmadı**.
+- **Database Status:** ✅ PostgreSQL 17 · `ai_dietitian` DB · `dietitian` kullanıcısı (CREATEDB verildi). Migration'lar: `20260711213135_init`, `20260715202355_add_auth_user_refresh_token`, `20260715203846_add_user_profile_onboarding`, `20260715205703_add_account_lifecycle` (account_tokens + audit_logs + AccountTokenType/AuditAction enum + `users.deletionRequestedAt`). ⚠️ VM restart sonrası Postgres kalıcı değil (yeniden kurulum + migrate gerekir).
+- **API Status:** ✅ `/api/health`, `/api/health/ready` · **Auth: `POST /api/auth/{register,login,refresh-token,logout}` + `GET /api/auth/me`** · **Account: `POST /api/account/email/verify/{request,confirm}` + `/password/{forgot,reset,change}` + `/deletion/{request,cancel}` + `DELETE /api/account`** · **Onboarding: `POST /api/onboarding` + `GET /api/onboarding`** · Swagger `/docs` (Auth + Account + Onboarding tag + bearerAuth). Diğer domain endpoint'leri henüz yok.
 - **AI Status:** ⚠️ Yalnızca frontend sohbet arayüzü (mock). Gerçek AI orchestrator/model entegrasyonu yok.
 - **Deployment Status:** ⚠️ Sadece dev/preview. Preview URL: https://685bf5caa.na115.preview.abacusai.app (HTTP 200). CI/CD ve production deployment yok.
 
