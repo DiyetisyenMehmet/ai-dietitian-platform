@@ -4,6 +4,7 @@ import { accountRouter } from "../modules/account/account.routes";
 import { authRouter } from "../modules/auth/auth.routes";
 import { bloodTestRouter } from "../modules/blood-test/blood-test.routes";
 import { bloodTestAnalysisModule } from "../modules/blood-test-analysis/blood-test-analysis.module";
+import { nutritionPlanModule } from "../modules/nutrition-plan/nutrition-plan.module";
 import { onboardingRouter } from "../modules/onboarding/onboarding.routes";
 import { healthRouter } from "./health.route";
 
@@ -28,4 +29,10 @@ for (const { path, router, mountFirst } of bloodTestAnalysisModule.routes) {
 apiRouter.use("/blood-tests", bloodTestRouter);
 for (const { path, router, mountFirst } of bloodTestAnalysisModule.routes) {
   if (!mountFirst) apiRouter.use(path, router);
+}
+
+// Nutrition Plan Engine (Sprint 13). Mounted at its own base path; no ordering
+// concerns since it does not share a base with any other module.
+for (const { path, router } of nutritionPlanModule.routes) {
+  apiRouter.use(path, router);
 }
