@@ -7,6 +7,7 @@ import {
   FORBIDDEN_AI_TERMS,
 } from "../constants";
 import { NUTRITION_PLAN_SYSTEM_PROMPT } from "../../nutrition-plan/constants";
+import { DIETITIAN_CHAT_SYSTEM_PROMPT } from "../../ai-chat/constants";
 import type {
   AnalysisContext,
   BiomarkerExplanation,
@@ -24,6 +25,7 @@ import type {
   PlannedMeal,
   PlanExplanations,
 } from "../../nutrition-plan/types";
+import type { DietitianChatAIInput, DietitianChatAIOutput } from "../../ai-chat/types";
 import type { AIAdapterInfo, IAIAdapter } from "./ai-adapter.interface";
 
 /** Configuration for an OpenAI-compatible endpoint. */
@@ -397,5 +399,39 @@ export class OpenAICompatibleAdapter implements IAIAdapter {
     const summary = `${summaryBase}\n\n${DISCLAIMER}`.trim();
 
     return { cycle, explanations, recommendations, summary };
+  }
+
+  /** @inheritdoc */
+  async chatWithDietitian(input: DietitianChatAIInput): Promise<DietitianChatAIOutput> {
+    const schemaHint =
+      'Respond ONLY with valid JSON of the form {"reply":"string"}. ' +
+      "The reply must be nutrition/wellness guidance only.";
+
+    const contextBlock =
+      "Non-identifying nutrition context for this user (may be partial or empty):\n" +
+      JSON.stringify(input.context);
+
+    const messages: ChatMessage[] = [{ role: "system", content: DIETITIAN_CHAT_SYSTEM_PROMPT }];
+
+    // Replay bounded, already-redacted history as prior turns.
+    for (const turn of input.history) {
+      messages.push({ role: turn.role, content: turn.content });
+    }
+
+    messages.push({
+      role: "user",
+      content: `${contextBlock}\n\n${schemaHint}\n\nUser message:\n"""\n${input.message}\n"""`,
+    });
+
+    const raw = await this.chat(messages);
+    const parsed = this.parseJson<{ reply?: string }>(raw);
+
+    let reply = this.sanitizeText(String(parsed.reply ?? "")).trim();
+    // Append the safety disclaimer once so every reply stays compliance-bound.
+    if (reply.length > 0 && !reply.includes(DISCLAIMER)) {
+      reply = `${reply}\n\n${DISCLAIMER}`;
+    }
+
+    return { reply };
   }
 }

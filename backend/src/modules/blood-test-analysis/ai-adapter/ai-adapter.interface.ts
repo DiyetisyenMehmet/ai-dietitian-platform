@@ -16,6 +16,10 @@ import type {
 // generation. Type-only import (erased at runtime) so there is no cross-module
 // runtime dependency cycle.
 import type { NutritionPlanAIInput, NutritionPlanAIOutput } from "../../nutrition-plan/types";
+// Sprint 14: the same provider-agnostic adapter also powers the AI Dietitian
+// Chat. Type-only import (erased at runtime) so there is no cross-module
+// runtime dependency cycle.
+import type { DietitianChatAIInput, DietitianChatAIOutput } from "../../ai-chat/types";
 
 // Re-export the shared types so consumers of the adapter get everything from
 // a single import site.
@@ -87,4 +91,17 @@ export interface IAIAdapter {
    * @returns The structured nutrition-plan content.
    */
   generateNutritionPlan(input: NutritionPlanAIInput): Promise<NutritionPlanAIOutput>;
+
+  /**
+   * Produces a single AI Dietitian Chat reply from a PHI-minimized context,
+   * bounded conversation history, and the user's current (redacted) message.
+   *
+   * Implementations MUST stay strictly within nutrition/wellness guidance (no
+   * diagnosis/treatment/prescription) and MUST NOT request or infer personal
+   * identifiers.
+   *
+   * @param input - Minimized context, redacted history, and the user message.
+   * @returns The assistant reply (safety-sanitized).
+   */
+  chatWithDietitian(input: DietitianChatAIInput): Promise<DietitianChatAIOutput>;
 }
