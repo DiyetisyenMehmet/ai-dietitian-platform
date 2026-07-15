@@ -7,6 +7,8 @@ import { bloodTestAnalysisModule } from "../modules/blood-test-analysis/blood-te
 import { nutritionPlanModule } from "../modules/nutrition-plan/nutrition-plan.module";
 import { aiChatModule } from "../modules/ai-chat/ai-chat.module";
 import { aiUsageModule } from "../modules/ai-usage/ai-usage.module";
+import { paymentsModule } from "../modules/payments/payments.module";
+import { legalModule } from "../modules/legal/legal.module";
 import { onboardingRouter } from "../modules/onboarding/onboarding.routes";
 import { healthRouter } from "./health.route";
 
@@ -45,5 +47,14 @@ for (const { path, router } of aiChatModule.routes) {
   apiRouter.use(path, router);
 }
 for (const { path, router } of aiUsageModule.routes) {
+  apiRouter.use(path, router);
+}
+
+// Payments & Subscriptions (Sprint 15) and Legal & Consent (Sprint 15). Each
+// mounts at its own base path with no ordering concerns.
+for (const { path, router } of paymentsModule.routes) {
+  apiRouter.use(path, router);
+}
+for (const { path, router } of legalModule.routes) {
   apiRouter.use(path, router);
 }

@@ -72,6 +72,9 @@ model User {
   nutritionPlans    NutritionPlan[]
   chatConversations ChatConversation[]
   aiUsageEvents     AiUsageEvent[]
+  subscriptions     Subscription[]
+  payments          Payment[]
+  consents          ConsentRecord[]
 
   @@map("users")
 }
@@ -209,6 +212,15 @@ enum AuditAction {
   BLOOD_TEST_UPLOADED
   BLOOD_TEST_REPLACED
   BLOOD_TEST_DELETED
+  SUBSCRIPTION_CHECKOUT_STARTED
+  SUBSCRIPTION_ACTIVATED
+  SUBSCRIPTION_CANCELED
+  SUBSCRIPTION_EXPIRED
+  PAYMENT_SUCCEEDED
+  PAYMENT_FAILED
+  PAYMENT_WEBHOOK_RECEIVED
+  CONSENT_GRANTED
+  CONSENT_WITHDRAWN
 }
 
 /// Append-only audit log for security-related account actions.
@@ -496,7 +508,7 @@ model NutritionPlan {
 enum SubscriptionTier {
   FREE
   PREMIUM
-  PRO
+  PREMIUM_PLUS
 }
 
 /// The AI-consuming feature a usage event belongs to. Adding a value here lets
@@ -583,4 +595,182 @@ model ChatMessage {
 
   @@index([conversationId, createdAt])
   @@map("chat_messages")
+}
+
+// ---------------------------------------------------------------------------
+// Subscription & payments domain (Sprint 15, D1–D3)
+// ---------------------------------------------------------------------------
+
+/// Lifecycle status of a subscription record.
+///
+/// A user may have at most one non-terminal (ACTIVE / PENDING / PAST_DUE)
+/// subscription at a time; CANCELED/EXPIRED rows are retained for history and
+/// audit. Tier entitlements are resolved from the User's `subscriptionTier`,
+/// which this module keeps in sync with the active subscription.
+enum SubscriptionStatus {
+  /// Checkout initiated; awaiting a successful payment/webhook confirmation.
+  PENDING
+  /// Paid and currently entitling the user to the tier's features.
+  ACTIVE
+  /// Payment failed on renewal; grace handling is a future concern (P4).
+  PAST_DUE
+  /// Canceled by the user; may remain entitling until `currentPeriodEnd`.
+  CANCELED
+  /// Term elapsed without renewal; no longer entitling.
+  EXPIRED
+}
+
+/// Payment processor. Modeled as an enum so the payment layer stays modular and
+/// additional providers (e.g. Stripe — roadmap F9) can be added without a
+/// breaking change to callers.
+enum PaymentProvider {
+  IYZICO
+}
+
+/// Lifecycle status of a single payment attempt.
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+/// A subscription purchased (or being purchased) by a user.
+///
+/// The provider-side identifiers (`providerRef`, `providerSubscriptionRef`) let
+/// the record be reconciled against iyzico without leaking processor internals
+/// into the rest of the app. `cancelAtPeriodEnd` supports "cancel but keep
+/// access until the paid term ends" (App Store 3.1.2 / Play cancellation UX).
+model Subscription {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  tier     SubscriptionTier
+  status   SubscriptionStatus @default(PENDING)
+  provider PaymentProvider    @default(IYZICO)
+
+  /// Provider-side conversation/checkout reference used to correlate webhooks.
+  providerRef             String?
+  /// Provider-side recurring-subscription reference (if applicable).
+  providerSubscriptionRef String?
+
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+  cancelAtPeriodEnd  Boolean   @default(false)
+  canceledAt         DateTime?
+
+  payments Payment[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([providerRef])
+  @@map("subscriptions")
+}
+
+/// A single payment attempt against a subscription.
+///
+/// `providerPaymentId` and `providerConversationId` are the iyzico correlation
+/// keys. `rawStatus` preserves the processor's own status string for support
+/// and reconciliation; `status` is the normalized lifecycle value the app acts
+/// on. Amounts are stored in minor units (kuruş) to avoid float rounding.
+model Payment {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  subscriptionId String?
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+
+  provider PaymentProvider @default(IYZICO)
+  status   PaymentStatus   @default(PENDING)
+
+  /// Amount in minor currency units (e.g. kuruş for TRY).
+  amountMinor Int
+  currency    String @default("TRY")
+
+  providerPaymentId      String?
+  providerConversationId String?
+  /// Processor's own status string, preserved verbatim for reconciliation.
+  rawStatus              String?
+  /// Non-sensitive failure reason surfaced to support (never card data).
+  failureReason          String?
+
+  @@index([userId])
+  @@index([subscriptionId])
+  @@index([providerConversationId])
+  @@map("payments")
+}
+
+/// Append-only log of inbound payment-provider webhook events.
+///
+/// `providerEventId` is UNIQUE so replays are idempotent — a duplicate delivery
+/// is detected and short-circuited rather than double-applying a state change
+/// (an unverified/replayed webhook must never grant free premium). The raw
+/// payload is retained for audit and reprocessing.
+model PaymentWebhookEvent {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  provider        PaymentProvider @default(IYZICO)
+  /// Provider-unique event identifier used for idempotent processing.
+  providerEventId String          @unique
+  eventType       String?
+  /// Whether the signature verified against the configured secret.
+  signatureValid  Boolean         @default(false)
+  /// Whether business processing completed successfully.
+  processedAt     DateTime?
+  payload         Json
+
+  @@index([provider])
+  @@map("payment_webhook_events")
+}
+
+// ---------------------------------------------------------------------------
+// Legal / consent compliance domain (Sprint 15, B1–B4)
+// ---------------------------------------------------------------------------
+
+/// A category of legal document / consent. Health data processing (KVKK m.6)
+/// requires explicit, versioned, withdrawable consent; the store forms (Play
+/// Data Safety, App Store) require accessible Privacy Policy & Terms.
+enum LegalDocumentType {
+  PRIVACY_POLICY
+  TERMS_OF_SERVICE
+  MEDICAL_DISCLAIMER
+  KVKK_EXPLICIT_CONSENT
+}
+
+/// A single user consent decision for a specific document version.
+///
+/// Consent is VERSIONED (a new document version requires re-consent) and
+/// WITHDRAWABLE (`withdrawnAt`): the latest row per (user, type) is the current
+/// state — `granted && withdrawnAt == null` means active consent. Rows are
+/// append-only for an auditable trail (KVKK accountability). Consent records
+/// survive normal reads but are removed with the account on permanent deletion
+/// (cascade) since they are personal data tied to the subject.
+model ConsentRecord {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type            LegalDocumentType
+  /// Version of the document the user acted on (e.g. "2026-07-01").
+  documentVersion String
+  granted         Boolean
+  grantedAt       DateTime?
+  withdrawnAt     DateTime?
+
+  ipAddress String?
+  userAgent String?
+
+  @@index([userId, type, createdAt])
+  @@map("consent_records")
 }
