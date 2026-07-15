@@ -60,10 +60,11 @@ model User {
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
-  refreshTokens    RefreshToken[]
-  profile          UserProfile?
-  accountTokens    AccountToken[]
-  bloodTestUploads BloodTestUpload[]
+  refreshTokens     RefreshToken[]
+  profile           UserProfile?
+  accountTokens     AccountToken[]
+  bloodTestUploads  BloodTestUpload[]
+  bloodTestAnalyses BloodTestAnalysis[]
 
   @@map("users")
 }
@@ -272,7 +273,124 @@ model BloodTestUpload {
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
 
+  /// One-to-one AI analysis produced by the Sprint 12 analysis engine.
+  analysis BloodTestAnalysis?
+
   @@index([userId])
   @@index([userId, status])
   @@map("blood_test_uploads")
+}
+
+// ---------------------------------------------------------------------------
+// AI blood-test analysis domain (Sprint 12)
+// ---------------------------------------------------------------------------
+
+/// Lifecycle status of an AI blood-test analysis run.
+enum BloodTestAnalysisStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+/// The structured result of running Diewish's AI Blood Test Analysis Engine
+/// over an uploaded blood-test document.
+///
+/// The engine extracts laboratory values (text → OCR → vision), normalizes and
+/// compares them against reference ranges, then asks a provider-agnostic AI
+/// adapter for plain-language explanations and *nutrition-focused* implications.
+/// This is explicitly NOT a medical-diagnosis record: all AI output is
+/// educational/nutritional and carries a disclaimer. The structured JSON fields
+/// are intentionally reusable by downstream features (nutrition plan generator,
+/// dietitian chat, progress tracking, future health reports).
+model BloodTestAnalysis {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// The uploaded blood-test document this analysis was produced from.
+  bloodTestId String          @unique
+  bloodTest   BloodTestUpload @relation(fields: [bloodTestId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  status           BloodTestAnalysisStatus @default(PENDING)
+  /// Which extraction path produced the values: "TEXT", "OCR" or "VISION".
+  extractionMethod String?
+
+  /// Raw text recovered from the document (for auditing/re-processing).
+  rawExtractedText String? @db.Text
+  /// NormalizedBloodTestValue[] — the full normalized value set.
+  normalizedValues Json
+  /// Subset of normalizedValues whose status != NORMAL.
+  abnormalValues   Json
+  abnormalCount    Int     @default(0)
+
+  /// Per-biomarker plain-language explanations.
+  aiExplanations         Json
+  /// Nutrition-focused implications per abnormal value.
+  nutritionImplications  Json
+  /// Ordered list of nutrition recommendations.
+  overallRecommendations Json
+
+  /// 2–3 sentence plain-language summary (with disclaimer).
+  summary String? @db.Text
+
+  aiProvider       String?
+  aiModel          String?
+  processingTimeMs Int?
+
+  errorMessage String?
+
+  @@index([userId])
+  @@index([bloodTestId])
+  @@map("blood_test_analyses")
+}
+
+/// Gender scope for a reference range.
+enum ReferenceRangeGender {
+  MALE
+  FEMALE
+  ALL
+}
+
+/// A database-driven reference range for a single biomarker.
+///
+/// Ranges are looked up by `biomarkerCode` and filtered by gender/age/country/
+/// laboratory so the analysis engine can pick the most specific applicable
+/// range. Seeded with ~30 common biomarkers using standard (WHO/ADA) values.
+model BloodTestReferenceRange {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  biomarkerCode   String
+  biomarkerName   String
+  /// Turkish display name for i18n.
+  biomarkerNameTr String?
+  unit            String
+
+  minValue   Float?
+  maxValue   Float?
+  /// Optimal sub-range within the normal range (nullable).
+  optimalMin Float?
+  optimalMax Float?
+
+  gender ReferenceRangeGender @default(ALL)
+  ageMin Int?
+  ageMax Int?
+
+  /// ISO 3166-1 alpha-2 country code; null = universal.
+  country      String?
+  /// Lab-specific range owner; null = generic.
+  laboratoryId String?
+
+  isActive Boolean @default(true)
+  source   String  @default("STANDARD")
+  notes    String?
+
+  @@index([biomarkerCode])
+  @@index([isActive])
+  @@map("blood_test_reference_ranges")
 }
