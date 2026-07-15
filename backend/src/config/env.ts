@@ -73,6 +73,20 @@ const envSchema = z.object({
   STORAGE_LOCAL_ROOT: z.string().default("./storage/uploads"),
   // Maximum accepted blood-test file size, in megabytes.
   BLOOD_TEST_MAX_FILE_SIZE_MB: z.coerce.number().int().positive().default(15),
+
+  // --- AI Blood Test Analysis Engine (Sprint 12) ---
+  // Provider-agnostic, OpenAI-compatible chat/completions API. Any endpoint
+  // that speaks the OpenAI schema works (OpenAI, Mistral, Together, Groq, …).
+  // The key is optional at startup so the rest of the app boots without it;
+  // the analysis engine surfaces a clear error only when it is actually used.
+  AI_API_KEY: z.string().optional(),
+  AI_API_BASE_URL: z.string().url().default("https://api.openai.com/v1"),
+  AI_MODEL: z.string().default("gpt-4o"),
+  AI_MAX_TOKENS: z.coerce.number().int().positive().default(4096),
+  AI_TEMPERATURE: z.coerce.number().min(0).max(2).default(0.2),
+  // Minimum meaningful character count required from text extraction before
+  // OCR fallback is triggered by the hybrid extraction pipeline.
+  BLOOD_TEST_TEXT_MIN_CHARS: z.coerce.number().int().positive().default(100),
 });
 
 export type Env = z.infer<typeof envSchema>;
