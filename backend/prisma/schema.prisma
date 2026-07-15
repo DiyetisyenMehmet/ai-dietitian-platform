@@ -43,22 +43,26 @@ enum UserRole {
 /// is kept here so the mandatory-onboarding gate can be enforced cheaply on
 /// every authenticated request without a join.
 model User {
-  id                  String    @id @default(uuid())
-  email               String    @unique
+  id                  String           @id @default(uuid())
+  email               String           @unique
   /// bcrypt hash — the plaintext password is never stored.
   passwordHash        String
   fullName            String?
-  role                UserRole  @default(USER)
-  isActive            Boolean   @default(true)
+  role                UserRole         @default(USER)
+  isActive            Boolean          @default(true)
   emailVerifiedAt     DateTime?
-  onboardingCompleted Boolean   @default(false)
+  onboardingCompleted Boolean          @default(false)
+  /// Subscription tier driving AI usage quotas (Sprint 14, C5). Defaults to
+  /// FREE; the payments sprint (Sprint 15) owns transitions between tiers. Kept
+  /// here so quota checks resolve the tier cheaply without a join.
+  subscriptionTier    SubscriptionTier @default(FREE)
   lastLoginAt         DateTime?
   /// Set when the user requests account deletion. The account enters a grace
   /// period during which the request can be canceled; after it elapses the
   /// account is eligible for permanent deletion. `null` means no pending request.
   deletionRequestedAt DateTime?
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
 
   refreshTokens     RefreshToken[]
   profile           UserProfile?
@@ -66,6 +70,8 @@ model User {
   bloodTestUploads  BloodTestUpload[]
   bloodTestAnalyses BloodTestAnalysis[]
   nutritionPlans    NutritionPlan[]
+  chatConversations ChatConversation[]
+  aiUsageEvents     AiUsageEvent[]
 
   @@map("users")
 }
@@ -477,4 +483,104 @@ model NutritionPlan {
   @@index([userId])
   @@index([userId, duration, isActive])
   @@map("nutrition_plans")
+}
+
+// ---------------------------------------------------------------------------
+// AI usage quota & subscription tiers domain (Sprint 14, C5)
+// ---------------------------------------------------------------------------
+
+/// Subscription tier used to resolve AI usage quotas. This is intentionally a
+/// lightweight enum owned here (not a full payments/subscription system — that
+/// is Sprint 15). It lets AI quota checks be "subscription-aware" today while
+/// defaulting every account to FREE until payments assign a paid tier.
+enum SubscriptionTier {
+  FREE
+  PREMIUM
+  PRO
+}
+
+/// The AI-consuming feature a usage event belongs to. Adding a value here lets
+/// any AI surface adopt the shared quota/cost-protection capability without a
+/// breaking change.
+enum AiUsageFeature {
+  DIETITIAN_CHAT
+  BLOOD_TEST_ANALYSIS
+  NUTRITION_PLAN
+}
+
+/// Append-only record of a single billable AI invocation (Sprint 14, C5).
+///
+/// One row is written per successful external AI call. Counting rows within a
+/// rolling window powers both per-tier quota enforcement (cost-explosion
+/// protection) and an auditable usage trail. No prompt content or PHI is stored
+/// here — only the feature, provider/model, and a coarse token estimate.
+model AiUsageEvent {
+  id              String         @id @default(uuid())
+  userId          String
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  feature         AiUsageFeature
+  provider        String
+  model           String
+  /// Best-effort estimate of tokens consumed, for cost observability. Optional
+  /// because not every provider returns usage; never used for enforcement math.
+  estimatedTokens Int?
+  createdAt       DateTime       @default(now())
+
+  @@index([userId, feature, createdAt])
+  @@map("ai_usage_events")
+}
+
+// ---------------------------------------------------------------------------
+// AI Dietitian Chat domain (Sprint 14, C2)
+// ---------------------------------------------------------------------------
+
+/// Author of a chat message.
+enum ChatRole {
+  USER
+  ASSISTANT
+}
+
+/// A single AI Dietitian Chat conversation thread owned by a user.
+///
+/// Conversations group an ordered list of messages so the orchestrator can
+/// supply bounded history back to the model. All access is owner-scoped.
+model ChatConversation {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Short human-readable label derived from the first user message.
+  title String?
+
+  messages ChatMessage[]
+
+  @@index([userId])
+  @@map("chat_conversations")
+}
+
+/// A single message within a conversation.
+///
+/// User messages store the user's original text (Diewish owns this data);
+/// PHI minimization is applied only to the copy sent to the external AI, never
+/// to what is persisted here. Assistant messages carry provider/model metadata
+/// for observability. All AI replies are nutrition-only and disclaimer-bound.
+model ChatMessage {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  conversationId String
+  conversation   ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  role    ChatRole
+  content String   @db.Text
+
+  /// Assistant-only: which provider/model produced the reply (null for user).
+  provider String?
+  model    String?
+
+  @@index([conversationId, createdAt])
+  @@map("chat_messages")
 }
