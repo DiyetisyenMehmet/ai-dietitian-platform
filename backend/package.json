@@ -18,7 +18,9 @@
     "format:check": "prettier --check .",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:studio": "prisma studio"
+    "prisma:migrate:deploy": "prisma migrate deploy",
+    "prisma:studio": "prisma studio",
+    "start:migrate": "prisma migrate deploy && node dist/index.js"
   },
   "prisma": {
     "schema": "prisma/schema.prisma"

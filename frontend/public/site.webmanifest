@@ -1,0 +1,10 @@
+{
+  "name": "Diewish",
+  "short_name": "Diewish",
+  "description": "Yapay zekâ destekli kişisel beslenme ve sağlık platformu.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#16a34a",
+  "icons": []
+}
