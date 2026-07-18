@@ -1,10 +1,14 @@
 import { Router } from "express";
 
+import { env } from "../config/env";
 import { checkDatabaseConnection } from "../lib/prisma";
 import { asyncHandler } from "../utils/async-handler";
 import { sendSuccess, sendError } from "../utils/api-response";
 
 export const healthRouter = Router();
+
+/** Service version, sourced from the package version (single source of truth). */
+const SERVICE_VERSION = process.env.npm_package_version ?? "0.1.0";
 
 /**
  * @openapi
@@ -25,8 +29,32 @@ healthRouter.get("/", (_req, res) => {
   sendSuccess(res, {
     status: "ok",
     service: "ai-dietitian-backend",
-    version: "0.1.0",
+    version: SERVICE_VERSION,
     uptime: Math.round(process.uptime()),
+    timestamp: new Date().toISOString(),
+  });
+});
+
+/**
+ * @openapi
+ * /api/health/version:
+ *   get:
+ *     tags: [Health]
+ *     summary: Version and build metadata
+ *     description: Returns the running service version and environment label.
+ *     responses:
+ *       200:
+ *         description: Version metadata.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ */
+healthRouter.get("/version", (_req, res) => {
+  sendSuccess(res, {
+    service: "ai-dietitian-backend",
+    version: SERVICE_VERSION,
+    environment: env.NODE_ENV,
     timestamp: new Date().toISOString(),
   });
 });

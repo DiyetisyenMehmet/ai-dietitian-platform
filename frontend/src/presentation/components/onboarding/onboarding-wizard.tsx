@@ -105,7 +105,7 @@ export function OnboardingWizard() {
           fullName: result.data.fullName,
         });
         toast.success("Profiliniz hazır! Diewish'e hoş geldiniz.");
-        router.replace("/");
+        router.replace("/dashboard");
         return;
       }
       toast.error(result.error);

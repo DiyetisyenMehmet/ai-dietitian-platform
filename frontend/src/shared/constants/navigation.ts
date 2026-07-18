@@ -16,7 +16,7 @@ export interface NavigationItem {
  * Routes themselves are implemented in later sprints.
  */
 export const PRIMARY_NAVIGATION: readonly NavigationItem[] = [
-  { id: "home", label: "Ana Sayfa", href: "/", icon: Home },
+  { id: "home", label: "Ana Sayfa", href: "/dashboard", icon: Home },
   { id: "meals", label: "Öğünler", href: "/meals", icon: UtensilsCrossed },
   { id: "ai", label: "Sohbet", href: "/ai", icon: Sparkles },
   { id: "goals", label: "Hedefler", href: "/goals", icon: Target },

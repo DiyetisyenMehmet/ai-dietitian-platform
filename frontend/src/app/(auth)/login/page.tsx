@@ -38,7 +38,7 @@ export default function LoginPage() {
       if (result.ok) {
         authStore.setSession(result.data);
         toast.success("Hoş geldiniz! Sizi yönlendiriyoruz...");
-        router.replace(result.data.user.onboardingCompleted ? "/" : "/onboarding");
+        router.replace(result.data.user.onboardingCompleted ? "/dashboard" : "/onboarding");
         return;
       }
       toast.error(result.error);
