@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Plus, UtensilsCrossed } from "lucide-react";
+import { Plus, ScanLine, UtensilsCrossed } from "lucide-react";
 
 import { AppShell } from "@/presentation/components/layout/app-shell";
 import { Button } from "@/presentation/components/ui/button";
@@ -19,15 +19,38 @@ export default function MealsPage() {
     <AppShell
       title="Öğünler"
       headerAction={
-        <Button asChild size="icon" variant="ghost" aria-label="Öğün ekle">
-          <Link href="/meals/add">
-            <Plus className="size-5" aria-hidden="true" />
-          </Link>
-        </Button>
+        <div className="flex items-center">
+          <Button asChild size="icon" variant="ghost" aria-label="Besin tara">
+            <Link href="/meals/scan">
+              <ScanLine className="size-5" aria-hidden="true" />
+            </Link>
+          </Button>
+          <Button asChild size="icon" variant="ghost" aria-label="Öğün ekle">
+            <Link href="/meals/add">
+              <Plus className="size-5" aria-hidden="true" />
+            </Link>
+          </Button>
+        </div>
       }
     >
       <div className="animate-fade-in space-y-6">
         <NutritionSummary totals={totals} />
+
+        {/* Food scanner entry */}
+        <Link
+          href="/meals/scan"
+          className="flex items-center gap-3 rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 via-accent to-background p-4 shadow-card transition-shadow hover:shadow-card-hover"
+        >
+          <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/15 text-primary">
+            <ScanLine className="size-6" aria-hidden="true" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold">Besin Tarayıcı</span>
+            <span className="block text-xs text-muted-foreground">
+              Yemeğinin fotoğrafını çek, koçun kalori ve makroları hesaplasın
+            </span>
+          </span>
+        </Link>
 
         {totalFoods > 0 ? (
           <section className="space-y-3">

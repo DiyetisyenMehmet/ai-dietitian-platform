@@ -22,6 +22,48 @@ export interface PlanDto {
   entitlements: string[];
 }
 
+/** Billing cadence for a paid subscription. */
+export type BillingCycle = "monthly" | "yearly";
+
+/** Lifecycle status of a user's subscription. */
+export type SubscriptionStatus = "active" | "canceled" | "past_due";
+
+/** The authenticated user's current subscription state. */
+export interface UserSubscription {
+  tier: SubscriptionTier;
+  status: SubscriptionStatus;
+  cycle: BillingCycle;
+  /** ISO date the plan started. */
+  startedAt: string;
+  /** ISO date the plan renews (or ends, if canceled). */
+  renewsAt: string;
+  /** When true, the plan will not auto-renew and ends at `renewsAt`. */
+  cancelAtPeriodEnd: boolean;
+}
+
+/** A single past payment / invoice line. */
+export interface BillingHistoryEntry {
+  id: string;
+  /** ISO date the charge was made. */
+  date: string;
+  description: string;
+  /** Amount in TRY (major units). */
+  amount: number;
+  status: "paid" | "refunded" | "failed";
+  /** Masked reference, e.g. invoice number. */
+  invoiceNo: string;
+}
+
+/** A saved payment method (masked card). */
+export interface PaymentMethod {
+  brand: string;
+  /** Last four digits of the card. */
+  last4: string;
+  expMonth: number;
+  expYear: number;
+  holderName: string;
+}
+
 /** Result of initiating a hosted checkout (`POST /payments/checkout`). */
 export interface CheckoutResult {
   subscriptionId: string;

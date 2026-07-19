@@ -146,8 +146,35 @@ function useHour(): number {
 }
 
 /**
+ * A rotation seed that changes on every dashboard visit so the coach feels
+ * alive and never repeats the exact same wording twice in a row. It combines
+ * the day-of-year (stable within a day) with a per-mount random tick.
+ */
+function useVisitSeed(): number {
+  const [seed, setSeed] = React.useState(0);
+  React.useEffect(() => {
+    const now = new Date();
+    const dayOfYear = Math.floor(
+      (now.getTime() - new Date(now.getFullYear(), 0, 0).getTime()) / 86_400_000,
+    );
+    setSeed(dayOfYear + Math.floor(Math.random() * 997));
+  }, []);
+  return seed;
+}
+
+/** Deterministically pick one variant from a list using the visit seed. */
+function pick<T>(variants: readonly T[], seed: number, salt = 0): T {
+  return variants[(seed + salt) % variants.length];
+}
+
+/**
  * Generates prioritized, proactive coach insights from the user's state.
  * Returns up to `limit` cards (default 3), most important first.
+ *
+ * Messages rotate between hand-written Turkish variants keyed by the visit
+ * seed, so the dashboard feels slightly different on each visit while the
+ * underlying reasoning (observe → analyze → recommend → motivate) stays
+ * deterministic and non-shaming.
  */
 export function useCoachInsights(limit = 3): CoachInsight[] {
   const profile = useHealthProfile();
@@ -155,11 +182,13 @@ export function useCoachInsights(limit = 3): CoachInsight[] {
   const { waterMl, waterGoalMl, chattedToday } = useDailyTracking();
   const weightEntries = useWeightEntries();
   const hour = useHour();
+  const seed = useVisitSeed();
 
   return React.useMemo(() => {
     const insights: CoachInsight[] = [];
     const analysis = analyzeWeight(weightEntries, profile.targetWeightKg);
     const foodsIn = (slot: string) => meals.find((m) => m.slot === slot)?.foods.length ?? 0;
+    const firstName = profile.fullName.split(" ")[0] ?? "";
 
     // 1. Success celebration (highest priority — positive reinforcement).
     if (analysis.status === "reached") {
@@ -167,7 +196,14 @@ export function useCoachInsights(limit = 3): CoachInsight[] {
         id: "coach-reached",
         tone: "success",
         title: "Hedefine ulaştın! 🎉",
-        message: "Bu büyük bir başarı. Kazandığın dengeyi korumak için planını birlikte güncelleyelim.",
+        message: pick(
+          [
+            "Bu büyük bir başarı. Kazandığın dengeyi korumak için planını birlikte güncelleyelim.",
+            "Harika iş çıkardın! Şimdi bu formu koruma planına geçelim.",
+            "Emeklerinin karşılığını aldın. Bundan sonrası için sürdürme moduna geçebiliriz.",
+          ],
+          seed,
+        ),
         icon: "trophy",
         actionLabel: "İlerlememi gör",
         actionHref: "/progress",
@@ -176,7 +212,7 @@ export function useCoachInsights(limit = 3): CoachInsight[] {
       insights.push({
         id: "coach-ahead",
         tone: "success",
-        title: "Planından öndesin",
+        title: pick(["Planından öndesin", "Harika gidiyorsun", "Beklentinin ilerisindesin"], seed),
         message: analysis.message,
         icon: "activity",
         actionLabel: "İlerlememi gör",
@@ -184,27 +220,40 @@ export function useCoachInsights(limit = 3): CoachInsight[] {
       });
     }
 
-    // 2. Goal deviation — gentle, non-shaming nudge.
+    // 2. Goal deviation — gentle, non-shaming "why this matters" nudge.
     if (analysis.status === "behind") {
       insights.push({
         id: "coach-behind",
         tone: "nudge",
-        title: "Birlikte bakalım mı?",
-        message:
-          "İlerlemenin biraz yavaşladığını fark ettim. Sana birkaç soru sorup planını nazikçe ayarlayabilirim.",
+        title: pick(["Birlikte bakalım mı?", "Küçük bir ayar yapalım", "Rotayı birlikte düzeltelim"], seed),
+        message: pick(
+          [
+            "İlerlemenin biraz yavaşladığını fark ettim. Bu normal — birkaç soruyla planını nazikçe ayarlayabilirim.",
+            "Son günlerde tempo düşmüş görünüyor. Neden önemli? Küçük düzeltmeler hedefine giden süreyi kısaltır.",
+            "Grafiğin biraz yatay seyrediyor. Endişelenme; birlikte gözden geçirip yeniden ivme kazanabiliriz.",
+          ],
+          seed,
+        ),
         icon: "heart",
         actionLabel: "Koçla konuş",
         actionHref: "/ai",
       });
     }
 
-    // 3. Weigh-in reminder.
+    // 3. Weigh-in reminder ("why this matters": tracking accuracy).
     if (analysis.isWeighInDue) {
       insights.push({
         id: "coach-weigh-in",
         tone: "info",
-        title: "Tartılma zamanı",
-        message: "Bu haftaki kilonu kaydedersen ilerlemeni daha net takip edebiliriz.",
+        title: pick(["Tartılma zamanı", "Bugün tartılma günün", "Haftalık ölçüm vakti"], seed),
+        message: pick(
+          [
+            "Bu haftaki kilonu kaydedersen ilerlemeni daha net takip edebiliriz.",
+            "Düzenli ölçüm, önerilerimin doğruluğunu artırır. Bugünkü kilonu ekleyelim mi?",
+            "Bir haftadır yeni ölçüm görmedim. Güncel kilon, planını isabetli tutmama yardımcı olur.",
+          ],
+          seed,
+        ),
         icon: "scale",
         actionLabel: "Kilo kaydet",
         actionHref: "/progress",
@@ -216,8 +265,15 @@ export function useCoachInsights(limit = 3): CoachInsight[] {
       insights.push({
         id: "coach-lunch",
         tone: "nudge",
-        title: "Öğle yemeğini atladın mı?",
-        message: "Öğününü kaydedersen günlük dengeni birlikte takip edebiliriz.",
+        title: pick(["Öğle yemeğini atladın mı?", "Öğlen ne yedin?", "Öğle öğününü ekleyelim"], seed),
+        message: pick(
+          [
+            "Öğününü kaydedersen günlük dengeni birlikte takip edebiliriz.",
+            "Öğlen öğününü görmedim. Eklersen kalan gün için daha iyi öneriler sunabilirim.",
+            "Ne yediğini bilirsem protein ve kalori hedefini daha isabetli ayarlayabilirim.",
+          ],
+          seed,
+        ),
         icon: "utensils",
         actionLabel: "Öğün ekle",
         actionHref: "/meals/add",
@@ -226,8 +282,15 @@ export function useCoachInsights(limit = 3): CoachInsight[] {
       insights.push({
         id: "coach-breakfast",
         tone: "nudge",
-        title: "Güne kahvaltıyla başla",
-        message: "Kahvaltını henüz görmedim. Eklersen günün için daha iyi öneriler sunabilirim.",
+        title: pick(["Güne kahvaltıyla başla", "Kahvaltını ekledin mi?", "Sabah öğünün nasıldı?"], seed),
+        message: pick(
+          [
+            "Kahvaltını henüz görmedim. Eklersen günün için daha iyi öneriler sunabilirim.",
+            "Güne iyi bir kahvaltı ile başlamak gün boyu enerjini dengeler. Ne yediğini ekleyelim mi?",
+            "Sabah öğününü kaydedersen günlük hedeflerini baştan planlayabiliriz.",
+          ],
+          seed,
+        ),
         icon: "utensils",
         actionLabel: "Kahvaltı ekle",
         actionHref: "/meals/add",
@@ -239,13 +302,22 @@ export function useCoachInsights(limit = 3): CoachInsight[] {
       insights.push({
         id: "coach-water",
         tone: "info",
-        title: "Su içmeyi unutma",
-        message: `Bugün ${(waterMl / 1000).toLocaleString("tr-TR")} L su içtin. Hedefinin yarısına birlikte ulaşalım.`,
+        title: pick(["Su içmeyi unutma", "Biraz su içelim", "Sıvı dengeni koru"], seed),
+        message: `Bugün ${(waterMl / 1000).toLocaleString("tr-TR")} L su içtin. ${pick(
+          [
+            "Hedefinin yarısına birlikte ulaşalım.",
+            "Bir bardak daha eklemek metabolizmana iyi gelir.",
+            "Küçük yudumlarla hedefe yaklaşabiliriz.",
+          ],
+          seed,
+        )}`,
         icon: "droplet",
+        actionLabel: "Su ekle",
+        actionHref: "/dashboard",
       });
     }
 
-    // 6. Blood test periodic reminder.
+    // 6. Blood test periodic reminder ("why this matters": data-driven plans).
     const memberDays = Math.round(
       (Date.now() - new Date(profile.memberSince).getTime()) / 86_400_000,
     );
@@ -253,29 +325,98 @@ export function useCoachInsights(limit = 3): CoachInsight[] {
       insights.push({
         id: "coach-blood-test",
         tone: "info",
-        title: "Kontrol zamanı yaklaşıyor",
-        message: "Güncel bir kan tahlili yüklersen önerilerini sağlık verilerine göre yenileyebilirim.",
+        title: pick(["Kontrol zamanı yaklaşıyor", "Kan tahlilini güncelleyelim", "Sağlık verini tazele"], seed),
+        message: pick(
+          [
+            "Güncel bir kan tahlili yüklersen önerilerini sağlık verilerine göre yenileyebilirim.",
+            "Bir süredir yeni tahlil görmedim. Yüklersen planını laboratuvar sonuçlarına göre kişiselleştiririm.",
+            "Kan değerlerin, sana özel beslenme önerilerinin temelini oluşturur. Güncel bir sonuç ekleyelim mi?",
+          ],
+          seed,
+        ),
         icon: "flask",
-        actionLabel: "Koça sor",
-        actionHref: "/ai",
+        actionLabel: "Tahlil yükle",
+        actionHref: "/profile/blood-tests",
       });
     }
 
-    // 7. Encourage first conversation.
+    // 7. Weekly encouragement — positive, recurring motivation.
+    {
+      const loggedMeals = meals.reduce((sum, m) => sum + m.foods.length, 0);
+      if (loggedMeals > 0 || weightEntries.length > 1) {
+        insights.push({
+          id: "coach-weekly-encouragement",
+          tone: "success",
+          title: pick(
+            [
+              firstName ? `Bu hafta harikasın, ${firstName}` : "Bu hafta harikasın",
+              "Küçük adımlar, büyük fark",
+              "İstikrarın işe yarıyor",
+            ],
+            seed,
+          ),
+          message: pick(
+            [
+              "Düzenli kayıt tutman, hedefine giden yolda en güçlü alışkanlığın. Böyle devam!",
+              "Her kayıt, seni tanımamı ve daha isabetli öneriler sunmamı sağlıyor. Teşekkürler!",
+              "Sürekliliğin motivasyonunu canlı tutuyor. Bu ritmi korursak sonuçlar kendini gösterecek.",
+            ],
+            seed,
+          ),
+          icon: "sparkles",
+          actionLabel: "İlerlememi gör",
+          actionHref: "/progress",
+        });
+      }
+    }
+
+    // 8. Healthy-habit reminder — gentle lifestyle nudge (evening).
+    if (hour >= 20) {
+      insights.push({
+        id: "coach-habit-evening",
+        tone: "info",
+        title: pick(["Güzel bir gün için hazırlık", "Yarına hazırlan", "Akşam rutini"], seed),
+        message: pick(
+          [
+            "Erken ve düzenli uyku, iştah hormonlarını dengeler. Bugünü güzel bir dinlenmeyle kapatalım.",
+            "Yatmadan önce hafif bir yürüyüş sindirime iyi gelir. Yarın için enerji topla.",
+            "Ekran süreni azaltmak uyku kaliteni artırır. Yarın seni yeni hedeflerle karşılayacağım.",
+          ],
+          seed,
+        ),
+        icon: "moon",
+      });
+    }
+
+    // 9. Encourage first conversation of the day.
     if (!chattedToday) {
       insights.push({
         id: "coach-chat",
         tone: "info",
-        title: "Bugün nasıl yardımcı olabilirim?",
-        message: "Beslenme, planın ya da tahlillerinle ilgili aklına takılanları bana sorabilirsin.",
-        icon: "sparkles",
+        title: pick(
+          [
+            "Bugün nasıl yardımcı olabilirim?",
+            firstName ? `Merhaba ${firstName}, sohbet edelim mi?` : "Sohbet edelim mi?",
+            "Aklına takılan bir şey var mı?",
+          ],
+          seed,
+        ),
+        message: pick(
+          [
+            "Beslenme, planın ya da tahlillerinle ilgili aklına takılanları bana sorabilirsin.",
+            "Bugünkü öğünlerin ya da hedeflerinle ilgili istediğini sorabilirsin — buradayım.",
+            "Küçük bir soru bile planını iyileştirebilir. Hadi başlayalım.",
+          ],
+          seed,
+        ),
+        icon: "message",
         actionLabel: "Koçla konuş",
         actionHref: "/ai",
       });
     }
 
     return insights.slice(0, limit);
-  }, [profile, meals, waterMl, waterGoalMl, chattedToday, weightEntries, hour, limit]);
+  }, [profile, meals, waterMl, waterGoalMl, chattedToday, weightEntries, hour, seed, limit]);
 }
 
 /** The single most important "next recommended action" for the dashboard hero. */
