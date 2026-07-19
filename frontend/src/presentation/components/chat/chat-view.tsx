@@ -51,7 +51,7 @@ export function ChatView() {
   const lastAssistantId = [...messages].reverse().find((m) => m.role === "assistant")?.id;
 
   return (
-    <div className="flex h-dvh flex-col bg-background">
+    <div className="flex h-full flex-col bg-background">
       <header className="z-20 flex h-14 shrink-0 items-center gap-2 border-b border-border/60 bg-background/80 px-3 backdrop-blur-lg">
         <button
           type="button"

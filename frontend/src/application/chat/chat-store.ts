@@ -3,6 +3,7 @@
 import * as React from "react";
 
 import type { ChatMessage, Conversation, MessageReaction } from "@/domain/chat/types";
+import { dailyTrackingStore } from "@/application/health/daily-tracking-store";
 import { getPlaceholderResponse } from "./placeholder-responses";
 
 /**
@@ -162,6 +163,9 @@ export const chatStore = {
       updatedAt: Date.now(),
       messages: [...conv.messages, userMessage, assistantMessage],
     }));
+
+    // Chatting with the coach completes the daily "talk to coach" task.
+    dailyTrackingStore.markChatted();
 
     // Simulate "thinking" latency before streaming begins.
     setState({ isResponding: true });
