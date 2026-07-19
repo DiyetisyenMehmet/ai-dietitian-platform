@@ -56,11 +56,25 @@ function seedAchievements(): Achievement[] {
       unlockedAt: isoOffset(-38),
     },
     {
+      id: "ach-first-meal",
+      title: "İlk Öğün",
+      description: "İlk öğününü günlüğe kaydettin.",
+      icon: "utensils",
+      unlockedAt: isoOffset(-37),
+    },
+    {
       id: "ach-blood-test",
       title: "Sağlık Kontrolü",
       description: "İlk kan tahlilini yükledin.",
       icon: "flask",
       unlockedAt: isoOffset(-30),
+    },
+    {
+      id: "ach-hydration",
+      title: "Su Şampiyonu",
+      description: "Günlük su hedefine ilk kez ulaştın.",
+      icon: "droplet",
+      unlockedAt: isoOffset(-20),
     },
     {
       id: "ach-3kg",
@@ -74,6 +88,13 @@ function seedAchievements(): Achievement[] {
       title: "7 Gün İstikrar",
       description: "7 gün üst üste takip yaptın.",
       icon: "flame",
+      unlockedAt: null,
+    },
+    {
+      id: "ach-5kg",
+      title: "5 Kilo Kilometre Taşı",
+      description: "Başlangıçtan bu yana 5 kg vererek bu taşı geç.",
+      icon: "target",
       unlockedAt: null,
     },
     {

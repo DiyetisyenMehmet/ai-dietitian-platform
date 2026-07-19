@@ -23,6 +23,9 @@ export interface WeightEntry {
   note?: string;
 }
 
+/** Processing state of an uploaded blood test. */
+export type BloodTestStatus = "analyzing" | "analyzed";
+
 /** A summarized blood test the user has uploaded. */
 export interface BloodTestSummary {
   id: string;
@@ -33,6 +36,10 @@ export interface BloodTestSummary {
   summary: string;
   /** Count of flagged (out-of-range) markers, if any. */
   flaggedCount: number;
+  /** Analysis pipeline status. */
+  status: BloodTestStatus;
+  /** Original uploaded file name, when known. */
+  fileName?: string;
 }
 
 /** An earned achievement / milestone badge. */

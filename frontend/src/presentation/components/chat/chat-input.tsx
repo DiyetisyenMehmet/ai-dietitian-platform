@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ArrowUp, Mic, Paperclip } from "lucide-react";
+import { ArrowUp } from "lucide-react";
 
 import { cn } from "@/shared/lib/utils";
 
@@ -11,9 +11,8 @@ interface ChatInputProps {
 }
 
 /**
- * Rounded message composer with auto-growing textarea. Voice and attachment
- * buttons are intentional disabled placeholders (out of Sprint 5 scope).
- * Sticky positioning keeps it above the mobile keyboard.
+ * Rounded message composer with auto-growing textarea. Sticky positioning
+ * keeps it above the mobile keyboard.
  */
 export function ChatInput({ onSend, disabled = false }: ChatInputProps) {
   const [value, setValue] = React.useState("");
@@ -41,16 +40,6 @@ export function ChatInput({ onSend, disabled = false }: ChatInputProps) {
   return (
     <div className="sticky bottom-0 z-10 border-t border-border/60 bg-background/90 pb-[env(safe-area-inset-bottom)] pt-3 backdrop-blur-lg">
       <div className="mx-auto flex w-full max-w-2xl items-end gap-2 px-4 pb-3">
-        <button
-          type="button"
-          disabled
-          aria-label="Dosya ekle (yakında)"
-          title="Yakında"
-          className="flex size-10 shrink-0 items-center justify-center rounded-full text-muted-foreground opacity-50"
-        >
-          <Paperclip className="size-5" aria-hidden="true" />
-        </button>
-
         <div className="flex flex-1 items-end rounded-3xl border border-input bg-card px-4 py-1 shadow-card focus-within:ring-2 focus-within:ring-ring">
           <textarea
             ref={textareaRef}
@@ -70,15 +59,6 @@ export function ChatInput({ onSend, disabled = false }: ChatInputProps) {
             aria-label="Mesaj"
             className="max-h-[140px] flex-1 resize-none bg-transparent py-2 text-sm leading-relaxed outline-none placeholder:text-muted-foreground"
           />
-          <button
-            type="button"
-            disabled
-            aria-label="Sesli mesaj (yakında)"
-            title="Yakında"
-            className="mb-1 flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground opacity-50"
-          >
-            <Mic className="size-4" aria-hidden="true" />
-          </button>
         </div>
 
         <button

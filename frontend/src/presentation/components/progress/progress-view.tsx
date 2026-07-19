@@ -13,6 +13,7 @@ import { Input } from "@/presentation/components/ui/input";
 import { ProgressBar } from "@/presentation/components/ui/progress-bar";
 import { EmptyState } from "@/presentation/components/feedback/empty-state";
 import { SectionCard } from "@/presentation/components/health/section-card";
+import { ProgressStatsSection } from "@/presentation/components/progress/progress-stats-section";
 import { WeightChart } from "@/presentation/components/health/weight-chart";
 import { healthIcon } from "@/presentation/components/health/health-icon";
 import { useHealthProfile } from "@/application/health/health-profile-store";
@@ -198,6 +199,9 @@ export function ProgressView() {
           </div>
         </section>
       )}
+
+      {/* Weekly / monthly analytics */}
+      <ProgressStatsSection />
 
       {/* Weigh-in */}
       <SectionCard icon="scale" title="Kilonu Kaydet">
