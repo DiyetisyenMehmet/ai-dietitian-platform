@@ -14,6 +14,8 @@ import { Card, CardContent } from "@/presentation/components/ui/card";
 import { FormField } from "@/presentation/components/ui/form-field";
 import { Input } from "@/presentation/components/ui/input";
 import { Button } from "@/presentation/components/ui/button";
+import { FoodWarningList } from "@/presentation/components/health/food-warning-list";
+import { useFoodWarnings } from "@/application/health/coach";
 import { SLOT_ICON } from "./meal-visuals";
 import { MealSearch } from "./meal-search";
 
@@ -36,6 +38,7 @@ export function AddMealForm({ initialSlot = "breakfast" }: AddMealFormProps) {
     handleSubmit,
     control,
     setValue,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<AddMealInput>({
     resolver: zodResolver(addMealSchema),
@@ -73,6 +76,9 @@ export function AddMealForm({ initialSlot = "breakfast" }: AddMealFormProps) {
     [router],
   );
 
+  const foodName = watch("name");
+  const warnings = useFoodWarnings(foodName ?? "");
+
   return (
     <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-5">
       <Card>
@@ -104,6 +110,8 @@ export function AddMealForm({ initialSlot = "breakfast" }: AddMealFormProps) {
           <FormField id="name" label="Besin Adı" error={errors.name?.message}>
             <Input placeholder="örn. Izgara Tavuk" {...register("name")} />
           </FormField>
+
+          <FoodWarningList warnings={warnings} />
 
           <FormField id="quantity" label="Miktar" error={errors.quantity?.message}>
             <Input placeholder="örn. 100 g, 1 porsiyon" {...register("quantity")} />

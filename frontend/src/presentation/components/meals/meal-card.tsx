@@ -18,7 +18,11 @@ import {
   ModalFooter,
 } from "@/presentation/components/ui/modal";
 import type { FoodItem, Meal } from "@/domain/meals/types";
+import type { FoodWarning } from "@/domain/health/types";
 import { mealsStore, mealTotals } from "@/application/meals/meals-store";
+import { useHealthProfile } from "@/application/health/health-profile-store";
+import { evaluateFoodWarnings } from "@/application/health/coach";
+import { FoodWarningList } from "@/presentation/components/health/food-warning-list";
 import { SLOT_ICON, SLOT_ACCENT } from "./meal-visuals";
 import { FoodItemRow } from "./food-item-row";
 import { EditFoodModal } from "./edit-food-modal";
@@ -35,10 +39,21 @@ export function MealCard({ meal, defaultOpen = false }: MealCardProps) {
   const [editing, setEditing] = React.useState<FoodItem | null>(null);
   const [deleting, setDeleting] = React.useState<FoodItem | null>(null);
 
+  const profile = useHealthProfile();
   const totals = mealTotals(meal);
   const Icon = SLOT_ICON[meal.slot];
   const foodCount = meal.foods.length;
   const contentId = `meal-panel-${meal.slot}`;
+
+  const warnings = React.useMemo<FoodWarning[]>(() => {
+    const byId = new Map<string, FoodWarning>();
+    for (const food of meal.foods) {
+      for (const warning of evaluateFoodWarnings(profile, food.name)) {
+        if (!byId.has(warning.id)) byId.set(warning.id, warning);
+      }
+    }
+    return Array.from(byId.values());
+  }, [meal.foods, profile]);
 
   const handleEditSave = React.useCallback(
     (values: EditFoodInput) => {
@@ -102,6 +117,7 @@ export function MealCard({ meal, defaultOpen = false }: MealCardProps) {
 
       {expanded && (
         <div id={contentId} className="space-y-2 px-4 pb-4">
+          <FoodWarningList warnings={warnings} className="mb-1" />
           {foodCount > 0 ? (
             meal.foods.map((food) => (
               <FoodItemRow key={food.id} food={food} onEdit={setEditing} onDelete={setDeleting} />
