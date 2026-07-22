@@ -81,6 +81,11 @@ export type JourneyEventType =
   | "first-plan"
   | "weight-updated"
   | "goal-reached"
+  | "goal-updated"
+  | "meal-added"
+  | "nutrition-adapted"
+  | "review"
+  | "achievement"
   | "streak";
 
 /** A single event on the user's health-journey timeline. */
@@ -162,4 +167,103 @@ export type HealthIconKey =
   | "sunrise"
   | "sun"
   | "moon"
-  | "message";
+  | "message"
+  | "gauge"
+  | "shield"
+  | "lightbulb"
+  | "calendar"
+  | "footprints"
+  | "trending-up"
+  | "star"
+  | "crown";
+
+/* -------------------------------------------------------------------------- */
+/* Sprint 20 — AI Health Coach Experience & Guided Journey                     */
+/* -------------------------------------------------------------------------- */
+
+/** The seven steps of the guided "Today's Journey". */
+export type JourneyStepKind =
+  | "breakfast"
+  | "lunch"
+  | "dinner"
+  | "water"
+  | "weight"
+  | "activity"
+  | "coach";
+
+/** Lifecycle state of a single journey step. */
+export type JourneyStepState = "completed" | "pending" | "recommended" | "skipped";
+
+/** A single step in the guided daily journey. */
+export interface JourneyStep {
+  kind: JourneyStepKind;
+  label: string;
+  /** Short supporting hint shown under the label. */
+  hint: string;
+  state: JourneyStepState;
+  icon: HealthIconKey;
+  /** Optional deep-link the step navigates to. */
+  href?: string;
+  /** Optional progress ratio (0..1) for partially-complete steps (e.g. water). */
+  progress?: number;
+}
+
+/** A single weighted contributor to the overall health score. */
+export interface HealthScoreFactor {
+  key: string;
+  label: string;
+  /** Normalized contribution 0..100. */
+  value: number;
+  /** Relative weight 0..1 (all weights sum to 1). */
+  weight: number;
+  icon: HealthIconKey;
+}
+
+/** Direction of the health-score trend. */
+export type ScoreTrend = "up" | "down" | "flat";
+
+/** The dynamic 0–100 health score with its explanation. */
+export interface HealthScore {
+  /** Overall score 0..100. */
+  score: number;
+  /** Qualitative band label (Turkish). */
+  band: string;
+  trend: ScoreTrend;
+  /** Signed delta vs. the recent baseline. */
+  delta: number;
+  /** Plain-language reason for the current score (Turkish). */
+  reason: string;
+  /** Prioritized, actionable ways to improve (Turkish). */
+  improvements: { label: string; href?: string }[];
+  /** Per-factor breakdown for the detailed view. */
+  factors: HealthScoreFactor[];
+}
+
+/** Category of an AI insight surfaced from the Sprint 19 intelligence layer. */
+export type AiInsightKind =
+  | "weekly-review"
+  | "monthly-review"
+  | "risk-alert"
+  | "nutrition-adaptation"
+  | "smart-question"
+  | "memory-summary";
+
+/** Severity used by risk-style insights. */
+export type AiInsightSeverity = "info" | "success" | "warning" | "danger";
+
+/** A surfaced AI insight card for the insights hub. */
+export interface AiInsight {
+  id: string;
+  kind: AiInsightKind;
+  title: string;
+  /** Short one-line summary. */
+  summary: string;
+  /** Longer supporting detail lines. */
+  details: string[];
+  severity: AiInsightSeverity;
+  icon: HealthIconKey;
+  /** Whether this insight is gated behind premium. */
+  premium?: boolean;
+  actionLabel?: string;
+  actionHref?: string;
+}

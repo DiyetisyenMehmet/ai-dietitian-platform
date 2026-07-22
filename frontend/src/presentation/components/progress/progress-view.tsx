@@ -73,6 +73,11 @@ const JOURNEY_ICON: Record<JourneyEventType, Parameters<typeof healthIcon>[0]> =
   "weight-updated": "scale",
   "goal-reached": "trophy",
   streak: "flame",
+  "goal-updated": "flag",
+  "meal-added": "utensils",
+  "nutrition-adapted": "sparkles",
+  review: "calendar",
+  achievement: "star",
 };
 
 function WeighInForm() {
