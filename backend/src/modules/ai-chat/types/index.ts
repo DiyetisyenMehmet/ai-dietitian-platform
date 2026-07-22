@@ -60,6 +60,13 @@ export interface MinimizedChatContext {
   profile?: MinimizedProfileContext;
   activePlan?: MinimizedPlanContext;
   bloodAnalysis?: MinimizedBloodContext;
+  /**
+   * AI Long-Term Memory context (Sprint 19). A pre-rendered, non-identifying
+   * Turkish summary of the user's durable coaching memory (trends, habits,
+   * goals, recorded notes) so the model never repeats identical advice for an
+   * unchanged situation. Optional and may be empty.
+   */
+  memory?: string;
 }
 
 /** Input passed to the AI adapter to produce a dietitian chat reply. */
@@ -69,6 +76,11 @@ export interface DietitianChatAIInput {
   history: ChatHistoryTurn[];
   /** The current user message (PHI-redacted for the external call). */
   message: string;
+  /**
+   * When true, the caller is on a premium tier: the adapter may produce a
+   * longer, deeper reply (higher token budget). Sprint 19, Section 8.
+   */
+  premium?: boolean;
 }
 
 /** Structured output returned by the AI adapter's chat generator. */

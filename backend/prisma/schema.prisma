@@ -76,6 +76,17 @@ model User {
   payments          Payment[]
   consents          ConsentRecord[]
 
+  // Sprint 19 — AI Health Coach Intelligence
+  weightLogs             WeightLog[]
+  mealLogs               MealLog[]
+  waterLogs              WaterLog[]
+  aiMemories             AiMemory[]
+  aiConversationSummaries AiConversationSummary[]
+  proactiveMessages      ProactiveMessage[]
+  weeklyReviews          WeeklyReview[]
+  monthlyReviews         MonthlyReview[]
+  notifications          Notification[]
+
   @@map("users")
 }
 
@@ -773,4 +784,233 @@ model ConsentRecord {
 
   @@index([userId, type, createdAt])
   @@map("consent_records")
+}
+
+// ---------------------------------------------------------------------------
+// Sprint 19 — AI Health Coach Intelligence
+// ---------------------------------------------------------------------------
+// This sprint turns Diewish into a proactive, memory-aware AI health coach. The
+// intelligence layer needs time-series signals (weight over time, meals, water)
+// that earlier sprints only captured as single profile snapshots, so lightweight
+// tracking logs are introduced here as first-class data sources. Everything
+// remains nutrition/coaching only — never medical diagnosis.
+
+/// The kind of meal a log entry represents.
+enum MealType {
+  BREAKFAST
+  LUNCH
+  DINNER
+  SNACK
+}
+
+/// A single weight measurement over time. Unlike `UserProfile.currentWeightKg`
+/// (a single snapshot), these rows let the coach reason about week-over-week
+/// trends, rapid gain/loss risk and goal progress.
+model WeightLog {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  weightKg  Float
+  note      String?
+  loggedAt  DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  @@index([userId, loggedAt])
+  @@map("weight_logs")
+}
+
+/// A single logged meal with optional nutrition estimates. Powers meal-habit
+/// memory, consistency scoring, and macro/sodium/sugar risk checks.
+model MealLog {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mealType  MealType
+  name      String?
+  calories  Float?
+  proteinG  Float?
+  carbsG    Float?
+  fatG      Float?
+  sodiumMg  Float?
+  sugarG    Float?
+  loggedAt  DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  @@index([userId, loggedAt])
+  @@map("meal_logs")
+}
+
+/// A single water-intake entry (millilitres). Powers hydration streak checks
+/// and low-water proactive nudges.
+model WaterLog {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amountMl  Int
+  loggedAt  DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  @@index([userId, loggedAt])
+  @@map("water_logs")
+}
+
+/// The category of a persisted AI memory. Adding a value lets a new signal be
+/// remembered without a breaking change.
+enum AiMemoryType {
+  WEIGHT_TREND
+  MEAL_HABITS
+  BLOOD_TESTS
+  GOALS
+  MISTAKES
+  ACHIEVEMENTS
+  ACTIVITY
+  CONVERSATION_SUMMARY
+}
+
+/// Long-term AI memory: durable, structured facts the coach recalls across
+/// conversations so it never repeats identical advice for an unchanged
+/// situation. `content` is a structured JSON payload whose shape depends on
+/// `memoryType`. `embedding` is reserved for future semantic recall. The latest
+/// row per (user, memoryType) is treated as the current memory of record.
+model AiMemory {
+  id         String       @id @default(uuid())
+  userId     String
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  memoryType AiMemoryType
+  content    Json
+  /// Optional vector embedding (JSON array) for future semantic retrieval.
+  embedding  Json?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  /// Optional TTL; a memory past this instant is treated as stale.
+  expiresAt  DateTime?
+
+  @@index([userId, memoryType, updatedAt])
+  @@map("ai_memories")
+}
+
+/// A weekly rollup of a user's conversations distilled into a summary plus key
+/// insights, so long histories can be recalled compactly.
+model AiConversationSummary {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  weekNumber  Int
+  year        Int
+  summary     String   @db.Text
+  keyInsights Json
+  createdAt   DateTime @default(now())
+
+  @@unique([userId, weekNumber, year])
+  @@index([userId, year, weekNumber])
+  @@map("ai_conversation_summaries")
+}
+
+/// The reason a proactive message was generated.
+enum ProactiveMessageType {
+  MISSED_MEAL
+  MISSED_WEIGHT
+  GOAL_BEHIND
+  LOW_WATER
+  INACTIVITY
+  RISK_ALERT
+  WEEKLY_REVIEW
+  MONTHLY_REVIEW
+}
+
+/// An AI-initiated message surfaced to the user without them asking first.
+/// Generated by the daily proactive job (and ad-hoc by risk/review flows).
+model ProactiveMessage {
+  id           String               @id @default(uuid())
+  userId       String
+  user         User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type         ProactiveMessageType
+  message      String               @db.Text
+  isRead       Boolean              @default(false)
+  scheduledFor DateTime             @default(now())
+  createdAt    DateTime             @default(now())
+
+  @@index([userId, isRead, scheduledFor])
+  @@map("proactive_messages")
+}
+
+/// The weekly-trend direction the coach reports.
+enum WeightTrend {
+  IMPROVING
+  STABLE
+  DECLINING
+}
+
+/// A generated weekly AI coaching report for one (user, ISO week, year).
+model WeeklyReview {
+  id                 String      @id @default(uuid())
+  userId             String
+  user               User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  weekNumber         Int
+  year               Int
+  score              Int
+  weightTrend        WeightTrend
+  mealConsistency    Int
+  waterConsistency   Int
+  proteinConsistency Int
+  coachComments      String      @db.Text
+  recommendations    Json
+  nextWeekPriorities Json
+  createdAt          DateTime    @default(now())
+
+  @@unique([userId, weekNumber, year])
+  @@index([userId, year, weekNumber])
+  @@map("weekly_reviews")
+}
+
+/// A generated monthly coaching summary for one (user, month, year).
+model MonthlyReview {
+  id               String   @id @default(uuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  month            Int
+  year             Int
+  progressSummary  String   @db.Text
+  habitsAnalysis   String   @db.Text
+  improvements     Json
+  riskAreas        Json
+  aiEvaluation     String   @db.Text
+  motivationMessage String  @db.Text
+  priorities       Json
+  createdAt        DateTime @default(now())
+
+  @@unique([userId, month, year])
+  @@index([userId, year, month])
+  @@map("monthly_reviews")
+}
+
+/// The channel/category a notification belongs to.
+enum NotificationType {
+  PROACTIVE_MESSAGE
+  WEEKLY_REVIEW
+  MONTHLY_REVIEW
+  RISK_ALERT
+  GOAL_REMINDER
+  WATER_REMINDER
+}
+
+/// A scheduled push notification. This sprint prepares the scheduling layer
+/// only; delivery is handled by a pluggable NotificationProvider (a logging
+/// stub today, Firebase/APNs later). `deliveredAt` is set once a provider
+/// reports the notification sent.
+model Notification {
+  id           String           @id @default(uuid())
+  userId       String
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type         NotificationType
+  title        String
+  body         String           @db.Text
+  scheduledFor DateTime
+  deliveredAt  DateTime?
+  metadata     Json?
+  createdAt    DateTime         @default(now())
+
+  @@index([userId, scheduledFor])
+  @@index([deliveredAt])
+  @@map("notifications")
 }
