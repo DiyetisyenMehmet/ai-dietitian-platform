@@ -50,3 +50,16 @@
 - AD-043: Tüm kritik işlemler correlation ID ile uçtan uca izlenebilir olacaktır.
 - AD-044: Mimari risk kaydı canlı bir doküman olarak tutulacaktır.
 - AD-045: "Thin Slice Architecture" prensibi uygulanacaktır.
+
+## Sprint 19 — AI Health Coach Intelligence Kararları
+
+- AD-046: **Express Framework (NestJS Değil):** Backend Express + TypeScript ile geliştirilmiştir. Zamanlanmış görevler için harici kütüphane (node-cron, bull vb.) kullanılmayacak; custom `setInterval` tabanlı scheduler tercih edilmiştir.
+- AD-047: **Turkey Yerel Saati (UTC+3):** Tüm scheduler, metrik hesaplamaları ve zaman penceresi işlemleri Türkiye yerel saati (UTC+3) kullanır. `metrics.ts` yardımcı fonksiyonları bu mantığı sağlar.
+- AD-048: **AI Hafızası (Long-Term Memory):** `AiMemory` modeli kullanıcı trendleri, alışkanlıkları, hatalar ve başarıları saklar. Her AI sohbet isteğine hafıza bağlamı otomatik olarak enjekte edilir (PHI minimization korunarak).
+- AD-049: **Proaktif AI Mimarisi:** AI, kullanıcıdan mesaj beklemeden günlük cron job'lar (20:00 Turkey) ile eksik kayıtlar, hedef gerisinde kalma ve hareketsizlik gibi durumları tespit eder ve `ProactiveMessage` kaydı oluşturur.
+- AD-050: **Premium Gating Stratejisi:** Free ve Premium kullanıcı deneyimi ayrımı `requirePremium` middleware ile yapılır. Free kullanıcılar premium endpoint'lere erişince **402 PREMIUM_REQUIRED** hatası döner. Hafıza derinliği, AI yanıt uzunluğu ve rapor detayı tier'a göre değişir.
+- AD-051: **Bildirim Soyutlama Katmanı:** `NotificationProvider` interface ile bildirim gönderimi soyutlanmıştır. Mevcut stub (`LoggingNotificationProvider`) ileride Firebase/APNs ile değiştirilebilir. Bildirimler `Notification` modelinde zamanlanır ve `dispatchDue` ile gönderilir.
+- AD-052: **Zaman Serisi Tracking Modelleri:** `WeightLog`, `MealLog`, `WaterLog` modelleri AI coach özelliklerinin birinci sınıf veri kaynağıdır. Bu modeller tracking modülü tarafından yönetilir ve tüm AI analiz servislerince tüketilir.
+- AD-053: **Risk Tespiti — Koçluk Odaklı:** `RiskDetectionService` 8 farklı sağlık/yaşam tarzı riski tarar ancak asla tıbbi teşhis koymaz. Yalnızca koçluk önerileri (coaching recommendations) döner. Yüksek önem dereceli riskler proaktif mesaj ve bildirim oluşturur.
+- AD-054: **Haftalık/Aylık Değerlendirme İdempotency:** Haftalık ve aylık değerlendirmeler (week/year veya month/year bazında) idempotent'tir; aynı dönem için tekrar çağrılırsa mevcut kayıt döner, yeniden hesaplama yapılmaz.
+- AD-055: **Scheduler Güvenilirlik:** Custom scheduler re-entrancy koruması ile çalışır (aynı job paralel çalışmaz). VM restart sonrası scheduler otomatik olarak yeniden başlar (`startCoachScheduler` bootstrap'ta çağrılır).

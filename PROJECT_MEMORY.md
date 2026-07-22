@@ -53,30 +53,48 @@
 
 ---
 
-## 📌 GÜNCEL PROJE DURUMU (Snapshot · 2026-07-15)
+## 📌 GÜNCEL PROJE DURUMU (Snapshot · 2026-07-22)
 
 > Bu bölüm, gelecekteki bir oturumun projeyi sıfırdan anlayabilmesi için tam durum özetidir.
 > **Ürün adı: Diewish** (resmi). Eski geçici ad "AI Dietitian Platform" kullanımdan kaldırıldı.
 
 ### Genel
-- **Aktif Sprint:** Sprint 11 (Kan Tahlili Yükleme Altyapısı — backend) **tamamlandı** → Sprint 12 (kan tahlili AI analizi — yüklenen dosyaları tüketir) sıradaki.
-- **Son Commit Hash:** bkz. `git log` — `feat(blood-test): Sprint 11 blood test upload infrastructure`
-- **Aktif Branch:** `main`
-- **Sürüm:** Frontend `0.1.0` · Backend `0.3.0` (auth + onboarding + account lifecycle + blood-test upload modülleri)
-- **Genel Tamamlanma:** ~%58
+- **Aktif Sprint:** Sprint 19 (AI Health Coach Intelligence) **tamamlandı** → Sprint 20 (Documentation Sync) sıradaki.
+- **Son Commit Hash:** `4c5e82b2df824c3c64799360ac176a6bb1d680c6`
+- **Aktif Branch:** `feature/sprint-19-ai-health-coach-intelligence` (PR açıldı, merge bekliyor)
+- **Base Branch:** `feature/sprint-18-product-polish-account-subscription`
+- **Sürüm:** Backend `0.4.0` (AI Health Coach Intelligence eklendi)
+- **Genel Tamamlanma:** ~%75
 - **V1 Stratejisi:** Launch Blocker / Post-Launch / Future Vision önceliklendirmesi `ROADMAP.md`'de (V1 = mümkün olan en kısa sürede kararlı, güvenli, production-ready yayın).
 
 ### Modüller
-- **Tamamlanan Modüller:** Frontend Foundation, Auth UI, Dashboard, Meals (UI), AI Chat (UI/mock), Goals (tam), Backend Foundation, **Backend Auth (Sprint 8: register/login/refresh-token/logout/me + rotation/reuse-detection + auth rate-limit)**, **Onboarding (Sprint 9: UserProfile + zorunlu çok adımlı onboarding, frontend auth entegrasyonu + session store + route guard)**, **Account Lifecycle (Sprint 10 — backend: e-posta doğrulama, şifre sıfırlama/değiştirme, hesap silme talebi + kalıcı silme, tek kullanımlık/süreli token'lar, denetim günlüğü)**, **Blood Test Upload (Sprint 11 — backend: sağlayıcı-bağımsız depolama soyutlaması + yerel depolama, PDF/JPEG/PNG/WebP magic-byte doğrulama, boyut/tek-dosya limiti, yükle/listele/indir/değiştir/sil + metadata + sahiplik-kapsamı + denetim günlüğü)**.
-- **Kalan Modüller:** Account Lifecycle frontend UI (Sprint 10 backend hazır, ekranlar sonraki), Blood Test frontend UI (Sprint 11 backend hazır, ekranlar sonraki), kan tahlili AI analizi (Sprint 12 — yüklenen dosyaları tüketir), domain backend API'leri (Meals/Goals/Dashboard/Chat kalıcılığı), gerçek AI Orchestrator, 30/60 gün plan, abonelik + iyzico, yasal/uyum katmanı, CI/CD, Monitoring, Deployment.
+- **Tamamlanan Modüller (Sprint 1–19):** 
+  - Frontend: Foundation, Auth UI, Dashboard, Meals (UI), AI Chat (UI), Goals, Marketing Site, Public Website, SEO
+  - Backend: Foundation, Auth (JWT + refresh rotation), Onboarding (UserProfile), Account Lifecycle (email verify, password reset, account deletion), Blood Test Upload, AI Blood Test Analysis, AI Nutrition Plan, AI Dietitian Chat, AI Usage Quota, Subscription Management, Payment Integration (iyzico), Legal/Compliance (KVKK), **Tracking (weight/meal/water logs)**, **AI Health Coach (memory, proactive AI, smart questions, nutrition adaptation, risk detection, weekly/monthly reviews)**, **Notifications (scheduling layer)**
+- **Kalan Modüller:** Frontend UI için AI Health Coach özelliklerinin ekranları, gerçek e-posta sağlayıcısı entegrasyonu (mailer), production deployment, CI/CD, APM/monitoring.
 
 ### Bileşen Durumları
-- **Frontend Status:** ✅ Kod tamam (port 3000). Sprint 9 doğrulaması: **lint ✓ (0 uyarı), type-check ✓ (0 hata)**. Auth session store + route guard + onboarding sihirbazı eklendi. ⚠️ Bu sprint kredi optimizasyonuyla `build` ve `preview` **alınmadı**.
-- **Backend Status:** ✅ Kod tamam (port 4000). Sprint 11 doğrulaması: **lint ✓ (0 uyarı), type-check ✓ (0 hata)**. Blood-test upload modülü + `storage` (sağlayıcı-bağımsız) soyutlaması eklendi; `multer` bağımlılığı eklendi. ⚠️ Bu sprint kredi optimizasyonuyla `build` ve `preview` **alınmadı**.
-- **Database Status:** ✅ PostgreSQL 17 · `ai_dietitian` DB · `dietitian` kullanıcısı (CREATEDB verildi). Migration'lar: `20260711213135_init`, `20260715202355_add_auth_user_refresh_token`, `20260715203846_add_user_profile_onboarding`, `20260715205703_add_account_lifecycle`, `20260715210742_add_blood_test_uploads` (blood_test_uploads + BloodTestStatus enum + AuditAction'a 3 değer). ⚠️ VM restart sonrası Postgres kalıcı değil (yeniden kurulum + migrate gerekir).
-- **API Status:** ✅ `/api/health`, `/api/health/ready` · **Auth: `POST /api/auth/{register,login,refresh-token,logout}` + `GET /api/auth/me`** · **Account: `POST /api/account/email/verify/{request,confirm}` + `/password/{forgot,reset,change}` + `/deletion/{request,cancel}` + `DELETE /api/account`** · **Onboarding: `POST /api/onboarding` + `GET /api/onboarding`** · **BloodTests: `POST /api/blood-tests` + `GET /api/blood-tests` + `GET /api/blood-tests/:id` + `GET /api/blood-tests/:id/file` + `PUT /api/blood-tests/:id/file` + `DELETE /api/blood-tests/:id`** · Swagger `/docs` (Auth + Account + Onboarding + BloodTests tag + bearerAuth). Diğer domain endpoint'leri henüz yok.
-- **AI Status:** ⚠️ Yalnızca frontend sohbet arayüzü (mock). Gerçek AI orchestrator/model entegrasyonu yok.
-- **Deployment Status:** ⚠️ Sadece dev/preview. Preview URL: https://685bf5caa.na115.preview.abacusai.app (HTTP 200). CI/CD ve production deployment yok.
+- **Frontend Status:** ✅ Kod tamam (port 3000). Sprint 16 ile herkese açık pazarlama sitesi, SEO ve production yapılandırması eklendi. Tüm doğrulamalar başarılı.
+- **Backend Status:** ✅ Kod tamam (port 4000). Sprint 19 doğrulaması: **lint ✓ (0 uyarı), type-check ✓ (0 hata), prisma validate ✓, prisma generate ✓**. AI Health Coach modülleri (tracking, ai-coach, notifications) + scheduler eklendi.
+- **Database Status:** ✅ PostgreSQL 17 · `ai_dietitian` DB · `dietitian` kullanıcısı. Migration'lar: init, auth, onboarding, account lifecycle, blood-test upload, sprint 12-14 catch-up, sprint 15 subscriptions/payments/legal, **sprint 19 AI Health Coach Intelligence** (`20260722000000_sprint19_ai_health_coach_intelligence` — 5 yeni enum, 9 yeni tablo, 9 FK, 13 index).
+- **API Status:** ✅ Tüm core API'ler hazır:
+  - **Health:** `/api/health`, `/api/health/ready`, `/api/health/version`
+  - **Auth:** register, login, refresh-token, logout, me
+  - **Account:** email verify, password reset/change, account deletion
+  - **Onboarding:** profil kayıt + okuma
+  - **Blood Tests:** yükle, listele, indir, değiştir, sil + AI analizi
+  - **AI Chat:** mesaj gönder, konuşmaları listele/sil
+  - **AI Usage:** kota kontrolü, kullanım geçmişi
+  - **Nutrition Plan:** plan oluştur/güncelle/oku
+  - **Subscription:** planlar, mevcut abonelik, iptal
+  - **Payments:** checkout, doğrulama, geçmiş, webhook
+  - **Legal:** dokümanlar, rıza yönetimi
+  - **Tracking:** kilo/yemek/su kayıtları (Sprint 19)
+  - **AI Coach:** proaktif mesajlar, hafıza, akıllı sorular, beslenme adaptasyonu, risk tespiti, haftalık/aylık değerlendirmeler (Sprint 19)
+  - **Notifications:** zamanlanmış bildirimleri listele (Sprint 19)
+- **AI Status:** ✅ Gerçek AI entegrasyonu tamamlandı: OpenAI-uyumlu adaptör, kan tahlili analizi, beslenme planı, diyetisyen sohbeti, **AI hafızası**, **proaktif koçluk**, **akıllı soru motoru**, **risk tespiti**, **haftalık/aylık değerlendirmeler**.
+- **Scheduler Status:** ✅ Custom setInterval-tabanlı scheduler (Turkey UTC+3); günlük (20:00), haftalık (Pazar 21:00), aylık (1. gün 08:00) ve bildirim dispatch görevleri çalışıyor.
+- **Deployment Status:** ✅ Production-ready Docker yapılandırması (multi-stage Dockerfile, docker-compose.yml). `DEPLOYMENT.md` dokümantasyonu mevcut.
 
 ### Mimari Özet
 - **Modular Monolith + DDD.** Her modül Application / Domain / Infrastructure katmanlarına sahip (AD-023).
@@ -98,22 +116,39 @@ ai-dietitian-platform/
 
 ### Aktif Teknolojiler
 - **Frontend:** Next.js 15.5, React, TypeScript, Tailwind CSS v3, shadcn/ui + Radix, lucide-react, react-hook-form, Zod, next-themes.
-- **Backend:** Node 22, Express 4.21, TypeScript, Prisma 6.2 + PostgreSQL 17, Pino/pino-http, Helmet, express-rate-limit, compression, Zod, swagger-jsdoc/swagger-ui-express, **bcryptjs**, **jsonwebtoken**, **multer**, tsx.
+- **Backend:** Node 22, **Express 4.21** (NOT NestJS), TypeScript, Prisma 6.2 + PostgreSQL 17, Pino/pino-http, Helmet, express-rate-limit, compression, Zod, swagger-jsdoc/swagger-ui-express, bcryptjs, jsonwebtoken, multer, tsx.
 - **Tooling:** ESLint, Prettier, npm.
 
-### Bilinen Sorunlar (Known Issues)
-1. **GitHub push 403 (Critical):** GitHub App'te bu repo için write izni yok → yerel commit'ler push edilemiyor.
-2. **Postgres kalıcı değil (High):** VM restart sonrası DB sunucusu resetleniyor.
-3. **`/profile` route yok (Medium):** Navbar linki soft 404 veriyor (bkz. TD-01).
-4. **Backend entegrasyonu eksik (Medium):** Frontend Meals/Goals/Chat verileri istemci tarafında.
+### Mimari & Teknik Kararlar (Sprint 19 sonrası kritik notlar)
+- **Backend Framework:** Express + TypeScript (NestJS DEĞİL). Zamanlanmış görevler için harici kütüphane YOK — custom `setInterval` tabanlı scheduler kullanılıyor.
+- **Zaman Hesaplamaları:** Tüm scheduler ve metrik hesaplamaları **Turkey yerel saati (UTC+3)** kullanır (`metrics.ts` yardımcıları ile).
+- **Premium Gating:** `requirePremium` middleware ile; free kullanıcılar premium endpoint'lere erişince **402 PREMIUM_REQUIRED** döner.
+- **Dil:** Tüm kullanıcı arayüzü, AI yanıtları, koçluk mesajları ve raporlar **Türkçe**'dir.
+- **Zaman Serisi Verileri:** `WeightLog`, `MealLog`, `WaterLog` modelleri tracking için birinci sınıf veri kaynağıdır (Sprint 19'da eklendi).
+- **AI Hafızası:** `AiMemory` modeli; kullanıcı trendleri, alışkanlıkları, hatalar ve başarılar saklanır; her AI sohbetine bağlam olarak enjekte edilir.
+- **Proaktif AI:** Günlük cron (20:00 Turkey saati) ile kullanıcılar için eksik kayıt/hedef gerisinde kalma mesajları üretilir (`ProactiveMessage`).
+- **Bildirimler:** `NotificationService` + pluggable `NotificationProvider` mimarisi; şu an `LoggingNotificationProvider` stub kullanılıyor (Firebase/APNs sonraki sprint).
+- **Veritabanı:** Migration'lar asla geri alınmaz; her değişiklik yeni migration dosyası gerektirir. Yerel development'ta PostgreSQL kalıcı değil (VM restart sonrası yeniden kurulum gerekir).
 
-### Bu Sprint'te Alınan Kararlar
-- Kalite kapıları (lint + type-check + build) hem frontend hem backend için zorunlu geçiş kriteri.
-- Build artefaktları (`dist/`, `.next/`, `*.tsbuildinfo`, `node_modules/`) git'e dahil edilmez — doğrulandı, temiz.
-- `.env` git'e alınmaz; yalnızca `.env.example` sürümlenir.
-- Proje dokümanları (TODO_MASTER, PROJECT_MEMORY, ROADMAP, CHANGELOG) her sprint sonunda senkron tutulur.
-- SemVer izlenecek; mevcut sürüm `0.1.0`.
+### Bilinen Sorunlar (Known Issues)
+1. **Postgres kalıcı değil (Medium):** VM restart sonrası DB sunucusu resetleniyor; production'da managed DB gerekli.
+2. **E-posta sağlayıcısı (Medium):** `mailer` soyutlaması mevcut ama gerçek e-posta servisi (SendGrid/AWS SES) entegre değil; production öncesi gerekli.
+3. **Bildirim push (Low):** `NotificationProvider` stub olarak `LoggingNotificationProvider` kullanıyor; Firebase/APNs entegrasyonu post-launch.
+
+### Sprint 19'da Alınan Kararlar
+- **Express (NestJS değil):** Mevcut backend Express tabanlı; zamanlanmış görevler için custom scheduler uygulandı (harici kütüphane yok).
+- **Turkey Saati (UTC+3):** Tüm scheduler ve metrik hesaplamaları yerel Türkiye saati kullanır.
+- **Premium Gating:** 402 PREMIUM_REQUIRED hata kodu ile free/premium ayrımı yapıldı; free kullanıcılara basitleştirilmiş hafıza ve raporlar sunuluyor.
+- **Tıbbi Sorumluluk:** AI asla teşhis koymaz; yalnızca koçluk rehberliği yapar (risk tespiti için coaching recommendations).
+- **Zaman Serisi Tracking:** `WeightLog`, `MealLog`, `WaterLog` modelleri birinci sınıf veri kaynağı olarak eklendi.
 
 ### Önerilen Sonraki Sprint
-**Sprint 8 — Backend Authentication Infrastructure (Critical):**
-`User` + `RefreshToken` Prisma modelleri → migration → bcrypt hashing → JWT (access+refresh) → auth service/controller (register/login/logout/current-user/refresh) → auth middleware → frontend auth akışının backend'e bağlanması → entegrasyon testleri.
+**Sprint 20 — AI Health Coach Frontend UI:**
+Sprint 19 backend özelliklerini tüketen frontend ekranları:
+- Proaktif mesaj bildirim merkezi (badge + liste)
+- Haftalık değerlendirme kartı (dashboard widget + detay ekranı)
+- Aylık değerlendirme detay ekranı (premium)
+- Risk uyarıları widget'ı
+- Beslenme adaptasyon bildirimi
+- Akıllı soru bloğu (AI sohbette görünür)
+- Hafıza özeti (settings/profil ekranında)
