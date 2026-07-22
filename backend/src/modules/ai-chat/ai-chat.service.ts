@@ -7,6 +7,9 @@ import { getAIAdapter } from "../blood-test-analysis/ai-adapter/ai-adapter.facto
 import { bloodTestAnalysisRepository } from "../blood-test-analysis/blood-test-analysis.repository";
 import { aiUsageService } from "../ai-usage/ai-usage.service";
 import type { FeatureQuotaStatus } from "../ai-usage/types";
+import { aiMemoryService } from "../ai-coach/ai-memory.service";
+import { isUserPremium } from "../ai-coach/premium";
+import { smartQuestionEngine } from "../ai-coach/smart-question.engine";
 import { aiChatRepository, type ConversationWithMessages } from "./ai-chat.repository";
 import { CHAT_HISTORY_LIMIT, TITLE_MAX_LENGTH } from "./constants";
 import { buildMinimizedContext, redactPii } from "./phi/phi-minimizer";
@@ -85,6 +88,15 @@ export const aiChatService = {
       const latestAnalysis = analyses.find((a) => a.status === "COMPLETED") ?? null;
       const context = buildMinimizedContext({ profile, activePlan, latestAnalysis });
 
+      // Sprint 19: resolve premium status once, then inject AI Long-Term Memory
+      // context (Section 1) into the system context. Memory depth and reply
+      // length both scale with the caller's tier (Section 8).
+      const premium = await isUserPremium(userId);
+      const memory = await aiMemoryService.buildMemoryContext(userId, premium);
+      if (memory) {
+        context.memory = memory;
+      }
+
       // 4. Bounded, PHI-redacted history (exclude the message we are about to send).
       const priorMessages = isNew
         ? []
@@ -100,14 +112,28 @@ export const aiChatService = {
         context,
         history,
         message: redactPii(message),
+        premium,
       });
+
+      // Sprint 19, Section 3: if the user's progress has declined, prepend a
+      // structured investigative question block BEFORE the advice, and remember
+      // that we asked so future turns can adapt.
+      let reply = output.reply;
+      try {
+        const decline = await smartQuestionEngine.detectProgressDecline(userId);
+        if (decline.declined) {
+          reply = `${smartQuestionEngine.renderQuestionBlock(decline)}\n\n${reply}`;
+        }
+      } catch (error) {
+        logger.warn({ err: error, userId }, "Smart question block generation skipped");
+      }
 
       // 6. Persist the turn (the user's ORIGINAL text is stored, not the redacted copy).
       const assistantMessage = await aiChatRepository.appendTurn(
         conversation.id,
         message,
-        { content: output.reply, provider: adapter.info.provider, model: adapter.info.model },
-        isNew ? undefined : conversation.title ?? deriveTitle(message),
+        { content: reply, provider: adapter.info.provider, model: adapter.info.model },
+        isNew ? undefined : (conversation.title ?? deriveTitle(message)),
       );
 
       // 7. Record usage, then return a fresh quota snapshot.

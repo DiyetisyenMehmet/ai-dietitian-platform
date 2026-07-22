@@ -73,7 +73,7 @@ export class OpenAICompatibleAdapter implements IAIAdapter {
    * content as a string. Throws an {@link ApiError} on transport or provider
    * failures so callers get a consistent error envelope.
    */
-  private async chat(messages: ChatMessage[]): Promise<string> {
+  private async chat(messages: ChatMessage[], maxTokensOverride?: number): Promise<string> {
     const url = `${this.config.baseUrl.replace(/\/+$/, "")}/chat/completions`;
     let response: Response;
     try {
@@ -86,7 +86,7 @@ export class OpenAICompatibleAdapter implements IAIAdapter {
         body: JSON.stringify({
           model: this.config.model,
           messages,
-          max_tokens: this.config.maxTokens,
+          max_tokens: maxTokensOverride ?? this.config.maxTokens,
           temperature: this.config.temperature,
           response_format: { type: "json_object" },
         }),
@@ -173,7 +173,10 @@ export class OpenAICompatibleAdapter implements IAIAdapter {
       messages.push({
         role: "user",
         content: [
-          { type: "text", text: `${schemaHint}\n\nExtract the values from this laboratory report image.` },
+          {
+            type: "text",
+            text: `${schemaHint}\n\nExtract the values from this laboratory report image.`,
+          },
           { type: "image_url", image_url: { url: this.toDataUrl(content, mimeType) } },
         ],
       });
@@ -202,7 +205,10 @@ export class OpenAICompatibleAdapter implements IAIAdapter {
   private sanitizeText(text: string): string {
     let out = text;
     for (const term of FORBIDDEN_AI_TERMS) {
-      out = out.replace(new RegExp(`\\b${term}\\w*\\b`, "gi"), "[consult a healthcare professional]");
+      out = out.replace(
+        new RegExp(`\\b${term}\\w*\\b`, "gi"),
+        "[consult a healthcare professional]",
+      );
     }
     return out;
   }
@@ -262,7 +268,9 @@ export class OpenAICompatibleAdapter implements IAIAdapter {
         }))
       : [];
 
-    const nutritionImplications: NutritionImplication[] = Array.isArray(parsed.nutritionImplications)
+    const nutritionImplications: NutritionImplication[] = Array.isArray(
+      parsed.nutritionImplications,
+    )
       ? parsed.nutritionImplications.map((n) => ({
           biomarkerCode: String(n.biomarkerCode ?? ""),
           biomarkerName: String(n.biomarkerName ?? ""),
@@ -418,12 +426,17 @@ export class OpenAICompatibleAdapter implements IAIAdapter {
       messages.push({ role: turn.role, content: turn.content });
     }
 
+    // Sprint 19: premium callers get a deeper, longer reply.
+    const lengthHint = input.premium
+      ? "Provide a thorough, well-structured reply with clear reasoning and concrete steps."
+      : "Keep the reply concise and practical.";
+
     messages.push({
       role: "user",
-      content: `${contextBlock}\n\n${schemaHint}\n\nUser message:\n"""\n${input.message}\n"""`,
+      content: `${contextBlock}\n\n${schemaHint}\n${lengthHint}\n\nUser message:\n"""\n${input.message}\n"""`,
     });
 
-    const raw = await this.chat(messages);
+    const raw = await this.chat(messages, input.premium ? 1200 : 500);
     const parsed = this.parseJson<{ reply?: string }>(raw);
 
     let reply = this.sanitizeText(String(parsed.reply ?? "")).trim();
