@@ -24,6 +24,7 @@ import {
 } from "@/domain/onboarding/types";
 import { onboardingService } from "@/application/onboarding/onboarding-service";
 import { authStore, useAuth } from "@/application/auth/auth-store";
+import { healthProfileStore } from "@/application/health/health-profile-store";
 import { FormField } from "@/presentation/components/ui/form-field";
 import { Input } from "@/presentation/components/ui/input";
 import { Button } from "@/presentation/components/ui/button";
@@ -103,6 +104,25 @@ export function OnboardingWizard() {
         authStore.updateUser({
           onboardingCompleted: true,
           fullName: result.data.fullName,
+        });
+        // Hydrate the shared health-profile store (the single source of truth
+        // read by Profile, Dashboard, Progress and the AI Coach) with the data
+        // the user just entered, so every screen reflects the real user instead
+        // of the seeded demo profile.
+        const p = result.data.profile;
+        healthProfileStore.update({
+          fullName: result.data.fullName,
+          age: p.age,
+          gender: p.gender,
+          heightCm: p.heightCm,
+          startWeightKg: p.currentWeightKg,
+          currentWeightKg: p.currentWeightKg,
+          targetWeightKg: p.targetWeightKg,
+          activityLevel: p.activityLevel,
+          dietaryPreference: p.dietaryPreference,
+          healthConditions: p.healthConditions,
+          allergies: p.allergies,
+          dailyWaterGoalMl: p.dailyWaterGoalMl,
         });
         toast.success("Profiliniz hazır! Diewish'e hoş geldiniz.");
         router.replace("/dashboard");
