@@ -25,6 +25,8 @@ import {
 import { onboardingService } from "@/application/onboarding/onboarding-service";
 import { authStore, useAuth } from "@/application/auth/auth-store";
 import { healthProfileStore } from "@/application/health/health-profile-store";
+import { weightStore } from "@/application/health/weight-store";
+import { goalsStore } from "@/application/goals/goals-store";
 import { FormField } from "@/presentation/components/ui/form-field";
 import { Input } from "@/presentation/components/ui/input";
 import { Button } from "@/presentation/components/ui/button";
@@ -122,6 +124,16 @@ export function OnboardingWizard() {
           dietaryPreference: p.dietaryPreference,
           healthConditions: p.healthConditions,
           allergies: p.allergies,
+          dailyWaterGoalMl: p.dailyWaterGoalMl,
+        });
+        // Reconcile the other client-side data layers (weight time-series and
+        // goals) with the same values, so charts and goal cards on Progress /
+        // Dashboard don't fall back to the seeded demo data — every screen
+        // reads one consistent dataset.
+        weightStore.reset(p.currentWeightKg);
+        goalsStore.syncFromProfile({
+          currentWeightKg: p.currentWeightKg,
+          targetWeightKg: p.targetWeightKg,
           dailyWaterGoalMl: p.dailyWaterGoalMl,
         });
         toast.success("Profiliniz hazır! Diewish'e hoş geldiniz.");
