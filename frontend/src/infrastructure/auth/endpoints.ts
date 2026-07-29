@@ -19,3 +19,8 @@ export const ONBOARDING_ENDPOINTS = {
   /** GET current profile / POST to complete onboarding. */
   base: "/onboarding",
 } as const;
+
+export const TRACKING_ENDPOINTS = {
+  /** GET water logs (optionally `?since=<ISO>`) / POST a new water log. */
+  water: "/tracking/water",
+} as const;

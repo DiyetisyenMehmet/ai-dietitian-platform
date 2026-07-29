@@ -5,6 +5,7 @@ import type { OnboardingProfile } from "@/domain/onboarding/types";
 import { goalsStore } from "@/application/goals/goals-store";
 import { healthProfileStore } from "./health-profile-store";
 import { weightStore } from "./weight-store";
+import { dailyTrackingStore } from "./daily-tracking-store";
 
 /**
  * Single place that hydrates the client-side caches from the authoritative
@@ -38,6 +39,9 @@ export function hydrateStoresFromProfile(profile: OnboardingProfile, fullName: s
     targetWeightKg: profile.targetWeightKg,
     dailyWaterGoalMl: profile.dailyWaterGoalMl,
   });
+  // Water goal is a profile value; today's water total is hydrated separately
+  // from the tracking logs (see hydrateProfileFromBackend).
+  dailyTrackingStore.setWaterGoal(profile.dailyWaterGoalMl);
 }
 
 /**
@@ -54,6 +58,9 @@ export async function hydrateProfileFromBackend(fullName: string): Promise<void>
   } catch {
     // Offline / transient failure: keep the last known cache, retry on next mount.
   }
+  // Today's water total lives in the tracking logs, independent of the profile
+  // (own best-effort try/catch), so hydrate it regardless of the profile call.
+  await dailyTrackingStore.hydrateWaterFromBackend();
 }
 
 /**
