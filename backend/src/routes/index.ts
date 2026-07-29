@@ -12,6 +12,7 @@ import { legalModule } from "../modules/legal/legal.module";
 import { trackingModule } from "../modules/tracking/tracking.module";
 import { notificationModule } from "../modules/notifications/notification.module";
 import { aiCoachModule } from "../modules/ai-coach/ai-coach.module";
+import { activityModule } from "../modules/activity/activity.module";
 import { onboardingRouter } from "../modules/onboarding/onboarding.routes";
 import { healthRouter } from "./health.route";
 
@@ -72,5 +73,11 @@ for (const { path, router } of notificationModule.routes) {
   apiRouter.use(path, router);
 }
 for (const { path, router } of aiCoachModule.routes) {
+  apiRouter.use(path, router);
+}
+
+// Activity logging (Sprint 22). Mounts at its own base path with no ordering
+// concerns; feeds the AI Health Coach's activity-consistency analysis.
+for (const { path, router } of activityModule.routes) {
   apiRouter.use(path, router);
 }
