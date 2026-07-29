@@ -181,11 +181,12 @@ export type HealthIconKey =
 /* Sprint 20 — AI Health Coach Experience & Guided Journey                     */
 /* -------------------------------------------------------------------------- */
 
-/** The seven steps of the guided "Today's Journey". */
+/** The steps of the guided "Today's Journey". */
 export type JourneyStepKind =
   | "breakfast"
   | "lunch"
   | "dinner"
+  | "snack"
   | "water"
   | "weight"
   | "activity"

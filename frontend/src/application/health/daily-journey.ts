@@ -69,7 +69,7 @@ export function useDailyJourney(): JourneyStep[] {
         label: "Kahvaltı",
         hint: "Güne dengeli bir kahvaltıyla başla",
         icon: "sunrise",
-        href: "/meals/add",
+        href: "/meals/add?slot=breakfast",
         done: foodsIn("breakfast") > 0,
         overdue: hour >= 12,
         priority: 1,
@@ -79,20 +79,30 @@ export function useDailyJourney(): JourneyStep[] {
         label: "Öğle yemeği",
         hint: "Öğle öğününü kaydet",
         icon: "sun",
-        href: "/meals/add",
+        href: "/meals/add?slot=lunch",
         done: foodsIn("lunch") > 0,
         overdue: hour >= 17,
         priority: 2,
+      },
+      {
+        kind: "snack",
+        label: "Ara öğün",
+        hint: "Atıştırmalığını ekle",
+        icon: "utensils",
+        href: "/meals/add?slot=snack",
+        done: foodsIn("snack") > 0,
+        overdue: false,
+        priority: 3,
       },
       {
         kind: "water",
         label: "Su",
         hint: `${(waterMl / 1000).toLocaleString("tr-TR")} / ${(waterGoalMl / 1000).toLocaleString("tr-TR")} L`,
         icon: "droplet",
-        href: "/dashboard",
+        href: undefined,
         done: waterMl >= waterGoalMl,
         overdue: false,
-        priority: 3,
+        priority: 4,
         progress: waterRatio,
       },
       {
@@ -100,10 +110,10 @@ export function useDailyJourney(): JourneyStep[] {
         label: "Hareket",
         hint: `${activity.steps.toLocaleString("tr-TR")} / ${activity.stepGoal.toLocaleString("tr-TR")} adım`,
         icon: "footprints",
-        href: "/dashboard",
+        href: undefined,
         done: activity.steps >= activity.stepGoal,
         overdue: false,
-        priority: 4,
+        priority: 5,
         progress: activityRatio,
       },
       {
@@ -111,10 +121,10 @@ export function useDailyJourney(): JourneyStep[] {
         label: "Akşam yemeği",
         hint: "Akşam öğününü ekle",
         icon: "moon",
-        href: "/meals/add",
+        href: "/meals/add?slot=dinner",
         done: foodsIn("dinner") > 0,
         overdue: hour >= 23,
-        priority: 5,
+        priority: 6,
       },
       {
         kind: "coach",
@@ -124,7 +134,7 @@ export function useDailyJourney(): JourneyStep[] {
         href: "/ai",
         done: chattedToday,
         overdue: false,
-        priority: 6,
+        priority: 7,
       },
     ];
 
@@ -138,7 +148,7 @@ export function useDailyJourney(): JourneyStep[] {
         href: "/progress",
         done: recordedToday,
         overdue: false,
-        priority: recordedToday ? 7 : 0, // due weigh-in is high priority
+        priority: recordedToday ? 8 : 0, // due weigh-in is high priority
       });
     }
 
