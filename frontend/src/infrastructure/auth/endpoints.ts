@@ -28,3 +28,8 @@ export const TRACKING_ENDPOINTS = {
   /** GET weight logs (optionally `?since=<ISO>`) / POST a new weight log. */
   weight: "/tracking/weight",
 } as const;
+
+export const BLOOD_TEST_ENDPOINTS = {
+  /** GET the authenticated user's blood-test analyses (newest first). */
+  analyses: "/blood-tests/analyses",
+} as const;
