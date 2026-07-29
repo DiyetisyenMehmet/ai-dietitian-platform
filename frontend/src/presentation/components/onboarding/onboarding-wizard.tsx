@@ -18,6 +18,8 @@ import {
   DIETARY_PREFERENCE_OPTIONS,
   GENDER_OPTIONS,
   HEALTH_CONDITION_PRESETS,
+  NO_ALLERGY,
+  NO_HEALTH_CONDITION,
   type ActivityLevel,
   type DietaryPreference,
   type Gender,
@@ -34,6 +36,34 @@ import { ProgressBar } from "@/presentation/components/ui/progress-bar";
 import { OptionCards } from "@/presentation/components/onboarding/option-cards";
 import { ChipSelect } from "@/presentation/components/onboarding/chip-select";
 
+/**
+ * Onboarding-only preset lists that prepend the explicit "none" chip. Kept
+ * local to the wizard so the shared presets (reused by profile editing) stay
+ * unchanged.
+ */
+const HEALTH_CONDITION_CHIPS: readonly string[] = [
+  NO_HEALTH_CONDITION,
+  ...HEALTH_CONDITION_PRESETS,
+];
+const ALLERGY_CHIPS: readonly string[] = [NO_ALLERGY, ...ALLERGY_PRESETS];
+
+/**
+ * Applies mutually-exclusive selection between the "none" sentinel and real
+ * entries: picking "none" clears everything else, and picking any real entry
+ * removes a previously chosen "none".
+ */
+function reconcileNoneSelection(next: string[], noneValue: string): string[] {
+  // "none" was the most recent pick → make it exclusive.
+  if (next[next.length - 1] === noneValue) {
+    return [noneValue];
+  }
+  // A real entry was picked while "none" was still selected → drop "none".
+  if (next.includes(noneValue) && next.some((v) => v !== noneValue)) {
+    return next.filter((v) => v !== noneValue);
+  }
+  return next;
+}
+
 /** Fields validated when advancing from each step. */
 const STEP_FIELDS: (keyof OnboardingFormValues)[][] = [
   ["fullName", "dateOfBirth", "gender"],
@@ -47,7 +77,10 @@ const STEP_META = [
   { title: "Sizi tanıyalım", subtitle: "Temel bilgilerinizle başlayalım." },
   { title: "Vücut ölçüleriniz", subtitle: "Hedeflerinizi kişiselleştirmemize yardımcı olun." },
   { title: "Aktivite seviyeniz", subtitle: "Günlük hareketliliğinizi seçin." },
-  { title: "Sağlık durumunuz", subtitle: "Varsa belirtin — bu adım isteğe bağlıdır." },
+  {
+    title: "Sağlık durumunuz",
+    subtitle: "Doğru öneriler için gereklidir. Yoksa \"yok\" seçeneğini işaretleyin.",
+  },
   { title: "Beslenme & su", subtitle: "Son birkaç tercih ve hazırsınız." },
 ];
 
@@ -241,27 +274,33 @@ export function OnboardingWizard() {
             <>
               <FormField
                 id="healthConditions"
-                label="Sağlık Durumları (isteğe bağlı)"
+                label="Sağlık Durumları"
                 error={errors.healthConditions?.message}
               >
                 <ChipSelect
                   ariaLabel="Sağlık durumları"
-                  presets={HEALTH_CONDITION_PRESETS}
+                  presets={HEALTH_CONDITION_CHIPS}
                   value={healthConditions}
-                  onChange={(v) => setValue("healthConditions", v, { shouldValidate: true })}
+                  onChange={(v) =>
+                    setValue(
+                      "healthConditions",
+                      reconcileNoneSelection(v, NO_HEALTH_CONDITION),
+                      { shouldValidate: true },
+                    )
+                  }
                   addPlaceholder="Başka bir durum ekleyin"
                 />
               </FormField>
-              <FormField
-                id="allergies"
-                label="Alerjiler (isteğe bağlı)"
-                error={errors.allergies?.message}
-              >
+              <FormField id="allergies" label="Alerjiler" error={errors.allergies?.message}>
                 <ChipSelect
                   ariaLabel="Alerjiler"
-                  presets={ALLERGY_PRESETS}
+                  presets={ALLERGY_CHIPS}
                   value={allergies}
-                  onChange={(v) => setValue("allergies", v, { shouldValidate: true })}
+                  onChange={(v) =>
+                    setValue("allergies", reconcileNoneSelection(v, NO_ALLERGY), {
+                      shouldValidate: true,
+                    })
+                  }
                   addPlaceholder="Başka bir alerji ekleyin"
                 />
               </FormField>
