@@ -2,10 +2,16 @@
 
 import * as React from "react";
 
+import { activityClient } from "@/infrastructure/activity/activity-client";
+
 /**
- * In-memory daily-activity store: steps and active minutes for today plus their
- * goals. Shared via useSyncExternalStore, consistent with the other health
- * stores (session-scoped placeholder data layer, backend-ready shape).
+ * Daily-activity store: steps and active minutes for today plus their goals.
+ * Shared via useSyncExternalStore, consistent with the other health stores.
+ *
+ * The backend is the single source of truth for activity (Sprint 22.2B):
+ * today's `activeMinutes` is hydrated from the `/api/activity` logs on login /
+ * app startup / refresh. There is no seeded/demo activity value — the cache
+ * starts empty and reflects only what the backend returns.
  *
  * Activity is a first-class step of the guided daily journey (Sprint 20) and a
  * weighted contributor to the dynamic health score, so it needs a reactive
@@ -27,11 +33,18 @@ interface ActivityState {
 export const ACTIVITY_STEP_INCREMENT = 1000;
 
 let state: ActivityState = {
-  steps: 4200,
+  steps: 0,
   stepGoal: 8000,
-  activeMinutes: 18,
+  activeMinutes: 0,
   activeMinutesGoal: 30,
 };
+
+/** Start of today (local) — the window used to sum "today's" activity logs. */
+function startOfToday(): Date {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
 
 const listeners = new Set<() => void>();
 
@@ -50,6 +63,21 @@ function getSnapshot() {
 }
 
 export const activityStore = {
+  /**
+   * Hydrates today's active-minutes total from the backend activity logs
+   * (single source of truth). Called on login / app startup / refresh.
+   * Best-effort: on a transient failure the last known cache is kept and
+   * retried on next mount.
+   */
+  async hydrateFromBackend(): Promise<void> {
+    try {
+      const { activities } = await activityClient.listActivities(startOfToday());
+      const total = activities.reduce((sum, activity) => sum + activity.durationMinutes, 0);
+      setState({ activeMinutes: Math.max(0, total) });
+    } catch {
+      // Offline / transient failure: keep the last known cache.
+    }
+  },
   /** Adds steps (defaults to one increment), clamped at 0. */
   addSteps(amount: number = ACTIVITY_STEP_INCREMENT) {
     setState({ steps: Math.max(0, state.steps + amount) });
