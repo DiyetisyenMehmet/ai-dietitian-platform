@@ -9,107 +9,60 @@ import {
   type MealSlot,
   type NutritionTotals,
 } from "@/domain/meals/types";
+import { mealsClient, type MealLog, type MealLogType } from "@/infrastructure/tracking/meals-client";
 
 /**
- * Lightweight in-memory meals store shared across routes via useSyncExternalStore.
- * Stands in for a backend/global data layer with no external dependencies; state
- * lives for the browser session only (placeholder behavior).
+ * Meals store shared across routes via useSyncExternalStore.
+ *
+ * The backend is the single source of truth (Sprint 21.3B): today's meals are
+ * hydrated from the `/api/tracking/meals` logs on login / app startup / refresh
+ * via `hydrateMealsFromBackend`. This store is a cache only — it holds no
+ * seeded/demo meals; it starts as empty slots and reflects only what the
+ * backend returns.
  */
 
 let uid = 0;
 const nextId = () => `food-${Date.now()}-${uid++}`;
 
-function seed(): Meal[] {
-  return [
-    {
-      slot: "breakfast",
-      label: "Kahvaltı",
-      time: "08:15",
-      foods: [
-        {
-          id: nextId(),
-          name: "Yulaf Ezmesi",
-          quantity: "40 g",
-          calories: 150,
-          protein: 5,
-          carbs: 27,
-          fat: 3,
-        },
-        {
-          id: nextId(),
-          name: "Yoğurt (yağlı)",
-          quantity: "150 g",
-          calories: 90,
-          protein: 8,
-          carbs: 7,
-          fat: 5,
-        },
-        {
-          id: nextId(),
-          name: "Muz",
-          quantity: "1 orta boy",
-          calories: 105,
-          protein: 1,
-          carbs: 27,
-          fat: 0,
-        },
-      ],
-    },
-    {
-      slot: "lunch",
-      label: "Öğle Yemeği",
-      time: "13:00",
-      foods: [
-        {
-          id: nextId(),
-          name: "Izgara Tavuk Göğsü",
-          quantity: "100 g",
-          calories: 165,
-          protein: 31,
-          carbs: 0,
-          fat: 4,
-        },
-        {
-          id: nextId(),
-          name: "Pirinç Pilavı",
-          quantity: "150 g",
-          calories: 205,
-          protein: 4,
-          carbs: 44,
-          fat: 1,
-        },
-        {
-          id: nextId(),
-          name: "Mevsim Salata",
-          quantity: "1 porsiyon",
-          calories: 70,
-          protein: 2,
-          carbs: 9,
-          fat: 3,
-        },
-      ],
-    },
-    { slot: "dinner", label: "Akşam Yemeği", time: "19:30", foods: [] },
-    {
-      slot: "snack",
-      label: "Atıştırmalık",
-      time: "16:00",
-      foods: [
-        {
-          id: nextId(),
-          name: "Badem",
-          quantity: "30 g",
-          calories: 180,
-          protein: 6,
-          carbs: 6,
-          fat: 15,
-        },
-      ],
-    },
-  ];
+/** Empty (foodless) meal slots — the cache's initial, pre-hydration state. */
+function emptyMeals(): Meal[] {
+  return MEAL_SLOTS.map(({ slot, label, defaultTime }) => ({
+    slot,
+    label,
+    time: defaultTime,
+    foods: [],
+  }));
 }
 
-let meals: Meal[] = seed();
+/** Maps a backend meal-type enum to the client-side meal slot. */
+const SLOT_BY_MEAL_TYPE: Record<MealLogType, MealSlot> = {
+  BREAKFAST: "breakfast",
+  LUNCH: "lunch",
+  DINNER: "dinner",
+  SNACK: "snack",
+};
+
+/** Converts a persisted backend meal log into a client-side food entry. */
+function toFoodItem(log: MealLog): FoodItem {
+  return {
+    id: log.id,
+    name: log.name ?? "",
+    quantity: "",
+    calories: log.calories ?? 0,
+    protein: log.proteinG ?? 0,
+    carbs: log.carbsG ?? 0,
+    fat: log.fatG ?? 0,
+  };
+}
+
+/** Start of today (local) — the window used to fetch "today's" meal logs. */
+function startOfToday(): Date {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+let meals: Meal[] = emptyMeals();
 const listeners = new Set<() => void>();
 
 function emit() {
@@ -133,6 +86,25 @@ export interface AddFoodPayload {
 }
 
 export const mealsStore = {
+  /**
+   * Hydrates today's meals from the backend logs (single source of truth).
+   * Called on login / app startup / refresh. Best-effort: on a transient
+   * failure the last known cache is kept and retried on next mount.
+   */
+  async hydrateMealsFromBackend(): Promise<void> {
+    try {
+      const { logs } = await mealsClient.listMeals(startOfToday());
+      meals = MEAL_SLOTS.map(({ slot, label, defaultTime }) => ({
+        slot,
+        label,
+        time: defaultTime,
+        foods: logs.filter((log) => SLOT_BY_MEAL_TYPE[log.mealType] === slot).map(toFoodItem),
+      }));
+      emit();
+    } catch {
+      // Offline / transient failure: keep the last known cache.
+    }
+  },
   addFood({ slot, time, food }: AddFoodPayload) {
     meals = meals.map((meal) =>
       meal.slot === slot

@@ -3,6 +3,7 @@
 import { onboardingClient } from "@/infrastructure/onboarding/onboarding-client";
 import type { OnboardingProfile } from "@/domain/onboarding/types";
 import { goalsStore } from "@/application/goals/goals-store";
+import { mealsStore } from "@/application/meals/meals-store";
 import { healthProfileStore } from "./health-profile-store";
 import { weightStore } from "./weight-store";
 import { dailyTrackingStore } from "./daily-tracking-store";
@@ -58,9 +59,13 @@ export async function hydrateProfileFromBackend(fullName: string): Promise<void>
   } catch {
     // Offline / transient failure: keep the last known cache, retry on next mount.
   }
-  // Today's water total lives in the tracking logs, independent of the profile
-  // (own best-effort try/catch), so hydrate it regardless of the profile call.
-  await dailyTrackingStore.hydrateWaterFromBackend();
+  // Today's water total and meals live in the tracking logs, independent of the
+  // profile (each has its own best-effort try/catch), so hydrate them regardless
+  // of the profile call.
+  await Promise.all([
+    dailyTrackingStore.hydrateWaterFromBackend(),
+    mealsStore.hydrateMealsFromBackend(),
+  ]);
 }
 
 /**

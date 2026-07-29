@@ -23,4 +23,6 @@ export const ONBOARDING_ENDPOINTS = {
 export const TRACKING_ENDPOINTS = {
   /** GET water logs (optionally `?since=<ISO>`) / POST a new water log. */
   water: "/tracking/water",
+  /** GET meal logs (optionally `?since=<ISO>`) / POST a new meal log. */
+  meals: "/tracking/meals",
 } as const;
