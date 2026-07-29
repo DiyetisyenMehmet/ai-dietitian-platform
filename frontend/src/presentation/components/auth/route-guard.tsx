@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
 import { authStore, useAuth } from "@/application/auth/auth-store";
+import { hydrateProfileFromBackend } from "@/application/health/profile-hydration";
 import { MARKETING_ROUTES } from "@/shared/constants/site";
 
 /** Home destination for fully onboarded, authenticated users. */
@@ -67,6 +68,17 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
 
   const authed = status === "authenticated" && !!user;
   const onboardingDone = authed && user.onboardingCompleted;
+
+  // Backend = single source of truth: whenever a fully-onboarded session becomes
+  // active (login, app startup / refresh, or logout→login), pull the profile
+  // from the backend and hydrate the client-side caches. Runs best-effort so a
+  // transient failure never blocks navigation.
+  React.useEffect(() => {
+    if (status === "authenticated" && user?.onboardingCompleted && user.fullName) {
+      void hydrateProfileFromBackend(user.fullName);
+    }
+  }, [status, user?.onboardingCompleted, user?.fullName]);
+
   const onMarketing = isMarketing(pathname);
   const onAuthRoute = isAuthRoute(pathname);
   const onOnboarding = pathname === ONBOARDING_ROUTE;

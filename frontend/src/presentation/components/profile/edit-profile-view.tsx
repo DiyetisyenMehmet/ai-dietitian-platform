@@ -10,6 +10,12 @@ import { Input } from "@/presentation/components/ui/input";
 import { FormField } from "@/presentation/components/ui/form-field";
 import { SectionCard } from "@/presentation/components/health/section-card";
 import { useHealthProfile, healthProfileStore } from "@/application/health/health-profile-store";
+import {
+  hydrateStoresFromProfile,
+  ageToDateOfBirth,
+} from "@/application/health/profile-hydration";
+import { onboardingService } from "@/application/onboarding/onboarding-service";
+import { authStore } from "@/application/auth/auth-store";
 import { journeyStore } from "@/application/health/journey-store";
 import {
   ACTIVITY_LEVEL_OPTIONS,
@@ -21,6 +27,7 @@ import {
   type DietaryPreference,
   type Gender,
 } from "@/domain/onboarding/types";
+import type { OnboardingPayload } from "@/domain/onboarding/validation";
 
 /** A toggleable chip used for multi-select presets (conditions / allergies). */
 function ToggleChip({
@@ -104,7 +111,7 @@ export function EditProfileView() {
     return e;
   };
 
-  const onSubmit = (event: React.FormEvent) => {
+  const onSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     const e = validate();
     setErrors(e);
@@ -115,20 +122,37 @@ export function EditProfileView() {
     setSaving(true);
     const nextCurrent = Number(currentWeightKg);
     const weightChanged = nextCurrent !== profile.currentWeightKg;
-    healthProfileStore.update({
+
+    // Persist to the backend first (reusing the idempotent onboarding upsert
+    // endpoint — no new endpoint / contract). The stores are only refreshed
+    // AFTER a successful response, from the backend's own data, so they never
+    // become their own source of truth.
+    const payload: OnboardingPayload = {
       fullName: fullName.trim(),
-      age: Number(age),
+      dateOfBirth: ageToDateOfBirth(Number(age)),
       gender,
       heightCm: Number(heightCm),
       currentWeightKg: nextCurrent,
       targetWeightKg: Number(targetWeightKg),
       activityLevel,
-      dietaryPreference,
-      dailyCalorieGoal: Number(dailyCalorieGoal),
-      dailyWaterGoalMl: Number(dailyWaterGoalMl),
       healthConditions: conditions,
       allergies,
-    });
+      dietaryPreference,
+      dailyWaterGoalMl: Number(dailyWaterGoalMl),
+    };
+    const result = await onboardingService.complete(payload);
+    if (!result.ok) {
+      toast.error(result.error);
+      setSaving(false);
+      return;
+    }
+
+    authStore.updateUser({ fullName: result.data.fullName });
+    hydrateStoresFromProfile(result.data.profile, result.data.fullName);
+    // Daily calorie goal is a client-only preference (not part of the backend
+    // profile contract); apply the user's edit locally after hydration.
+    healthProfileStore.update({ dailyCalorieGoal: Number(dailyCalorieGoal) });
+
     if (weightChanged) {
       journeyStore.add({
         type: "weight-updated",
@@ -142,7 +166,7 @@ export function EditProfileView() {
   };
 
   return (
-    <form onSubmit={onSubmit} className="space-y-6">
+    <form onSubmit={(e) => void onSubmit(e)} className="space-y-6">
       <SectionCard icon="user" title="Kişisel Bilgiler">
         <div className="space-y-4">
           <FormField id="fullName" label="Ad Soyad" error={errors.fullName}>
