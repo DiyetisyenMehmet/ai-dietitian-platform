@@ -240,25 +240,11 @@ export function useCoachInsights(limit = 3): CoachInsight[] {
       });
     }
 
-    // 3. Weigh-in reminder ("why this matters": tracking accuracy).
-    if (analysis.isWeighInDue) {
-      insights.push({
-        id: "coach-weigh-in",
-        tone: "info",
-        title: pick(["Tartılma zamanı", "Bugün tartılma günün", "Haftalık ölçüm vakti"], seed),
-        message: pick(
-          [
-            "Bu haftaki kilonu kaydedersen ilerlemeni daha net takip edebiliriz.",
-            "Düzenli ölçüm, önerilerimin doğruluğunu artırır. Bugünkü kilonu ekleyelim mi?",
-            "Bir haftadır yeni ölçüm görmedim. Güncel kilon, planını isabetli tutmama yardımcı olur.",
-          ],
-          seed,
-        ),
-        icon: "scale",
-        actionLabel: "Kilo kaydet",
-        actionHref: "/progress",
-      });
-    }
+    // NOTE: The weigh-in reminder is surfaced by a single owner — the guided
+    // "Bugünkü Yolculuğun" weight step (daily-journey), which marks it as the
+    // recommended (highest-priority) action when a weigh-in is due. It is
+    // intentionally NOT repeated here as a separate coach card to avoid showing
+    // the same reminder in multiple places on the dashboard.
 
     // 4. Missing meals (time-aware).
     if (hour >= 14 && foodsIn("lunch") === 0) {
