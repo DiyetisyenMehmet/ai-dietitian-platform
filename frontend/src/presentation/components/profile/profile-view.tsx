@@ -8,7 +8,6 @@ import {
   Camera,
   CreditCard,
   FlaskConical,
-  Heart,
   LineChart,
   LogOut,
   Lock,
@@ -196,7 +195,6 @@ export function ProfileView() {
 
       {/* Health data */}
       <SettingGroup title="Sağlık Verilerim">
-        <SettingRow icon={Heart} label="Sağlık bilgilerimi düzenle" description="Boy, kilo, aktivite, hastalık ve alerjiler" href="/profile/edit" />
         <SettingRow icon={FlaskConical} label="Kan tahlilleri" description="Yükle, geçmişi ve analizleri gör" href="/profile/blood-tests" />
         <SettingRow icon={LineChart} label="Kilo & ilerleme" description="Haftalık ve aylık trendler" href="/progress" />
       </SettingGroup>
