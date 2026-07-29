@@ -78,13 +78,28 @@ export const activityStore = {
       // Offline / transient failure: keep the last known cache.
     }
   },
+  /**
+   * Persists an activity log to the backend FIRST, then updates the cache from
+   * the persisted duration. Throws on failure so the caller can surface an
+   * error and avoid showing an optimistic success.
+   */
+  async logActivity(input: {
+    type: string;
+    durationMinutes: number;
+    name?: string;
+    caloriesBurned?: number;
+  }): Promise<void> {
+    const { activity } = await activityClient.logActivity({
+      type: input.type as never,
+      name: input.name,
+      durationMinutes: input.durationMinutes,
+      caloriesBurned: input.caloriesBurned,
+    });
+    setState({ activeMinutes: Math.max(0, state.activeMinutes + activity.durationMinutes) });
+  },
   /** Adds steps (defaults to one increment), clamped at 0. */
   addSteps(amount: number = ACTIVITY_STEP_INCREMENT) {
     setState({ steps: Math.max(0, state.steps + amount) });
-  },
-  /** Adds active minutes, clamped at 0. */
-  addActiveMinutes(minutes: number) {
-    setState({ activeMinutes: Math.max(0, state.activeMinutes + minutes) });
   },
   setStepGoal(goal: number) {
     setState({ stepGoal: Math.max(0, goal) });
