@@ -13,6 +13,19 @@ import { trackingRepository } from "../tracking/tracking.repository";
 import { average, daysAgo, groupBy, turkeyDayKey } from "./metrics";
 
 /**
+ * Forward-looking, optional health signals the AI Health Coach may reason over
+ * in future sprints (e.g. activity minutes, steps, sleep, resting heart rate).
+ *
+ * Intentionally open-ended and optional so new signals can be threaded through
+ * the analysis pipeline without breaking existing callers or altering current
+ * coaching behaviour. This field is currently unpopulated by `loadCoachData`,
+ * so it has no effect on any existing insight, output or endpoint.
+ */
+export interface CoachHealthSignals {
+  [signal: string]: unknown;
+}
+
+/**
  * A bundle of the signals the AI Health Coach reasons over for one user, loaded
  * once and shared across the memory, risk, review and adaptation services to
  * avoid redundant queries. `windowDays` bounds the time-series pulls (premium =
@@ -27,6 +40,13 @@ export interface CoachDataBundle {
   waterLogs: WaterLog[];
   latestAnalysis: BloodTestAnalysis | null;
   lastAnalysisAt: Date | null;
+  /**
+   * Optional extensible health signals for future intelligence work. Left
+   * undefined by current loaders; present so downstream services can accept
+   * additional signals without interface churn. No current behaviour depends
+   * on it.
+   */
+  healthSignals?: CoachHealthSignals;
 }
 
 /** Loads the coach data bundle for a user over the given window. */
