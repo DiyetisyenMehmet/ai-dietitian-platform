@@ -54,19 +54,21 @@ export interface CoachDataBundle {
 export async function loadCoachData(userId: string, windowDays: number): Promise<CoachDataBundle> {
   const since = daysAgo(windowDays);
   const [profile, activePlan, weightLogs, mealLogs, waterLogs, analyses, activities] = await Promise.all([
-    prisma.userProfile.findUnique({ where: { userId } }),
-    prisma.nutritionPlan.findFirst({
-      where: { userId, isActive: true },
-      orderBy: { updatedAt: "desc" },
-    }),
-    trackingRepository.listWeightLogs(userId, since),
-    trackingRepository.listMealLogs(userId, since),
-    trackingRepository.listWaterLogs(userId, since),
-    bloodTestAnalysisRepository.listByUser(userId),
-    activityRepository.listActivities(userId, since),
+    prisma.userProfile.findUnique({ where: { userId } }).catch(() => null),
+    prisma.nutritionPlan
+      .findFirst({
+        where: { userId, isActive: true },
+        orderBy: { updatedAt: "desc" },
+      })
+      .catch(() => null),
+    trackingRepository.listWeightLogs(userId, since).catch(() => []),
+    trackingRepository.listMealLogs(userId, since).catch(() => []),
+    trackingRepository.listWaterLogs(userId, since).catch(() => []),
+    bloodTestAnalysisRepository.listByUser(userId).catch(() => []),
+    activityRepository.listActivities(userId, since).catch(() => []),
   ]);
 
-  const completed = analyses.filter((a) => a.status === "COMPLETED");
+  const completed = (analyses ?? []).filter((a) => a.status === "COMPLETED");
   const latestAnalysis = completed[0] ?? null;
   const lastAnalysisAt = latestAnalysis?.createdAt ?? null;
 
@@ -74,13 +76,13 @@ export async function loadCoachData(userId: string, windowDays: number): Promise
     windowDays,
     profile,
     activePlan,
-    weightLogs,
-    mealLogs,
-    waterLogs,
+    weightLogs: weightLogs ?? [],
+    mealLogs: mealLogs ?? [],
+    waterLogs: waterLogs ?? [],
     latestAnalysis,
     lastAnalysisAt,
     healthSignals: {
-      activities,
+      activities: activities ?? [],
     },
   };
 }
