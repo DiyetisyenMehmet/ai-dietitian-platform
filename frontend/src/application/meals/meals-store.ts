@@ -21,9 +21,6 @@ import { mealsClient, type MealLog, type MealLogType } from "@/infrastructure/tr
  * backend returns.
  */
 
-let uid = 0;
-const nextId = () => `food-${Date.now()}-${uid++}`;
-
 /** Empty (foodless) meal slots — the cache's initial, pre-hydration state. */
 function emptyMeals(): Meal[] {
   return MEAL_SLOTS.map(({ slot, label, defaultTime }) => ({
@@ -40,6 +37,14 @@ const SLOT_BY_MEAL_TYPE: Record<MealLogType, MealSlot> = {
   LUNCH: "lunch",
   DINNER: "dinner",
   SNACK: "snack",
+};
+
+/** Maps a client-side meal slot to the backend meal-type enum. */
+const MEAL_TYPE_BY_SLOT: Record<MealSlot, MealLogType> = {
+  breakfast: "BREAKFAST",
+  lunch: "LUNCH",
+  dinner: "DINNER",
+  snack: "SNACK",
 };
 
 /** Converts a persisted backend meal log into a client-side food entry. */
@@ -105,10 +110,31 @@ export const mealsStore = {
       // Offline / transient failure: keep the last known cache.
     }
   },
-  addFood({ slot, time, food }: AddFoodPayload) {
+  /**
+   * Persists a new food entry to the backend FIRST (single source of truth),
+   * then updates the cache from the persisted record. No optimistic update:
+   * throws on failure so the caller can surface an error and avoid showing a
+   * meal that was never saved. The store never generates its own meal data —
+   * the created entry uses the backend `id` and persisted macros; only the
+   * display-only `quantity` (not part of the backend contract) is kept from
+   * the user's input.
+   */
+  async addFood({ slot, time, food }: AddFoodPayload): Promise<void> {
+    const { log } = await mealsClient.logMeal({
+      mealType: MEAL_TYPE_BY_SLOT[slot],
+      name: food.name,
+      calories: food.calories,
+      proteinG: food.protein,
+      carbsG: food.carbs,
+      fatG: food.fat,
+    });
     meals = meals.map((meal) =>
       meal.slot === slot
-        ? { ...meal, time: time || meal.time, foods: [...meal.foods, { ...food, id: nextId() }] }
+        ? {
+            ...meal,
+            time: time || meal.time,
+            foods: [...meal.foods, { ...toFoodItem(log), quantity: food.quantity }],
+          }
         : meal,
     );
     emit();

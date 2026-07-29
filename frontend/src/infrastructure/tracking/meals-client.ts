@@ -25,6 +25,23 @@ export interface MealLog {
 }
 
 /**
+ * Payload for persisting a new meal log. Mirrors the backend
+ * `createMealLogSchema` (Sprint 19 tracking module) — all macro fields are
+ * optional; only `mealType` is required.
+ */
+export interface LogMealInput {
+  mealType: MealLogType;
+  name?: string;
+  calories?: number;
+  proteinG?: number;
+  carbsG?: number;
+  fatG?: number;
+  sodiumMg?: number;
+  sugarG?: number;
+  loggedAt?: string;
+}
+
+/**
  * Infrastructure-level meals client. Authenticated (the HTTP client attaches
  * the access token). Reuses the existing `/api/tracking/meals` endpoints — no
  * new backend contract. No UI or store logic here.
@@ -37,6 +54,16 @@ export const mealsClient = {
       path: `${TRACKING_ENDPOINTS.meals}${query}`,
       method: "GET",
       auth: true,
+    });
+  },
+
+  /** Persists a new meal log and returns the created record. */
+  logMeal(input: LogMealInput) {
+    return apiRequest<{ log: MealLog }>({
+      path: TRACKING_ENDPOINTS.meals,
+      method: "POST",
+      auth: true,
+      body: JSON.stringify(input),
     });
   },
 } as const;

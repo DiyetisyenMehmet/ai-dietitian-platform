@@ -56,22 +56,27 @@ export function AddMealForm({ initialSlot = "breakfast" }: AddMealFormProps) {
 
   const onSubmit = React.useCallback(
     async (values: AddMealInput) => {
-      // Simulate async persistence for realistic loading UX (no backend).
-      await new Promise((resolve) => setTimeout(resolve, 600));
-      mealsStore.addFood({
-        slot: values.mealSlot,
-        time: values.time,
-        food: {
-          name: values.name,
-          quantity: values.quantity,
-          calories: values.calories,
-          protein: values.protein,
-          carbs: values.carbs,
-          fat: values.fat,
-        },
-      });
-      toast.success("Besin öğüne eklendi");
-      router.push("/meals");
+      // Backend-first: persist to the single source of truth, then update the
+      // cache from the persisted record. No optimistic update — on failure the
+      // meal is not added and the user is informed.
+      try {
+        await mealsStore.addFood({
+          slot: values.mealSlot,
+          time: values.time,
+          food: {
+            name: values.name,
+            quantity: values.quantity,
+            calories: values.calories,
+            protein: values.protein,
+            carbs: values.carbs,
+            fat: values.fat,
+          },
+        });
+        toast.success("Besin öğüne eklendi");
+        router.push("/meals");
+      } catch {
+        toast.error("Besin kaydedilemedi. Lütfen tekrar deneyin.");
+      }
     },
     [router],
   );
