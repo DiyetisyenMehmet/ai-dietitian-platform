@@ -8,6 +8,7 @@ import type {
 } from "@prisma/client";
 
 import { prisma } from "../../lib/prisma";
+import { activityRepository } from "../activity/activity.repository";
 import { bloodTestAnalysisRepository } from "../blood-test-analysis/blood-test-analysis.repository";
 import { trackingRepository } from "../tracking/tracking.repository";
 import { average, daysAgo, groupBy, turkeyDayKey } from "./metrics";
@@ -52,7 +53,7 @@ export interface CoachDataBundle {
 /** Loads the coach data bundle for a user over the given window. */
 export async function loadCoachData(userId: string, windowDays: number): Promise<CoachDataBundle> {
   const since = daysAgo(windowDays);
-  const [profile, activePlan, weightLogs, mealLogs, waterLogs, analyses] = await Promise.all([
+  const [profile, activePlan, weightLogs, mealLogs, waterLogs, analyses, activities] = await Promise.all([
     prisma.userProfile.findUnique({ where: { userId } }),
     prisma.nutritionPlan.findFirst({
       where: { userId, isActive: true },
@@ -62,6 +63,7 @@ export async function loadCoachData(userId: string, windowDays: number): Promise
     trackingRepository.listMealLogs(userId, since),
     trackingRepository.listWaterLogs(userId, since),
     bloodTestAnalysisRepository.listByUser(userId),
+    activityRepository.listActivities(userId, since),
   ]);
 
   const completed = analyses.filter((a) => a.status === "COMPLETED");
@@ -77,6 +79,9 @@ export async function loadCoachData(userId: string, windowDays: number): Promise
     waterLogs,
     latestAnalysis,
     lastAnalysisAt,
+    healthSignals: {
+      activities,
+    },
   };
 }
 
