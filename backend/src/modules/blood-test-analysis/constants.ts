@@ -48,3 +48,20 @@ export const EXTRACTION_SYSTEM_PROMPT = [
 
 /** Words the AI must never emit; used for a defensive output guard. */
 export const FORBIDDEN_AI_TERMS = ["diagnose", "treat", "prescribe", "cure", "medication"] as const;
+
+/**
+ * Minimum number of recognized biomarkers required for an upload to be treated
+ * as a genuine blood-test report. A real laboratory report always contains at
+ * least one recognizable biomarker; unrelated files (random PDFs, Word docs,
+ * images) yield none. Uploads below this threshold are rejected before any AI
+ * analysis runs or any result is persisted.
+ */
+export const MIN_RECOGNIZED_BIOMARKERS = 1;
+
+/**
+ * User-facing (Turkish) message returned when an uploaded document is not
+ * recognized as a valid blood-test report.
+ */
+export const NOT_A_BLOOD_TEST_MESSAGE =
+  "Yüklenen dosya bir kan tahlili raporu olarak tanınmadı. Lütfen geçerli bir " +
+  "kan tahlili raporu (PDF veya görüntü) yükleyin.";

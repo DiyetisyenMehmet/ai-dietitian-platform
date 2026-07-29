@@ -7,6 +7,7 @@ import { ApiError } from "../../utils/api-error";
 import { bloodTestRepository } from "../blood-test/blood-test.repository";
 import { getAIAdapter } from "./ai-adapter/ai-adapter.factory";
 import { bloodTestAnalysisRepository } from "./blood-test-analysis.repository";
+import { MIN_RECOGNIZED_BIOMARKERS, NOT_A_BLOOD_TEST_MESSAGE } from "./constants";
 import { extractionService } from "./extraction/extraction.service";
 import { matchBiomarkerCode } from "./normalization/biomarker-aliases.map";
 import { normalizationService } from "./normalization/normalization.service";
@@ -91,6 +92,17 @@ export const bloodTestAnalysisService = {
             .filter((code): code is string => code !== null),
         ),
       );
+
+      // 3b. Validation gate: confirm the document is actually a blood-test
+      // report before running the (expensive) AI analysis or persisting any
+      // result. A genuine lab report yields at least one recognized biomarker;
+      // unrelated files (random PDF/Word/image) yield none. Rejecting here means
+      // no analysis is generated and no result is written to the database — the
+      // upload/analysis are marked FAILED by the shared error handler below.
+      if (codes.length < MIN_RECOGNIZED_BIOMARKERS) {
+        throw new ApiError(422, NOT_A_BLOOD_TEST_MESSAGE, { code: "NOT_A_BLOOD_TEST" });
+      }
+
       const rangeMap = await referenceRangesService.getRangeMapForCodes(codes, context);
 
       // 4. Normalize + compare against ranges.
