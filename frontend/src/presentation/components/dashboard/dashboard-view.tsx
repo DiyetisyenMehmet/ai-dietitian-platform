@@ -7,6 +7,7 @@ import { ArrowRight, Sparkles } from "lucide-react";
 import { GreetingSection } from "@/presentation/components/dashboard/greeting-section";
 import { CoachHeroSection } from "@/presentation/components/dashboard/coach-hero-section";
 import { TodayProgressSection } from "@/presentation/components/dashboard/today-progress-section";
+import { ActivitySection } from "@/presentation/components/dashboard/activity-section";
 import { DailyJourneySection } from "@/presentation/components/dashboard/daily-journey-section";
 import { HealthScoreSection } from "@/presentation/components/dashboard/health-score-section";
 import { GoalTrackerSection } from "@/presentation/components/dashboard/goal-tracker-section";
@@ -41,6 +42,8 @@ export function DashboardView() {
       <GoalTrackerSection />
 
       <TodayProgressSection />
+
+      <ActivitySection />
 
       {rest.length > 0 && (
         <section className="space-y-3">
