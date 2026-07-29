@@ -7,6 +7,7 @@ import { mealsStore } from "@/application/meals/meals-store";
 import { healthProfileStore } from "./health-profile-store";
 import { weightStore } from "./weight-store";
 import { dailyTrackingStore } from "./daily-tracking-store";
+import { journeyStore } from "./journey-store";
 
 /**
  * Single place that hydrates the client-side caches from the authoritative
@@ -59,12 +60,13 @@ export async function hydrateProfileFromBackend(fullName: string): Promise<void>
   } catch {
     // Offline / transient failure: keep the last known cache, retry on next mount.
   }
-  // Today's water total and meals live in the tracking logs, independent of the
-  // profile (each has its own best-effort try/catch), so hydrate them regardless
-  // of the profile call.
+  // Today's water total, meals and the journey timeline live in the tracking
+  // logs, independent of the profile (each has its own best-effort try/catch),
+  // so hydrate them regardless of the profile call.
   await Promise.all([
     dailyTrackingStore.hydrateWaterFromBackend(),
     mealsStore.hydrateMealsFromBackend(),
+    journeyStore.hydrateJourneyFromBackend(),
   ]);
 }
 

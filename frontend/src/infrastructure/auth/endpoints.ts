@@ -25,4 +25,6 @@ export const TRACKING_ENDPOINTS = {
   water: "/tracking/water",
   /** GET meal logs (optionally `?since=<ISO>`) / POST a new meal log. */
   meals: "/tracking/meals",
+  /** GET weight logs (optionally `?since=<ISO>`) / POST a new weight log. */
+  weight: "/tracking/weight",
 } as const;
