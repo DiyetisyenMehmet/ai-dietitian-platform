@@ -7,12 +7,98 @@ import { ApiError } from "../../utils/api-error";
 import { bloodTestRepository } from "../blood-test/blood-test.repository";
 import { getAIAdapter } from "./ai-adapter/ai-adapter.factory";
 import { bloodTestAnalysisRepository } from "./blood-test-analysis.repository";
+import {
+  LAB_REPORT_KEYWORDS,
+  LAB_UNIT_PATTERN,
+  MIN_NUMERIC_VALUES,
+  MIN_RECOGNIZED_BIOMARKERS,
+  MIN_STRUCTURE_SCORE,
+  MIN_VALUES_WITH_UNITS,
+  NOT_A_BLOOD_TEST_MESSAGE,
+  REFERENCE_RANGE_PATTERN,
+} from "./constants";
 import { extractionService } from "./extraction/extraction.service";
 import { matchBiomarkerCode } from "./normalization/biomarker-aliases.map";
 import { normalizationService } from "./normalization/normalization.service";
 import { referenceRangesService } from "./reference-ranges/reference-ranges.service";
 import { nutritionAdaptationService } from "../ai-coach/nutrition-adaptation.service";
-import type { AnalysisContext, NormalizedBloodTestValue } from "./types";
+import type { AnalysisContext, ExtractionResult, NormalizedBloodTestValue } from "./types";
+
+/**
+ * Multi-layered guard that confirms an uploaded document is a genuine
+ * laboratory blood-test report BEFORE any AI analysis runs or any result is
+ * persisted. It combines several independent structural signals so that an
+ * unrelated file (a random PDF/Word/image that merely mentions a biomarker
+ * word) cannot pass:
+ *
+ *  1. **Multiple biomarkers** — at least {@link MIN_RECOGNIZED_BIOMARKERS}
+ *     distinct recognized markers (a single marker is never sufficient).
+ *  2. **Units present** — at least {@link MIN_VALUES_WITH_UNITS} extracted
+ *     values carry a real laboratory unit (mg/dL, mmol/L, g/dL, …). Works for
+ *     both text and image (vision) uploads.
+ *  3. **Lab-report structure** — an aggregate score built from independent
+ *     signals (reference-range intervals, unit tokens, lab keywords, a
+ *     biomarker panel, and multiple numeric values) must reach
+ *     {@link MIN_STRUCTURE_SCORE}.
+ *
+ * Throws an operational {@link ApiError} (HTTP 422) with a Turkish message when
+ * the document fails validation. Because this runs before the AI call and the
+ * COMPLETED persistence step, a rejected upload never produces an analysis
+ * result and never triggers nutrition adaptation.
+ *
+ * @param extraction - The hybrid-extraction output for the document.
+ * @param recognizedCodes - Distinct canonical biomarker codes recognized.
+ */
+function assertLooksLikeBloodTest(
+  extraction: ExtractionResult,
+  recognizedCodes: string[],
+): void {
+  const values = extraction.values;
+  const rawText = extraction.rawText ?? "";
+  const lowerText = rawText.toLowerCase();
+
+  // Layer 1 — multiple distinct biomarkers.
+  const biomarkerCount = recognizedCodes.length;
+
+  // Layer 2 — units present on the extracted values (document-derived).
+  const valuesWithUnits = values.filter(
+    (value) => typeof value.unit === "string" && LAB_UNIT_PATTERN.test(value.unit),
+  ).length;
+  const rawTextHasUnits = LAB_UNIT_PATTERN.test(rawText);
+
+  // Layer 3 — aggregate lab-report structure score from independent signals.
+  const numericValueCount = values.filter((value) => /\d/.test(value.rawValue)).length;
+  const hasReferenceRanges = REFERENCE_RANGE_PATTERN.test(rawText);
+  const hasLabKeyword = LAB_REPORT_KEYWORDS.some((keyword) => lowerText.includes(keyword));
+
+  let structureScore = 0;
+  if (valuesWithUnits >= MIN_VALUES_WITH_UNITS) structureScore += 1;
+  if (biomarkerCount >= MIN_RECOGNIZED_BIOMARKERS + 1) structureScore += 1;
+  if (hasReferenceRanges) structureScore += 1;
+  if (hasLabKeyword) structureScore += 1;
+  if (numericValueCount >= MIN_NUMERIC_VALUES) structureScore += 1;
+
+  const hasMultipleBiomarkers = biomarkerCount >= MIN_RECOGNIZED_BIOMARKERS;
+  const hasUnits = valuesWithUnits >= MIN_VALUES_WITH_UNITS || rawTextHasUnits;
+  const hasStructure = structureScore >= MIN_STRUCTURE_SCORE;
+
+  if (!hasMultipleBiomarkers || !hasUnits || !hasStructure) {
+    logger.warn(
+      {
+        biomarkerCount,
+        valuesWithUnits,
+        rawTextHasUnits,
+        numericValueCount,
+        hasReferenceRanges,
+        hasLabKeyword,
+        structureScore,
+        checks: { hasMultipleBiomarkers, hasUnits, hasStructure },
+      },
+      "Upload rejected: not recognized as a laboratory blood-test report",
+    );
+    throw new ApiError(422, NOT_A_BLOOD_TEST_MESSAGE, { code: "NOT_A_BLOOD_TEST" });
+  }
+}
 
 /** Storage namespace used by the Sprint 11 uploader (kept in sync). */
 function storageNamespace(userId: string): string {
@@ -91,6 +177,16 @@ export const bloodTestAnalysisService = {
             .filter((code): code is string => code !== null),
         ),
       );
+
+      // 3b. Multi-layered validation gate: confirm the document is genuinely a
+      // laboratory blood-test report BEFORE running the (expensive) AI analysis
+      // or persisting any result. Combines several independent signals
+      // (multiple biomarkers + units + lab-report structure) so unrelated files
+      // (random PDF/Word/image) cannot slip through. On failure an ApiError
+      // (422) is thrown, so no analysis is generated, nothing is written to the
+      // database as COMPLETED, and no nutrition adaptation is triggered.
+      assertLooksLikeBloodTest(extraction, codes);
+
       const rangeMap = await referenceRangesService.getRangeMapForCodes(codes, context);
 
       // 4. Normalize + compare against ranges.

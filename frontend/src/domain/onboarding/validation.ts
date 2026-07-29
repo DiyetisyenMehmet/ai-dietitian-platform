@@ -1,10 +1,12 @@
 import { z } from "zod";
 
-import type {
-  ActivityLevel,
-  DietaryPreference,
-  Gender,
-  OnboardingProfile,
+import {
+  NO_ALLERGY,
+  NO_HEALTH_CONDITION,
+  type ActivityLevel,
+  type DietaryPreference,
+  type Gender,
+  type OnboardingProfile,
 } from "@/domain/onboarding/types";
 
 /**
@@ -71,8 +73,17 @@ export const onboardingFormSchema = z.object({
   activityLevel: z.enum(ACTIVITY_LEVELS, {
     errorMap: () => ({ message: "Lütfen bir aktivite seviyesi seçin." }),
   }),
-  healthConditions: z.array(z.string().trim().min(1).max(80)).max(30),
-  allergies: z.array(z.string().trim().min(1).max(80)).max(30),
+  healthConditions: z
+    .array(z.string().trim().min(1).max(80))
+    .min(
+      1,
+      "Lütfen \"Hastalığım yok\" seçeneğini işaretleyin veya en az bir sağlık durumu ekleyin.",
+    )
+    .max(30),
+  allergies: z
+    .array(z.string().trim().min(1).max(80))
+    .min(1, "Lütfen \"Alerjim yok\" seçeneğini işaretleyin veya en az bir alerji ekleyin.")
+    .max(30),
   dietaryPreference: z.enum(DIETARY_PREFERENCES, {
     errorMap: () => ({ message: "Lütfen bir beslenme tercihi seçin." }),
   }),
@@ -106,8 +117,10 @@ export function toOnboardingPayload(values: OnboardingFormValues): OnboardingPay
     currentWeightKg: Number(values.currentWeightKg),
     targetWeightKg: Number(values.targetWeightKg),
     activityLevel: values.activityLevel,
-    healthConditions: values.healthConditions,
-    allergies: values.allergies,
+    // Strip the explicit "none" sentinels so persisted data is a clean empty
+    // list when the user declared they have no conditions / allergies.
+    healthConditions: values.healthConditions.filter((v) => v !== NO_HEALTH_CONDITION),
+    allergies: values.allergies.filter((v) => v !== NO_ALLERGY),
     dietaryPreference: values.dietaryPreference,
     dailyWaterGoalMl: Number(values.dailyWaterGoalMl),
   };

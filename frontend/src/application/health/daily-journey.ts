@@ -5,7 +5,6 @@ import * as React from "react";
 import type { JourneyStep, JourneyStepKind, JourneyStepState } from "@/domain/health/types";
 import { useMeals } from "@/application/meals/meals-store";
 import { useDailyTracking } from "./daily-tracking-store";
-import { useActivity } from "./activity-store";
 import { useWeightEntries, WEIGH_IN_INTERVAL_DAYS } from "./weight-store";
 
 /**
@@ -47,7 +46,6 @@ interface RawStep {
 export function useDailyJourney(): JourneyStep[] {
   const meals = useMeals();
   const { waterMl, waterGoalMl, chattedToday } = useDailyTracking();
-  const activity = useActivity();
   const weightEntries = useWeightEntries();
   const hour = useHour();
 
@@ -61,7 +59,6 @@ export function useDailyJourney(): JourneyStep[] {
     const recordedToday = latest?.date === isoToday();
 
     const waterRatio = waterGoalMl > 0 ? waterMl / waterGoalMl : 0;
-    const activityRatio = activity.stepGoal > 0 ? activity.steps / activity.stepGoal : 0;
 
     const raw: RawStep[] = [
       {
@@ -69,7 +66,7 @@ export function useDailyJourney(): JourneyStep[] {
         label: "Kahvaltı",
         hint: "Güne dengeli bir kahvaltıyla başla",
         icon: "sunrise",
-        href: "/meals/add",
+        href: "/meals/add?slot=breakfast",
         done: foodsIn("breakfast") > 0,
         overdue: hour >= 12,
         priority: 1,
@@ -79,42 +76,41 @@ export function useDailyJourney(): JourneyStep[] {
         label: "Öğle yemeği",
         hint: "Öğle öğününü kaydet",
         icon: "sun",
-        href: "/meals/add",
+        href: "/meals/add?slot=lunch",
         done: foodsIn("lunch") > 0,
         overdue: hour >= 17,
         priority: 2,
+      },
+      {
+        kind: "snack",
+        label: "Ara öğün",
+        hint: "Atıştırmalığını ekle",
+        icon: "utensils",
+        href: "/meals/add?slot=snack",
+        done: foodsIn("snack") > 0,
+        overdue: false,
+        priority: 3,
       },
       {
         kind: "water",
         label: "Su",
         hint: `${(waterMl / 1000).toLocaleString("tr-TR")} / ${(waterGoalMl / 1000).toLocaleString("tr-TR")} L`,
         icon: "droplet",
-        href: "/dashboard",
+        href: undefined,
         done: waterMl >= waterGoalMl,
         overdue: false,
-        priority: 3,
-        progress: waterRatio,
-      },
-      {
-        kind: "activity",
-        label: "Hareket",
-        hint: `${activity.steps.toLocaleString("tr-TR")} / ${activity.stepGoal.toLocaleString("tr-TR")} adım`,
-        icon: "footprints",
-        href: "/dashboard",
-        done: activity.steps >= activity.stepGoal,
-        overdue: false,
         priority: 4,
-        progress: activityRatio,
+        progress: waterRatio,
       },
       {
         kind: "dinner",
         label: "Akşam yemeği",
         hint: "Akşam öğününü ekle",
         icon: "moon",
-        href: "/meals/add",
+        href: "/meals/add?slot=dinner",
         done: foodsIn("dinner") > 0,
         overdue: hour >= 23,
-        priority: 5,
+        priority: 6,
       },
       {
         kind: "coach",
@@ -124,7 +120,7 @@ export function useDailyJourney(): JourneyStep[] {
         href: "/ai",
         done: chattedToday,
         overdue: false,
-        priority: 6,
+        priority: 7,
       },
     ];
 
@@ -138,14 +134,15 @@ export function useDailyJourney(): JourneyStep[] {
         href: "/progress",
         done: recordedToday,
         overdue: false,
-        priority: recordedToday ? 7 : 0, // due weigh-in is high priority
+        priority: recordedToday ? 8 : 0, // due weigh-in is high priority
       });
     }
 
     // Choose the single recommended step: the highest-priority actionable one
-    // that is neither done nor overdue.
+    // that is neither done nor overdue. Only steps with a destination (href)
+    // are eligible, so the highlighted "recommended" card is always tappable.
     const actionable = raw
-      .filter((s) => !s.done && !s.overdue)
+      .filter((s) => !s.done && !s.overdue && Boolean(s.href))
       .sort((a, b) => a.priority - b.priority);
     const recommendedKind = actionable[0]?.kind;
 
@@ -169,7 +166,7 @@ export function useDailyJourney(): JourneyStep[] {
       });
 
     return steps;
-  }, [meals, waterMl, waterGoalMl, chattedToday, activity, weightEntries, hour]);
+  }, [meals, waterMl, waterGoalMl, chattedToday, weightEntries, hour]);
 }
 
 /** Completion summary (completed vs. total, excluding skipped from the goal). */
