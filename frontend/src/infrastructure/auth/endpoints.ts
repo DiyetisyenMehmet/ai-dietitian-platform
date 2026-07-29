@@ -29,6 +29,11 @@ export const TRACKING_ENDPOINTS = {
   weight: "/tracking/weight",
 } as const;
 
+export const ACTIVITY_ENDPOINTS = {
+  /** GET activity logs (optionally `?since=<ISO>`) / POST a new activity log. */
+  base: "/activity",
+} as const;
+
 export const BLOOD_TEST_ENDPOINTS = {
   /** GET the authenticated user's blood-test analyses (newest first). */
   analyses: "/blood-tests/analyses",
