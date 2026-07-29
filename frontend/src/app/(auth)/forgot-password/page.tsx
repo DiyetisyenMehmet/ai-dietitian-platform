@@ -16,6 +16,7 @@ import { Button } from "@/presentation/components/ui/button";
 
 export default function ForgotPasswordPage() {
   const [sentTo, setSentTo] = React.useState<string | null>(null);
+  const [isResending, setIsResending] = React.useState(false);
   const {
     register,
     handleSubmit,
@@ -35,6 +36,16 @@ export default function ForgotPasswordPage() {
     }
     toast.error(result.error);
   }, []);
+
+  const handleResend = React.useCallback(async () => {
+    if (isResending) return;
+    setIsResending(true);
+    try {
+      await onSubmit(getValues());
+    } finally {
+      setIsResending(false);
+    }
+  }, [isResending, onSubmit, getValues]);
 
   if (sentTo) {
     return (
@@ -58,8 +69,13 @@ export default function ForgotPasswordPage() {
             <span className="font-medium text-foreground">{sentTo}</span> adresine bir şifre
             sıfırlama bağlantısı gönderdik. Gelen kutunuzu ve spam klasörünü kontrol edin.
           </p>
-          <Button variant="outline" className="w-full" onClick={() => onSubmit(getValues())}>
-            Tekrar gönder
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={handleResend}
+            isLoading={isResending}
+          >
+            {isResending ? "Gönderiliyor..." : "Tekrar gönder"}
           </Button>
         </div>
       </AuthLayout>
