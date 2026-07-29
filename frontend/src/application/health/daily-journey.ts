@@ -5,7 +5,6 @@ import * as React from "react";
 import type { JourneyStep, JourneyStepKind, JourneyStepState } from "@/domain/health/types";
 import { useMeals } from "@/application/meals/meals-store";
 import { useDailyTracking } from "./daily-tracking-store";
-import { useActivity } from "./activity-store";
 import { useWeightEntries, WEIGH_IN_INTERVAL_DAYS } from "./weight-store";
 
 /**
@@ -47,7 +46,6 @@ interface RawStep {
 export function useDailyJourney(): JourneyStep[] {
   const meals = useMeals();
   const { waterMl, waterGoalMl, chattedToday } = useDailyTracking();
-  const activity = useActivity();
   const weightEntries = useWeightEntries();
   const hour = useHour();
 
@@ -61,7 +59,6 @@ export function useDailyJourney(): JourneyStep[] {
     const recordedToday = latest?.date === isoToday();
 
     const waterRatio = waterGoalMl > 0 ? waterMl / waterGoalMl : 0;
-    const activityRatio = activity.stepGoal > 0 ? activity.steps / activity.stepGoal : 0;
 
     const raw: RawStep[] = [
       {
@@ -104,17 +101,6 @@ export function useDailyJourney(): JourneyStep[] {
         overdue: false,
         priority: 4,
         progress: waterRatio,
-      },
-      {
-        kind: "activity",
-        label: "Hareket",
-        hint: `${activity.steps.toLocaleString("tr-TR")} / ${activity.stepGoal.toLocaleString("tr-TR")} adım`,
-        icon: "footprints",
-        href: undefined,
-        done: activity.steps >= activity.stepGoal,
-        overdue: false,
-        priority: 5,
-        progress: activityRatio,
       },
       {
         kind: "dinner",
@@ -179,7 +165,7 @@ export function useDailyJourney(): JourneyStep[] {
       });
 
     return steps;
-  }, [meals, waterMl, waterGoalMl, chattedToday, activity, weightEntries, hour]);
+  }, [meals, waterMl, waterGoalMl, chattedToday, weightEntries, hour]);
 }
 
 /** Completion summary (completed vs. total, excluding skipped from the goal). */
