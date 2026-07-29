@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+import type { Activity, Prisma } from "@prisma/client";
 
 import { logger } from "../../lib/logger";
 import { prisma } from "../../lib/prisma";
@@ -130,10 +130,15 @@ export const riskDetectionService = {
       });
     }
 
-    // 7. Inactive lifestyle (no meal/weight logs in 5+ days).
-    const lastActivity = [...bundle.mealLogs, ...bundle.weightLogs]
-      .map((l) => l.loggedAt)
-      .sort((a, b) => b.getTime() - a.getTime())[0];
+    // 7. Inactive lifestyle (no meal/weight/exercise logs in 5+ days).
+    // Logged exercise activities count as engagement too, so an active user who
+    // only logs workouts is not flagged as inactive.
+    const loggedActivities = (bundle.healthSignals?.activities as Activity[] | undefined) ?? [];
+    const lastActivity = [
+      ...bundle.mealLogs.map((l) => l.loggedAt),
+      ...bundle.weightLogs.map((l) => l.loggedAt),
+      ...loggedActivities.map((a) => a.loggedAt),
+    ].sort((a, b) => b.getTime() - a.getTime())[0];
     if (!lastActivity || lastActivity < daysAgo(INACTIVITY_DAYS)) {
       alerts.push({
         type: "INACTIVE_LIFESTYLE",
