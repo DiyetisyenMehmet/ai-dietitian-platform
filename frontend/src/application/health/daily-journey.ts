@@ -139,9 +139,10 @@ export function useDailyJourney(): JourneyStep[] {
     }
 
     // Choose the single recommended step: the highest-priority actionable one
-    // that is neither done nor overdue.
+    // that is neither done nor overdue. Only steps with a destination (href)
+    // are eligible, so the highlighted "recommended" card is always tappable.
     const actionable = raw
-      .filter((s) => !s.done && !s.overdue)
+      .filter((s) => !s.done && !s.overdue && Boolean(s.href))
       .sort((a, b) => a.priority - b.priority);
     const recommendedKind = actionable[0]?.kind;
 
