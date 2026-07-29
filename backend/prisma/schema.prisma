@@ -77,15 +77,18 @@ model User {
   consents          ConsentRecord[]
 
   // Sprint 19 — AI Health Coach Intelligence
-  weightLogs             WeightLog[]
-  mealLogs               MealLog[]
-  waterLogs              WaterLog[]
-  aiMemories             AiMemory[]
+  weightLogs              WeightLog[]
+  mealLogs                MealLog[]
+  waterLogs               WaterLog[]
+  aiMemories              AiMemory[]
   aiConversationSummaries AiConversationSummary[]
-  proactiveMessages      ProactiveMessage[]
-  weeklyReviews          WeeklyReview[]
-  monthlyReviews         MonthlyReview[]
-  notifications          Notification[]
+  proactiveMessages       ProactiveMessage[]
+  weeklyReviews           WeeklyReview[]
+  monthlyReviews          MonthlyReview[]
+  notifications           Notification[]
+
+  // Sprint 22 — Activity tracking
+  activities Activity[]
 
   @@map("users")
 }
@@ -965,19 +968,19 @@ model WeeklyReview {
 
 /// A generated monthly coaching summary for one (user, month, year).
 model MonthlyReview {
-  id               String   @id @default(uuid())
-  userId           String
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  month            Int
-  year             Int
-  progressSummary  String   @db.Text
-  habitsAnalysis   String   @db.Text
-  improvements     Json
-  riskAreas        Json
-  aiEvaluation     String   @db.Text
-  motivationMessage String  @db.Text
-  priorities       Json
-  createdAt        DateTime @default(now())
+  id                String   @id @default(uuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  month             Int
+  year              Int
+  progressSummary   String   @db.Text
+  habitsAnalysis    String   @db.Text
+  improvements      Json
+  riskAreas         Json
+  aiEvaluation      String   @db.Text
+  motivationMessage String   @db.Text
+  priorities        Json
+  createdAt         DateTime @default(now())
 
   @@unique([userId, month, year])
   @@index([userId, year, month])
@@ -1013,4 +1016,49 @@ model Notification {
   @@index([userId, scheduledFor])
   @@index([deliveredAt])
   @@map("notifications")
+}
+
+// ---------------------------------------------------------------------------
+// Sprint 22 — Activity data foundation
+// ---------------------------------------------------------------------------
+// Physical-activity logging complements the Sprint 19 tracking signals
+// (weight, meals, water) with movement/exercise data. Like those logs, this is
+// a lightweight time-series source the coach can reason about (activity streaks,
+// inactivity nudges, energy-expenditure context). This sprint introduces the
+// data model only — no API, service, or business logic. Everything remains
+// nutrition/coaching only, never medical diagnosis.
+
+/// The kind of physical activity a log entry represents. Adding a value lets a
+/// new activity type be tracked without a breaking change.
+enum ActivityType {
+  WALKING
+  RUNNING
+  CYCLING
+  SWIMMING
+  STRENGTH_TRAINING
+  YOGA
+  HIIT
+  SPORTS
+  OTHER
+}
+
+/// A single logged physical-activity entry over time. Unlike the static
+/// `UserProfile.activityLevel` snapshot, these rows let the coach reason about
+/// actual movement history: activity consistency, inactivity gaps, and a
+/// best-effort energy-expenditure signal. `caloriesBurned` is optional because
+/// not every entry can be reliably estimated; it is never used for medical math.
+model Activity {
+  id              String       @id @default(uuid())
+  userId          String
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type            ActivityType
+  name            String?
+  durationMinutes Int
+  caloriesBurned  Float?
+  note            String?
+  loggedAt        DateTime     @default(now())
+  createdAt       DateTime     @default(now())
+
+  @@index([userId, loggedAt])
+  @@map("activities")
 }
