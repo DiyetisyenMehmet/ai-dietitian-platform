@@ -5,7 +5,7 @@ import { prisma } from "../../lib/prisma";
 import { notificationService } from "../notifications/notification.service";
 import { aiMemoryService } from "./ai-memory.service";
 import { daysWithMeals, loadCoachData } from "./coach-data";
-import { average, daysAgo, groupBy, sum, turkeyDayKey } from "./metrics";
+import { average, daysAgo, groupByDay, sum } from "./metrics";
 import type { RiskAlert } from "./types";
 
 /** Thresholds for the coaching risk checks (nutrition guidance, not diagnosis). */
@@ -19,7 +19,7 @@ const MEAL_CONSISTENCY_WINDOW_DAYS = 14;
 
 /** Averages a per-day total over the number of distinct days that had data. */
 function averagePerLoggedDay(values: { loggedAt: Date; amount: number }[]): number {
-  const byDay = groupBy(values, (v) => turkeyDayKey(v.loggedAt));
+  const byDay = groupByDay(values);
   const dailyTotals: number[] = [];
   for (const items of byDay.values()) {
     dailyTotals.push(sum(items.map((i) => i.amount)));

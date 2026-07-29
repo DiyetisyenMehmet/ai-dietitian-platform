@@ -11,7 +11,7 @@ import { prisma } from "../../lib/prisma";
 import { activityRepository } from "../activity/activity.repository";
 import { bloodTestAnalysisRepository } from "../blood-test-analysis/blood-test-analysis.repository";
 import { trackingRepository } from "../tracking/tracking.repository";
-import { average, daysAgo, groupBy, turkeyDayKey } from "./metrics";
+import { average, daysAgo, groupByDay } from "./metrics";
 
 /**
  * Forward-looking, optional health signals the AI Health Coach may reason over
@@ -148,7 +148,7 @@ export function deriveWeight(weightLogs: WeightLog[], profile: UserProfile | nul
 
 /** Distinct Turkey-local days that had at least `minMeals` meals logged. */
 export function daysWithMeals(mealLogs: MealLog[], minMeals: number): number {
-  const byDay = groupBy(mealLogs, (m) => turkeyDayKey(m.loggedAt));
+  const byDay = groupByDay(mealLogs);
   let count = 0;
   for (const meals of byDay.values()) {
     if (meals.length >= minMeals) count += 1;
@@ -159,6 +159,6 @@ export function daysWithMeals(mealLogs: MealLog[], minMeals: number): number {
 /** Fraction (0-1) of the last `days` calendar days on which a meal was logged. */
 export function mealDayCoverage(mealLogs: MealLog[], days: number): number {
   if (days <= 0) return 0;
-  const byDay = groupBy(mealLogs, (m) => turkeyDayKey(m.loggedAt));
+  const byDay = groupByDay(mealLogs);
   return Math.min(1, byDay.size / days);
 }
