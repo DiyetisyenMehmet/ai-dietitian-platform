@@ -132,10 +132,13 @@ export function deriveWeight(weightLogs: WeightLog[], profile: UserProfile | nul
       ? average(lastWeek.map((w) => w.weightKg)) - average(priorWeek.map((w) => w.weightKg))
       : null;
 
-  const wantsToLose = profile ? profile.targetWeightKg < profile.currentWeightKg : true;
+  const wantsToLose =
+    profile && profile.targetWeightKg != null && profile.currentWeightKg != null
+      ? profile.targetWeightKg < profile.currentWeightKg
+      : true;
   const change = weekOverWeekKg ?? deltaKg;
   let trend: TrendDirection = "STABLE";
-  if (Math.abs(change) >= 0.3) {
+  if (change != null && Math.abs(change) >= 0.3) {
     const movingToward = wantsToLose ? change < 0 : change > 0;
     trend = movingToward ? "IMPROVING" : "DECLINING";
   }
