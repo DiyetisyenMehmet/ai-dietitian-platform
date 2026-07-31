@@ -8,6 +8,8 @@ import {
 } from "../constants";
 import { NUTRITION_PLAN_SYSTEM_PROMPT } from "../../nutrition-plan/constants";
 import { DIETITIAN_CHAT_SYSTEM_PROMPT } from "../../ai-chat/constants";
+import { DOCUMENT_VALIDATION_SYSTEM_PROMPT } from "../validation/document-validation.constants";
+import type { DocumentValidationResult } from "../validation/document-validation.types";
 import type {
   AnalysisContext,
   BiomarkerExplanation,
@@ -151,6 +153,70 @@ export class OpenAICompatibleAdapter implements IAIAdapter {
    */
   private toDataUrl(content: Buffer, mimeType: string): string {
     return `data:${mimeType};base64,${content.toString("base64")}`;
+  }
+
+  /** @inheritdoc */
+  async validateBloodTestDocument(
+    content: string | Buffer,
+    mimeType: string,
+  ): Promise<DocumentValidationResult> {
+    const schemaHint =
+      "Classify the document strictly per the rules. Do NOT interpret medical " +
+      "values. Respond ONLY with the JSON object described in the system prompt.";
+
+    const messages: ChatMessage[] = [
+      { role: "system", content: DOCUMENT_VALIDATION_SYSTEM_PROMPT },
+    ];
+
+    if (typeof content === "string") {
+      messages.push({
+        role: "user",
+        content: `${schemaHint}\n\nDocument text to validate:\n"""\n${content}\n"""`,
+      });
+    } else {
+      messages.push({
+        role: "user",
+        content: [
+          { type: "text", text: `${schemaHint}\n\nValidate this uploaded document image.` },
+          { type: "image_url", image_url: { url: this.toDataUrl(content, mimeType) } },
+        ],
+      });
+    }
+
+    const raw = await this.chat(messages);
+    const parsed = this.parseJson<Partial<DocumentValidationResult>>(raw);
+
+    const classification = parsed.classification === "VALID" ? "VALID" : "INVALID";
+    const confidenceRaw = this.num(parsed.confidence);
+    const confidence = Math.max(0, Math.min(100, confidenceRaw));
+    const detectedParameters = Array.isArray(parsed.detectedParameters)
+      ? parsed.detectedParameters.map((p) => String(p)).filter((p) => p.length > 0)
+      : [];
+    const parameterCount = Number.isFinite(Number(parsed.parameterCount))
+      ? Math.max(0, Math.trunc(Number(parsed.parameterCount)))
+      : detectedParameters.length;
+
+    const patient = parsed.patient
+      ? {
+          name: parsed.patient.name != null ? String(parsed.patient.name) : null,
+          gender: parsed.patient.gender != null ? String(parsed.patient.gender) : null,
+          birthDateOrAge:
+            parsed.patient.birthDateOrAge != null ? String(parsed.patient.birthDateOrAge) : null,
+        }
+      : null;
+
+    return {
+      classification,
+      confidence,
+      hospital: parsed.hospital != null ? String(parsed.hospital) : null,
+      reportDate: parsed.reportDate != null ? String(parsed.reportDate) : null,
+      patient,
+      barcode: parsed.barcode != null ? String(parsed.barcode) : null,
+      hasLabTable: Boolean(parsed.hasLabTable),
+      parameterCount,
+      detectedParameters,
+      reason: parsed.reason != null ? String(parsed.reason) : "",
+    };
   }
 
   /** @inheritdoc */

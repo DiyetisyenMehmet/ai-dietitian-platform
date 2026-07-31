@@ -8,6 +8,7 @@ import { bloodTestRepository } from "../blood-test/blood-test.repository";
 import { getAIAdapter } from "./ai-adapter/ai-adapter.factory";
 import { bloodTestAnalysisRepository } from "./blood-test-analysis.repository";
 import { extractionService } from "./extraction/extraction.service";
+import { documentValidationService } from "./validation/document-validation.service";
 import { matchBiomarkerCode } from "./normalization/biomarker-aliases.map";
 import { normalizationService } from "./normalization/normalization.service";
 import { referenceRangesService } from "./reference-ranges/reference-ranges.service";
@@ -78,6 +79,13 @@ export const bloodTestAnalysisService = {
         namespace: storageNamespace(userId),
         key: upload.storageKey,
       });
+
+      // 1a. VALIDATION GATE (Sprint 25 — critical release blocker).
+      // Reject anything that is not a genuine, readable laboratory blood-test
+      // report BEFORE any OCR extraction or AI medical analysis runs. On failure
+      // this throws the exact Turkish rejection message (ApiError 422), which is
+      // handled by the catch block below, so extraction/analysis never start.
+      await documentValidationService.assertValidBloodTestReport(buffer, upload.mimeType);
 
       // 2. Hybrid extraction (text → OCR → vision).
       const extraction = await extractionService.extract(buffer, upload.mimeType);

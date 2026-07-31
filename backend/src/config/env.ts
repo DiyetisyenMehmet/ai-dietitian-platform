@@ -88,6 +88,16 @@ const envSchema = z.object({
   // OCR fallback is triggered by the hybrid extraction pipeline.
   BLOOD_TEST_TEXT_MIN_CHARS: z.coerce.number().int().positive().default(100),
 
+  // --- Blood Test Validation Pipeline (Sprint 25 — release blocker) ---
+  // The pre-analysis gate rejects non-lab documents (selfies, food photos, ID
+  // cards, chat screenshots, unrelated PDFs) before any OCR/AI runs. A document
+  // only proceeds when the classifier returns VALID with a confidence at least
+  // this high (0–100). Kept high on purpose so only clearly genuine reports pass.
+  BLOOD_TEST_VALIDATION_MIN_CONFIDENCE: z.coerce.number().int().min(0).max(100).default(95),
+  // Minimum number of recognized laboratory parameters required to accept a
+  // report (a genuine report always lists several).
+  BLOOD_TEST_VALIDATION_MIN_PARAMETERS: z.coerce.number().int().positive().default(3),
+
   // --- Payments / iyzico (Sprint 15, D2) ---
   // Payment provider selector. Only "iyzico" ships now; the modular payment
   // layer lets an additional provider be added later without touching callers.

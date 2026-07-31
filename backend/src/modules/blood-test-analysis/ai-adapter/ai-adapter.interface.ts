@@ -20,9 +20,12 @@ import type { NutritionPlanAIInput, NutritionPlanAIOutput } from "../../nutritio
 // Chat. Type-only import (erased at runtime) so there is no cross-module
 // runtime dependency cycle.
 import type { DietitianChatAIInput, DietitianChatAIOutput } from "../../ai-chat/types";
+// Sprint 25: the adapter also powers the pre-analysis document validation gate.
+import type { DocumentValidationResult } from "../validation/document-validation.types";
 
 // Re-export the shared types so consumers of the adapter get everything from
 // a single import site.
+export type { DocumentValidationResult } from "../validation/document-validation.types";
 export type {
   AnalysisContext,
   BiomarkerExplanation,
@@ -51,6 +54,23 @@ export interface AIAdapterInfo {
 export interface IAIAdapter {
   /** Static provider/model info for logging and persistence. */
   readonly info: AIAdapterInfo;
+
+  /**
+   * Validates whether a document is a genuine, readable laboratory blood-test
+   * report BEFORE any extraction or medical analysis is attempted (Sprint 25).
+   *
+   * This performs classification only — it never interprets medical values.
+   * Implementations MUST return a structured verdict; the caller applies the
+   * hard confidence/parameter gate.
+   *
+   * @param content - UTF-8 text (text path) or a raw file Buffer (vision path).
+   * @param mimeType - MIME type of the content, used to choose text vs. image.
+   * @returns The structured validation verdict.
+   */
+  validateBloodTestDocument(
+    content: string | Buffer,
+    mimeType: string,
+  ): Promise<DocumentValidationResult>;
 
   /**
    * Extracts raw laboratory values from document content.
