@@ -9,6 +9,9 @@ import { aiChatModule } from "../modules/ai-chat/ai-chat.module";
 import { aiUsageModule } from "../modules/ai-usage/ai-usage.module";
 import { paymentsModule } from "../modules/payments/payments.module";
 import { legalModule } from "../modules/legal/legal.module";
+import { trackingModule } from "../modules/tracking/tracking.module";
+import { notificationModule } from "../modules/notifications/notification.module";
+import { aiCoachModule } from "../modules/ai-coach/ai-coach.module";
 import { onboardingRouter } from "../modules/onboarding/onboarding.routes";
 import { healthRouter } from "./health.route";
 
@@ -56,5 +59,18 @@ for (const { path, router } of paymentsModule.routes) {
   apiRouter.use(path, router);
 }
 for (const { path, router } of legalModule.routes) {
+  apiRouter.use(path, router);
+}
+
+// AI Health Coach Intelligence (Sprint 19): time-series tracking, the coach
+// endpoints and the scheduled-notification surface. Each mounts at its own base
+// path with no ordering concerns.
+for (const { path, router } of trackingModule.routes) {
+  apiRouter.use(path, router);
+}
+for (const { path, router } of notificationModule.routes) {
+  apiRouter.use(path, router);
+}
+for (const { path, router } of aiCoachModule.routes) {
   apiRouter.use(path, router);
 }

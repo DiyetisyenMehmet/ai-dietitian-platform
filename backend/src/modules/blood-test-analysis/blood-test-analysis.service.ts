@@ -11,6 +11,7 @@ import { extractionService } from "./extraction/extraction.service";
 import { matchBiomarkerCode } from "./normalization/biomarker-aliases.map";
 import { normalizationService } from "./normalization/normalization.service";
 import { referenceRangesService } from "./reference-ranges/reference-ranges.service";
+import { nutritionAdaptationService } from "../ai-coach/nutrition-adaptation.service";
 import type { AnalysisContext, NormalizedBloodTestValue } from "./types";
 
 /** Storage namespace used by the Sprint 11 uploader (kept in sync). */
@@ -141,6 +142,11 @@ export const bloodTestAnalysisService = {
         await prisma.bloodTestUpload
           .update({ where: { id: bloodTestId }, data: { status: "ANALYZED" } })
           .catch(() => undefined);
+        // Sprint 19, Section 4: a fresh blood-test result may warrant a nutrition
+        // adaptation. Best-effort, non-blocking — it must never fail the analysis.
+        void nutritionAdaptationService.analyzeAndAdapt(userId).catch((err: unknown) => {
+          logger.warn({ err, userId }, "Nutrition adaptation after blood test failed");
+        });
       }
     }
   },

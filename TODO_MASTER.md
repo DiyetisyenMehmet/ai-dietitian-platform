@@ -1,6 +1,6 @@
 # TODO_MASTER
 
-> Son güncelleme: 2026-07-13 · Branch: `main` · Genel tamamlanma: **~%42**
+> Son güncelleme: 2026-07-22 · Branch: `feature/sprint-19-ai-health-coach-intelligence` · Genel tamamlanma: **~%75**
 > Bu dosya iki bölümden oluşur: (A) Mimari Planlama Fazları (Faz 1–20) ve (B) Uygulama Sprintleri.
 > Kural: Tamamlanan işler silinmez, bekleyen işler korunur, yeni keşfedilen işler eklenir.
 
@@ -115,39 +115,58 @@ Durum simgeleri: `[x]` tamam · `[~]` kısmen · `[ ]` beklemede
 - [x] Endpoint'ler: `POST /api/blood-tests` (yükle), `GET /api/blood-tests` (geçmiş), `GET /:id` (metadata), `GET /:id/file` (indir), `PUT /:id/file` (değiştir), `DELETE /:id` (sil) — **(Critical)**
 - [x] Sahiplik-kapsamı (yetkisiz erişimde varlık sızdırmayan 404), rastgele UUID storage key, tüm yaşam döngüsü için denetim günlüğü, `BloodTests` Swagger tag'i — **(High)**
 
-> Not: Sprint 11 backend-odaklıdır (kapsam frontend/OCR/AI analizi içermiyor — yalnızca yükleme altyapısı); kredi optimizasyonu gereği **build/preview alınmadan** tamamlandı. Doğrulama: backend `type-check` + `lint` (0 hata/0 uyarı) + Prisma migration'ın canlı DB'ye uygulanması. Altyapı, Sprint 12'deki AI analizinin dosyaları `getFile` stream'i + `status` alanı üzerinden büyük değişiklik olmadan tüketebilmesi için tasarlandı.
+### Sprint 12–18 ✅ (Tamamlandı)
+- [x] AI Blood Test Analysis (Sprint 12) — OCR + AI analizi
+- [x] AI Nutrition Plan (Sprint 13) — kişiselleştirilmiş beslenme planı
+- [x] AI Dietitian Chat + Usage Quota (Sprint 14) — sohbet + kota sistemi
+- [x] Subscriptions + Payments (Sprint 15) — iyzico + abonelik + fatura
+- [x] Marketing Site + Production Config (Sprint 16) — herkese açık web + SEO + Docker
+- [x] Legal + Compliance (Sprint 17) — KVKK + gizlilik + rıza yönetimi
+- [x] Product Polish (Sprint 18) — UX iyileştirmeleri + hesap yönetimi
+
+### Sprint 19 — AI Health Coach Intelligence ✅ (Tamamlandı)
+- [x] Tracking modülü: `WeightLog`, `MealLog`, `WaterLog` Prisma modelleri + repository + service + controller + routes — **(Critical)**
+- [x] AI Long-Term Memory: `AiMemory` + `AiConversationSummary` modelleri, `AiMemoryService` (upsert, getRelevant, buildMemoryContext), hafıza enjeksiyonu tüm AI chat'e — **(High)**
+- [x] Proactive AI: `ProactiveMessage` modeli, `ProactiveAiService` (computeCandidates, generateForUser), günlük cron (20:00 Turkey), GET/PATCH endpoints — **(High)**
+- [x] Smart Question Engine: `SmartQuestionEngine` (detectProgressDecline, buildQuestionBlock, recordAnswer), GET /api/ai-coach/progress-check — **(High)**
+- [x] Dynamic Nutrition Adaptation: `NutritionAdaptationService` (analyzeAndAdapt), kilo/kan tahlili hook'ları, GET /api/ai-coach/nutrition-adaptation — **(High)**
+- [x] Risk Detection: `RiskDetectionService` (detectRisks 8 kontrol, persistAndEscalate), GET /api/ai-coach/risks — **(High)**
+- [x] Weekly Review: `WeeklyReview` modeli, `WeeklyReviewService` (generateWeeklyReview), Pazar 21:00 cron, GET + POST endpoints — **(High)**
+- [x] Monthly Review: `MonthlyReview` modeli, `MonthlyReviewService` (generateMonthlyReview), aylık 1. gün 08:00 cron, GET + POST endpoints, premium-only — **(High)**
+- [x] Premium AI Experience: `requirePremium` middleware, free vs premium hafıza derinliği/yanıt uzunluğu/rapor detayı ayrımı, 402 PREMIUM_REQUIRED — **(High)**
+- [x] Notification Preparation: `Notification` modeli, `NotificationService` (schedule, getScheduled, markDelivered, dispatchDue), `NotificationProvider` interface + `LoggingNotificationProvider` stub, GET /api/notifications/scheduled — **(Medium)**
+- [x] Scheduler: `coach-scheduler.ts` (custom setInterval, Turkey UTC+3, runOncePerDay, tüm cron job'lar), `coach-jobs.ts` (batch işlemler) — **(Critical)**
+- [x] Prisma migration: `20260722000000_sprint19_ai_health_coach_intelligence` (5 enum, 9 tablo, 9 FK, 13 index) — **(Critical)**
+- [x] Doğrulama: tsc --noEmit ✓, eslint ✓, prisma validate ✓, prisma generate ✓ — **(Critical)**
+
+> Not: Sprint 19, NestJS yerine Express tabanlı mevcut mimariye uygun olarak tamamlandı; zamanlanmış görevler için harici kütüphane kullanılmadı, custom scheduler uygulandı. Tüm kullanıcı metinleri Türkçe; AI asla tıbbi teşhis koymaz.
 
 ---
 
 ## Kalan İş Tahminleri (Sprint bazında)
 
-| Sprint / Alan | Öncelik | Tahmini Eforu |
+| Sprint / Alan | Öncelik | Tahmini Efor |
 |---|---|---|
-| Sprint 8 — Auth Infrastructure (BE) | Critical | ~3–4 gün |
-| Frontend ↔ Backend auth entegrasyonu | Critical | ~1–2 gün |
-| Meals/Goals/Dashboard için backend API + DB modelleri | High | ~5–7 gün |
-| AI Orchestrator (gerçek entegrasyon) | High | ~4–6 gün |
-| `/profile` route + profil modülü | Medium | ~2 gün |
-| CI/CD + DevOps workflow | Medium | ~2–3 gün |
-| Monitoring/metrics (APM) | Medium | ~2 gün |
-| Deployment (cloud) | Low | ~3 gün |
+| Sprint 20 — AI Health Coach Frontend UI | High | ~3–4 gün |
+| Sprint 21 — Observability & Monitoring (Sentry, uptime, alerting) | High | ~2–3 gün |
+| Sprint 22 — Production Deployment + CI/CD (managed DB, secrets, pipeline) | Critical | ~3–4 gün |
+| Sprint 23 — E-posta Sağlayıcısı Entegrasyonu (SendGrid/AWS SES) | Medium | ~1–2 gün |
+| Sprint 24 — Test Suite + QA (kritik akış testleri) | High | ~3–4 gün |
+| Sprint 25 — Store Hazırlık + Launch (metadata, assets, soft launch) | Critical | ~2–3 gün |
 
-**Toplam tahmini kalan efor:** ~22–29 gün · **Genel tamamlanma:** ~%42
+**Toplam tahmini kalan efor:** ~14–20 gün · **Genel tamamlanma:** ~%75
 
 ---
 
 ## Blocker'lar (Aktif)
 
-1. **GitHub push izni (Critical):** Abacus.AI GitHub App'in bu repoda **write (Contents: Read & write)** izni yok. `git push` → `403`. Yerel commit'ler push edilemiyor.
-   - Çözüm: https://github.com/apps/abacusai/installations/select_target adresinden `ai-dietitian-platform` reposuna write izni verilmeli.
-2. **PostgreSQL kalıcı değil (High):** VM her yeniden başladığında Postgres sunucusu sıfırlanıyor; kurulum + migration manuel tekrar gerekiyor. Kalıcı ortam/managed DB gerekli.
+1. **PostgreSQL kalıcı değil (Medium):** VM her yeniden başladığında Postgres sunucusu sıfırlanıyor; production'da managed DB gerekli (Sprint 22).
+2. **E-posta sağlayıcısı yok (Medium):** `mailer` soyutlaması mevcut ama gerçek e-posta servisi entegre değil; production öncesi gerekli (Sprint 23).
 
 ---
 
 ## Teknik Borç (Technical Debt)
 
-- **TD-01 (Medium):** `/profile` navigasyonda tanımlı (`navigation.ts`) ama route yok → soft 404. Ya route eklenmeli ya link gizlenmeli.
-- **TD-02 (Medium):** Frontend Meals/Goals/Chat verileri istemci tarafında (mock/in-memory); kalıcı backend API'sine taşınmalı.
-- **TD-03 (Low):** `next lint` deprecate uyarısı veriyor (Next.js 16'da kalkacak); ESLint CLI'ye geçiş gerekli.
-- **TD-04 (Low):** Otomatik test altyapısı (unit/integration/e2e) henüz yok.
-- **TD-05 (Low):** Root seviyesinde `.gitignore` yok; sadece frontend/backend altında var (şu an sorun değil, ilerisi için eklenebilir).
+- **TD-01 (Low):** `NotificationProvider` stub olarak `LoggingNotificationProvider` kullanıyor; Firebase/APNs entegrasyonu post-launch.
+- **TD-02 (Low):** Otomatik test altyapısı (unit/integration/e2e) henüz yok; Sprint 24'te eklenecek.
+- **TD-03 (Low):** Frontend AI Health Coach ekranları henüz yok (proaktif mesajlar, haftalık/aylık değerlendirmeler vb.); Sprint 20'de eklenecek.

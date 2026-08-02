@@ -1,8 +1,8 @@
 # Diewish
 
-Kurumsal, AI destekli diyetisyen platformu. Modular Monolith + Domain-Driven Design.
+Kurumsal, AI destekli sağlık koçu platformu. Modular Monolith + Domain-Driven Design.
 
-**Sürüm:** 0.1.0 · **Durum:** Frontend MVP + Backend Foundation (~%42) · Detay için bkz. `PROJECT_MEMORY.md`, `ROADMAP.md`, `CHANGELOG.md`.
+**Sürüm:** 0.4.0 · **Durum:** AI Health Coach Intelligence (~%75 tamamlandı) · Detay için bkz. `PROJECT_MEMORY.md`, `ROADMAP.md`, `CHANGELOG.md`.
 
 ## Depo Yapısı
 
@@ -128,6 +128,28 @@ Tümü sıfır hata/uyarı ile geçmelidir.
 - Swagger UI: `http://localhost:4000/docs`
 - Health: `GET /api/health` → servis durumu
 - Readiness: `GET /api/health/ready` → veritabanı bağlantı durumu
+- Version: `GET /api/health/version` → backend sürüm bilgisi
+
+### Sprint 19 — AI Health Coach Intelligence
+
+Sprint 19 ile eklenen yeni API endpoint'leri:
+
+- **Tracking:** `POST|GET /api/tracking/weight`, `/meals`, `/water` — kilo, yemek ve su kayıtları
+- **AI Coach:** 
+  - `GET /api/ai-coach/proactive-messages` — proaktif koçluk mesajları
+  - `PATCH /api/ai-coach/proactive-messages/:id/read` — mesajı okundu olarak işaretle
+  - `GET /api/ai-coach/progress-check` — ilerleme düşüşü kontrolü
+  - `POST /api/ai-coach/smart-answer` — akıllı soru yanıtı kaydet
+  - `GET /api/ai-coach/nutrition-adaptation` — beslenme adaptasyonu durumu
+  - `POST /api/ai-coach/nutrition-adaptation/run` — manuel adaptasyon (premium)
+  - `GET /api/ai-coach/risks` — risk uyarıları
+  - `GET /api/ai-coach/weekly-review` — haftalık değerlendirme
+  - `POST /api/ai-coach/weekly-review/generate` — haftalık rapor oluştur
+  - `GET /api/ai-coach/monthly-review` — aylık değerlendirme (premium)
+  - `POST /api/ai-coach/monthly-review/generate` — aylık rapor oluştur (premium)
+- **Notifications:** `GET /api/notifications/scheduled` — zamanlanmış bildirimler
+
+Tüm AI coach özellikleri Türkçe; sistem asla tıbbi teşhis koymaz, yalnızca koçluk rehberliği sunar.
 
 ## Deployment / Preview
 
