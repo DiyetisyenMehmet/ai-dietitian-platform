@@ -11,6 +11,7 @@ import { extractionService } from "./extraction/extraction.service";
 import { documentEnhancementService } from "./enhancement/document-enhancement.service";
 import { documentQualityAssessmentService } from "./enhancement/document-quality-assessment.service";
 import { documentValidationService } from "./validation/document-validation.service";
+import { longitudinalComparisonService } from "./comparison/longitudinal-comparison.service";
 import { matchBiomarkerCode } from "./normalization/biomarker-aliases.map";
 import { normalizationService } from "./normalization/normalization.service";
 import { referenceRangesService } from "./reference-ranges/reference-ranges.service";
@@ -126,6 +127,24 @@ export const bloodTestAnalysisService = {
       const abnormal: NormalizedBloodTestValue[] = normalized.filter(
         (value) => value.status !== "NORMAL" && value.status !== "UNKNOWN",
       );
+
+      // 4a. LONGITUDINAL COMPARISON (data only — no medical interpretation).
+      // If the user has a previous completed analysis, prepare a structured,
+      // purely numeric comparison of matching biomarkers (previous/current
+      // value, absolute & percentage difference, direction) so Medical AI can
+      // consume the trend later. Returns null when no prior analysis exists.
+      // This never changes prompts, OCR, validation or extraction.
+      const longitudinalComparison = await longitudinalComparisonService.buildForUser(
+        userId,
+        analysis.id,
+        normalized,
+      );
+      if (longitudinalComparison) {
+        logger.info(
+          { comparedCount: longitudinalComparison.comparedCount },
+          "Longitudinal blood-test comparison prepared",
+        );
+      }
 
       // 5. AI explanations + nutrition implications.
       const adapter = getAIAdapter();
