@@ -1,11 +1,50 @@
 import { env } from "../../../config/env";
 import { logger } from "../../../lib/logger";
 import type { ExtractedBloodTestValue, ExtractionResult } from "../types";
-import { extractTextWithOcr } from "./ocr-extractor";
+import { extractTextWithOcr, PSM } from "./ocr-extractor";
 import { extractPdfText, meaningfulCharCount } from "./pdf-text-extractor";
 import { extractWithVision } from "./vision-extractor";
 
 const PDF_MIME = "application/pdf";
+
+/** Each of the four OCR-quality signals contributes up to this many points. */
+const OCR_QUALITY_WEIGHT = 25;
+/** Parameter count treated as a "complete" panel when scoring. */
+const OCR_QUALITY_TARGET_PARAMS = 8;
+/** OCR quality (0–100) at/above which the first pass is accepted as-is. */
+const OCR_QUALITY_ACCEPT_THRESHOLD = 85;
+/** Detects a printed reference range such as "10-20", "10 - 20", "3.5–5.1". */
+const REFERENCE_RANGE_REGEX = /\d[\d.,]*\s*[-–]\s*\d[\d.,]*/;
+
+/**
+ * Estimates OCR quality on a 0–100 scale from data that OCR already produced.
+ * No new AI model is introduced: this is a pure heuristic over the structured
+ * values plus the raw text. It blends four equally-weighted signals — how many
+ * parameters were detected, and the share of values carrying a numeric reading,
+ * a unit, and a reference range — so a garbled OCR pass scores low and triggers
+ * a single retry.
+ *
+ * @param values - Structured biomarker values parsed from an OCR pass.
+ * @param rawText - The raw OCR text (used to detect printed reference ranges).
+ * @returns An integer quality score in the range [0, 100].
+ */
+function computeOcrQualityScore(values: ExtractedBloodTestValue[], rawText: string): number {
+  if (values.length === 0) return 0;
+
+  const total = values.length;
+  const numericPct = values.filter((v) => /\d/.test(v.rawValue)).length / total;
+  const unitsPct = values.filter((v) => v.unit && v.unit.length > 0).length / total;
+
+  const refRangeLines = rawText
+    .split(/\r?\n/)
+    .filter((line) => REFERENCE_RANGE_REGEX.test(line)).length;
+  const refRangePct = Math.min(refRangeLines / total, 1);
+
+  const paramsScore = Math.min(total / OCR_QUALITY_TARGET_PARAMS, 1);
+
+  const score = OCR_QUALITY_WEIGHT * (paramsScore + numericPct + unitsPct + refRangePct);
+  return Math.round(Math.max(0, Math.min(100, score)));
+}
 
 /**
  * Parses raw laboratory-report text into structured biomarker values using a
@@ -99,9 +138,34 @@ export const extractionService = {
     }
 
     // Unknown type: attempt OCR, then vision.
-    const ocrText = await extractTextWithOcr(buffer);
+    //
+    // OCR reliability improvement (same engine, no new models): after the first
+    // pass we score its quality from the data it produced. If the score is below
+    // the accept threshold we run exactly ONE more pass over the SAME already
+    // enhanced buffer using a table-oriented page-segmentation mode, then keep
+    // whichever pass scored higher.
+    let ocrText = await extractTextWithOcr(buffer);
+    let ocrValues = parseLabText(ocrText);
+    let ocrScore = computeOcrQualityScore(ocrValues, ocrText);
+
+    if (ocrScore < OCR_QUALITY_ACCEPT_THRESHOLD) {
+      const retryText = await extractTextWithOcr(buffer, { pageSegMode: PSM.SINGLE_BLOCK });
+      const retryValues = parseLabText(retryText);
+      const retryScore = computeOcrQualityScore(retryValues, retryText);
+      logger.info(
+        { firstScore: ocrScore, retryScore },
+        "OCR quality below threshold → ran one retry with table layout mode",
+      );
+      if (retryScore > ocrScore) {
+        ocrText = retryText;
+        ocrValues = retryValues;
+        ocrScore = retryScore;
+      }
+    }
+
     if (meaningfulCharCount(ocrText) >= minChars) {
-      return { method: "OCR", rawText: ocrText, values: parseLabText(ocrText) };
+      logger.info({ ocrScore }, "Extraction: OCR path");
+      return { method: "OCR", rawText: ocrText, values: ocrValues };
     }
     const vision = await extractWithVision(buffer, mimeType);
     return { method: "VISION", rawText: vision.rawText, values: vision.values };
