@@ -27,3 +27,4 @@ coverage/
 
 # Local file storage (blood-test uploads, etc.)
 storage/
+*.traineddata

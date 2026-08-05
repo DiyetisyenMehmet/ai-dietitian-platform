@@ -124,7 +124,11 @@ export const documentValidationService = {
           classification: result.classification,
           confidence: result.confidence,
           hasLabTable: result.hasLabTable,
+          hospital: result.hospital,
+          reportDate: result.reportDate,
+          patient: result.patient,
           parameterCount: result.parameterCount,
+          detectedParameters: result.detectedParameters,
           reason: result.reason,
         },
         "Blood test document rejected by validation gate",
@@ -144,9 +148,15 @@ export const documentValidationService = {
 
     logger.info(
       {
+        classification: result.classification,
         confidence: result.confidence,
+        hasLabTable: result.hasLabTable,
         hospital: result.hospital,
+        reportDate: result.reportDate,
+        patient: result.patient,
         parameterCount: result.parameterCount,
+        detectedParameters: result.detectedParameters,
+        reason: result.reason,
       },
       "Blood test document passed validation gate",
     );

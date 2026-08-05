@@ -83,17 +83,19 @@ export const extractionService = {
         return { method: "TEXT", rawText: text, values: parseLabText(text) };
       }
 
-      // 2. OCR fallback.
-      logger.info("Extraction: sparse text layer → OCR path");
-      const ocrText = await extractTextWithOcr(buffer);
-      if (meaningfulCharCount(ocrText) >= minChars) {
-        return { method: "OCR", rawText: ocrText, values: parseLabText(ocrText) };
-      }
-
-      // 3. Vision fallback (last resort).
-      logger.info("Extraction: OCR insufficient → VISION fallback");
+      // 2. Vision fallback for scanned / image-only PDFs.
+      //
+      // IMPORTANT: `tesseract.js` can only decode raster images — it CANNOT
+      // read PDF bytes. Passing a PDF buffer to it makes the underlying worker
+      // throw "Error attempting to read image", and because that failure is
+      // emitted asynchronously from the worker thread it escapes a normal
+      // try/catch and becomes a FATAL uncaught exception that crashes the whole
+      // backend process. A scanned/image-only lab-report PDF (no text layer) is
+      // common, so the OCR step must be skipped for PDFs and the document sent
+      // straight to the vision model, which reads image-only PDFs natively.
+      logger.info("Extraction: sparse PDF text layer → VISION path");
       const vision = await extractWithVision(buffer, mimeType);
-      return { method: "VISION", rawText: vision.rawText || ocrText, values: vision.values };
+      return { method: "VISION", rawText: vision.rawText, values: vision.values };
     }
 
     // Unknown type: attempt OCR, then vision.
