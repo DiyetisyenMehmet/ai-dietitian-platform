@@ -22,6 +22,16 @@ export interface AbacusAIConfig {
   discoveryUrl?: string;
 }
 
+/**
+ * Hard ceiling for any single AI provider HTTP request (endpoint discovery or
+ * completion). Without this, a stalled connection leaves `await fetch` pending
+ * forever, so the analysis pipeline's catch/finally never runs and the record
+ * stays stuck in PROCESSING. `AbortSignal.timeout` makes the fetch reject with
+ * a TimeoutError, which the existing catch converts to an ApiError and the
+ * caller persists as FAILED. Overridable via AI_REQUEST_TIMEOUT_MS.
+ */
+const AI_REQUEST_TIMEOUT_MS = Number(process.env.AI_REQUEST_TIMEOUT_MS) || 120_000;
+
 /** Shape of the endpoint-discovery response we rely on. */
 interface ApiEndpointResponse {
   success?: boolean;
@@ -98,6 +108,7 @@ export class AbacusAIAdapter extends OpenAICompatibleAdapter {
         response = await fetch(this.discoveryUrl, {
           method: "GET",
           headers: { APIKEY: this.abacusApiKey },
+          signal: AbortSignal.timeout(AI_REQUEST_TIMEOUT_MS),
         });
       } catch (error) {
         logger.error({ err: error }, "Abacus endpoint discovery request failed");
@@ -179,6 +190,7 @@ export class AbacusAIAdapter extends OpenAICompatibleAdapter {
           messages: conversation,
           maxTokens: maxTokensOverride ?? this.abacusMaxTokens,
         }),
+        signal: AbortSignal.timeout(AI_REQUEST_TIMEOUT_MS),
       });
     } catch (error) {
       logger.error({ err: error }, "AI provider request failed");
