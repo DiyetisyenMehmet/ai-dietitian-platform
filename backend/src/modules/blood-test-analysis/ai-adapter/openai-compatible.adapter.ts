@@ -29,6 +29,7 @@ import type {
 } from "../../nutrition-plan/types";
 import type { DietitianChatAIInput, DietitianChatAIOutput } from "../../ai-chat/types";
 import type { AIAdapterInfo, IAIAdapter } from "./ai-adapter.interface";
+import { buildClinicalCorrelationDirective } from "./clinical-correlation";
 
 /** Configuration for an OpenAI-compatible endpoint. */
 export interface OpenAICompatibleConfig {
@@ -314,8 +315,18 @@ export class OpenAICompatibleAdapter implements IAIAdapter {
       })),
     };
 
+    // Clinical Correlation Engine: when clinically related parameter groups are
+    // fully present (e.g. lipid panel, iron/anemia panel), instruct the model to
+    // interpret them together — one combined, de-duplicated, non-contradictory
+    // interpretation — instead of independently. This only augments the
+    // interpretation prompt; safety wording and all other prompts are unchanged.
+    const correlationDirective = buildClinicalCorrelationDirective(
+      normalizedValues.map((v) => ({ biomarkerCode: v.biomarkerCode })),
+    );
+
     const messages: ChatMessage[] = [
       { role: "system", content: ANALYSIS_SYSTEM_PROMPT },
+      ...(correlationDirective ? [{ role: "system" as const, content: correlationDirective }] : []),
       {
         role: "user",
         content: `${schemaHint}\n\nNormalized blood-test data:\n${JSON.stringify(payload)}`,
