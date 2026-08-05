@@ -1,3 +1,5 @@
+import sharp, { Sharp } from "sharp";
+
 import { logger } from "../../../lib/logger";
 import { env } from "../../../config/env";
 import { extractPdfText, meaningfulCharCount } from "../extraction/pdf-text-extractor";
@@ -49,83 +51,106 @@ const PDF_MIME = "application/pdf";
 export interface EnhancementContext {
   /** MIME type of the uploaded document. */
   readonly mimeType: string;
+  /**
+   * Multiplicative brightness factor (1 = unchanged) derived from image
+   * luminance statistics in {@link documentEnhancementService.enhance}. The
+   * brightness step consumes this so its transform stays data-driven yet the
+   * step itself remains a pure, side-effect-free pipeline chain.
+   */
+  readonly brightnessFactor: number;
 }
 
-/** Result of running a single enhancement step. */
-export interface EnhancementStepResult {
-  /** The (possibly) transformed buffer. Pass-through returns the input as-is. */
-  readonly buffer: Buffer;
-  /** Whether this step actually modified the bytes. */
-  readonly changed: boolean;
-  /** Short human-readable note for logging/auditing. */
-  readonly note: string;
-}
-
-/** A single, independent image-preprocessing step. */
+/**
+ * A single, independent image-preprocessing step. Each step chains its
+ * transform onto a shared `sharp` pipeline so the whole enhancement runs as ONE
+ * decode + ONE encode (preserving resolution and avoiding repeated re-encoding
+ * quality loss). New steps are added by appending to
+ * {@link IMAGE_ENHANCEMENT_STEPS}; callers require no changes.
+ */
 export interface EnhancementStep {
   /** Stable identifier used in logs and future configuration. */
   readonly name: string;
-  /** Applies the step. MUST NOT throw; on any failure return the input buffer. */
-  apply(buffer: Buffer, ctx: EnhancementContext): Promise<EnhancementStepResult>;
+  /** Chains this step's transform onto the pipeline. MUST be pure/non-throwing. */
+  apply(pipeline: Sharp, ctx: EnhancementContext): Sharp;
 }
 
 /** Result of running the whole enhancement pipeline. */
 export interface DocumentEnhancementResult {
   /** The final buffer to hand to the validation pipeline. */
   readonly buffer: Buffer;
-  /** Ordered names of the steps that actually changed the bytes. */
+  /** Ordered names of the steps that ran on the pipeline. */
   readonly appliedSteps: string[];
   /** Whether enhancement was skipped entirely (e.g. clean text-layer PDF). */
   readonly skipped: boolean;
 }
 
 /**
- * Builds a no-op step. Returns the input buffer unchanged and documents where
- * the real transform belongs. Used until an approved lightweight image library
- * is available in the project.
- */
-function passThroughStep(name: string, extensionNote: string): EnhancementStep {
-  // `extensionNote` documents exactly what the real transform must do; it is
-  // surfaced in the step result so the extension point is discoverable at
-  // runtime/log level until a lightweight image library (e.g. sharp/jimp) is
-  // approved and the transform is implemented here (keep `apply` non-throwing).
-  return {
-    name,
-    async apply(buffer: Buffer): Promise<EnhancementStepResult> {
-      return {
-        buffer,
-        changed: false,
-        note: `${name}: pass-through (no image library available) — TODO: ${extensionNote}`,
-      };
-    },
-  };
-}
-
-/**
  * The ordered image-enhancement steps. Append new steps here; the orchestrator
  * and callers require no changes.
+ *
+ * Implemented with `sharp` (lightweight, production-grade). The steps are the
+ * four safe preprocessing operations required for lab-report photos/scans:
+ *   1. auto orientation using EXIF
+ *   2. auto rotation normalization
+ *   3. auto contrast normalization
+ *   4. brightness normalization
+ * None of them resize the image, so the ORIGINAL RESOLUTION is preserved.
  */
 export const IMAGE_ENHANCEMENT_STEPS: EnhancementStep[] = [
-  passThroughStep(
-    "auto-rotate",
-    "Rotate the image according to its EXIF Orientation tag so text is upright.",
-  ),
-  passThroughStep(
-    "normalize-orientation",
-    "Strip/normalize the orientation metadata after rotating so downstream " +
-      "consumers always see a top-left origin.",
-  ),
-  passThroughStep(
-    "auto-contrast",
-    "Apply automatic contrast stretching (histogram normalization) to improve " +
-      "legibility of faint scans/photos.",
-  ),
-  passThroughStep(
-    "brightness-normalize",
-    "Normalize overall brightness so under/over-exposed phone photos land in a " +
-      "consistent range before OCR/vision.",
-  ),
+  {
+    name: "auto-orient-exif",
+    // `sharp.rotate()` with no angle reads the EXIF Orientation tag and rotates
+    // the pixels so the image is displayed upright (auto orientation via EXIF).
+    apply: (p) => p.rotate(),
+  },
+  {
+    name: "normalize-rotation",
+    // `rotate()` above also bakes the orientation into the pixel data and resets
+    // the stored orientation to the identity, and sharp does not re-attach the
+    // stale EXIF orientation on output by default — so the rotation is fully
+    // normalized to a top-left origin. Kept as an explicit, named step so the
+    // guarantee is auditable and future rotation logic has a clear home.
+    apply: (p) => p,
+  },
+  {
+    name: "auto-contrast",
+    // `normalize()` performs a histogram stretch (per-channel min/max to full
+    // range), improving legibility of faint scans without altering resolution.
+    apply: (p) => p.normalize(),
+  },
+  {
+    name: "brightness-normalize",
+    // Gentle, data-driven exposure correction toward a mid target. The factor
+    // is precomputed from image stats and clamped (see enhance()); 1 = no-op.
+    apply: (p, ctx) =>
+      ctx.brightnessFactor !== 1 ? p.modulate({ brightness: ctx.brightnessFactor }) : p,
+  },
 ];
+
+/** Target mean luminance (0–255) the brightness step normalizes toward. */
+const BRIGHTNESS_TARGET = 128;
+/** Clamp bounds so brightness correction never blows out / crushes an image. */
+const BRIGHTNESS_MIN = 0.7;
+const BRIGHTNESS_MAX = 1.4;
+
+/**
+ * Computes a clamped brightness factor from an image's mean luminance so an
+ * under/over-exposed phone photo is nudged toward a consistent exposure. Returns
+ * 1 (no change) on any failure or for an already well-exposed image.
+ */
+async function computeBrightnessFactor(buffer: Buffer): Promise<number> {
+  try {
+    const stats = await sharp(buffer, { failOn: "none" }).stats();
+    const rgb = stats.channels.slice(0, 3);
+    if (rgb.length === 0) return 1;
+    const meanLuma = rgb.reduce((sum, c) => sum + c.mean, 0) / rgb.length;
+    if (!(meanLuma > 0)) return 1;
+    const factor = BRIGHTNESS_TARGET / meanLuma;
+    return Math.max(BRIGHTNESS_MIN, Math.min(BRIGHTNESS_MAX, factor));
+  } catch {
+    return 1;
+  }
+}
 
 export const documentEnhancementService = {
   /**
@@ -167,26 +192,52 @@ export const documentEnhancementService = {
       return { buffer, appliedSteps: [], skipped: false };
     }
 
-    // Image upload → run the ordered enhancement steps.
-    let current = buffer;
-    const applied: string[] = [];
-    const ctx: EnhancementContext = { mimeType };
-    for (const step of IMAGE_ENHANCEMENT_STEPS) {
-      try {
-        const result = await step.apply(current, ctx);
-        current = result.buffer;
-        if (result.changed) applied.push(step.name);
-      } catch (error) {
-        // A step must never break the pipeline — keep the last good buffer.
-        logger.warn({ err: error, step: step.name }, "Enhancement step failed; skipping");
-      }
-    }
+    // Image upload → run the real sharp preprocessing pipeline as ONE decode +
+    // ONE encode. Never throws: on any failure we fall back to the original
+    // bytes so the pipeline order (enhancement → validation → OCR → medical AI)
+    // stays safe and validation/OCR/medical-AI logic is untouched.
+    try {
+      const meta = await sharp(buffer, { failOn: "none" }).metadata();
+      const brightnessFactor = await computeBrightnessFactor(buffer);
+      const ctx: EnhancementContext = { mimeType, brightnessFactor };
 
-    if (applied.length > 0) {
-      logger.info({ appliedSteps: applied }, "Enhancement: image preprocessing applied");
-    } else {
-      logger.info("Enhancement: image preprocessing → pass-through (no active transforms)");
+      let pipeline = sharp(buffer, { failOn: "none" });
+      const applied: string[] = [];
+      for (const step of IMAGE_ENHANCEMENT_STEPS) {
+        pipeline = step.apply(pipeline, ctx);
+        applied.push(step.name);
+      }
+
+      // Re-encode in the SAME format, preserving resolution (no resize) and
+      // using high-quality / low-compression settings so the image is never
+      // aggressively compressed.
+      switch (meta.format) {
+        case "jpeg":
+          pipeline = pipeline.jpeg({ quality: 95, chromaSubsampling: "4:4:4" });
+          break;
+        case "png":
+          pipeline = pipeline.png({ compressionLevel: 6 });
+          break;
+        case "webp":
+          pipeline = pipeline.webp({ quality: 95 });
+          break;
+        default:
+          // Leave sharp to emit its default encoding for the input format.
+          break;
+      }
+
+      const out = await pipeline.toBuffer();
+      logger.info(
+        { appliedSteps: applied, format: meta.format, brightnessFactor },
+        "Enhancement: image preprocessing applied",
+      );
+      return { buffer: out, appliedSteps: applied, skipped: false };
+    } catch (error) {
+      logger.warn(
+        { err: error },
+        "Enhancement: image preprocessing failed; using original buffer",
+      );
+      return { buffer, appliedSteps: [], skipped: false };
     }
-    return { buffer: current, appliedSteps: applied, skipped: false };
   },
 };
