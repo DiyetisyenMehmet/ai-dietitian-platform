@@ -8,6 +8,7 @@ import { bloodTestRepository } from "../blood-test/blood-test.repository";
 import { getAIAdapter } from "./ai-adapter/ai-adapter.factory";
 import { bloodTestAnalysisRepository } from "./blood-test-analysis.repository";
 import { extractionService } from "./extraction/extraction.service";
+import { documentEnhancementService } from "./enhancement/document-enhancement.service";
 import { documentValidationService } from "./validation/document-validation.service";
 import { matchBiomarkerCode } from "./normalization/biomarker-aliases.map";
 import { normalizationService } from "./normalization/normalization.service";
@@ -80,15 +81,23 @@ export const bloodTestAnalysisService = {
         key: upload.storageKey,
       });
 
-      // 1a. VALIDATION GATE (Sprint 25 — critical release blocker).
+      // 1a. DOCUMENT ENHANCEMENT PIPELINE (runs BEFORE validation).
+      // Modular image preprocessing (auto-rotate, orientation, contrast,
+      // brightness). Clean text-layer PDFs are skipped. Never throws; on any
+      // issue it returns the original bytes, so the pipeline order is safe and
+      // validation thresholds / OCR / Medical AI are entirely unaffected.
+      const enhanced = await documentEnhancementService.enhance(buffer, upload.mimeType);
+      const documentBuffer = enhanced.buffer;
+
+      // 1b. VALIDATION GATE (Sprint 25 — critical release blocker).
       // Reject anything that is not a genuine, readable laboratory blood-test
       // report BEFORE any OCR extraction or AI medical analysis runs. On failure
       // this throws the exact Turkish rejection message (ApiError 422), which is
       // handled by the catch block below, so extraction/analysis never start.
-      await documentValidationService.assertValidBloodTestReport(buffer, upload.mimeType);
+      await documentValidationService.assertValidBloodTestReport(documentBuffer, upload.mimeType);
 
       // 2. Hybrid extraction (text → OCR → vision).
-      const extraction = await extractionService.extract(buffer, upload.mimeType);
+      const extraction = await extractionService.extract(documentBuffer, upload.mimeType);
 
       // 3. Resolve reference ranges for the recognized biomarkers.
       const context = await buildContext(userId);
