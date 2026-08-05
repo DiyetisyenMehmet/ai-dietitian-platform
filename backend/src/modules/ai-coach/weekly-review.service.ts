@@ -6,6 +6,7 @@ import { trackingRepository } from "../tracking/tracking.repository";
 import { aiMemoryService } from "./ai-memory.service";
 import { deriveWeight } from "./coach-data";
 import { getIsoWeek, groupBy, isoWeekRange, sum, toScore, turkeyDayKey } from "./metrics";
+import { healthPrioritizationService } from "./health-prioritization.service";
 
 /** A simplified weekly review returned to free-tier users. */
 export interface SimplifiedWeeklyReview {
@@ -102,7 +103,11 @@ export const weeklyReviewService = {
     );
 
     // --- Turkish coach comments, recommendations, next-week priorities ---
-    const { coachComments, recommendations, nextWeekPriorities } = this.buildNarrative({
+    const {
+      coachComments,
+      recommendations: rawRecommendations,
+      nextWeekPriorities,
+    } = this.buildNarrative({
       score,
       weightTrend,
       mealConsistency,
@@ -110,6 +115,15 @@ export const weeklyReviewService = {
       proteinConsistency,
       loggedDays: mealsByDay.size,
     });
+
+    // Smart Health Prioritization (independent post-processing): classify,
+    // de-duplicate, merge highly similar items, sort by priority and cap at the
+    // 5 highest-priority recommendations before they are persisted/shown. This
+    // only reorders/dedupes the already-generated strings — it never changes
+    // medical wording, safety messages, or risk-detection logic.
+    const recommendations = healthPrioritizationService
+      .prioritize(rawRecommendations)
+      .map((insight) => insight.message);
 
     const review = await prisma.weeklyReview.upsert({
       where: { userId_weekNumber_year: { userId, weekNumber: iso.weekNumber, year: iso.year } },
