@@ -40,12 +40,12 @@ export interface OpenAICompatibleConfig {
 }
 
 /** Minimal shape of a chat/completions message content part (multimodal). */
-type ChatContentPart =
+export type ChatContentPart =
   | { type: "text"; text: string }
   | { type: "image_url"; image_url: { url: string } };
 
 /** Minimal shape of a chat/completions message. */
-interface ChatMessage {
+export interface ChatMessage {
   role: "system" | "user" | "assistant";
   content: string | ChatContentPart[];
 }
@@ -75,7 +75,7 @@ export class OpenAICompatibleAdapter implements IAIAdapter {
    * content as a string. Throws an {@link ApiError} on transport or provider
    * failures so callers get a consistent error envelope.
    */
-  private async chat(messages: ChatMessage[], maxTokensOverride?: number): Promise<string> {
+  protected async chat(messages: ChatMessage[], maxTokensOverride?: number): Promise<string> {
     const url = `${this.config.baseUrl.replace(/\/+$/, "")}/chat/completions`;
     let response: Response;
     try {
