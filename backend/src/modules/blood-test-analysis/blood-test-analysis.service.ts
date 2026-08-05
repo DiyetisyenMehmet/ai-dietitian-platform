@@ -9,6 +9,7 @@ import { getAIAdapter } from "./ai-adapter/ai-adapter.factory";
 import { bloodTestAnalysisRepository } from "./blood-test-analysis.repository";
 import { extractionService } from "./extraction/extraction.service";
 import { documentEnhancementService } from "./enhancement/document-enhancement.service";
+import { documentQualityAssessmentService } from "./enhancement/document-quality-assessment.service";
 import { documentValidationService } from "./validation/document-validation.service";
 import { matchBiomarkerCode } from "./normalization/biomarker-aliases.map";
 import { normalizationService } from "./normalization/normalization.service";
@@ -89,6 +90,16 @@ export const bloodTestAnalysisService = {
       const enhanced = await documentEnhancementService.enhance(buffer, upload.mimeType);
       const documentBuffer = enhanced.buffer;
 
+      // 1a'. DOCUMENT QUALITY ASSESSMENT (independent, advisory-only).
+      // Runs immediately after enhancement and BEFORE validation/OCR/Medical AI.
+      // It NEVER rejects or alters the document — it only scores quality (0–100)
+      // and returns HIGH/MEDIUM/LOW. HIGH/MEDIUM continue silently; LOW continues
+      // normally but surfaces a non-blocking warning to the user.
+      const quality = await documentQualityAssessmentService.assess(
+        documentBuffer,
+        upload.mimeType,
+      );
+
       // 1b. VALIDATION GATE (Sprint 25 — critical release blocker).
       // Reject anything that is not a genuine, readable laboratory blood-test
       // report BEFORE any OCR extraction or AI medical analysis runs. On failure
@@ -120,6 +131,15 @@ export const bloodTestAnalysisService = {
       const adapter = getAIAdapter();
       const aiResult = await adapter.analyzeBloodTestValues(normalized, context);
 
+      // 5a. Advisory-only quality notice. When the upload scored LOW, prepend a
+      // non-blocking warning to the recommendations so the user is informed that
+      // accuracy may be reduced. This never blocks analysis and does not alter
+      // any Medical AI logic — the warning is generated entirely outside the AI.
+      const overallRecommendations =
+        quality.warning !== null
+          ? [quality.warning, ...aiResult.overallRecommendations]
+          : aiResult.overallRecommendations;
+
       // 6. Persist the completed analysis.
       return await bloodTestAnalysisRepository.complete(analysis.id, {
         status: "COMPLETED",
@@ -130,7 +150,7 @@ export const bloodTestAnalysisService = {
         abnormalCount: abnormal.length,
         aiExplanations: aiResult.explanations,
         nutritionImplications: aiResult.nutritionImplications,
-        overallRecommendations: aiResult.overallRecommendations,
+        overallRecommendations,
         summary: aiResult.summary,
         aiProvider: adapter.info.provider,
         aiModel: adapter.info.model,
