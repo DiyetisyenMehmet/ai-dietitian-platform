@@ -7,6 +7,7 @@ import { aiMemoryService } from "./ai-memory.service";
 import { deriveWeight } from "./coach-data";
 import { getIsoWeek, groupBy, isoWeekRange, sum, toScore, turkeyDayKey } from "./metrics";
 import { healthPrioritizationService } from "./health-prioritization.service";
+import { goalAwarenessService } from "./goal-awareness.service";
 
 /** A simplified weekly review returned to free-tier users. */
 export interface SimplifiedWeeklyReview {
@@ -121,8 +122,14 @@ export const weeklyReviewService = {
     // 5 highest-priority recommendations before they are persisted/shown. This
     // only reorders/dedupes the already-generated strings — it never changes
     // medical wording, safety messages, or risk-detection logic.
-    const recommendations = healthPrioritizationService
-      .prioritize(rawRecommendations)
+    const prioritized = healthPrioritizationService.prioritize(rawRecommendations);
+    // Goal Awareness (independent): nudge recommendations relevant to the user's
+    // primary goal higher WITHIN their priority tier. Never crosses tiers (so
+    // CRITICAL stays first and safety items never fall below informational),
+    // never rewrites text, and never adds/removes items — only reorders.
+    const goal = goalAwarenessService.deriveGoalFromProfile(profile);
+    const recommendations = goalAwarenessService
+      .reorderByGoal(prioritized, goal)
       .map((insight) => insight.message);
 
     const review = await prisma.weeklyReview.upsert({
