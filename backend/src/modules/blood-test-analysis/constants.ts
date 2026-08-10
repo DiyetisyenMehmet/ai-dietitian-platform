@@ -48,3 +48,92 @@ export const EXTRACTION_SYSTEM_PROMPT = [
 
 /** Words the AI must never emit; used for a defensive output guard. */
 export const FORBIDDEN_AI_TERMS = ["diagnose", "treat", "prescribe", "cure", "medication"] as const;
+
+/**
+ * Multi-layered document validation thresholds.
+ *
+ * A genuine laboratory blood-test report is confirmed by several independent
+ * signals, not a single lucky keyword match. A random PDF/Word/image that
+ * happens to contain one biomarker-like word must NOT pass. All of the
+ * thresholds below must be satisfied before any AI analysis runs or any result
+ * is persisted.
+ */
+
+/**
+ * Minimum number of DISTINCT recognized biomarkers. A single biomarker is never
+ * sufficient — real reports contain a panel of several markers.
+ */
+export const MIN_RECOGNIZED_BIOMARKERS = 2;
+
+/**
+ * Minimum number of extracted values that carry a recognizable laboratory unit
+ * (mg/dL, mmol/L, g/dL, …). Units are the strongest structural signal of a lab
+ * report and are available for both text and image (vision) uploads.
+ */
+export const MIN_VALUES_WITH_UNITS = 2;
+
+/**
+ * Minimum aggregate "lab-report structure" score. Each independent structural
+ * signal (units, biomarker panel size, reference-range patterns, lab keywords,
+ * multiple numeric values) contributes one point; at least this many distinct
+ * signals must be present.
+ */
+export const MIN_STRUCTURE_SCORE = 2;
+
+/**
+ * Matches a recognizable laboratory measurement unit. Tested against both a
+ * single extracted unit string and the raw report text. NOTE: intentionally has
+ * no `g` flag so `.test()` is stateless.
+ */
+export const LAB_UNIT_PATTERN =
+  /(?:\b(?:mg|g|µg|μg|ug|ng|pg|mmol|µmol|μmol|umol|nmol|pmol|meq|miu|µiu|μiu|uiu|iu|u|k|m)\s*\/\s*(?:dl|l|ml|µl|μl|ul|min))|(?:\bmm\s*\/\s*hr\b)|(?:\bfl\b)|(?:\/\s*[µμu]l\b)|(?:10\s*\^?\s*\d)|%/i;
+
+/**
+ * Matches a numeric reference-range interval such as "12 - 16" or "0,5–1,2",
+ * a common structural feature of laboratory reports. Stateless (no `g` flag).
+ */
+export const REFERENCE_RANGE_PATTERN = /\d+(?:[.,]\d+)?\s*[-–—]\s*\d+(?:[.,]\d+)?/;
+
+/**
+ * Keywords that typically appear in the header/structure of a laboratory
+ * report (Turkish + English). Compared against lower-cased raw text.
+ */
+export const LAB_REPORT_KEYWORDS = [
+  "referans",
+  "aralik",
+  "aralık",
+  "laboratuvar",
+  "laboratuar",
+  "tahlil",
+  "hemogram",
+  "biyokimya",
+  "sonuc",
+  "sonuç",
+  "numune",
+  "tetkik",
+  "serum",
+  "plazma",
+  "reference",
+  "range",
+  "result",
+  "laboratory",
+  "specimen",
+  "panel",
+  "plasma",
+] as const;
+
+/**
+ * Minimum count of extracted values with a parseable numeric value that counts
+ * as a "multiple numeric values" structural signal.
+ */
+export const MIN_NUMERIC_VALUES = 3;
+
+/**
+ * User-facing (Turkish) message returned when an uploaded document is not
+ * recognized as a valid blood-test report.
+ */
+export const NOT_A_BLOOD_TEST_MESSAGE =
+  "Yüklenen dosya geçerli bir laboratuvar kan tahlili raporu olarak " +
+  "doğrulanamadı. Lütfen üzerinde ölçüm değerleri, birimleri (örn. mg/dL, " +
+  "mmol/L) ve referans aralıkları bulunan gerçek bir kan tahlili raporu " +
+  "(PDF veya görüntü) yükleyin.";

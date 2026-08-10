@@ -50,6 +50,17 @@ export const DIETARY_PREFERENCE_OPTIONS: readonly SelectOption<DietaryPreference
   { value: "OTHER", label: "Diğer" },
 ] as const;
 
+/**
+ * Sentinel values for the explicit "none" choice in the onboarding health step.
+ * Selecting one means the user actively declared they have no conditions /
+ * allergies (as opposed to skipping the step). They are mutually exclusive with
+ * any real selection and are stripped from the API payload so persisted data
+ * stays clean (an empty list). Kept out of the shared presets so screens that
+ * reuse the preset arrays (e.g. profile editing) are unaffected.
+ */
+export const NO_HEALTH_CONDITION = "Hastalığım yok";
+export const NO_ALLERGY = "Alerjim yok";
+
 /** Common presets offered as quick-select chips (users can also add their own). */
 export const HEALTH_CONDITION_PRESETS: readonly string[] = [
   "Diyabet",

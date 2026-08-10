@@ -4,11 +4,11 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
-import { cn } from "@/shared/lib/utils";
 import { Button } from "@/presentation/components/ui/button";
 import { Input } from "@/presentation/components/ui/input";
 import { FormField } from "@/presentation/components/ui/form-field";
 import { SectionCard } from "@/presentation/components/health/section-card";
+import { ChipSelect } from "@/presentation/components/onboarding/chip-select";
 import { useHealthProfile, healthProfileStore } from "@/application/health/health-profile-store";
 import {
   hydrateStoresFromProfile,
@@ -28,37 +28,6 @@ import {
   type Gender,
 } from "@/domain/onboarding/types";
 import type { OnboardingPayload } from "@/domain/onboarding/validation";
-
-/** A toggleable chip used for multi-select presets (conditions / allergies). */
-function ToggleChip({
-  label,
-  active,
-  onToggle,
-  tone = "primary",
-}: {
-  label: string;
-  active: boolean;
-  onToggle: () => void;
-  tone?: "primary" | "danger";
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      aria-pressed={active}
-      className={cn(
-        "rounded-full border px-3 py-1.5 text-sm font-medium transition-all active:scale-[0.97]",
-        active
-          ? tone === "danger"
-            ? "border-destructive bg-destructive/10 text-destructive"
-            : "border-primary bg-primary/10 text-primary"
-          : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground",
-      )}
-    >
-      {label}
-    </button>
-  );
-}
 
 const selectClass =
   "flex h-11 w-full rounded-xl border border-input bg-background px-3.5 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
@@ -84,9 +53,6 @@ export function EditProfileView() {
   const [allergies, setAllergies] = React.useState<string[]>(profile.allergies);
   const [errors, setErrors] = React.useState<Record<string, string>>({});
   const [saving, setSaving] = React.useState(false);
-
-  const toggle = (list: string[], value: string) =>
-    list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
 
   const validate = (): Record<string, string> => {
     const e: Record<string, string> = {};
@@ -126,7 +92,9 @@ export function EditProfileView() {
     // Persist to the backend first (reusing the idempotent onboarding upsert
     // endpoint — no new endpoint / contract). The stores are only refreshed
     // AFTER a successful response, from the backend's own data, so they never
-    // become their own source of truth.
+    // become their own source of truth. Custom diseases/allergies flow through
+    // the `conditions`/`allergies` state verbatim so free-text "other" entries
+    // persist (21.2 medical-profile single-source-of-truth requirement).
     const payload: OnboardingPayload = {
       fullName: fullName.trim(),
       dateOfBirth: ageToDateOfBirth(Number(age)),
@@ -247,33 +215,33 @@ export function EditProfileView() {
         <p className="mb-3 text-xs text-muted-foreground">
           Sana uygun olanları seç. Bu bilgiler önerilerini kişiselleştirmemi sağlar.
         </p>
-        <div className="flex flex-wrap gap-2">
-          {HEALTH_CONDITION_PRESETS.map((c) => (
-            <ToggleChip
-              key={c}
-              label={c}
-              active={conditions.includes(c)}
-              onToggle={() => setConditions((prev) => toggle(prev, c))}
-            />
-          ))}
-        </div>
+        {/* Same preset set (HEALTH_CONDITION_PRESETS) and same component used in
+            onboarding, so diseases stay perfectly in sync between the two flows.
+            ChipSelect also supports free-text "other" conditions, so custom
+            diseases entered during onboarding remain visible, editable and are
+            never silently dropped on save. */}
+        <ChipSelect
+          ariaLabel="Sağlık durumları"
+          presets={HEALTH_CONDITION_PRESETS}
+          value={conditions}
+          onChange={setConditions}
+          addPlaceholder="Başka bir durum ekleyin"
+        />
       </SectionCard>
 
       <SectionCard icon="flag" title="Alerjiler">
         <p className="mb-3 text-xs text-muted-foreground">
           Alerjin olan besinleri seç; içerdikleri öğünlerde seni uyarırım.
         </p>
-        <div className="flex flex-wrap gap-2">
-          {ALLERGY_PRESETS.map((a) => (
-            <ToggleChip
-              key={a}
-              label={a}
-              tone="danger"
-              active={allergies.includes(a)}
-              onToggle={() => setAllergies((prev) => toggle(prev, a))}
-            />
-          ))}
-        </div>
+        {/* Same preset set (ALLERGY_PRESETS) and same component as onboarding, so
+            allergies stay in sync, and custom "other" allergies are preserved. */}
+        <ChipSelect
+          ariaLabel="Alerjiler"
+          presets={ALLERGY_PRESETS}
+          value={allergies}
+          onChange={setAllergies}
+          addPlaceholder="Başka bir alerji ekleyin"
+        />
       </SectionCard>
 
       <div className="flex gap-3">

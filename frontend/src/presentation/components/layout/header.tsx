@@ -22,6 +22,16 @@ interface HeaderProps {
 export function Header({ title, showBack = false, action, className }: HeaderProps) {
   const router = useRouter();
 
+  const handleBack = React.useCallback(() => {
+    // Guard against deep links / hard refreshes where there is no in-app
+    // history to go back to; fall back to the dashboard instead.
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+    } else {
+      router.push("/dashboard");
+    }
+  }, [router]);
+
   return (
     <header
       className={cn(
@@ -36,7 +46,7 @@ export function Header({ title, showBack = false, action, className }: HeaderPro
             size="icon"
             aria-label="Geri"
             className="-ml-2"
-            onClick={() => router.back()}
+            onClick={handleBack}
           >
             <ArrowLeft className="size-5" aria-hidden="true" />
           </Button>

@@ -94,11 +94,13 @@ export function computeHealthScore(inputs: HealthScoreInputs): HealthScore {
       : `Bugün en zayıf alanın "${weak.label.toLocaleLowerCase("tr-TR")}". Birkaç küçük adımla puanını hızla yükseltebiliriz.`;
 
   // Actionable improvements from the weakest factors below 70.
+  // NOTE: The "weight" hint is intentionally omitted here. The weigh-in reminder
+  // has a single owner on the dashboard — the guided "Bugünkü Yolculuğun" weight
+  // step — so it is not repeated as a score-improvement chip.
   const HINTS: Record<string, { label: string; href?: string }> = {
     meals: { label: "Öğünlerini kaydet", href: "/meals/add" },
     water: { label: "Su ekle", href: "/dashboard" },
     activity: { label: "Hareketini kaydet", href: "/dashboard" },
-    weight: { label: "Kilonu kaydet", href: "/progress" },
     coach: { label: "Koçunla konuş", href: "/ai" },
     bloodTest: { label: "Kan tahlili yükle", href: "/profile/blood-tests" },
   };

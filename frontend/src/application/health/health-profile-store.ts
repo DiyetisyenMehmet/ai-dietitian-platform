@@ -31,8 +31,12 @@ function seedProfile(): HealthProfile {
     targetWeightKg: 75,
     activityLevel: "MODERATE",
     dietaryPreference: "OMNIVORE",
-    healthConditions: ["Hipertansiyon", "İnsülin Direnci"],
-    allergies: ["Fıstık"],
+    // No hardcoded/demo medical data: diseases and allergies are the single
+    // source of truth for the current user and must come solely from what the
+    // user entered during onboarding (or later edited in the profile). They stay
+    // empty until hydrated so Profile → Health Information never shows demo values.
+    healthConditions: [],
+    allergies: [],
     dailyCalorieGoal: 2200,
     dailyWaterGoalMl: 2500,
     memberSince: isoOffset(-40),
