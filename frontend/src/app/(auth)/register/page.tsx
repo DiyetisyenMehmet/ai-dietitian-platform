@@ -110,11 +110,11 @@ export default function RegisterPage() {
               }
             />
             <span>
-              <Link href="/" className="font-medium text-primary hover:underline">
+              <Link href="/terms" className="font-medium text-primary hover:underline">
                 Kullanım koşullarını
               </Link>{" "}
               ve{" "}
-              <Link href="/" className="font-medium text-primary hover:underline">
+              <Link href="/privacy" className="font-medium text-primary hover:underline">
                 gizlilik politikasını
               </Link>{" "}
               kabul ediyorum.

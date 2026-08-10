@@ -1,9 +1,10 @@
 import type { Server } from "node:http";
 
 import { createApp } from "./app";
-import { env } from "./config/env";
+import { env, isTest } from "./config/env";
 import { logger } from "./lib/logger";
 import { checkDatabaseConnection, disconnectPrisma } from "./lib/prisma";
+import { startCoachScheduler, stopCoachScheduler } from "./scheduler/coach-scheduler";
 
 async function bootstrap(): Promise<void> {
   const app = createApp();
@@ -22,6 +23,12 @@ async function bootstrap(): Promise<void> {
     );
   });
 
+  // Start the AI Health Coach scheduler (proactive nudges, weekly/monthly
+  // reviews, notification dispatch). Skipped under test to keep tests hermetic.
+  if (!isTest) {
+    startCoachScheduler();
+  }
+
   registerShutdownHandlers(server);
 }
 
@@ -29,6 +36,7 @@ async function bootstrap(): Promise<void> {
 function registerShutdownHandlers(server: Server): void {
   const shutdown = (signal: string) => {
     logger.info({ signal }, "Shutting down gracefully...");
+    stopCoachScheduler();
     server.close(() => {
       void disconnectPrisma().finally(() => {
         logger.info("Shutdown complete.");

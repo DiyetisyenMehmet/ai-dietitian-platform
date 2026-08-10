@@ -192,6 +192,45 @@ export const goalsStore = {
     goals = goals.filter((g) => g.id !== id);
     emit();
   },
+
+  /**
+   * Reconciles the seeded demo goals with the real user's health profile on
+   * onboarding, so the goals surfaced on Progress/Dashboard match the single
+   * source of truth (health profile + weight store) instead of the demo user.
+   * - Weight goal: start = current = the user's current weight, target = the
+   *   user's target weight, history rebuilt to a single starting point.
+   * - Water goal: target aligned with the user's daily water goal.
+   */
+  syncFromProfile(input: {
+    currentWeightKg: number;
+    targetWeightKg: number;
+    dailyWaterGoalMl: number;
+  }) {
+    goals = goals.map((g) => {
+      if (g.id === "goal-seed-1") {
+        return {
+          ...g,
+          startValue: input.currentWeightKg,
+          currentValue: input.currentWeightKg,
+          targetValue: input.targetWeightKg,
+          startDate: isoOffset(0),
+          history: [
+            {
+              id: nextHistoryId(),
+              date: isoOffset(0),
+              value: input.currentWeightKg,
+              note: "Başlangıç",
+            },
+          ],
+        };
+      }
+      if (g.id === "goal-seed-2") {
+        return { ...g, targetValue: input.dailyWaterGoalMl };
+      }
+      return g;
+    });
+    emit();
+  },
 };
 
 /** Subscribe to the shared goals list. */

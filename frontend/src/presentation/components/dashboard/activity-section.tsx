@@ -1,22 +1,29 @@
-import { Footprints, Flame, Timer, type LucideIcon } from "lucide-react";
+"use client";
+
+import { Footprints, Timer, type LucideIcon } from "lucide-react";
 
 import { Card, CardContent } from "@/presentation/components/ui/card";
 import { formatNumber } from "@/shared/lib/format";
-import type { ActivityMetric } from "@/application/dashboard/dashboard-data";
+import { useActivity } from "@/application/health/activity-store";
 
 const ACTIVITY_ICONS: Record<string, LucideIcon> = {
-  a1: Footprints,
-  a2: Flame,
-  a3: Timer,
+  steps: Footprints,
+  activeMinutes: Timer,
 };
 
-/** Activity summary: steps, calories burned and exercise minutes. */
-export function ActivitySection({ activity }: { activity: ActivityMetric[] }) {
+/** Activity summary: steps and active minutes from the backend activity store. */
+export function ActivitySection() {
+  const { steps, stepGoal, activeMinutes, activeMinutesGoal } = useActivity();
+
+  const metrics = [
+    { id: "steps", label: "Adım", value: steps, goal: stepGoal, unit: "" },
+    { id: "activeMinutes", label: "Egzersiz", value: activeMinutes, goal: activeMinutesGoal, unit: "dk" },
+  ];
   return (
     <section className="space-y-3">
       <h3 className="text-base font-semibold">Aktivite Özeti</h3>
-      <div className="grid grid-cols-3 gap-3">
-        {activity.map((metric) => {
+      <div className="grid grid-cols-2 gap-3">
+        {metrics.map((metric) => {
           const Icon = ACTIVITY_ICONS[metric.id] ?? Footprints;
           return (
             <Card key={metric.id}>

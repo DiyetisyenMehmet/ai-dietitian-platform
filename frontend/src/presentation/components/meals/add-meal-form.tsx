@@ -14,6 +14,8 @@ import { Card, CardContent } from "@/presentation/components/ui/card";
 import { FormField } from "@/presentation/components/ui/form-field";
 import { Input } from "@/presentation/components/ui/input";
 import { Button } from "@/presentation/components/ui/button";
+import { FoodWarningList } from "@/presentation/components/health/food-warning-list";
+import { useFoodWarnings } from "@/application/health/coach";
 import { SLOT_ICON } from "./meal-visuals";
 import { MealSearch } from "./meal-search";
 
@@ -36,6 +38,7 @@ export function AddMealForm({ initialSlot = "breakfast" }: AddMealFormProps) {
     handleSubmit,
     control,
     setValue,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<AddMealInput>({
     resolver: zodResolver(addMealSchema),
@@ -53,25 +56,33 @@ export function AddMealForm({ initialSlot = "breakfast" }: AddMealFormProps) {
 
   const onSubmit = React.useCallback(
     async (values: AddMealInput) => {
-      // Simulate async persistence for realistic loading UX (no backend).
-      await new Promise((resolve) => setTimeout(resolve, 600));
-      mealsStore.addFood({
-        slot: values.mealSlot,
-        time: values.time,
-        food: {
-          name: values.name,
-          quantity: values.quantity,
-          calories: values.calories,
-          protein: values.protein,
-          carbs: values.carbs,
-          fat: values.fat,
-        },
-      });
-      toast.success("Besin öğüne eklendi");
-      router.push("/meals");
+      // Backend-first: persist to the single source of truth, then update the
+      // cache from the persisted record. No optimistic update — on failure the
+      // meal is not added and the user is informed.
+      try {
+        await mealsStore.addFood({
+          slot: values.mealSlot,
+          time: values.time,
+          food: {
+            name: values.name,
+            quantity: values.quantity,
+            calories: values.calories,
+            protein: values.protein,
+            carbs: values.carbs,
+            fat: values.fat,
+          },
+        });
+        toast.success("Besin öğüne eklendi");
+        router.push("/meals");
+      } catch {
+        toast.error("Besin kaydedilemedi. Lütfen tekrar deneyin.");
+      }
     },
     [router],
   );
+
+  const foodName = watch("name");
+  const warnings = useFoodWarnings(foodName ?? "");
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-5">
@@ -104,6 +115,8 @@ export function AddMealForm({ initialSlot = "breakfast" }: AddMealFormProps) {
           <FormField id="name" label="Besin Adı" error={errors.name?.message}>
             <Input placeholder="örn. Izgara Tavuk" {...register("name")} />
           </FormField>
+
+          <FoodWarningList warnings={warnings} />
 
           <FormField id="quantity" label="Miktar" error={errors.quantity?.message}>
             <Input placeholder="örn. 100 g, 1 porsiyon" {...register("quantity")} />

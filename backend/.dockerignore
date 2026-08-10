@@ -1,0 +1,14 @@
+node_modules
+dist
+npm-debug.log
+.env
+.env.*
+!.env.production.example
+.git
+.gitignore
+*.md
+coverage
+.vscode
+.idea
+tsconfig.tsbuildinfo
+*.tsbuildinfo

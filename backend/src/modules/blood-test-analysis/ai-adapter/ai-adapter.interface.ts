@@ -1,0 +1,127 @@
+/**
+ * Provider-agnostic AI adapter contract for Diewish's Blood Test Analysis Engine.
+ *
+ * The engine never talks to a specific vendor SDK directly; it depends only on
+ * this interface. Concrete adapters (OpenAI-compatible today) are supplied by
+ * the factory, so the AI provider can be swapped purely through configuration.
+ */
+
+import type {
+  AnalysisContext,
+  BloodTestAnalysisResult,
+  ExtractedBloodTestValues,
+  NormalizedBloodTestValue,
+} from "../types";
+// Sprint 13: the same provider-agnostic adapter also powers nutrition-plan
+// generation. Type-only import (erased at runtime) so there is no cross-module
+// runtime dependency cycle.
+import type { NutritionPlanAIInput, NutritionPlanAIOutput } from "../../nutrition-plan/types";
+// Sprint 14: the same provider-agnostic adapter also powers the AI Dietitian
+// Chat. Type-only import (erased at runtime) so there is no cross-module
+// runtime dependency cycle.
+import type { DietitianChatAIInput, DietitianChatAIOutput } from "../../ai-chat/types";
+// Sprint 25: the adapter also powers the pre-analysis document validation gate.
+import type { DocumentValidationResult } from "../validation/document-validation.types";
+
+// Re-export the shared types so consumers of the adapter get everything from
+// a single import site.
+export type { DocumentValidationResult } from "../validation/document-validation.types";
+export type {
+  AnalysisContext,
+  BiomarkerExplanation,
+  BloodTestAnalysisResult,
+  BloodTestValueStatus,
+  ExtractedBloodTestValue,
+  ExtractedBloodTestValues,
+  NormalizedBloodTestValue,
+  NutritionImplication,
+  ReferenceRangeSnapshot,
+} from "../types";
+
+/** Identifying metadata for the active AI provider/model. */
+export interface AIAdapterInfo {
+  /** Human-readable provider identifier (e.g. "openai-compatible"). */
+  provider: string;
+  /** Concrete model name in use (e.g. "gpt-4o"). */
+  model: string;
+}
+
+/**
+ * The provider-agnostic AI adapter. Implementations MUST enforce Diewish's
+ * safety constraints (no diagnosis/treatment/prescription; nutrition-only) and
+ * return structured, schema-valid data.
+ */
+export interface IAIAdapter {
+  /** Static provider/model info for logging and persistence. */
+  readonly info: AIAdapterInfo;
+
+  /**
+   * Validates whether a document is a genuine, readable laboratory blood-test
+   * report BEFORE any extraction or medical analysis is attempted (Sprint 25).
+   *
+   * This performs classification only — it never interprets medical values.
+   * Implementations MUST return a structured verdict; the caller applies the
+   * hard confidence/parameter gate.
+   *
+   * @param content - UTF-8 text (text path) or a raw file Buffer (vision path).
+   * @param mimeType - MIME type of the content, used to choose text vs. image.
+   * @returns The structured validation verdict.
+   */
+  validateBloodTestDocument(
+    content: string | Buffer,
+    mimeType: string,
+  ): Promise<DocumentValidationResult>;
+
+  /**
+   * Extracts raw laboratory values from document content.
+   *
+   * @param content - UTF-8 text (for the text path) or a raw file Buffer (for
+   *                  the vision path).
+   * @param mimeType - MIME type of the content, used to choose text vs. image.
+   * @returns The structured values plus any recovered raw text.
+   */
+  extractBloodTestValues(
+    content: string | Buffer,
+    mimeType: string,
+  ): Promise<ExtractedBloodTestValues>;
+
+  /**
+   * Produces plain-language explanations and nutrition-focused implications for
+   * a set of normalized values.
+   *
+   * @param normalizedValues - The normalized, reference-compared values.
+   * @param context - Non-sensitive user context to tailor the guidance.
+   * @returns The structured analysis result (explanations, implications, etc.).
+   */
+  analyzeBloodTestValues(
+    normalizedValues: NormalizedBloodTestValue[],
+    context: AnalysisContext,
+  ): Promise<BloodTestAnalysisResult>;
+
+  /**
+   * Generates a personalized nutrition plan (meal rotation cycle, per-meal and
+   * per-recommendation explanations, and a summary) from pre-computed calorie /
+   * macro targets and the user's constraints.
+   *
+   * Implementations MUST honor every allergen as a hard exclusion and MUST stay
+   * strictly within nutrition guidance (no diagnosis/treatment/prescription).
+   *
+   * @param input - Calculated targets plus dietary/allergy/condition constraints
+   *                and optional blood-test nutrition implications.
+   * @returns The structured nutrition-plan content.
+   */
+  generateNutritionPlan(input: NutritionPlanAIInput): Promise<NutritionPlanAIOutput>;
+
+  /**
+   * Produces a single AI Dietitian Chat reply from a PHI-minimized context,
+   * bounded conversation history, and the user's current (redacted) message.
+   *
+   * Implementations MUST stay strictly within nutrition/wellness guidance (no
+   * diagnosis/treatment/prescription) and MUST NOT request or infer personal
+   * identifiers.
+   *
+   * @param input - Minimized context, redacted history, and the user message.
+   * @returns The assistant reply (safety-sanitized).
+   */
+  chatWithDietitian(input: DietitianChatAIInput): Promise<DietitianChatAIOutput>;
+}

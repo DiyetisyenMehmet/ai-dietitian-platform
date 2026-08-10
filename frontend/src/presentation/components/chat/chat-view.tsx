@@ -6,6 +6,7 @@ import { Menu } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { ThemeToggle } from "@/presentation/components/layout/theme-toggle";
 import { useActiveConversation, useChatState, chatStore } from "@/application/chat/chat-store";
+import { useHealthProfile } from "@/application/health/health-profile-store";
 import { AiAvatar } from "./ai-avatar";
 import { ChatSidebar } from "./chat-sidebar";
 import { WelcomeScreen } from "./welcome-screen";
@@ -13,11 +14,10 @@ import { MessageBubble } from "./message-bubble";
 import { ChatInput } from "./chat-input";
 import { ScrollToBottomButton } from "./scroll-to-bottom";
 
-const USER_NAME = "Mehmet";
-
 /** Full-screen AI chat experience: sidebar + message thread + composer. */
 export function ChatView() {
   const conversation = useActiveConversation();
+  const profile = useHealthProfile();
   const { isResponding } = useChatState();
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const [showScrollButton, setShowScrollButton] = React.useState(false);
@@ -51,7 +51,7 @@ export function ChatView() {
   const lastAssistantId = [...messages].reverse().find((m) => m.role === "assistant")?.id;
 
   return (
-    <div className="flex h-dvh flex-col bg-background">
+    <div className="flex h-full flex-col bg-background">
       <header className="z-20 flex h-14 shrink-0 items-center gap-2 border-b border-border/60 bg-background/80 px-3 backdrop-blur-lg">
         <button
           type="button"
@@ -81,7 +81,7 @@ export function ChatView() {
             <div className={cn("mx-auto w-full max-w-2xl px-4 py-5", !isEmpty && "space-y-5")}>
               {isEmpty ? (
                 <WelcomeScreen
-                  userName={USER_NAME}
+                  userName={profile.fullName}
                   onSelect={(prompt) => chatStore.sendMessage(prompt)}
                 />
               ) : (

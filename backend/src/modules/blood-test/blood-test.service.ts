@@ -219,7 +219,7 @@ export const bloodTestService = {
 
     // Remove the superseded object; failure is non-fatal (a stray blob at worst).
     if (existing.storageKey !== storageKey) {
-      await storage.delete(refFor(userId, existing.storageKey)).catch((err) => {
+      await storage.delete(refFor(userId, existing.storageKey)).catch((err: unknown) => {
         logger.warn(
           { err, uploadId: id, staleKey: existing.storageKey },
           "Failed to remove superseded blood-test object",
@@ -254,7 +254,7 @@ export const bloodTestService = {
 
     await getStorageProvider()
       .delete(refFor(userId, existing.storageKey))
-      .catch((err) => {
+      .catch((err: unknown) => {
         logger.warn(
           { err, uploadId: id, storageKey: existing.storageKey },
           "Failed to remove blood-test object after record deletion",

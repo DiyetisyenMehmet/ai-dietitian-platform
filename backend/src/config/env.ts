@@ -73,6 +73,78 @@ const envSchema = z.object({
   STORAGE_LOCAL_ROOT: z.string().default("./storage/uploads"),
   // Maximum accepted blood-test file size, in megabytes.
   BLOOD_TEST_MAX_FILE_SIZE_MB: z.coerce.number().int().positive().default(15),
+
+  // --- AI Blood Test Analysis Engine (Sprint 12) ---
+  // Provider-agnostic, OpenAI-compatible chat/completions API. Any endpoint
+  // that speaks the OpenAI schema works (OpenAI, Mistral, Together, Groq, …).
+  // The key is optional at startup so the rest of the app boots without it;
+  // the analysis engine surfaces a clear error only when it is actually used.
+  AI_API_KEY: z.string().optional(),
+  AI_API_BASE_URL: z.string().url().default("https://api.openai.com/v1"),
+  AI_MODEL: z.string().default("gpt-4o"),
+  AI_MAX_TOKENS: z.coerce.number().int().positive().default(4096),
+  AI_TEMPERATURE: z.coerce.number().min(0).max(2).default(0.2),
+
+  // --- Abacus.AI cluster-proxy provider (production platform) ---
+  // Optional selector. When set to "abacus" (or when only ABACUS_API_KEY is
+  // present) the engine uses the Abacus.AI cluster-proxy LLM API instead of an
+  // external OpenAI-compatible endpoint. This lets the platform run its own
+  // vision-capable model with no third-party AI key.
+  AI_PROVIDER: z.enum(["openai", "abacus"]).optional(),
+  // Abacus.AI platform API key (sent as the APIKEY header). Optional at startup
+  // so the app boots without it; the engine surfaces a clear error only when it
+  // is actually used and no provider is configured.
+  ABACUS_API_KEY: z.string().optional(),
+  // LLM name understood by the cluster proxy. GPT-4o is verified vision-capable.
+  ABACUS_MODEL: z.string().default("OPENAI_GPT4O"),
+  // Endpoint-discovery URL used to resolve the per-session cluster-proxy host.
+  ABACUS_API_ENDPOINT_URL: z
+    .string()
+    .url()
+    .default("https://api.abacus.ai/api/v0/getApiEndpoint"),
+  // Minimum meaningful character count required from text extraction before
+  // OCR fallback is triggered by the hybrid extraction pipeline.
+  BLOOD_TEST_TEXT_MIN_CHARS: z.coerce.number().int().positive().default(100),
+
+  // --- Blood Test Validation Pipeline (Sprint 25 — release blocker) ---
+  // The pre-analysis gate rejects non-lab documents (selfies, food photos, ID
+  // cards, chat screenshots, unrelated PDFs) before any OCR/AI runs. A document
+  // only proceeds when the classifier returns VALID with a confidence at least
+  // this high (0–100). Kept high on purpose so only clearly genuine reports pass.
+  BLOOD_TEST_VALIDATION_MIN_CONFIDENCE: z.coerce.number().int().min(0).max(100).default(95),
+  // Minimum number of recognized laboratory parameters required to accept a
+  // report (a genuine report always lists several).
+  BLOOD_TEST_VALIDATION_MIN_PARAMETERS: z.coerce.number().int().positive().default(3),
+
+  // --- Payments / iyzico (Sprint 15, D2) ---
+  // Payment provider selector. Only "iyzico" ships now; the modular payment
+  // layer lets an additional provider be added later without touching callers.
+  PAYMENT_PROVIDER: z.enum(["iyzico"]).default("iyzico"),
+  // iyzico environment. "sandbox" targets the sandbox base URL by default so a
+  // misconfigured deployment cannot accidentally charge real cards.
+  IYZICO_ENV: z.enum(["sandbox", "production"]).default("sandbox"),
+  // iyzico REST base URL. Defaults to the sandbox endpoint; set the production
+  // URL (https://api.iyzipay.com) only alongside IYZICO_ENV=production.
+  IYZICO_BASE_URL: z.string().url().default("https://sandbox-api.iyzipay.com"),
+  // API credentials. Optional at startup so the app boots without them; the
+  // payment service surfaces a clear error only when a payment is attempted.
+  IYZICO_API_KEY: z.string().optional(),
+  IYZICO_SECRET_KEY: z.string().optional(),
+  // Secret used to verify inbound webhook signatures. Falls back to the API
+  // secret when unset (iyzico signs notifications with the account secret).
+  IYZICO_WEBHOOK_SECRET: z.string().optional(),
+  // Public callback URL iyzico redirects to after a hosted-checkout payment.
+  IYZICO_CALLBACK_URL: z.string().url().default("http://localhost:3000/billing/callback"),
+  // Billing currency (ISO 4217). TRY for the Turkish market.
+  BILLING_CURRENCY: z.string().length(3).default("TRY"),
+
+  // --- Legal / consent (Sprint 15, B1–B4) ---
+  // Current published version of each legal document. Bumping a version marks
+  // existing user consents stale and forces re-consent on the next gated action.
+  LEGAL_PRIVACY_POLICY_VERSION: z.string().default("2026-07-01"),
+  LEGAL_TERMS_OF_SERVICE_VERSION: z.string().default("2026-07-01"),
+  LEGAL_MEDICAL_DISCLAIMER_VERSION: z.string().default("2026-07-01"),
+  LEGAL_KVKK_CONSENT_VERSION: z.string().default("2026-07-01"),
 });
 
 export type Env = z.infer<typeof envSchema>;

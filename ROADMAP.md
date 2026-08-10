@@ -3,7 +3,7 @@
 > **Ürün adı:** Diewish (resmi). Önceki geçici ad "AI Dietitian Platform" artık kullanılmaz.
 > **Belge amacı:** V1 lansmanı için optimize edilmiş, önceliklendirilmiş nihai yol haritası.
 > **Strateji:** Her planlanan özelliği inşa etmek DEĞİL — kararlı, güvenli ve production-ready bir V1'i mümkün olan en kısa sürede yayınlamak.
-> **Son güncelleme:** 2026-07-15 · **Genel tamamlanma:** ~%42
+> **Son güncelleme:** 2026-07-22 · **Genel tamamlanma:** ~%75
 
 Mimari temel: **Modular Monolith + Domain-Driven Design** (bkz. `ARCHITECTURE_DECISIONS.md`).
 Kaynak analiz: `V1_GAP_ANALYSIS.md` (29 kritik / 19 önemli / 9 ertelenebilir bulgu).
@@ -133,26 +133,32 @@ Aşağıdaki maddeler değerlidir ancak **7 kritik boyuttan hiçbirini bloke etm
 
 ## 4. Sprint Planı (Launch Blocker kapsamı)
 
-> Sprint 1–7 tamamlandı (Foundation + Frontend MVP + Backend Foundation). Aşağısı V1 kritik yolu.
+> Sprint 1–19 tamamlandı. Aşağıda V1'e kalan çalışma listelenmiştir.
 
-| Sprint | Odak | Kapsam |
-|---|---|---|
-| **8** | **Authentication** ✅ *(bu sprint)* | A1, A2 — backend auth altyapısı |
-| 9 | Hesap yaşam döngüsü + e-posta | A4, A5, A6 |
-| 10 | Consent & yasal temel | B1–B6, E8 |
-| 11 | Profil & zorunlu onboarding + domain persistence | A3, C1 |
-| 12 | Güvenlik (veri) | E1, E2 |
-| 13 | AI orchestrator + PHI minimization | C2, C5 |
-| 14 | Sağlık motoru | C3, C4 |
-| 15 | Ödeme (1): abonelik & iyzico | D1, D2, D3, D5 |
-| 16 | Ödeme (2): fatura, geçmiş, audit | D4 |
-| 17 | Gözlemlenebilirlik & ops | E3, E4, E5 |
-| 18 | Kalite & UX & test | E6, E7 |
-| 19 | Mağaza hazırlık | E9 |
-| 20 | Uyum sign-off & launch | Pre-launch checklist → soft launch → GA |
+| Sprint | Odak | Kapsam | Durum |
+|---|---|---|---|
+| **1–7** | **Foundation** | Frontend MVP + Backend Foundation | ✅ Tamamlandı |
+| **8** | **Authentication** | A1, A2 — backend auth altyapısı | ✅ Tamamlandı |
+| **9** | **Onboarding** | A3 — zorunlu profil + frontend auth entegrasyonu | ✅ Tamamlandı |
+| **10** | **Account Lifecycle** | A4, A5, A6 — email verify, password reset, account deletion | ✅ Tamamlandı |
+| **11** | **Blood Test Upload** | Dosya yükleme altyapısı | ✅ Tamamlandı |
+| **12** | **AI Blood Test Analysis** | C3 — OCR + AI analizi | ✅ Tamamlandı |
+| **13** | **AI Nutrition Plan** | C4 — kişiselleştirilmiş plan | ✅ Tamamlandı |
+| **14** | **AI Chat + Quota** | C2, C5 — diyetisyen sohbeti + kota sistemi | ✅ Tamamlandı |
+| **15** | **Subscriptions + Payments** | D1, D2, D3, D4, D5 — iyzico + abonelik + fatura | ✅ Tamamlandı |
+| **16** | **Marketing Site + Production Config** | Herkese açık web sitesi + SEO + Docker | ✅ Tamamlandı |
+| **17** | **Legal + Compliance** | B1–B6, E8 — KVKK + gizlilik + rıza yönetimi | ✅ Tamamlandı |
+| **18** | **Product Polish** | UX iyileştirmeleri + hesap yönetimi | ✅ Tamamlandı |
+| **19** | **AI Health Coach Intelligence** | Hafıza, proaktif AI, risk tespiti, haftalık/aylık değerlendirmeler | ✅ Tamamlandı |
+| 20 | AI Health Coach Frontend UI | Sprint 19 backend özelliklerini tüketen ekranlar | ⏳ Sonraki |
+| 21 | Gözlemlenebilirlik & monitoring | E4 — Sentry, uptime monitoring, alerting | ⏳ Planlı |
+| 22 | Production deployment + CI/CD | E3, E5 — managed DB, secrets, pipeline | ⏳ Planlı |
+| 23 | E-posta sağlayıcısı entegrasyonu | Gerçek e-posta servisi (SendGrid/AWS SES) | ⏳ Planlı |
+| 24 | Test suite + QA | E6 — kritik akış testleri | ⏳ Planlı |
+| 25 | Store hazırlık + launch | E9 — metadata, assets, versioning, soft launch | ⏳ Planlı |
 
-**Tahmini V1 süresi (Sprint 8→20):** ~13–15 hafta (paralel iş ile sıkışabilir).
-**Kritik yol:** Auth → Consent/Legal → Health Engine → Payments → Observability → Store Readiness.
+**Tahmini kalan süre (Sprint 20→25):** ~6–8 hafta.
+**Kritik yol:** AI Coach Frontend UI → Observability → Production Deployment → Testing → Store Launch.
 
 ---
 
@@ -160,10 +166,12 @@ Aşağıdaki maddeler değerlidir ancak **7 kritik boyuttan hiçbirini bloke etm
 
 | Faz | Sprintler | Durum |
 |---|---|---|
-| Foundation + Frontend MVP | 1–6 | ✅ Completed |
-| Backend Foundation | 7 | ✅ Completed |
-| Auth & Compliance | 8–11 | 🚧 In Progress (Sprint 8) |
-| AI, Health & Payments | 12–16 | ⏳ Pending |
-| Production Hardening & Launch | 17–20 | ⏳ Pending |
+| Foundation + Frontend MVP | 1–6 | ✅ Tamamlandı |
+| Backend Foundation | 7 | ✅ Tamamlandı |
+| Auth & Account Management | 8–11 | ✅ Tamamlandı |
+| AI Core Features | 12–14 | ✅ Tamamlandı |
+| Payments & Legal | 15–17 | ✅ Tamamlandı |
+| Product Polish & AI Intelligence | 18–19 | ✅ Tamamlandı |
+| Production Hardening & Launch | 20–25 | ⏳ Kalan İş |
 
 > Bu belge canlıdır. Her sprint sonunda güncellenir; bir Post-Launch maddesi kritikleşirse Launch Blocker'a terfi ettirilir.
