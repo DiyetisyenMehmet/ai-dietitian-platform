@@ -18,6 +18,7 @@ import { WeightChart } from "@/presentation/components/health/weight-chart";
 import { healthIcon } from "@/presentation/components/health/health-icon";
 import { useHealthProfile } from "@/application/health/health-profile-store";
 import { useWeightEntries, weightStore, analyzeWeight } from "@/application/health/weight-store";
+import { useActivity } from "@/application/health/activity-store";
 import { journeyStore, useJourneyEvents } from "@/application/health/journey-store";
 import { useGoals } from "@/application/goals/goals-store";
 import { computeProgress, computeStatus } from "@/application/goals/goal-insights";
@@ -127,6 +128,7 @@ export function ProgressView() {
   const router = useRouter();
   const profile = useHealthProfile();
   const entries = useWeightEntries();
+  const activity = useActivity();
   const journey = useJourneyEvents();
   const goals = useGoals();
 
@@ -207,6 +209,30 @@ export function ProgressView() {
 
       {/* Weekly / monthly analytics */}
       <ProgressStatsSection />
+
+      {/* Activity summary */}
+      <SectionCard icon="activity" title="Aktivite Özeti">
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-2xl border border-border bg-card p-3">
+            <p className="text-[11px] text-muted-foreground">Adım</p>
+            <p className="mt-1 text-base font-bold tabular-nums">
+              {activity.steps.toLocaleString("tr-TR")}
+            </p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              / {activity.stepGoal.toLocaleString("tr-TR")} hedef
+            </p>
+          </div>
+          <div className="rounded-2xl border border-border bg-card p-3">
+            <p className="text-[11px] text-muted-foreground">Egzersiz</p>
+            <p className="mt-1 text-base font-bold tabular-nums">
+              {activity.activeMinutes} dk
+            </p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              / {activity.activeMinutesGoal} dk hedef
+            </p>
+          </div>
+        </div>
+      </SectionCard>
 
       {/* Weigh-in */}
       <SectionCard icon="scale" title="Kilonu Kaydet">

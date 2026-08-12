@@ -8,6 +8,10 @@ import { bloodTestRepository } from "../blood-test/blood-test.repository";
 import { getAIAdapter } from "./ai-adapter/ai-adapter.factory";
 import { bloodTestAnalysisRepository } from "./blood-test-analysis.repository";
 import { extractionService } from "./extraction/extraction.service";
+import { documentEnhancementService } from "./enhancement/document-enhancement.service";
+import { documentQualityAssessmentService } from "./enhancement/document-quality-assessment.service";
+import { documentValidationService } from "./validation/document-validation.service";
+import { longitudinalComparisonService } from "./comparison/longitudinal-comparison.service";
 import { matchBiomarkerCode } from "./normalization/biomarker-aliases.map";
 import { normalizationService } from "./normalization/normalization.service";
 import { referenceRangesService } from "./reference-ranges/reference-ranges.service";
@@ -79,8 +83,33 @@ export const bloodTestAnalysisService = {
         key: upload.storageKey,
       });
 
+      // 1a. DOCUMENT ENHANCEMENT PIPELINE (runs BEFORE validation).
+      // Modular image preprocessing (auto-rotate, orientation, contrast,
+      // brightness). Clean text-layer PDFs are skipped. Never throws; on any
+      // issue it returns the original bytes, so the pipeline order is safe and
+      // validation thresholds / OCR / Medical AI are entirely unaffected.
+      const enhanced = await documentEnhancementService.enhance(buffer, upload.mimeType);
+      const documentBuffer = enhanced.buffer;
+
+      // 1a'. DOCUMENT QUALITY ASSESSMENT (independent, advisory-only).
+      // Runs immediately after enhancement and BEFORE validation/OCR/Medical AI.
+      // It NEVER rejects or alters the document — it only scores quality (0–100)
+      // and returns HIGH/MEDIUM/LOW. HIGH/MEDIUM continue silently; LOW continues
+      // normally but surfaces a non-blocking warning to the user.
+      const quality = await documentQualityAssessmentService.assess(
+        documentBuffer,
+        upload.mimeType,
+      );
+
+      // 1b. VALIDATION GATE (Sprint 25 — critical release blocker).
+      // Reject anything that is not a genuine, readable laboratory blood-test
+      // report BEFORE any OCR extraction or AI medical analysis runs. On failure
+      // this throws the exact Turkish rejection message (ApiError 422), which is
+      // handled by the catch block below, so extraction/analysis never start.
+      await documentValidationService.assertValidBloodTestReport(documentBuffer, upload.mimeType);
+
       // 2. Hybrid extraction (text → OCR → vision).
-      const extraction = await extractionService.extract(buffer, upload.mimeType);
+      const extraction = await extractionService.extract(documentBuffer, upload.mimeType);
 
       // 3. Resolve reference ranges for the recognized biomarkers.
       const context = await buildContext(userId);
@@ -99,9 +128,36 @@ export const bloodTestAnalysisService = {
         (value) => value.status !== "NORMAL" && value.status !== "UNKNOWN",
       );
 
+      // 4a. LONGITUDINAL COMPARISON (data only — no medical interpretation).
+      // If the user has a previous completed analysis, prepare a structured,
+      // purely numeric comparison of matching biomarkers (previous/current
+      // value, absolute & percentage difference, direction) so Medical AI can
+      // consume the trend later. Returns null when no prior analysis exists.
+      // This never changes prompts, OCR, validation or extraction.
+      const longitudinalComparison = await longitudinalComparisonService.buildForUser(
+        userId,
+        analysis.id,
+        normalized,
+      );
+      if (longitudinalComparison) {
+        logger.info(
+          { comparedCount: longitudinalComparison.comparedCount },
+          "Longitudinal blood-test comparison prepared",
+        );
+      }
+
       // 5. AI explanations + nutrition implications.
       const adapter = getAIAdapter();
       const aiResult = await adapter.analyzeBloodTestValues(normalized, context);
+
+      // 5a. Advisory-only quality notice. When the upload scored LOW, prepend a
+      // non-blocking warning to the recommendations so the user is informed that
+      // accuracy may be reduced. This never blocks analysis and does not alter
+      // any Medical AI logic — the warning is generated entirely outside the AI.
+      const overallRecommendations =
+        quality.warning !== null
+          ? [quality.warning, ...aiResult.overallRecommendations]
+          : aiResult.overallRecommendations;
 
       // 6. Persist the completed analysis.
       return await bloodTestAnalysisRepository.complete(analysis.id, {
@@ -113,7 +169,7 @@ export const bloodTestAnalysisService = {
         abnormalCount: abnormal.length,
         aiExplanations: aiResult.explanations,
         nutritionImplications: aiResult.nutritionImplications,
-        overallRecommendations: aiResult.overallRecommendations,
+        overallRecommendations,
         summary: aiResult.summary,
         aiProvider: adapter.info.provider,
         aiModel: adapter.info.model,

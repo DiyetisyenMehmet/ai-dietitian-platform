@@ -40,9 +40,13 @@ export function TodayProgressSection() {
   const remaining = Math.max(0, calorieGoal - consumed);
   const waterPercent = toPercent(waterMl, waterGoalMl);
 
-  const addWater = () => {
-    dailyTrackingStore.addWater();
-    toast.success("Su eklendi", { description: `+${WATER_GLASS_ML} ml` });
+  const addWater = async () => {
+    try {
+      await dailyTrackingStore.addWater();
+      toast.success("Su eklendi", { description: `+${WATER_GLASS_ML} ml` });
+    } catch {
+      toast.error("Su eklenemedi. Lütfen tekrar deneyin.");
+    }
   };
 
   return (
@@ -103,7 +107,7 @@ export function TodayProgressSection() {
             <span className="text-2xl font-bold tabular-nums text-sky-500">%{waterPercent}</span>
           </div>
           <ProgressBar value={waterPercent} indicatorClassName="bg-sky-500" />
-          <Button variant="outline" className="w-full" onClick={addWater}>
+          <Button variant="outline" className="w-full" onClick={() => void addWater()}>
             <Plus aria-hidden="true" />
             {WATER_GLASS_ML} ml ekle
           </Button>

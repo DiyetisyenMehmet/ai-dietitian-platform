@@ -99,3 +99,8 @@ export function groupBy<T>(items: T[], keyOf: (item: T) => string): Map<string, 
   }
   return map;
 }
+
+/** Groups log items by their Turkey-local calendar day (YYYY-MM-DD). */
+export function groupByDay<T extends { loggedAt: Date }>(logs: T[]): Map<string, T[]> {
+  return groupBy(logs, (log) => turkeyDayKey(log.loggedAt));
+}

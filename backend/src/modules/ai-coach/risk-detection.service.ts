@@ -1,11 +1,11 @@
-import type { Prisma } from "@prisma/client";
+import type { Activity, Prisma } from "@prisma/client";
 
 import { logger } from "../../lib/logger";
 import { prisma } from "../../lib/prisma";
 import { notificationService } from "../notifications/notification.service";
 import { aiMemoryService } from "./ai-memory.service";
 import { daysWithMeals, loadCoachData } from "./coach-data";
-import { average, daysAgo, groupBy, sum, turkeyDayKey } from "./metrics";
+import { average, daysAgo, groupByDay, sum } from "./metrics";
 import type { RiskAlert } from "./types";
 
 /** Thresholds for the coaching risk checks (nutrition guidance, not diagnosis). */
@@ -19,7 +19,7 @@ const MEAL_CONSISTENCY_WINDOW_DAYS = 14;
 
 /** Averages a per-day total over the number of distinct days that had data. */
 function averagePerLoggedDay(values: { loggedAt: Date; amount: number }[]): number {
-  const byDay = groupBy(values, (v) => turkeyDayKey(v.loggedAt));
+  const byDay = groupByDay(values);
   const dailyTotals: number[] = [];
   for (const items of byDay.values()) {
     dailyTotals.push(sum(items.map((i) => i.amount)));
@@ -130,10 +130,15 @@ export const riskDetectionService = {
       });
     }
 
-    // 7. Inactive lifestyle (no meal/weight logs in 5+ days).
-    const lastActivity = [...bundle.mealLogs, ...bundle.weightLogs]
-      .map((l) => l.loggedAt)
-      .sort((a, b) => b.getTime() - a.getTime())[0];
+    // 7. Inactive lifestyle (no meal/weight/exercise logs in 5+ days).
+    // Logged exercise activities count as engagement too, so an active user who
+    // only logs workouts is not flagged as inactive.
+    const loggedActivities = (bundle.healthSignals?.activities as Activity[] | undefined) ?? [];
+    const lastActivity = [
+      ...bundle.mealLogs.map((l) => l.loggedAt),
+      ...bundle.weightLogs.map((l) => l.loggedAt),
+      ...loggedActivities.map((a) => a.loggedAt),
+    ].sort((a, b) => b.getTime() - a.getTime())[0];
     if (!lastActivity || lastActivity < daysAgo(INACTIVITY_DAYS)) {
       alerts.push({
         type: "INACTIVE_LIFESTYLE",

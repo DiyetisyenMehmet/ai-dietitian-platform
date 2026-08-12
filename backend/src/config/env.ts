@@ -84,9 +84,37 @@ const envSchema = z.object({
   AI_MODEL: z.string().default("gpt-4o"),
   AI_MAX_TOKENS: z.coerce.number().int().positive().default(4096),
   AI_TEMPERATURE: z.coerce.number().min(0).max(2).default(0.2),
+
+  // --- Abacus.AI cluster-proxy provider (production platform) ---
+  // Optional selector. When set to "abacus" (or when only ABACUS_API_KEY is
+  // present) the engine uses the Abacus.AI cluster-proxy LLM API instead of an
+  // external OpenAI-compatible endpoint. This lets the platform run its own
+  // vision-capable model with no third-party AI key.
+  AI_PROVIDER: z.enum(["openai", "abacus"]).optional(),
+  // Abacus.AI platform API key (sent as the APIKEY header). Optional at startup
+  // so the app boots without it; the engine surfaces a clear error only when it
+  // is actually used and no provider is configured.
+  ABACUS_API_KEY: z.string().optional(),
+  // LLM name understood by the cluster proxy. GPT-4o is verified vision-capable.
+  ABACUS_MODEL: z.string().default("OPENAI_GPT4O"),
+  // Endpoint-discovery URL used to resolve the per-session cluster-proxy host.
+  ABACUS_API_ENDPOINT_URL: z
+    .string()
+    .url()
+    .default("https://api.abacus.ai/api/v0/getApiEndpoint"),
   // Minimum meaningful character count required from text extraction before
   // OCR fallback is triggered by the hybrid extraction pipeline.
   BLOOD_TEST_TEXT_MIN_CHARS: z.coerce.number().int().positive().default(100),
+
+  // --- Blood Test Validation Pipeline (Sprint 25 — release blocker) ---
+  // The pre-analysis gate rejects non-lab documents (selfies, food photos, ID
+  // cards, chat screenshots, unrelated PDFs) before any OCR/AI runs. A document
+  // only proceeds when the classifier returns VALID with a confidence at least
+  // this high (0–100). Kept high on purpose so only clearly genuine reports pass.
+  BLOOD_TEST_VALIDATION_MIN_CONFIDENCE: z.coerce.number().int().min(0).max(100).default(95),
+  // Minimum number of recognized laboratory parameters required to accept a
+  // report (a genuine report always lists several).
+  BLOOD_TEST_VALIDATION_MIN_PARAMETERS: z.coerce.number().int().positive().default(3),
 
   // --- Payments / iyzico (Sprint 15, D2) ---
   // Payment provider selector. Only "iyzico" ships now; the modular payment

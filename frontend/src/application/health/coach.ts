@@ -6,6 +6,7 @@ import type { CoachInsight, FoodWarning, HealthProfile } from "@/domain/health/t
 import { useMeals } from "@/application/meals/meals-store";
 import { useHealthProfile } from "./health-profile-store";
 import { useDailyTracking } from "./daily-tracking-store";
+import { useActivity } from "./activity-store";
 import { analyzeWeight, useWeightEntries } from "./weight-store";
 
 /**
@@ -180,6 +181,7 @@ export function useCoachInsights(limit = 3): CoachInsight[] {
   const profile = useHealthProfile();
   const meals = useMeals();
   const { waterMl, waterGoalMl, chattedToday } = useDailyTracking();
+  const activity = useActivity();
   const weightEntries = useWeightEntries();
   const hour = useHour();
   const seed = useVisitSeed();
@@ -317,7 +319,27 @@ export function useCoachInsights(limit = 3): CoachInsight[] {
       });
     }
 
-    // 6. Blood test periodic reminder ("why this matters": data-driven plans).
+    // 6. Low activity (afternoon+).
+    if (hour >= 14 && activity.activeMinutes < activity.activeMinutesGoal * 0.5) {
+      insights.push({
+        id: "coach-activity",
+        tone: "info",
+        title: pick(["Hareket zamanı", "Biraz hareket edelim", "Aktiviteyi artıralım"], seed),
+        message: `Bugün ${activity.activeMinutes} dakika aktiftin. ${pick(
+          [
+            "Kısa bir yürüyüş hedefine yaklaşmana yardımcı olur.",
+            "Birkaç dakika tempolu yürüyüş metabolizmayı hareketlendirir.",
+            "Hafif bir egzersiz enerji seviyeni dengeleyebilir.",
+          ],
+          seed,
+        )}`,
+        icon: "activity",
+        actionLabel: "İlerlememi gör",
+        actionHref: "/progress",
+      });
+    }
+
+    // 7. Blood test periodic reminder ("why this matters": data-driven plans).
     const memberDays = Math.round(
       (Date.now() - new Date(profile.memberSince).getTime()) / 86_400_000,
     );
@@ -416,7 +438,7 @@ export function useCoachInsights(limit = 3): CoachInsight[] {
     }
 
     return insights.slice(0, limit);
-  }, [profile, meals, waterMl, waterGoalMl, chattedToday, weightEntries, hour, seed, limit]);
+  }, [profile, meals, waterMl, waterGoalMl, activity, chattedToday, weightEntries, hour, seed, limit]);
 }
 
 /** The single most important "next recommended action" for the dashboard hero. */

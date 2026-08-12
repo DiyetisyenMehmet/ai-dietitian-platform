@@ -3,11 +3,16 @@
 import * as React from "react";
 
 import type { JourneyEvent } from "@/domain/health/types";
+import { trackingClient, type WeightLog } from "@/infrastructure/tracking/tracking-client";
 
 /**
- * In-memory health-journey store. Holds the chronological milestone timeline so
- * the user can answer "what have I achieved?". Placeholder data layer consistent
- * with the other stores; state lives for the browser session only.
+ * Health-journey store shared across routes via useSyncExternalStore.
+ *
+ * The backend is the single source of truth (Sprint 21.3B): the milestone
+ * timeline is hydrated from the persisted `/api/tracking/weight` logs via
+ * `hydrateJourneyFromBackend` on login / app startup / refresh. This store is a
+ * cache only — it holds no seeded/demo events; it starts empty and reflects
+ * only what the backend returns.
  */
 
 let uid = 0;
@@ -19,46 +24,23 @@ function isoOffset(days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-function seed(): JourneyEvent[] {
-  return [
-    {
-      id: nextId(),
-      type: "profile-created",
-      date: isoOffset(-40),
-      title: "Sağlık profili oluşturuldu",
-      description: "Hedeflerin ve tercihlerin kaydedildi.",
-    },
-    {
-      id: nextId(),
-      type: "first-plan",
-      date: isoOffset(-38),
-      title: "İlk beslenme planı hazırlandı",
-      description: "Yapay zekâ profiline özel bir plan oluşturdu.",
-    },
-    {
-      id: nextId(),
-      type: "blood-test",
-      date: isoOffset(-30),
-      title: "Kan tahlili yüklendi",
-      description: "Sonuçların analiz edildi ve sadeleştirildi.",
-    },
-    {
-      id: nextId(),
-      type: "weight-updated",
-      date: isoOffset(-26),
-      title: "Kilo güncellendi: 80,3 kg",
-    },
-    {
-      id: nextId(),
-      type: "weight-updated",
-      date: isoOffset(-5),
-      title: "Kilo güncellendi: 78,4 kg",
-      description: "Başlangıçtan bu yana 3,6 kg verdin.",
-    },
-  ];
+/** Formats a weight in kilograms using Turkish decimal notation (e.g. 78,4). */
+function formatKg(weightKg: number): string {
+  return String(weightKg).replace(".", ",");
 }
 
-let events: JourneyEvent[] = seed();
+/** Converts a persisted backend weight log into a journey timeline event. */
+function toJourneyEvent(log: WeightLog): JourneyEvent {
+  return {
+    id: log.id,
+    type: "weight-updated",
+    date: log.loggedAt.slice(0, 10),
+    title: `Kilo güncellendi: ${formatKg(log.weightKg)} kg`,
+    ...(log.note ? { description: log.note } : {}),
+  };
+}
+
+let events: JourneyEvent[] = [];
 const listeners = new Set<() => void>();
 
 function emit() {
@@ -76,6 +58,20 @@ function getSnapshot() {
 }
 
 export const journeyStore = {
+  /**
+   * Hydrates the milestone timeline from the backend weight logs (single source
+   * of truth). Called on login / app startup / refresh. Best-effort: on a
+   * transient failure the last known cache is kept and retried on next mount.
+   */
+  async hydrateJourneyFromBackend(): Promise<void> {
+    try {
+      const { logs } = await trackingClient.listWeight();
+      events = logs.map(toJourneyEvent);
+      emit();
+    } catch {
+      // Offline / transient failure: keep the last known cache.
+    }
+  },
   add(event: Omit<JourneyEvent, "id" | "date"> & { date?: string }) {
     events = [
       { id: nextId(), date: event.date ?? isoOffset(0), ...event },

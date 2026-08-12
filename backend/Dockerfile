@@ -35,6 +35,11 @@ COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
 COPY --from=builder --chown=nodejs:nodejs /app/prisma ./prisma
 COPY --from=builder --chown=nodejs:nodejs /app/package.json ./package.json
 
+# Pre-create the uploads directory owned by the runtime user. A named volume
+# mounted here (see docker-compose `uploads_data`) inherits this ownership on
+# first init, so the unprivileged `nodejs` user can write blood-test files.
+RUN mkdir -p /app/storage/uploads && chown -R nodejs:nodejs /app/storage
+
 USER nodejs
 
 EXPOSE 4000

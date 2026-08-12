@@ -78,6 +78,20 @@ export const weightStore = {
     entries = entries.filter((e) => e.id !== id);
     emit();
   },
+  /**
+   * Replaces the entire weight history with a single starting entry at the
+   * given weight. Called on onboarding so the weight time-series (and every
+   * chart/analysis derived from it) reflects the real user's starting weight
+   * instead of the seeded demo history — keeping start = current = the value
+   * the user just entered, consistent with the shared health profile.
+   */
+  reset(startWeightKg: number) {
+    entries = [
+      { id: nextId(), date: isoOffset(0), weightKg: startWeightKg, note: "Başlangıç" },
+    ];
+    emit();
+    healthProfileStore.setCurrentWeight(startWeightKg);
+  },
 };
 
 /** Subscribe to the chronological (oldest → newest) weight history. */

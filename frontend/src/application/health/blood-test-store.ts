@@ -3,59 +3,42 @@
 import * as React from "react";
 
 import type { BloodTestSummary } from "@/domain/health/types";
+import {
+  bloodTestClient,
+  type BloodTestAnalysis,
+} from "@/infrastructure/tracking/blood-test-client";
 
 /**
- * In-memory blood-test store shared via useSyncExternalStore. Placeholder data
- * layer consistent with the other health stores; state lives for the session.
+ * Blood-test store shared across routes via useSyncExternalStore.
  *
- * Blood tests feed the health profile (medical context) and the health journey
- * timeline. The shape is backend-ready so it can later be swapped for a real
- * document-analysis data source without touching presentation components.
+ * The backend is the single source of truth (Sprint 21.3B): the analysis
+ * history is hydrated from `/api/blood-tests/analyses` via
+ * `hydrateBloodTestsFromBackend` on login / app startup / refresh. This store
+ * is a cache only — it holds no seeded/demo tests and never generates its own
+ * analysis results; it starts empty and reflects only what the backend returns.
  */
 
 let uid = 0;
 const nextId = () => `bt-${Date.now()}-${uid++}`;
 
-function isoOffset(days: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
+function today(): string {
+  return new Date().toISOString().slice(0, 10);
 }
 
-function seed(): BloodTestSummary[] {
-  return [
-    {
-      id: nextId(),
-      date: isoOffset(-30),
-      title: "Tam Kan & Metabolik Panel",
-      summary:
-        "Açlık kan şekeri hafif yüksek, HbA1c sınırda. Sodyum ve kolesterol takibi öneriliyor.",
-      flaggedCount: 2,
-      status: "analyzed",
-    },
-  ];
+/** Converts a persisted backend analysis record into a cache summary. */
+function toSummary(a: BloodTestAnalysis): BloodTestSummary {
+  const analyzed = a.status === "COMPLETED";
+  return {
+    id: a.id,
+    date: a.createdAt.slice(0, 10),
+    title: "Kan Tahlili Analizi",
+    summary: a.summary ?? (analyzed ? "" : "Analiz ediliyor…"),
+    flaggedCount: a.abnormalCount,
+    status: analyzed ? "analyzed" : "analyzing",
+  };
 }
 
-/** Simulated AI summaries used while a real analysis pipeline is wired later. */
-const SIMULATED_SUMMARIES: readonly { summary: string; flaggedCount: number }[] = [
-  {
-    summary:
-      "Değerlerinin çoğu referans aralığında. Kolesterol sınıra yakın; doymuş yağ alımını dengede tutman faydalı olur.",
-    flaggedCount: 1,
-  },
-  {
-    summary:
-      "Tüm temel değerler normal aralıkta görünüyor. Güzel bir tablo — mevcut beslenme düzenini sürdürebilirsin.",
-    flaggedCount: 0,
-  },
-  {
-    summary:
-      "Açlık kan şekeri ve HbA1c hafif yüksek. Glisemik yükü düşük öğünlere ağırlık vermeni öneririm.",
-    flaggedCount: 2,
-  },
-];
-
-let tests: BloodTestSummary[] = seed();
+let tests: BloodTestSummary[] = [];
 const listeners = new Set<() => void>();
 
 function emit() {
@@ -78,14 +61,29 @@ function sorted(list: BloodTestSummary[]): BloodTestSummary[] {
 }
 
 export const bloodTestStore = {
+  /**
+   * Hydrates the analysis history from the backend (single source of truth).
+   * Called on login / app startup / refresh. Best-effort: on a transient
+   * failure the last known cache is kept and retried on next mount.
+   */
+  async hydrateBloodTestsFromBackend(): Promise<void> {
+    try {
+      const { analyses } = await bloodTestClient.listAnalyses();
+      tests = analyses.map(toSummary);
+      emit();
+    } catch {
+      // Offline / transient failure: keep the last known cache.
+    }
+  },
   add(entry: Omit<BloodTestSummary, "id">) {
     tests = [...tests, { ...entry, id: nextId() }];
     emit();
   },
   /**
-   * Simulates uploading a blood test: creates an entry in the "analyzing"
-   * state, then resolves it to "analyzed" with a summary after a short delay
-   * (stands in for the future document-analysis pipeline). Returns the new id.
+   * Adds an uploaded blood test to the cache in the "analyzing" state. The
+   * store never generates its own analysis result — the real summary and
+   * flagged count come from the backend and appear on the next hydration once
+   * the analysis pipeline completes. Returns the new (cache-local) id.
    */
   upload(fileName: string): string {
     const id = nextId();
@@ -93,7 +91,7 @@ export const bloodTestStore = {
       ...tests,
       {
         id,
-        date: isoOffset(0),
+        date: today(),
         title: fileName.replace(/\.[^.]+$/, "") || "Kan Tahlili",
         summary: "Analiz ediliyor…",
         flaggedCount: 0,
@@ -102,18 +100,6 @@ export const bloodTestStore = {
       },
     ];
     emit();
-
-    if (typeof window !== "undefined") {
-      const pick = SIMULATED_SUMMARIES[Math.floor(Math.random() * SIMULATED_SUMMARIES.length)];
-      window.setTimeout(() => {
-        tests = tests.map((t) =>
-          t.id === id
-            ? { ...t, status: "analyzed", summary: pick.summary, flaggedCount: pick.flaggedCount }
-            : t,
-        );
-        emit();
-      }, 2200);
-    }
     return id;
   },
   remove(id: string) {
