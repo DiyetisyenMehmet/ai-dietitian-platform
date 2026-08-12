@@ -35,4 +35,17 @@ export const aiUsageRepository = {
       where: { userId, feature, createdAt: { gte: since } },
     });
   },
+
+  /**
+   * Counts a user's TOTAL (lifetime) usage events for a feature, with no time
+   * window. Used to enforce the FREE-tier lifetime trial cap. Owner-scoped.
+   *
+   * @param userId - Owner id.
+   * @param feature - Feature to count.
+   */
+  countTotal(userId: string, feature: AiUsageFeature): Promise<number> {
+    return prisma.aiUsageEvent.count({
+      where: { userId, feature },
+    });
+  },
 };

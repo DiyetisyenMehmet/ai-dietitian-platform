@@ -16,13 +16,33 @@ export interface WindowUsage {
   resetsAt: Date;
 }
 
+/**
+ * FREE-tier LIFETIME trial status for a feature. Present only for the FREE tier;
+ * absent (undefined) for paid tiers, which use the rolling day/month windows.
+ */
+export interface TrialUsage {
+  /** Total non-resetting allowance for the FREE tier. */
+  limit: number;
+  /** Successful calls consumed so far (lifetime). */
+  used: number;
+  /** Calls remaining before an upgrade is required. */
+  remaining: number;
+  /** True when the lifetime trial is exhausted (upgrade required). */
+  exhausted: boolean;
+}
+
 /** A feature's full quota status for the current day and month. */
 export interface FeatureQuotaStatus {
   feature: AiUsageFeature;
   tier: SubscriptionTier;
   day: WindowUsage;
   month: WindowUsage;
-  /** True when at least one window is exhausted (a call would be blocked). */
+  /**
+   * FREE-tier lifetime trial status (undefined for paid tiers). Lets clients
+   * show "N free uses left" and a paywall proactively.
+   */
+  trial?: TrialUsage;
+  /** True when at least one window OR the FREE lifetime trial is exhausted. */
   exceeded: boolean;
 }
 

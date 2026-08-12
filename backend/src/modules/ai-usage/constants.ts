@@ -47,3 +47,19 @@ export const QUOTA_MATRIX: QuotaMatrix = {
 
 /** Machine-readable error code surfaced when a quota is exhausted. */
 export const QUOTA_EXCEEDED_CODE = "AI_QUOTA_EXCEEDED";
+
+/**
+ * FREE-tier LIFETIME trial allowances (V1 cost protection).
+ *
+ * Unlike the daily/monthly {@link QUOTA_MATRIX} windows, these are TOTAL,
+ * non-resetting caps on the number of *successful* AI invocations a FREE user
+ * may ever make per feature. Once exhausted, the user must upgrade to a paid
+ * tier to continue. Paid tiers are NOT subject to a lifetime trial — they use
+ * the rolling quota windows above. Counted against append-only `AiUsageEvent`
+ * rows (one per successful call), so no schema change is required.
+ */
+export const FREE_LIFETIME_TRIAL: Record<AiUsageFeature, number> = {
+  DIETITIAN_CHAT: 5,
+  BLOOD_TEST_ANALYSIS: 1,
+  NUTRITION_PLAN: 1,
+};

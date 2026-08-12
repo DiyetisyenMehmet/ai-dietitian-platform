@@ -2,9 +2,15 @@ import type { AiUsageEvent, AiUsageFeature, SubscriptionTier } from "@prisma/cli
 
 import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/api-error";
+import { ENTITLEMENT_REQUIRED_CODE } from "../payments/constants";
 import { aiUsageRepository } from "./ai-usage.repository";
-import { QUOTA_EXCEEDED_CODE, QUOTA_MATRIX, type FeatureQuota } from "./constants";
-import type { FeatureQuotaStatus, RecordUsageInput, WindowUsage } from "./types";
+import {
+  FREE_LIFETIME_TRIAL,
+  QUOTA_EXCEEDED_CODE,
+  QUOTA_MATRIX,
+  type FeatureQuota,
+} from "./constants";
+import type { FeatureQuotaStatus, RecordUsageInput, TrialUsage, WindowUsage } from "./types";
 
 /** Start of the current UTC day. */
 function startOfUtcDay(now: Date): Date {
@@ -76,11 +82,28 @@ export const aiUsageService = {
 
     const day = buildWindow(dayUsed, limits.perDay, startOfNextUtcDay(now));
     const month = buildWindow(monthUsed, limits.perMonth, startOfNextUtcMonth(now));
-    const exceeded =
+    const windowExceeded =
       (day.limit !== null && day.used >= day.limit) ||
       (month.limit !== null && month.used >= month.limit);
 
-    return { feature, tier: effectiveTier, day, month, exceeded };
+    // FREE-tier LIFETIME trial (V1 cost protection): a total, non-resetting cap
+    // on successful calls per feature. Paid tiers have no trial and rely solely
+    // on the rolling day/month windows above.
+    let trial: TrialUsage | undefined;
+    if (effectiveTier === "FREE") {
+      const limit = FREE_LIFETIME_TRIAL[feature];
+      const used = await aiUsageRepository.countTotal(userId, feature);
+      trial = {
+        limit,
+        used,
+        remaining: Math.max(0, limit - used),
+        exhausted: used >= limit,
+      };
+    }
+
+    const exceeded = windowExceeded || (trial?.exhausted ?? false);
+
+    return { feature, tier: effectiveTier, day, month, trial, exceeded };
   },
 
   /**
@@ -96,6 +119,27 @@ export const aiUsageService = {
     tier?: SubscriptionTier,
   ): Promise<FeatureQuotaStatus> {
     const status = await this.getStatus(userId, feature, tier);
+
+    // FREE lifetime trial exhausted → this is a PAYWALL, not a transient limit.
+    // Checked FIRST (and before any expensive AI provider call) so the client
+    // receives a stable SUBSCRIPTION_REQUIRED (403) upgrade prompt rather than a
+    // "try again later" message. Paid tiers never carry a `trial`.
+    if (status.trial?.exhausted) {
+      throw new ApiError(
+        403,
+        "Ücretsiz deneme hakkınız doldu. Bu özelliği kullanmaya devam etmek için Premium'a geçin.",
+        {
+          code: ENTITLEMENT_REQUIRED_CODE,
+          details: {
+            feature,
+            tier: status.tier,
+            reason: "FREE_TRIAL_EXHAUSTED",
+            trialLimit: status.trial.limit,
+          },
+        },
+      );
+    }
+
     if (status.exceeded) {
       const which = status.day.remaining === 0 ? status.day : status.month;
       throw new ApiError(429, "AI usage limit reached for your plan. Please try again later.", {

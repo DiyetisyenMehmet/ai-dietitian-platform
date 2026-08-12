@@ -4,6 +4,7 @@ import { logger } from "../../lib/logger";
 import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/api-error";
 import { bloodTestAnalysisRepository } from "../blood-test-analysis/blood-test-analysis.repository";
+import { aiUsageService } from "../ai-usage/ai-usage.service";
 import { calculateCalories } from "./calculations/calorie-calculator";
 import { calculateMacros } from "./calculations/macro-calculator";
 import { calculateMealTiming } from "./calculations/meal-timing";
@@ -122,6 +123,13 @@ export const nutritionPlanService = {
   async generate(userId: string, duration: NutritionPlanDuration): Promise<NutritionPlan> {
     const startedAt = Date.now();
     try {
+      // Subscription gating + AI cost protection (V1): enforce the caller's
+      // quota / FREE lifetime trial BEFORE the (expensive) AI meal generation.
+      // FREE trial exhausted → 403 SUBSCRIPTION_REQUIRED; paid window exhausted
+      // → 429. In both cases no AI provider call is made. `regenerate` routes
+      // through here, so it is covered too. userId is the authenticated owner.
+      await aiUsageService.assertWithinQuota(userId, "NUTRITION_PLAN");
+
       const profile = await buildProfile(userId);
       const { analysisId, implications } = await loadBloodTestImplications(userId);
 
@@ -158,7 +166,7 @@ export const nutritionPlanService = {
       };
 
       // 4. Persist as a new immutable version (previous active plan retained).
-      return await nutritionPlanRepository.createVersioned({
+      const plan = await nutritionPlanRepository.createVersioned({
         userId,
         duration,
         bloodTestAnalysisId: analysisId,
@@ -174,6 +182,19 @@ export const nutritionPlanService = {
         aiModel: generation.aiModel,
         processingTimeMs: Date.now() - startedAt,
       });
+
+      // 5. Record a chargeable AI usage event only after a successful, persisted
+      // generation. This consumes one FREE lifetime trial / paid-window unit.
+      // A failed provider call throws above and never reaches here, so it does
+      // not consume the caller's trial.
+      await aiUsageService.record({
+        userId,
+        feature: "NUTRITION_PLAN",
+        provider: generation.aiProvider,
+        model: generation.aiModel,
+      });
+
+      return plan;
     } catch (error) {
       logger.error({ err: error, userId, duration }, "Nutrition plan generation failed");
       if (error instanceof ApiError) throw error;

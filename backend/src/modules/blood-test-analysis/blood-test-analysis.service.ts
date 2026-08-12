@@ -26,6 +26,7 @@ import { matchBiomarkerCode } from "./normalization/biomarker-aliases.map";
 import { normalizationService } from "./normalization/normalization.service";
 import { referenceRangesService } from "./reference-ranges/reference-ranges.service";
 import { nutritionAdaptationService } from "../ai-coach/nutrition-adaptation.service";
+import { aiUsageService } from "../ai-usage/ai-usage.service";
 import type { AnalysisContext, ExtractionResult, NormalizedBloodTestValue } from "./types";
 
 /**
@@ -156,6 +157,14 @@ export const bloodTestAnalysisService = {
       throw ApiError.notFound("Blood test upload not found.");
     }
 
+    // Subscription gating + AI cost protection (V1): enforce the caller's quota
+    // / FREE lifetime trial BEFORE any expensive AI provider call (validation,
+    // OCR/extraction, analysis) and before the upload is marked ANALYZING. When
+    // the FREE trial is exhausted this throws 403 SUBSCRIPTION_REQUIRED; when a
+    // paid-tier window is exhausted it throws 429 — in both cases zero AI calls
+    // are made. The userId is the authenticated owner (never client-supplied).
+    await aiUsageService.assertWithinQuota(userId, "BLOOD_TEST_ANALYSIS");
+
     const analysis = await bloodTestAnalysisRepository.startProcessing(bloodTestId, userId);
     await prisma.bloodTestUpload
       .update({ where: { id: bloodTestId }, data: { status: "ANALYZING" } })
@@ -256,7 +265,7 @@ export const bloodTestAnalysisService = {
           : aiResult.overallRecommendations;
 
       // 6. Persist the completed analysis.
-      return await bloodTestAnalysisRepository.complete(analysis.id, {
+      const completed = await bloodTestAnalysisRepository.complete(analysis.id, {
         status: "COMPLETED",
         extractionMethod: extraction.method,
         rawExtractedText: extraction.rawText,
@@ -271,6 +280,18 @@ export const bloodTestAnalysisService = {
         aiModel: adapter.info.model,
         processingTimeMs: Date.now() - startedAt,
       });
+
+      // 6a. Record the successful, chargeable AI invocation for quota + FREE
+      // lifetime-trial accounting. Only reached on a COMPLETED analysis — a
+      // failed run throws before this and therefore never consumes the trial.
+      await aiUsageService.record({
+        userId,
+        feature: "BLOOD_TEST_ANALYSIS",
+        provider: adapter.info.provider,
+        model: adapter.info.model,
+      });
+
+      return completed;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Analysis failed.";
       logger.error({ err: error, bloodTestId, userId }, "Blood test analysis failed");
