@@ -22,7 +22,6 @@ function requireUserId(req: Request): string {
   return req.user.id;
 }
 
-/** Normalizes the multer file into the service's IncomingFile, or 400. */
 function requireFile(req: Request): IncomingFile {
   const file = req.file;
   if (!file || !file.buffer) {
@@ -41,17 +40,29 @@ export const bloodTestController = {
   }),
 
   /**
-   * Uploads and immediately analyzes on the SAME Cloud Run instance/request.
-   * This avoids an upload request landing on one ephemeral container and the
-   * follow-up analyze request landing on another before object storage is live.
+   * Uploads and analyzes on the same Cloud Run request/instance. Invalid
+   * documents and quota/paywall rejections are deleted immediately so we do not
+   * retain useless health files or leave hidden orphan uploads behind.
    */
   uploadAndAnalyze: asyncHandler(async (req: Request, res: Response) => {
     const userId = requireUserId(req);
     const file = requireFile(req);
     const metadata = req.body as UploadMetadataInput;
-    const upload = await bloodTestService.upload(userId, file, metadata, auditContext(req));
-    const analysis = await bloodTestAnalysisService.analyze(userId, upload.id);
-    sendCreated(res, { upload, analysis });
+    const context = auditContext(req);
+    const upload = await bloodTestService.upload(userId, file, metadata, context);
+
+    try {
+      const analysis = await bloodTestAnalysisService.analyze(userId, upload.id);
+      sendCreated(res, { upload, analysis });
+    } catch (error) {
+      if (
+        error instanceof ApiError &&
+        (error.statusCode === 422 || error.statusCode === 403 || error.statusCode === 429)
+      ) {
+        await bloodTestService.remove(userId, upload.id, context).catch(() => undefined);
+      }
+      throw error;
+    }
   }),
 
   list: asyncHandler(async (req: Request, res: Response) => {
