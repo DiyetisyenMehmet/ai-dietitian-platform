@@ -3,41 +3,51 @@
 import * as React from "react";
 
 import type { WeightEntry } from "@/domain/health/types";
+import { trackingClient, type WeightLog } from "@/infrastructure/tracking/tracking-client";
 import { healthProfileStore } from "./health-profile-store";
 
 /**
- * In-memory weight-tracking store shared via useSyncExternalStore. Placeholder
- * data layer consistent with the other stores; state lives for the session.
+ * Weight-tracking cache backed by `/api/tracking/weight`.
  *
- * Recording weight regularly is a core Sprint 17 workflow: the store keeps the
- * chronological entry history and derives progress vs. the target so the coach
- * can explain whether the user is ahead of or behind plan.
+ * There is intentionally NO seeded/demo weight history. The backend is the
+ * authoritative source for measurements; when a user has no persisted logs we
+ * may show a single baseline derived from their real onboarding profile.
  */
-
-let uid = 0;
-const nextId = () => `w-${Date.now()}-${uid++}`;
-
-function isoOffset(days: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
-}
-
-function seed(): WeightEntry[] {
-  return [
-    { id: nextId(), date: isoOffset(-40), weightKg: 82, note: "Başlangıç" },
-    { id: nextId(), date: isoOffset(-33), weightKg: 81.2 },
-    { id: nextId(), date: isoOffset(-26), weightKg: 80.3 },
-    { id: nextId(), date: isoOffset(-19), weightKg: 79.6 },
-    { id: nextId(), date: isoOffset(-12), weightKg: 79.0 },
-    { id: nextId(), date: isoOffset(-5), weightKg: 78.4, note: "İyi gidiyor" },
-  ];
-}
 
 /** Recommended cadence between weigh-ins, in days. */
 export const WEIGH_IN_INTERVAL_DAYS = 7;
 
-let entries: WeightEntry[] = seed();
+function isoToday(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function toEntry(log: WeightLog): WeightEntry {
+  return {
+    id: log.id,
+    date: log.loggedAt.slice(0, 10),
+    weightKg: log.weightKg,
+    ...(log.note ? { note: log.note } : {}),
+  };
+}
+
+/**
+ * Backend permits multiple measurements per day. For the compact daily chart we
+ * keep the newest measurement for each calendar day while preserving every row
+ * in the database for audit/history purposes.
+ */
+function collapseToLatestPerDay(logs: WeightLog[]): WeightEntry[] {
+  const latestByDay = new Map<string, WeightLog>();
+  for (const log of logs) {
+    const day = log.loggedAt.slice(0, 10);
+    const existing = latestByDay.get(day);
+    if (!existing || new Date(log.loggedAt).getTime() > new Date(existing.loggedAt).getTime()) {
+      latestByDay.set(day, log);
+    }
+  }
+  return [...latestByDay.values()].map(toEntry);
+}
+
+let entries: WeightEntry[] = [];
 const listeners = new Set<() => void>();
 
 function emit() {
@@ -59,38 +69,71 @@ function sorted(list: WeightEntry[]): WeightEntry[] {
   return [...list].sort((a, b) => a.date.localeCompare(b.date));
 }
 
+function syncLatestProfileWeight(): void {
+  const latest = sorted(entries).at(-1);
+  if (latest) healthProfileStore.setCurrentWeight(latest.weightKg);
+}
+
 export const weightStore = {
-  add(weightKg: number, note?: string) {
-    const today = isoOffset(0);
-    const existing = entries.find((e) => e.date === today);
-    if (existing) {
-      entries = entries.map((e) =>
-        e.id === existing.id ? { ...e, weightKg, note: note ?? e.note } : e,
-      );
-    } else {
-      entries = [...entries, { id: nextId(), date: today, weightKg, note }];
-    }
-    emit();
-    const latest = sorted(entries).at(-1);
-    if (latest) healthProfileStore.setCurrentWeight(latest.weightKg);
-  },
-  remove(id: string) {
-    entries = entries.filter((e) => e.id !== id);
-    emit();
-  },
   /**
-   * Replaces the entire weight history with a single starting entry at the
-   * given weight. Called on onboarding so the weight time-series (and every
-   * chart/analysis derived from it) reflects the real user's starting weight
-   * instead of the seeded demo history — keeping start = current = the value
-   * the user just entered, consistent with the shared health profile.
+   * Replaces the cache with persisted measurements. If the account has never
+   * logged weight, an optional REAL onboarding weight can be used as the visual
+   * baseline without writing a synthetic tracking record to the backend.
    */
-  reset(startWeightKg: number) {
+  async hydrateWeightFromBackend(profileBaselineKg?: number): Promise<void> {
+    try {
+      const { logs } = await trackingClient.listWeight();
+      entries = collapseToLatestPerDay(logs);
+      if (entries.length === 0 && profileBaselineKg && profileBaselineKg > 0) {
+        entries = [
+          {
+            id: "profile-baseline",
+            date: isoToday(),
+            weightKg: profileBaselineKg,
+            note: "Başlangıç",
+          },
+        ];
+      }
+      emit();
+      syncLatestProfileWeight();
+    } catch {
+      // Never keep another session/user's stale weight cache after a failed
+      // hydration. A real profile baseline is safe to show when available.
+      entries =
+        profileBaselineKg && profileBaselineKg > 0
+          ? [
+              {
+                id: "profile-baseline",
+                date: isoToday(),
+                weightKg: profileBaselineKg,
+                note: "Başlangıç",
+              },
+            ]
+          : [];
+      emit();
+      syncLatestProfileWeight();
+    }
+  },
+
+  /**
+   * Persists the measurement FIRST, then updates the cache from the authoritative
+   * backend row. Callers should await this and surface any error to the user.
+   */
+  async add(weightKg: number, note?: string): Promise<void> {
+    const { log } = await trackingClient.logWeight(weightKg, note);
+    const entry = toEntry(log);
     entries = [
-      { id: nextId(), date: isoOffset(0), weightKg: startWeightKg, note: "Başlangıç" },
+      ...entries.filter((existing) => existing.date !== entry.date),
+      entry,
     ];
     emit();
-    healthProfileStore.setCurrentWeight(startWeightKg);
+    syncLatestProfileWeight();
+  },
+
+  /** Clears all user-specific cached measurements. */
+  clear() {
+    entries = [];
+    emit();
   },
 };
 
@@ -130,18 +173,23 @@ export function analyzeWeight(entries: WeightEntry[], targetKg: number): WeightA
   const first = list[0] ?? null;
   const latest = list.at(-1) ?? null;
 
-  if (!first || !latest) {
+  if (!first || !latest || targetKg <= 0) {
     return {
       direction: "maintain",
-      latestKg: null,
-      startKg: null,
+      latestKg: latest?.weightKg ?? null,
+      startKg: first?.weightKg ?? null,
       targetKg,
       changeKg: 0,
       progressPercent: 0,
       isWeighInDue: true,
-      daysSinceLast: null,
+      daysSinceLast: latest
+        ? Math.max(
+            0,
+            Math.round((Date.now() - new Date(latest.date).getTime()) / 86_400_000),
+          )
+        : null,
       status: "no-data",
-      message: "İlk kilonu kaydederek ilerlemeni takip etmeye başlayalım.",
+      message: "Kilo hedefin ve ölçümlerin hazır olduğunda ilerlemeni burada takip edeceğiz.",
     };
   }
 
@@ -152,13 +200,25 @@ export function analyzeWeight(entries: WeightEntry[], targetKg: number): WeightA
   const changeKg = Number((latestKg - startKg).toFixed(1));
 
   const totalDelta = Math.abs(targetKg - startKg);
-  const achievedDelta = Math.abs(latestKg - startKg);
+  const achievedDelta =
+    direction === "lose"
+      ? Math.max(0, startKg - latestKg)
+      : direction === "gain"
+        ? Math.max(0, latestKg - startKg)
+        : Math.max(0, 0.3 - Math.abs(latestKg - targetKg));
   const progressPercent =
-    totalDelta === 0 ? 100 : Math.min(100, Math.max(0, Math.round((achievedDelta / totalDelta) * 100)));
+    totalDelta === 0
+      ? Math.abs(latestKg - targetKg) < 0.3
+        ? 100
+        : 0
+      : Math.min(100, Math.max(0, Math.round((achievedDelta / totalDelta) * 100)));
 
-  const today = new Date(isoOffset(0));
+  const today = new Date(isoToday());
   const lastDate = new Date(latest.date);
-  const daysSinceLast = Math.round((today.getTime() - lastDate.getTime()) / 86_400_000);
+  const daysSinceLast = Math.max(
+    0,
+    Math.round((today.getTime() - lastDate.getTime()) / 86_400_000),
+  );
   const isWeighInDue = daysSinceLast >= WEIGH_IN_INTERVAL_DAYS;
 
   const reached =
@@ -166,7 +226,8 @@ export function analyzeWeight(entries: WeightEntry[], targetKg: number): WeightA
     (direction === "gain" && latestKg >= targetKg) ||
     (direction === "maintain" && Math.abs(latestKg - targetKg) < 0.3);
 
-  // Expected linear pace from start date to now (assumes a ~90-day plan window).
+  // Expected linear pace from start date to now (temporary 90-day coaching
+  // heuristic; it does NOT change calorie targets or medical guidance).
   const daysElapsed = Math.max(
     1,
     Math.round((today.getTime() - new Date(first.date).getTime()) / 86_400_000),
@@ -177,17 +238,17 @@ export function analyzeWeight(entries: WeightEntry[], targetKg: number): WeightA
   let message: string;
   if (reached) {
     status = "reached";
-    message = "Tebrikler! Hedef kilona ulaştın. 🎉 Şimdi bu dengeyi koruma zamanı.";
+    message = "Hedef kilona ulaştın. Bundan sonraki odağımız bu dengeyi sürdürülebilir biçimde korumak.";
   } else if (progressPercent >= expectedProgress + 8) {
     status = "ahead";
-    message = "Harika gidiyorsun — planından daha hızlı ilerliyorsun. Bu tempoyu sürdürülebilir tut.";
+    message = "Hedefine doğru planlanan hızın önünde ilerliyorsun. Hızı değil sürdürülebilirliği korumaya odaklan.";
   } else if (progressPercent >= expectedProgress - 8) {
     status = "on-track";
-    message = "Planına göre yolundasın. İstikrarlı ilerleyişin çok değerli, böyle devam.";
+    message = "Hedefine doğru istikrarlı ilerliyorsun. Düzenli ölçüm, eğilimi daha doğru görmemize yardımcı olur.";
   } else {
     status = "behind";
     message =
-      "Son dönemde ilerlemen bir miktar yavaşladı. Sorun değil — birlikte nedenine bakıp planını nazikçe ayarlayabiliriz.";
+      "Son dönemde ilerleme daha yavaş görünüyor. Öğün, aktivite ve uyum verilerini birlikte değerlendirerek sürdürülebilir bir sonraki adımı seçebiliriz.";
   }
 
   return {
