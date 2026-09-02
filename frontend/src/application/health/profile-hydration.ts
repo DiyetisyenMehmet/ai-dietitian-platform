@@ -9,6 +9,7 @@ import { dailyTrackingStore } from "./daily-tracking-store";
 import { journeyStore } from "./journey-store";
 import { bloodTestStore } from "./blood-test-store";
 import { activityStore } from "./activity-store";
+import { nutritionPlanStore } from "./nutrition-plan-store";
 
 /** Last authenticated account whose client caches were hydrated. */
 let cacheOwnerUserId: string | null = null;
@@ -26,6 +27,7 @@ function resetUserCaches(): void {
   journeyStore.reset();
   bloodTestStore.reset();
   activityStore.reset();
+  nutritionPlanStore.reset();
 }
 
 /**
@@ -83,14 +85,21 @@ export async function hydrateProfileFromBackend(userId: string, fullName: string
     // Keep neutral caches + authenticated name; do not fall back to demo values.
   }
 
-  await Promise.all([
+  const nutritionPlanPromise = nutritionPlanStore.hydrateFromBackend();
+
+  const [, , , , , , activePlan] = await Promise.all([
     dailyTrackingStore.hydrateWaterFromBackend(),
     mealsStore.hydrateMealsFromBackend(),
     journeyStore.hydrateJourneyFromBackend(),
     bloodTestStore.hydrateBloodTestsFromBackend(),
     activityStore.hydrateFromBackend(),
     weightStore.hydrateWeightFromBackend(profile?.currentWeightKg),
+    nutritionPlanPromise,
   ]);
+
+  // Energy targets only come from a successfully generated, persisted plan.
+  // Never restore a universal/demo calorie number when no plan exists.
+  healthProfileStore.update({ dailyCalorieGoal: activePlan?.dailyCalories ?? 0 });
 }
 
 /** Explicitly clears all health caches when the authenticated account logs out. */
