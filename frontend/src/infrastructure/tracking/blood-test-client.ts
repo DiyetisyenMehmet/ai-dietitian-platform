@@ -4,7 +4,6 @@ import { BLOOD_TEST_ENDPOINTS } from "@/infrastructure/auth/endpoints";
 /** Lifecycle status of an AI blood-test analysis run (backend enum). */
 export type BloodTestAnalysisStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
 
-/** Minimal upload metadata returned by POST /blood-tests. */
 export interface BloodTestUpload {
   id: string;
   status: "UPLOADED" | "ANALYZING" | "ANALYZED" | "FAILED";
@@ -14,43 +13,44 @@ export interface BloodTestUpload {
   createdAt: string;
 }
 
-/**
- * A persisted blood-test analysis record, as returned by the backend
- * blood-test-analysis module. The backend is the single source of truth; the
- * frontend blood-test store is a cache hydrated from these records.
- */
 export interface BloodTestAnalysis {
   id: string;
   bloodTestId: string;
   status: BloodTestAnalysisStatus;
-  /** 2–3 sentence plain-language summary (with disclaimer), when available. */
   summary: string | null;
-  /** Count of abnormal (out-of-range) biomarkers. */
   abnormalCount: number;
-  /** Safe operational failure text persisted by the backend, when available. */
   errorMessage?: string | null;
   createdAt: string;
   updatedAt?: string;
 }
 
-/**
- * Infrastructure-level blood-test client. Uploads use multipart/form-data;
- * analysis and history calls are authenticated JSON requests.
- */
+function uploadForm(file: File): FormData {
+  const form = new FormData();
+  form.append("file", file, file.name);
+  return form;
+}
+
 export const bloodTestClient = {
-  /** Uploads a PDF/JPG/PNG to the authenticated user's blood-test storage. */
+  /** Preferred browser flow: upload and analyze on the same backend request/instance. */
+  uploadAndAnalyze(file: File) {
+    return apiRequest<{ upload: BloodTestUpload; analysis: BloodTestAnalysis }>({
+      path: "/blood-tests/analyze-upload",
+      method: "POST",
+      auth: true,
+      body: uploadForm(file),
+    });
+  },
+
+  /** Upload-only endpoint kept for lower-level workflows. */
   upload(file: File) {
-    const form = new FormData();
-    form.append("file", file, file.name);
     return apiRequest<{ upload: BloodTestUpload }>({
       path: "/blood-tests",
       method: "POST",
       auth: true,
-      body: form,
+      body: uploadForm(file),
     });
   },
 
-  /** Runs the synchronous validation/extraction/AI analysis pipeline. */
   analyze(uploadId: string) {
     return apiRequest<{ analysis: BloodTestAnalysis }>({
       path: `/blood-tests/${encodeURIComponent(uploadId)}/analyze`,
@@ -59,7 +59,6 @@ export const bloodTestClient = {
     });
   },
 
-  /** Lists the authenticated user's blood-test analyses (newest first). */
   listAnalyses() {
     return apiRequest<{ analyses: BloodTestAnalysis[] }>({
       path: BLOOD_TEST_ENDPOINTS.analyses,
@@ -68,7 +67,6 @@ export const bloodTestClient = {
     });
   },
 
-  /** Deletes the stored upload; its one-to-one analysis cascades server-side. */
   removeUpload(uploadId: string) {
     return apiRequest<{ message: string }>({
       path: `/blood-tests/${encodeURIComponent(uploadId)}`,
