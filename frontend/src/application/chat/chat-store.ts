@@ -4,89 +4,140 @@ import * as React from "react";
 
 import type { ChatMessage, Conversation, MessageReaction } from "@/domain/chat/types";
 import { dailyTrackingStore } from "@/application/health/daily-tracking-store";
-import { getPlaceholderResponse } from "./placeholder-responses";
+import { apiRequest, ApiError } from "@/infrastructure/api/http-client";
 
 /**
- * In-memory chat store shared across the app via useSyncExternalStore.
+ * Backend-backed AI chat store.
  *
- * Simulates an AI assistant entirely on the client: canned markdown answers
- * are "streamed" in word-by-word. No AI model, backend, RAG or memory is
- * involved — this is placeholder UX logic only. State lives for the browser
- * session.
+ * Conversations and messages are persisted by the Diewish backend/Neon rather
+ * than being generated from client-side canned responses. A local draft thread
+ * exists only until the first message creates the real backend conversation.
  */
 
 let uid = 0;
 const nextId = (prefix: string) => `${prefix}-${Date.now()}-${uid++}`;
+const DRAFT_PREFIX = "draft-";
 
 interface ChatState {
   conversations: Conversation[];
   activeId: string;
-  /** True while an assistant reply is being generated/streamed. */
+  /** True while the backend is generating an assistant reply. */
   isResponding: boolean;
+  /** True while conversation history is being fetched. */
+  isLoading: boolean;
+  /** Last transport/backend error, when present. */
+  error: string | null;
 }
 
-function seedConversations(): Conversation[] {
-  const now = Date.now();
-  return [
-    {
-      id: "conv-history-1",
-      title: "Haftalık öğün planı",
-      updatedAt: now - 1000 * 60 * 60 * 24,
-      messages: [
-        {
-          id: "h1-u",
-          role: "user",
-          content: "Haftalık bir öğün planı yapar mısın?",
-          createdAt: now - 1000 * 60 * 60 * 24,
-        },
-        {
-          id: "h1-a",
-          role: "assistant",
-          content: getPlaceholderResponse("öğün planı"),
-          createdAt: now - 1000 * 60 * 60 * 24 + 2000,
-        },
-      ],
-    },
-    {
-      id: "conv-history-2",
-      title: "Yüksek proteinli besinler",
-      updatedAt: now - 1000 * 60 * 60 * 48,
-      messages: [
-        {
-          id: "h2-u",
-          role: "user",
-          content: "Yüksek proteinli besinler nelerdir?",
-          createdAt: now - 1000 * 60 * 60 * 48,
-        },
-        {
-          id: "h2-a",
-          role: "assistant",
-          content: getPlaceholderResponse("protein"),
-          createdAt: now - 1000 * 60 * 60 * 48 + 2000,
-        },
-      ],
-    },
-  ];
+interface ApiConversationSummary {
+  id: string;
+  title: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface ApiChatMessage {
+  id: string;
+  role: "USER" | "ASSISTANT";
+  content: string;
+  createdAt: string;
+}
+
+interface ApiConversationDetail extends ApiConversationSummary {
+  messages: ApiChatMessage[];
+}
+
+interface ListConversationsResponse {
+  conversations: ApiConversationSummary[];
+}
+
+interface GetConversationResponse {
+  conversation: ApiConversationDetail;
+}
+
+interface SendMessageResponse {
+  conversationId: string;
+  message: ApiChatMessage;
 }
 
 function createEmptyConversation(): Conversation {
-  return { id: nextId("conv"), title: "Yeni sohbet", messages: [], updatedAt: Date.now() };
+  return {
+    id: `${DRAFT_PREFIX}${nextId("conv")}`,
+    title: "Yeni sohbet",
+    messages: [],
+    updatedAt: Date.now(),
+  };
+}
+
+function toEpoch(value: string): number {
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : Date.now();
+}
+
+function mapMessage(message: ApiChatMessage): ChatMessage {
+  return {
+    id: message.id,
+    role: message.role === "ASSISTANT" ? "assistant" : "user",
+    content: message.content,
+    createdAt: toEpoch(message.createdAt),
+  };
+}
+
+function mapSummary(conversation: ApiConversationSummary): Conversation {
+  return {
+    id: conversation.id,
+    title: conversation.title?.trim() || "Sohbet",
+    messages: [],
+    updatedAt: toEpoch(conversation.updatedAt),
+  };
+}
+
+function mapDetail(conversation: ApiConversationDetail): Conversation {
+  return {
+    ...mapSummary(conversation),
+    messages: conversation.messages.map(mapMessage),
+  };
+}
+
+function deriveTitle(text: string): string {
+  const trimmed = text.trim();
+  return trimmed.length > 32 ? `${trimmed.slice(0, 32)}…` : trimmed || "Yeni sohbet";
+}
+
+function friendlyError(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.code === "SUBSCRIPTION_REQUIRED") {
+      return "Ücretsiz AI Koç kullanım hakkın doldu. Devam etmek için plan seçeneklerini inceleyebilirsin.";
+    }
+    if (error.status === 401) {
+      return "Oturumunun süresi dolmuş olabilir. Lütfen yeniden giriş yap.";
+    }
+    if (error.status === 429) {
+      return "AI Koç kullanım limitine ulaştın. Bir süre sonra tekrar deneyebilir veya planını inceleyebilirsin.";
+    }
+    return error.message;
+  }
+  return "AI Koç şu anda yanıt veremiyor. Lütfen biraz sonra tekrar dene.";
 }
 
 const initialConversation = createEmptyConversation();
 
 let state: ChatState = {
-  conversations: [initialConversation, ...seedConversations()],
+  conversations: [initialConversation],
   activeId: initialConversation.id,
   isResponding: false,
+  isLoading: false,
+  error: null,
 };
 
 const listeners = new Set<() => void>();
-let streamTimer: ReturnType<typeof setInterval> | null = null;
+const loadedConversationIds = new Set<string>();
+let initialized = false;
+let initializePromise: Promise<void> | null = null;
 
 function setState(next: Partial<ChatState>) {
   state = { ...state, ...next };
-  listeners.forEach((l) => l());
+  listeners.forEach((listener) => listener());
 }
 
 function subscribe(listener: () => void) {
@@ -98,144 +149,229 @@ function getSnapshot() {
   return state;
 }
 
-function updateActive(mutator: (conv: Conversation) => Conversation) {
+function updateConversation(id: string, mutator: (conv: Conversation) => Conversation) {
   setState({
-    conversations: state.conversations.map((c) => (c.id === state.activeId ? mutator(c) : c)),
+    conversations: state.conversations.map((conversation) =>
+      conversation.id === id ? mutator(conversation) : conversation,
+    ),
   });
 }
 
-function deriveTitle(text: string): string {
-  const trimmed = text.trim();
-  return trimmed.length > 32 ? `${trimmed.slice(0, 32)}…` : trimmed || "Yeni sohbet";
+async function fetchConversation(id: string): Promise<Conversation> {
+  const result = await apiRequest<GetConversationResponse>({
+    path: `/ai-chat/conversations/${encodeURIComponent(id)}`,
+    method: "GET",
+    auth: true,
+  });
+  loadedConversationIds.add(id);
+  return mapDetail(result.conversation);
 }
 
-/** Streams the given full text into the assistant message word by word. */
-function streamAssistant(messageId: string, fullText: string) {
-  const words = fullText.split(" ");
-  let index = 0;
-  setState({ isResponding: true });
+async function initializeFromBackend(): Promise<void> {
+  if (initialized) return;
+  if (initializePromise) return initializePromise;
 
-  if (streamTimer) clearInterval(streamTimer);
-  streamTimer = setInterval(() => {
-    index += Math.max(1, Math.round(words.length / 40)); // ~40 ticks total
-    const partial = words.slice(0, index).join(" ");
-    const done = index >= words.length;
+  initializePromise = (async () => {
+    setState({ isLoading: true, error: null });
+    try {
+      const result = await apiRequest<ListConversationsResponse>({
+        path: "/ai-chat/conversations",
+        method: "GET",
+        auth: true,
+      });
 
-    updateActive((conv) => ({
-      ...conv,
-      updatedAt: Date.now(),
-      messages: conv.messages.map((m) =>
-        m.id === messageId ? { ...m, content: done ? fullText : partial, streaming: !done } : m,
-      ),
-    }));
-
-    if (done && streamTimer) {
-      clearInterval(streamTimer);
-      streamTimer = null;
-      setState({ isResponding: false });
+      if (result.conversations.length === 0) {
+        const draft = createEmptyConversation();
+        setState({ conversations: [draft], activeId: draft.id });
+      } else {
+        const summaries = result.conversations.map(mapSummary);
+        const first = await fetchConversation(summaries[0].id);
+        setState({
+          conversations: summaries.map((conversation) =>
+            conversation.id === first.id ? first : conversation,
+          ),
+          activeId: first.id,
+        });
+      }
+      initialized = true;
+    } catch (error) {
+      setState({ error: friendlyError(error) });
+    } finally {
+      initializePromise = null;
+      setState({ isLoading: false });
     }
-  }, 45);
+  })();
+
+  return initializePromise;
 }
 
 export const chatStore = {
+  initialize(): Promise<void> {
+    return initializeFromBackend();
+  },
+
   sendMessage(text: string) {
     const trimmed = text.trim();
     if (!trimmed || state.isResponding) return;
 
+    const targetId = state.activeId;
+    const active = state.conversations.find((conversation) => conversation.id === targetId);
+    if (!active) return;
+
+    const isDraft = targetId.startsWith(DRAFT_PREFIX);
     const userMessage: ChatMessage = {
-      id: nextId("msg"),
+      id: nextId("user"),
       role: "user",
       content: trimmed,
       createdAt: Date.now(),
     };
-    const assistantId = nextId("msg");
-    const assistantMessage: ChatMessage = {
-      id: assistantId,
+    const pendingAssistantId = nextId("assistant");
+    const pendingAssistant: ChatMessage = {
+      id: pendingAssistantId,
       role: "assistant",
       content: "",
       createdAt: Date.now(),
       streaming: true,
     };
 
-    updateActive((conv) => ({
-      ...conv,
-      title: conv.messages.length === 0 ? deriveTitle(trimmed) : conv.title,
+    updateConversation(targetId, (conversation) => ({
+      ...conversation,
+      title: conversation.messages.length === 0 ? deriveTitle(trimmed) : conversation.title,
       updatedAt: Date.now(),
-      messages: [...conv.messages, userMessage, assistantMessage],
+      messages: [...conversation.messages, userMessage, pendingAssistant],
     }));
+    setState({ isResponding: true, error: null });
 
-    // Chatting with the coach completes the daily "talk to coach" task.
-    dailyTrackingStore.markChatted();
+    void (async () => {
+      try {
+        const result = await apiRequest<SendMessageResponse>({
+          path: "/ai-chat/messages",
+          method: "POST",
+          auth: true,
+          body: JSON.stringify({
+            message: trimmed,
+            ...(isDraft ? {} : { conversationId: targetId }),
+          }),
+        });
 
-    // Simulate "thinking" latency before streaming begins.
-    setState({ isResponding: true });
-    window.setTimeout(() => streamAssistant(assistantId, getPlaceholderResponse(trimmed)), 700);
+        const assistantMessage = mapMessage(result.message);
+        const serverId = result.conversationId;
+
+        if (isDraft) {
+          loadedConversationIds.add(serverId);
+          const nextConversations = state.conversations.map((conversation) => {
+            if (conversation.id !== targetId) return conversation;
+            return {
+              ...conversation,
+              id: serverId,
+              title: deriveTitle(trimmed),
+              updatedAt: assistantMessage.createdAt,
+              messages: conversation.messages.map((message) =>
+                message.id === pendingAssistantId ? assistantMessage : message,
+              ),
+            };
+          });
+          setState({
+            conversations: nextConversations,
+            activeId: state.activeId === targetId ? serverId : state.activeId,
+          });
+        } else {
+          loadedConversationIds.add(targetId);
+          updateConversation(targetId, (conversation) => ({
+            ...conversation,
+            updatedAt: assistantMessage.createdAt,
+            messages: conversation.messages.map((message) =>
+              message.id === pendingAssistantId ? assistantMessage : message,
+            ),
+          }));
+        }
+
+        // Count the daily coach task only after a real backend AI turn succeeds.
+        dailyTrackingStore.markChatted();
+      } catch (error) {
+        const message = friendlyError(error);
+        updateConversation(targetId, (conversation) => ({
+          ...conversation,
+          messages: conversation.messages.map((item) =>
+            item.id === pendingAssistantId
+              ? { ...item, content: message, streaming: false }
+              : item,
+          ),
+        }));
+        setState({ error: message });
+      } finally {
+        setState({ isResponding: false });
+      }
+    })();
   },
 
+  /**
+   * Regeneration needs a dedicated backend endpoint so it can replace a reply
+   * without duplicating persisted user turns. Until that exists we deliberately
+   * do not fake or mutate server history.
+   */
   regenerate() {
-    if (state.isResponding) return;
-    const conv = state.conversations.find((c) => c.id === state.activeId);
-    if (!conv) return;
-    const lastUser = [...conv.messages].reverse().find((m) => m.role === "user");
-    const lastAssistant = [...conv.messages].reverse().find((m) => m.role === "assistant");
-    if (!lastUser || !lastAssistant) return;
-
-    updateActive((c) => ({
-      ...c,
-      messages: c.messages.map((m) =>
-        m.id === lastAssistant.id ? { ...m, content: "", streaming: true, reaction: null } : m,
-      ),
-    }));
-    setState({ isResponding: true });
-    window.setTimeout(
-      () => streamAssistant(lastAssistant.id, getPlaceholderResponse(lastUser.content)),
-      500,
-    );
+    return;
   },
 
   setReaction(messageId: string, reaction: MessageReaction) {
-    updateActive((conv) => ({
-      ...conv,
-      messages: conv.messages.map((m) =>
-        m.id === messageId ? { ...m, reaction: m.reaction === reaction ? null : reaction } : m,
+    updateConversation(state.activeId, (conversation) => ({
+      ...conversation,
+      messages: conversation.messages.map((message) =>
+        message.id === messageId
+          ? { ...message, reaction: message.reaction === reaction ? null : reaction }
+          : message,
       ),
     }));
   },
 
   newChat() {
-    if (streamTimer) {
-      clearInterval(streamTimer);
-      streamTimer = null;
-    }
-    // Reuse an existing empty conversation if the active one is already empty.
-    const active = state.conversations.find((c) => c.id === state.activeId);
-    if (active && active.messages.length === 0) return;
+    const active = state.conversations.find((conversation) => conversation.id === state.activeId);
+    if (active && active.id.startsWith(DRAFT_PREFIX) && active.messages.length === 0) return;
 
-    const conv = createEmptyConversation();
+    const draft = createEmptyConversation();
     setState({
-      conversations: [conv, ...state.conversations],
-      activeId: conv.id,
-      isResponding: false,
+      conversations: [draft, ...state.conversations],
+      activeId: draft.id,
+      error: null,
     });
   },
 
   selectConversation(id: string) {
-    if (id === state.activeId) return;
-    if (streamTimer) {
-      clearInterval(streamTimer);
-      streamTimer = null;
-    }
-    setState({ activeId: id, isResponding: false });
+    if (id === state.activeId || state.isResponding) return;
+    const conversation = state.conversations.find((item) => item.id === id);
+    if (!conversation) return;
+
+    setState({ activeId: id, error: null });
+    if (id.startsWith(DRAFT_PREFIX) || loadedConversationIds.has(id)) return;
+
+    setState({ isLoading: true });
+    void (async () => {
+      try {
+        const fullConversation = await fetchConversation(id);
+        updateConversation(id, () => fullConversation);
+      } catch (error) {
+        setState({ error: friendlyError(error) });
+      } finally {
+        setState({ isLoading: false });
+      }
+    })();
   },
 };
 
-/** Subscribe to the entire chat state. */
+/** Subscribe to the entire chat state and hydrate persisted server history once. */
 export function useChatState(): ChatState {
-  return React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  const snapshot = React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+
+  React.useEffect(() => {
+    void chatStore.initialize();
+  }, []);
+
+  return snapshot;
 }
 
 /** Selector for the active conversation. */
 export function useActiveConversation(): Conversation {
   const s = useChatState();
-  return s.conversations.find((c) => c.id === s.activeId) ?? s.conversations[0];
+  return s.conversations.find((conversation) => conversation.id === s.activeId) ?? s.conversations[0];
 }
