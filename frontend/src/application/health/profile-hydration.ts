@@ -2,24 +2,37 @@
 
 import { onboardingClient } from "@/infrastructure/onboarding/onboarding-client";
 import type { OnboardingProfile } from "@/domain/onboarding/types";
-import { goalsStore } from "@/application/goals/goals-store";
 import { mealsStore } from "@/application/meals/meals-store";
 import { healthProfileStore } from "./health-profile-store";
 import { weightStore } from "./weight-store";
 import { dailyTrackingStore } from "./daily-tracking-store";
 import { journeyStore } from "./journey-store";
 import { bloodTestStore } from "./blood-test-store";
+import { activityStore } from "./activity-store";
+
+/** Last authenticated account whose client caches were hydrated. */
+let cacheOwnerUserId: string | null = null;
 
 /**
- * Single place that hydrates the client-side caches from the authoritative
- * backend profile. The backend is the single source of truth (Sprint 21.3);
- * these stores are caches only and must never surface their own seed/demo data
- * once a real profile exists.
- *
- * Reuses the existing store mutators (no duplicated logic):
- *  - healthProfileStore.update — scalar profile read by every screen
- *  - weightStore.reset         — weight time-series (charts / analysis)
- *  - goalsStore.syncFromProfile — weight & water goals
+ * Clears user-specific browser caches before switching accounts. This prevents
+ * one account's nutrition/health data from flashing or surviving when another
+ * account signs in on the same browser session.
+ */
+function resetUserCaches(): void {
+  healthProfileStore.reset();
+  weightStore.clear();
+  dailyTrackingStore.reset();
+  mealsStore.reset();
+  journeyStore.reset();
+  bloodTestStore.reset();
+  activityStore.reset();
+}
+
+/**
+ * Hydrates scalar caches from the authoritative onboarding profile. Time-series
+ * records (weight/water/meals/activity/etc.) are hydrated separately from their
+ * own backend endpoints so historical data is never replaced by a fake local
+ * series.
  */
 export function hydrateStoresFromProfile(profile: OnboardingProfile, fullName: string): void {
   healthProfileStore.update({
@@ -27,6 +40,8 @@ export function hydrateStoresFromProfile(profile: OnboardingProfile, fullName: s
     age: profile.age,
     gender: profile.gender,
     heightCm: profile.heightCm,
+    // `startWeightKg` is the onboarding/profile baseline. Persisted weight logs
+    // may later update only `currentWeightKg` through the weight store.
     startWeightKg: profile.currentWeightKg,
     currentWeightKg: profile.currentWeightKg,
     targetWeightKg: profile.targetWeightKg,
@@ -36,40 +51,52 @@ export function hydrateStoresFromProfile(profile: OnboardingProfile, fullName: s
     allergies: profile.allergies,
     dailyWaterGoalMl: profile.dailyWaterGoalMl,
   });
-  weightStore.reset(profile.currentWeightKg);
-  goalsStore.syncFromProfile({
-    currentWeightKg: profile.currentWeightKg,
-    targetWeightKg: profile.targetWeightKg,
-    dailyWaterGoalMl: profile.dailyWaterGoalMl,
-  });
-  // Water goal is a profile value; today's water total is hydrated separately
-  // from the tracking logs (see hydrateProfileFromBackend).
   dailyTrackingStore.setWaterGoal(profile.dailyWaterGoalMl);
 }
 
 /**
- * Fetches the authoritative profile from the backend (GET /onboarding) and
- * hydrates all caches. Best-effort and idempotent — safe to call on login, on
- * app startup / refresh and after a profile edit. No-op while onboarding is
- * still pending (backend returns a null profile). Never throws so callers (e.g.
- * the route guard) stay resilient to transient network errors.
+ * Fetches authoritative user/profile + tracking data and hydrates session caches.
+ *
+ * - Account changes clear all user-specific caches before any network response.
+ * - Full name comes from the authenticated account, so it remains correct even
+ *   if the profile endpoint is temporarily unavailable.
+ * - Each domain hydrates from its own persisted backend source.
+ * - Failures are isolated; one unavailable domain does not block the rest.
  */
-export async function hydrateProfileFromBackend(fullName: string): Promise<void> {
+export async function hydrateProfileFromBackend(userId: string, fullName: string): Promise<void> {
+  const ownerChanged = cacheOwnerUserId !== userId;
+  if (ownerChanged) {
+    resetUserCaches();
+    cacheOwnerUserId = userId;
+  }
+
+  // Account identity is already authenticated and is safe to show independently
+  // of the optional onboarding-profile request.
+  healthProfileStore.update({ fullName });
+
+  let profile: OnboardingProfile | null = null;
   try {
-    const { profile } = await onboardingClient.getProfile();
+    const response = await onboardingClient.getProfile();
+    profile = response.profile;
     if (profile) hydrateStoresFromProfile(profile, fullName);
   } catch {
-    // Offline / transient failure: keep the last known cache, retry on next mount.
+    // Keep neutral caches + authenticated name; do not fall back to demo values.
   }
-  // Today's water total, meals, the journey timeline and blood-test analyses
-  // live in their own backend records, independent of the profile (each has its
-  // own best-effort try/catch), so hydrate them regardless of the profile call.
+
   await Promise.all([
     dailyTrackingStore.hydrateWaterFromBackend(),
     mealsStore.hydrateMealsFromBackend(),
     journeyStore.hydrateJourneyFromBackend(),
     bloodTestStore.hydrateBloodTestsFromBackend(),
+    activityStore.hydrateFromBackend(),
+    weightStore.hydrateWeightFromBackend(profile?.currentWeightKg),
   ]);
+}
+
+/** Explicitly clears all health caches when the authenticated account logs out. */
+export function clearHydratedProfileCaches(): void {
+  cacheOwnerUserId = null;
+  resetUserCaches();
 }
 
 /**
