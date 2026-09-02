@@ -12,6 +12,12 @@ export interface AssistantTurnData {
   model: string;
 }
 
+/** Result of atomically creating a conversation together with its first turn. */
+export interface CreatedConversationTurn {
+  conversation: ChatConversation;
+  assistantMessage: ChatMessage;
+}
+
 /**
  * Data-access layer for AI Dietitian Chat. All reads are owner-scoped by
  * `userId` so a user can never access another user's conversation.
@@ -20,6 +26,35 @@ export const aiChatRepository = {
   /** Creates a new (empty) conversation for a user. */
   createConversation(userId: string, title: string | null): Promise<ChatConversation> {
     return prisma.chatConversation.create({ data: { userId, title } });
+  },
+
+  /**
+   * Creates a conversation and its first user/assistant turn in ONE transaction.
+   * A provider or persistence failure can therefore never leave an empty,
+   * orphaned conversation visible in the user's history.
+   */
+  async createConversationWithTurn(
+    userId: string,
+    title: string,
+    userContent: string,
+    assistant: AssistantTurnData,
+  ): Promise<CreatedConversationTurn> {
+    return prisma.$transaction(async (tx) => {
+      const conversation = await tx.chatConversation.create({ data: { userId, title } });
+      await tx.chatMessage.create({
+        data: { conversationId: conversation.id, role: "USER", content: userContent },
+      });
+      const assistantMessage = await tx.chatMessage.create({
+        data: {
+          conversationId: conversation.id,
+          role: "ASSISTANT",
+          content: assistant.content,
+          provider: assistant.provider,
+          model: assistant.model,
+        },
+      });
+      return { conversation, assistantMessage };
+    });
   },
 
   /** Fetches a conversation (no messages), scoped to the user. */
