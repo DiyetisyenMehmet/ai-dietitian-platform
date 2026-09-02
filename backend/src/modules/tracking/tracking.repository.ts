@@ -3,18 +3,28 @@ import type { MealLog, WaterLog, WeightLog } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 
 /**
- * Data access for the Sprint 19 tracking logs. Kept intentionally thin: the
- * intelligence services own the analysis; this layer only reads/writes rows.
- * All queries are owner-scoped by `userId`.
+ * Data access for tracking logs. All reads/writes are owner-scoped by `userId`.
  */
 export const trackingRepository = {
+  /**
+   * Persists a weight measurement and synchronizes the profile's current weight
+   * in one transaction. This keeps the time-series source and the scalar profile
+   * consumed by AI/nutrition calculations from drifting apart.
+   */
   createWeightLog(data: {
     userId: string;
     weightKg: number;
     note?: string;
     loggedAt?: Date;
   }): Promise<WeightLog> {
-    return prisma.weightLog.create({ data });
+    return prisma.$transaction(async (tx) => {
+      const log = await tx.weightLog.create({ data });
+      await tx.userProfile.updateMany({
+        where: { userId: data.userId },
+        data: { currentWeightKg: data.weightKg },
+      });
+      return log;
+    });
   },
 
   listWeightLogs(userId: string, since?: Date): Promise<WeightLog[]> {
