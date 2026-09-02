@@ -5,7 +5,10 @@ import { usePathname, useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
 import { authStore, useAuth } from "@/application/auth/auth-store";
-import { hydrateProfileFromBackend } from "@/application/health/profile-hydration";
+import {
+  clearHydratedProfileCaches,
+  hydrateProfileFromBackend,
+} from "@/application/health/profile-hydration";
 import { MARKETING_ROUTES } from "@/shared/constants/site";
 
 /** Home destination for fully onboarded, authenticated users. */
@@ -49,13 +52,15 @@ function Splash() {
  * Global authentication + onboarding gate.
  *
  * Enforces three rules on every navigation:
- *  1. Unauthenticated users may only see public (auth) routes.
+ *  1. Unauthenticated users may only see public/auth routes.
  *  2. Authenticated users who have NOT completed onboarding are locked to
- *     `/onboarding` until they finish — no app feature is reachable.
- *  3. Fully onboarded users are kept out of the auth/onboarding routes.
+ *     `/onboarding` until they finish.
+ *  3. Fully onboarded users are kept out of auth/onboarding routes.
  *
- * The store is hydrated from localStorage once on mount; until then a splash is
- * shown so protected content never flashes before the session is known.
+ * It also owns the lifecycle of user-specific browser caches: hydration is
+ * keyed by authenticated user id, and caches are cleared when the session ends,
+ * preventing sensitive data from one account leaking into another on the same
+ * device.
  */
 export function RouteGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -70,14 +75,24 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
   const onboardingDone = authed && user.onboardingCompleted;
 
   // Backend = single source of truth: whenever a fully-onboarded session becomes
-  // active (login, app startup / refresh, or logout→login), pull the profile
-  // from the backend and hydrate the client-side caches. Runs best-effort so a
-  // transient failure never blocks navigation.
+  // active, hydrate the user-specific caches. Keying by user id (not just name)
+  // is essential for safe account switching on shared devices.
   React.useEffect(() => {
-    if (status === "authenticated" && user?.onboardingCompleted && user.fullName) {
-      void hydrateProfileFromBackend(user.fullName);
+    if (
+      status === "authenticated" &&
+      user?.onboardingCompleted &&
+      user.id &&
+      user.fullName
+    ) {
+      void hydrateProfileFromBackend(user.id, user.fullName);
     }
-  }, [status, user?.onboardingCompleted, user?.fullName]);
+  }, [status, user?.id, user?.onboardingCompleted, user?.fullName]);
+
+  React.useEffect(() => {
+    if (status === "unauthenticated") {
+      clearHydratedProfileCaches();
+    }
+  }, [status]);
 
   const onMarketing = isMarketing(pathname);
   const onAuthRoute = isAuthRoute(pathname);
