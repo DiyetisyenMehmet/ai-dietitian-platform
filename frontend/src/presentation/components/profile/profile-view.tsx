@@ -18,10 +18,7 @@ import {
 import { cn } from "@/shared/lib/utils";
 import { formatLongDate } from "@/shared/lib/format";
 import { ProgressBar } from "@/presentation/components/ui/progress-bar";
-import {
-  SectionCard,
-  ChipList,
-} from "@/presentation/components/health/section-card";
+import { SectionCard, ChipList } from "@/presentation/components/health/section-card";
 import { healthIcon } from "@/presentation/components/health/health-icon";
 import { SettingGroup, SettingRow } from "@/presentation/components/profile/setting-row";
 import { useHealthProfile, useAchievements } from "@/application/health/health-profile-store";
@@ -59,7 +56,7 @@ function AchievementBadge({ achievement }: { achievement: Achievement }) {
   );
 }
 
-/** The profile hub — a professional account home with grouped settings. */
+/** The profile hub — account identity plus persisted health/profile data. */
 export function ProfileView() {
   const router = useRouter();
   const profile = useHealthProfile();
@@ -76,10 +73,12 @@ export function ProfileView() {
     [entries, profile.targetWeightKg],
   );
 
-  const initial = profile.fullName.trim().charAt(0).toUpperCase() || "D";
-  const unlockedCount = achievements.filter((a) => a.unlockedAt !== null).length;
+  const displayName = profile.fullName || user?.fullName || "Diewish";
+  const initial = displayName.trim().charAt(0).toUpperCase() || "D";
+  const unlockedCount = achievements.filter((achievement) => achievement.unlockedAt !== null).length;
   const planName = planForTier(subscription.tier).name;
   const email = user?.email ?? "";
+  const memberSince = user?.createdAt ? formatLongDate(new Date(user.createdAt)) : null;
 
   const onPickAvatar = React.useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -107,11 +106,11 @@ export function ProfileView() {
     try {
       if (refreshToken) await authService.logout(refreshToken);
     } catch {
-      // best-effort revoke; proceed with local sign-out regardless
+      // Best-effort server revoke; local sign-out still proceeds.
     }
     authStore.clear();
     accountStore.reset();
-    toast.success("Çıkış yapıldı. Görüşmek üzere!");
+    toast.success("Çıkış yapıldı.");
     router.push("/login");
   }, [router]);
 
@@ -143,11 +142,11 @@ export function ProfileView() {
             </span>
           </button>
           <div className="min-w-0">
-            <h2 className="truncate text-lg font-bold">{profile.fullName}</h2>
+            <h2 className="truncate text-lg font-bold">{displayName}</h2>
             {email && <p className="truncate text-sm text-muted-foreground">{email}</p>}
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              {formatLongDate(new Date(profile.memberSince))} tarihinden beri üye
-            </p>
+            {memberSince && (
+              <p className="mt-0.5 text-xs text-muted-foreground">{memberSince} tarihinden beri üye</p>
+            )}
           </div>
         </div>
         <input
@@ -159,23 +158,33 @@ export function ProfileView() {
         />
         <div className="mt-4 grid grid-cols-3 gap-3 text-center">
           <div className="rounded-xl bg-background/60 p-3">
-            <p className="text-lg font-bold tabular-nums">{profile.currentWeightKg.toFixed(1)}</p>
+            <p className="text-lg font-bold tabular-nums">
+              {profile.currentWeightKg > 0 ? profile.currentWeightKg.toFixed(1) : "—"}
+            </p>
             <p className="text-[11px] text-muted-foreground">Güncel kg</p>
           </div>
           <div className="rounded-xl bg-background/60 p-3">
-            <p className="text-lg font-bold tabular-nums">{profile.targetWeightKg.toFixed(1)}</p>
+            <p className="text-lg font-bold tabular-nums">
+              {profile.targetWeightKg > 0 ? profile.targetWeightKg.toFixed(1) : "—"}
+            </p>
             <p className="text-[11px] text-muted-foreground">Hedef kg</p>
           </div>
           <div className="rounded-xl bg-background/60 p-3">
-            <p className="text-lg font-bold tabular-nums text-primary">%{analysis.progressPercent}</p>
+            <p className="text-lg font-bold tabular-nums text-primary">
+              {analysis.status === "no-data" ? "—" : `%${analysis.progressPercent}`}
+            </p>
             <p className="text-[11px] text-muted-foreground">İlerleme</p>
           </div>
         </div>
       </section>
 
-      {/* Account */}
       <SettingGroup title="Hesap">
-        <SettingRow icon={UserPen} label="Profili düzenle" description="Ad, sağlık bilgileri ve hedefler" href="/profile/edit" />
+        <SettingRow
+          icon={UserPen}
+          label="Profili düzenle"
+          description="Ad, sağlık bilgileri ve hedefler"
+          href="/profile/edit"
+        />
         <SettingRow
           icon={CreditCard}
           label="Abonelik"
@@ -183,8 +192,18 @@ export function ProfileView() {
           value={planName}
           href="/profile/subscription"
         />
-        <SettingRow icon={Bell} label="Bildirim tercihleri" description="Hatırlatmaları ve özetleri ayarla" href="/profile/notifications" />
-        <SettingRow icon={Lock} label="Şifre değiştir" description="Hesap güvenliğini güncelle" href="/profile/security" />
+        <SettingRow
+          icon={Bell}
+          label="Bildirim tercihleri"
+          description="Hatırlatmaları ve özetleri ayarla"
+          href="/profile/notifications"
+        />
+        <SettingRow
+          icon={Lock}
+          label="Şifre değiştir"
+          description="Hesap güvenliğini güncelle"
+          href="/profile/security"
+        />
         <SettingRow
           icon={LogOut}
           label={loggingOut ? "Çıkış yapılıyor..." : "Çıkış yap"}
@@ -193,51 +212,69 @@ export function ProfileView() {
         />
       </SettingGroup>
 
-      {/* Health data */}
       <SettingGroup title="Sağlık Verilerim">
-        <SettingRow icon={FlaskConical} label="Kan tahlilleri" description="Yükle, geçmişi ve analizleri gör" href="/profile/blood-tests" />
-        <SettingRow icon={LineChart} label="Kilo & ilerleme" description="Haftalık ve aylık trendler" href="/progress" />
+        <SettingRow
+          icon={FlaskConical}
+          label="Kan tahlilleri"
+          description="Yükle, geçmişi ve analizleri gör"
+          href="/profile/blood-tests"
+        />
+        <SettingRow
+          icon={LineChart}
+          label="Kilo & ilerleme"
+          description="Haftalık ve aylık trendler"
+          href="/progress"
+        />
       </SettingGroup>
 
-      {/* Health snapshot */}
       <SectionCard icon="heart" title="Sağlık Durumu">
-        <ChipList items={profile.healthConditions} tone="warning" empty="Kayıtlı bir sağlık durumu yok." />
+        <ChipList
+          items={profile.healthConditions}
+          tone="warning"
+          empty="Kayıtlı bir sağlık durumu yok."
+        />
       </SectionCard>
 
       <SectionCard icon="utensils" title="Beslenme Tercihi">
-        <ChipList items={[dietaryLabel(profile.dietaryPreference)]} tone="primary" empty="—" />
+        <ChipList
+          items={profile.age > 0 ? [dietaryLabel(profile.dietaryPreference)] : []}
+          tone="primary"
+          empty="Profil bilgisi yüklenmedi."
+        />
       </SectionCard>
 
       <SectionCard icon="flag" title="Alerjiler">
         <ChipList items={profile.allergies} tone="danger" empty="Bilinen bir alerji yok." />
       </SectionCard>
 
-      {/* Achievements */}
-      <SectionCard
-        icon="trophy"
-        title="Başarılar"
-        action={
-          <span className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground">
-            <Trophy className="size-3.5" aria-hidden="true" />
-            {unlockedCount}/{achievements.length}
-          </span>
-        }
-      >
-        <div className="mb-4">
-          <div className="mb-1.5 flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">Rozet ilerlemen</span>
-            <span className="font-semibold">
-              %{Math.round((unlockedCount / achievements.length) * 100)}
+      {/* Achievement data is shown only once a real persisted source exists. */}
+      {achievements.length > 0 && (
+        <SectionCard
+          icon="trophy"
+          title="Başarılar"
+          action={
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground">
+              <Trophy className="size-3.5" aria-hidden="true" />
+              {unlockedCount}/{achievements.length}
             </span>
+          }
+        >
+          <div className="mb-4">
+            <div className="mb-1.5 flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Rozet ilerlemen</span>
+              <span className="font-semibold">
+                %{Math.round((unlockedCount / achievements.length) * 100)}
+              </span>
+            </div>
+            <ProgressBar value={Math.round((unlockedCount / achievements.length) * 100)} />
           </div>
-          <ProgressBar value={Math.round((unlockedCount / achievements.length) * 100)} />
-        </div>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {achievements.map((achievement) => (
-            <AchievementBadge key={achievement.id} achievement={achievement} />
-          ))}
-        </div>
-      </SectionCard>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {achievements.map((achievement) => (
+              <AchievementBadge key={achievement.id} achievement={achievement} />
+            ))}
+          </div>
+        </SectionCard>
+      )}
     </div>
   );
 }
