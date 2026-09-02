@@ -16,8 +16,7 @@ export interface WaterLog {
 
 /**
  * A persisted weight-measurement log entry, as returned by the backend tracking
- * module (Sprint 19). The backend is the single source of truth; the frontend
- * journey store is a cache hydrated from these records.
+ * module (Sprint 19). The backend is the single source of truth.
  */
 export interface WeightLog {
   id: string;
@@ -30,8 +29,7 @@ export interface WeightLog {
 
 /**
  * Infrastructure-level tracking client. Authenticated (the HTTP client attaches
- * the access token). Reuses the existing `/api/tracking/water` endpoints — no
- * new backend contract. No UI or store logic here.
+ * the access token). No UI or cache logic lives here.
  */
 export const trackingClient = {
   /** Lists water logs, optionally only those logged on/after `since`. */
@@ -61,6 +59,20 @@ export const trackingClient = {
       path: `${TRACKING_ENDPOINTS.weight}${query}`,
       method: "GET",
       auth: true,
+    });
+  },
+
+  /** Persists a weight measurement and returns the authoritative record. */
+  logWeight(weightKg: number, note?: string, loggedAt?: Date) {
+    return apiRequest<{ log: WeightLog }>({
+      path: TRACKING_ENDPOINTS.weight,
+      method: "POST",
+      auth: true,
+      body: JSON.stringify({
+        weightKg,
+        ...(note?.trim() ? { note: note.trim() } : {}),
+        ...(loggedAt ? { loggedAt: loggedAt.toISOString() } : {}),
+      }),
     });
   },
 } as const;
