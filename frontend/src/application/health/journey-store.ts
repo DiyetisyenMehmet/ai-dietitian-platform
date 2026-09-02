@@ -6,22 +6,17 @@ import type { JourneyEvent } from "@/domain/health/types";
 import { trackingClient, type WeightLog } from "@/infrastructure/tracking/tracking-client";
 
 /**
- * Health-journey store shared across routes via useSyncExternalStore.
+ * Health-journey cache.
  *
- * The backend is the single source of truth (Sprint 21.3B): the milestone
- * timeline is hydrated from the persisted `/api/tracking/weight` logs via
- * `hydrateJourneyFromBackend` on login / app startup / refresh. This store is a
- * cache only — it holds no seeded/demo events; it starts empty and reflects
- * only what the backend returns.
+ * The backend is the single source of truth for the currently implemented
+ * timeline source (persisted weight logs). No seeded/demo events are kept.
  */
 
 let uid = 0;
 const nextId = () => `je-${Date.now()}-${uid++}`;
 
-function isoOffset(days: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
+function isoToday(): string {
+  return new Date().toISOString().slice(0, 10);
 }
 
 /** Formats a weight in kilograms using Turkish decimal notation (e.g. 78,4). */
@@ -59,9 +54,8 @@ function getSnapshot() {
 
 export const journeyStore = {
   /**
-   * Hydrates the milestone timeline from the backend weight logs (single source
-   * of truth). Called on login / app startup / refresh. Best-effort: on a
-   * transient failure the last known cache is kept and retried on next mount.
+   * Hydrates the timeline from persisted backend weight logs. On failure the
+   * cache is cleared so another account's stale timeline is never displayed.
    */
   async hydrateJourneyFromBackend(): Promise<void> {
     try {
@@ -69,14 +63,23 @@ export const journeyStore = {
       events = logs.map(toJourneyEvent);
       emit();
     } catch {
-      // Offline / transient failure: keep the last known cache.
+      events = [];
+      emit();
     }
   },
+  /**
+   * Adds a transient UI-only milestone. Persisted domains should prefer a
+   * backend re-hydration instead of this helper.
+   */
   add(event: Omit<JourneyEvent, "id" | "date"> & { date?: string }) {
     events = [
-      { id: nextId(), date: event.date ?? isoOffset(0), ...event },
+      { id: nextId(), date: event.date ?? isoToday(), ...event },
       ...events,
     ];
+    emit();
+  },
+  reset() {
+    events = [];
     emit();
   },
 };
