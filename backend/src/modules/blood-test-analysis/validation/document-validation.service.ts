@@ -1,23 +1,13 @@
 /**
- * Blood Test Validation Pipeline (Sprint 25 — critical release blocker).
+ * Blood Test Validation Pipeline.
  *
- * This service is the gate that runs BEFORE any OCR extraction or AI medical
- * analysis. It classifies an uploaded document and either returns a passing
- * verdict or throws with the exact user-facing Turkish rejection message. If a
- * document does not pass, the medical analysis engine MUST never start.
+ * Cost/safety order:
+ *  1. Deterministic checks first whenever the document exposes enough text.
+ *  2. External AI classification only for genuinely ambiguous/scanned content.
+ *  3. Hard validation gate before extraction/medical interpretation.
  *
- * Design:
- *  - Images   → single vision classification call.
- *  - PDFs     → try the embedded text layer first (cheap + deterministic
- *               biomarker backstop). If the text layer is too sparse to judge,
- *               fall back to a vision classification of the raw PDF.
- *  - Hard gate → classification === VALID AND confidence >= threshold AND a lab
- *               table was detected AND parameterCount >= minimum. Any miss is a
- *               rejection.
- *
- * Only the FIRST page's worth of a multi-page report is needed to validate; the
- * text layer / vision call naturally operate on the whole document, and a
- * genuine report satisfies the gate from its first page.
+ * This keeps obvious invoices/unrelated PDFs from spending AI credits and lets
+ * structurally obvious text-based laboratory reports pass without an AI call.
  */
 
 import { env } from "../../../config/env";
@@ -33,42 +23,143 @@ import type { DocumentValidationResult } from "./document-validation.types";
 
 const PDF_MIME = "application/pdf";
 
+/** Words that strongly suggest a laboratory-result layout. */
+const LAB_STRUCTURE_TERMS = [
+  "referans",
+  "reference",
+  "sonuç",
+  "sonuc",
+  "result",
+  "birim",
+  "unit",
+  "hemogram",
+  "biyokimya",
+  "laboratuvar",
+  "laboratory",
+];
+
+/** Obvious unrelated-document signals used only for a high-confidence reject. */
+const UNRELATED_DOCUMENT_TERMS = [
+  "fatura",
+  "invoice",
+  "irsaliye",
+  "reçete",
+  "recete",
+  "prescription",
+  "kimlik",
+  "identity card",
+  "passport",
+  "ehliyet",
+  "driver license",
+  "sözleşme",
+  "sozlesme",
+  "contract",
+  "whatsapp",
+];
+
 /**
  * Deterministically counts recognizable laboratory parameters in recovered
- * text. Used as a backstop over the PDF text path so a document with a real
- * table of biomarkers is never rejected purely due to a weak model reply, and
- * — conversely — a non-lab PDF with no biomarkers cannot be waved through.
+ * text. This is deliberately conservative: recognition helps establish
+ * structure, but medical interpretation remains a separate later stage.
  */
 function countKnownParameters(text: string): string[] {
-  const haystack = text.toLowerCase();
+  const haystack = text.toLocaleLowerCase("tr-TR");
   const found = new Set<string>();
   for (const param of KNOWN_BLOOD_TEST_PARAMETERS) {
-    if (haystack.includes(param)) found.add(param);
+    if (haystack.includes(param.toLocaleLowerCase("tr-TR"))) found.add(param);
   }
   return Array.from(found);
 }
 
+function includesAny(text: string, terms: readonly string[]): boolean {
+  const haystack = text.toLocaleLowerCase("tr-TR");
+  return terms.some((term) => haystack.includes(term));
+}
+
+/**
+ * Looks for repeated value/unit-like rows without interpreting the values.
+ * Examples matched include "5.4 mg/dL", "12,8 g/dL", "4.2 mmol/L".
+ */
+function countValueUnitPairs(text: string): number {
+  const matches = text.match(/\b\d+(?:[.,]\d+)?\s*(?:mg\/dL|g\/dL|mmol\/L|µmol\/L|umol\/L|mIU\/L|IU\/L|U\/L|ng\/mL|pg\/mL|fL|%|10\^?\d+\/L)\b/gi);
+  return matches?.length ?? 0;
+}
+
+function deterministicVerdict(text: string): DocumentValidationResult | null {
+  const parameters = countKnownParameters(text);
+  const hasLabTerms = includesAny(text, LAB_STRUCTURE_TERMS);
+  const valueUnitPairs = countValueUnitPairs(text);
+  const hasUnrelatedTerms = includesAny(text, UNRELATED_DOCUMENT_TERMS);
+  const minimum = env.BLOOD_TEST_VALIDATION_MIN_PARAMETERS;
+
+  // Strong positive: several known biomarkers PLUS clear laboratory table
+  // vocabulary PLUS repeated numeric/unit structure. This is enough to establish
+  // document class without paying an external model; it does NOT interpret data.
+  if (
+    parameters.length >= Math.max(minimum, 5) &&
+    hasLabTerms &&
+    valueUnitPairs >= Math.max(minimum, 3)
+  ) {
+    return {
+      classification: "VALID",
+      confidence: 100,
+      hospital: null,
+      reportDate: null,
+      patient: null,
+      barcode: null,
+      hasLabTable: true,
+      parameterCount: parameters.length,
+      detectedParameters: parameters,
+      reason: "Deterministic laboratory structure match.",
+    };
+  }
+
+  // Strong negative: an unrelated-document marker and no meaningful biomarker/
+  // lab structure. Reject locally with zero AI cost. Ambiguous documents are
+  // intentionally NOT rejected here; they continue to AI classification.
+  if (hasUnrelatedTerms && parameters.length < minimum && !hasLabTerms) {
+    return {
+      classification: "INVALID",
+      confidence: 100,
+      hospital: null,
+      reportDate: null,
+      patient: null,
+      barcode: null,
+      hasLabTable: false,
+      parameterCount: parameters.length,
+      detectedParameters: parameters,
+      reason: "Deterministic unrelated-document match.",
+    };
+  }
+
+  return null;
+}
+
 export const documentValidationService = {
   /**
-   * Runs the 7-step classification and returns the structured verdict WITHOUT
-   * applying the gate. Callers that need the pass/fail decision should use
-   * {@link assertValidBloodTestReport} instead.
-   *
-   * @param buffer - Raw document bytes loaded from storage.
-   * @param mimeType - Detected MIME type of the document.
+   * Returns a structured document-class verdict. External AI is the fallback,
+   * not the first step, for text-rich PDFs.
    */
   async validate(buffer: Buffer, mimeType: string): Promise<DocumentValidationResult> {
-    const adapter = getAIAdapter();
-
     if (mimeType === PDF_MIME) {
-      // Prefer the embedded text layer: cheap, and lets a deterministic
-      // biomarker count reinforce the model verdict.
       const text = await extractPdfText(buffer).catch(() => "");
       if (meaningfulCharCount(text) >= env.BLOOD_TEST_TEXT_MIN_CHARS) {
+        const localVerdict = deterministicVerdict(text);
+        if (localVerdict) {
+          logger.info(
+            {
+              classification: localVerdict.classification,
+              parameterCount: localVerdict.parameterCount,
+              validationMode: "deterministic",
+            },
+            "Blood test document classified without external AI",
+          );
+          return localVerdict;
+        }
+
+        const adapter = getAIAdapter();
         const result = await adapter.validateBloodTestDocument(text, mimeType);
         const deterministic = countKnownParameters(text);
-        // Never let the recognized-parameter count fall below what we can prove
-        // deterministically from the text.
         if (deterministic.length > result.parameterCount) {
           result.parameterCount = deterministic.length;
           const merged = new Set([...result.detectedParameters, ...deterministic]);
@@ -76,26 +167,24 @@ export const documentValidationService = {
         }
         return result;
       }
-      // Sparse/absent text layer (scanned/exported image PDF) → vision.
-      logger.info("Validation: sparse PDF text layer → vision classification");
-      return adapter.validateBloodTestDocument(buffer, mimeType);
+
+      // Sparse/absent text layer (scanned/exported image PDF) still needs a
+      // vision-capable classifier. This is intentionally the expensive fallback.
+      logger.info("Validation: sparse PDF text layer; using vision classification");
+      return getAIAdapter().validateBloodTestDocument(buffer, mimeType);
     }
 
     if (mimeType.startsWith("image/")) {
-      return adapter.validateBloodTestDocument(buffer, mimeType);
+      return getAIAdapter().validateBloodTestDocument(buffer, mimeType);
     }
 
-    // Unknown type: attempt vision as a best effort; the gate will reject if it
-    // is not a lab report.
-    return adapter.validateBloodTestDocument(buffer, mimeType);
+    // Unsupported/unknown types should normally be blocked by the upload layer.
+    // If one reaches this service, keep the validation gate fail-closed through
+    // the provider rather than assuming it is a medical document.
+    return getAIAdapter().validateBloodTestDocument(buffer, mimeType);
   },
 
-  /**
-   * Applies the hard gate to a validation result.
-   *
-   * @returns true only when the document is a genuine lab blood-test report by
-   *          every gate criterion.
-   */
+  /** Returns true only when every hard gate criterion is satisfied. */
   isAcceptable(result: DocumentValidationResult): boolean {
     return (
       result.classification === "VALID" &&
@@ -106,11 +195,8 @@ export const documentValidationService = {
   },
 
   /**
-   * Validates a document and THROWS the exact Turkish rejection message when it
-   * does not pass the gate. On success, returns the verdict so the caller can
-   * log the recognized hospital/patient/parameters.
-   *
-   * @throws {ApiError} 422 with the pinned Turkish message on rejection.
+   * Validates and throws a stable 422 response on rejection. Logs intentionally
+   * exclude patient identity, report text and raw health values.
    */
   async assertValidBloodTestReport(
     buffer: Buffer,
@@ -124,11 +210,7 @@ export const documentValidationService = {
           classification: result.classification,
           confidence: result.confidence,
           hasLabTable: result.hasLabTable,
-          hospital: result.hospital,
-          reportDate: result.reportDate,
-          patient: result.patient,
           parameterCount: result.parameterCount,
-          detectedParameters: result.detectedParameters,
           reason: result.reason,
         },
         "Blood test document rejected by validation gate",
@@ -138,8 +220,6 @@ export const documentValidationService = {
         details: {
           classification: result.classification,
           confidence: result.confidence,
-          hospital: result.hospital,
-          patient: result.patient,
           parameterCount: result.parameterCount,
           reason: result.reason,
         },
@@ -151,12 +231,7 @@ export const documentValidationService = {
         classification: result.classification,
         confidence: result.confidence,
         hasLabTable: result.hasLabTable,
-        hospital: result.hospital,
-        reportDate: result.reportDate,
-        patient: result.patient,
         parameterCount: result.parameterCount,
-        detectedParameters: result.detectedParameters,
-        reason: result.reason,
       },
       "Blood test document passed validation gate",
     );
