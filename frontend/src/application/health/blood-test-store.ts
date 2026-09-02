@@ -9,13 +9,8 @@ import {
 } from "@/infrastructure/tracking/blood-test-client";
 
 /**
- * Blood-test store shared across routes via useSyncExternalStore.
- *
- * The backend is the single source of truth (Sprint 21.3B): the analysis
- * history is hydrated from `/api/blood-tests/analyses` via
- * `hydrateBloodTestsFromBackend` on login / app startup / refresh. This store
- * is a cache only — it holds no seeded/demo tests and never generates its own
- * analysis results; it starts empty and reflects only what the backend returns.
+ * Blood-test cache. The backend is the single source of truth for analysis
+ * history. No seeded/demo test or generated result is stored here.
  */
 
 let uid = 0;
@@ -62,9 +57,8 @@ function sorted(list: BloodTestSummary[]): BloodTestSummary[] {
 
 export const bloodTestStore = {
   /**
-   * Hydrates the analysis history from the backend (single source of truth).
-   * Called on login / app startup / refresh. Best-effort: on a transient
-   * failure the last known cache is kept and retried on next mount.
+   * Hydrates analysis history from the backend. On failure the cache is cleared
+   * so sensitive results from another account/session are never retained.
    */
   async hydrateBloodTestsFromBackend(): Promise<void> {
     try {
@@ -72,18 +66,13 @@ export const bloodTestStore = {
       tests = analyses.map(toSummary);
       emit();
     } catch {
-      // Offline / transient failure: keep the last known cache.
+      tests = [];
+      emit();
     }
   },
-  add(entry: Omit<BloodTestSummary, "id">) {
-    tests = [...tests, { ...entry, id: nextId() }];
-    emit();
-  },
   /**
-   * Adds an uploaded blood test to the cache in the "analyzing" state. The
-   * store never generates its own analysis result — the real summary and
-   * flagged count come from the backend and appear on the next hydration once
-   * the analysis pipeline completes. Returns the new (cache-local) id.
+   * Adds a temporary local row while an upload/analysis request is in flight.
+   * The authoritative result must still come from backend hydration.
    */
   upload(fileName: string): string {
     const id = nextId();
@@ -104,6 +93,10 @@ export const bloodTestStore = {
   },
   remove(id: string) {
     tests = tests.filter((t) => t.id !== id);
+    emit();
+  },
+  reset() {
+    tests = [];
     emit();
   },
 };
