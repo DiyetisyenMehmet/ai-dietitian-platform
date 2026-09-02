@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Copy, Check, Share2, ThumbsUp, ThumbsDown, RefreshCw } from "lucide-react";
+import { Copy, Check, Share2, ThumbsUp, ThumbsDown } from "lucide-react";
 import { toast } from "sonner";
 
 import { cn } from "@/shared/lib/utils";
@@ -13,22 +13,14 @@ import { AiAvatar } from "./ai-avatar";
 
 interface MessageBubbleProps {
   message: ChatMessage;
-  /** Whether this is the last assistant message (enables Regenerate). */
-  isLastAssistant?: boolean;
-  /** Disable actions while a response is generating. */
-  busy?: boolean;
 }
 
 function formatTime(ts: number): string {
   return new Intl.DateTimeFormat("tr-TR", { hour: "2-digit", minute: "2-digit" }).format(ts);
 }
 
-/** A single chat message row: user (right) or assistant (left) with actions. */
-export const MessageBubble = React.memo(function MessageBubble({
-  message,
-  isLastAssistant = false,
-  busy = false,
-}: MessageBubbleProps) {
+/** A single chat message row with safe client-only message actions. */
+export const MessageBubble = React.memo(function MessageBubble({ message }: MessageBubbleProps) {
   const [copied, setCopied] = React.useState(false);
   const isUser = message.role === "user";
   const showActions = !isUser && !message.streaming && message.content.length > 0;
@@ -50,10 +42,10 @@ export const MessageBubble = React.memo(function MessageBubble({
         await navigator.share({ text: message.content });
       } else {
         await navigator.clipboard.writeText(message.content);
-        toast.success("Paylaşım bu cihazda desteklenmiyor, mesajı kopyaladık");
+        toast.success("Paylaşım desteklenmiyor; mesaj panoya kopyalandı");
       }
     } catch {
-      /* user cancelled share — no-op */
+      // User cancelled native share — no-op.
     }
   }, [message.content]);
 
@@ -108,15 +100,6 @@ export const MessageBubble = React.memo(function MessageBubble({
               >
                 <ThumbsDown className="size-3.5" />
               </ActionButton>
-              {isLastAssistant && (
-                <ActionButton
-                  label="Yeniden oluştur"
-                  onClick={() => chatStore.regenerate()}
-                  disabled={busy}
-                >
-                  <RefreshCw className="size-3.5" />
-                </ActionButton>
-              )}
             </div>
           )}
         </div>
@@ -129,24 +112,21 @@ function ActionButton({
   label,
   onClick,
   active,
-  disabled,
   children,
 }: {
   label: string;
   onClick: () => void;
   active?: boolean;
-  disabled?: boolean;
   children: React.ReactNode;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      disabled={disabled}
       aria-label={label}
       aria-pressed={active}
       className={cn(
-        "flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40",
+        "flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         active && "bg-accent text-primary",
       )}
     >
