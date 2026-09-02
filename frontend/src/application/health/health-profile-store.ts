@@ -5,114 +5,42 @@ import * as React from "react";
 import type { Achievement, HealthProfile } from "@/domain/health/types";
 
 /**
- * In-memory health-profile store shared across routes via useSyncExternalStore.
+ * Session cache for the authenticated user's health profile.
  *
- * Stands in for a backend/global data layer with no external dependencies;
- * state lives for the browser session only (placeholder behavior consistent
- * with the meals/goals/chat stores). The shape is backend-ready so it can be
- * swapped for a real data source without touching presentation components.
+ * IMPORTANT: this store intentionally starts with neutral/empty values. It must
+ * never invent demo weight, calorie, disease, allergy or achievement data while
+ * the real backend profile is still loading or temporarily unavailable. The
+ * backend remains the single source of truth; presentation components should
+ * treat zero/empty values as "not loaded / not configured yet".
  */
 
-/** ISO date offset (in days from today) as YYYY-MM-DD. */
-function isoOffset(days: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
-}
-
-function seedProfile(): HealthProfile {
+function emptyProfile(): HealthProfile {
   return {
-    fullName: "Mehmet",
-    age: 34,
-    gender: "MALE",
-    heightCm: 178,
-    startWeightKg: 82,
-    currentWeightKg: 78.4,
-    targetWeightKg: 75,
-    activityLevel: "MODERATE",
+    fullName: "",
+    age: 0,
+    gender: "PREFER_NOT_TO_SAY",
+    heightCm: 0,
+    startWeightKg: 0,
+    currentWeightKg: 0,
+    targetWeightKg: 0,
+    activityLevel: "SEDENTARY",
     dietaryPreference: "OMNIVORE",
-    // No hardcoded/demo medical data: diseases and allergies are the single
-    // source of truth for the current user and must come solely from what the
-    // user entered during onboarding (or later edited in the profile). They stay
-    // empty until hydrated so Profile → Health Information never shows demo values.
     healthConditions: [],
     allergies: [],
-    dailyCalorieGoal: 2200,
-    dailyWaterGoalMl: 2500,
-    memberSince: isoOffset(-40),
+    // Calorie targets must come from a real generated nutrition plan. Keeping
+    // this at zero is safer than presenting a fabricated universal target.
+    dailyCalorieGoal: 0,
+    dailyWaterGoalMl: 0,
+    memberSince: "",
   };
 }
 
-function seedAchievements(): Achievement[] {
-  return [
-    {
-      id: "ach-profile",
-      title: "Yolculuk Başladı",
-      description: "Sağlık profilini oluşturdun.",
-      icon: "user",
-      unlockedAt: isoOffset(-40),
-    },
-    {
-      id: "ach-first-plan",
-      title: "İlk Plan",
-      description: "Yapay zekâ ilk beslenme planını hazırladı.",
-      icon: "sparkles",
-      unlockedAt: isoOffset(-38),
-    },
-    {
-      id: "ach-first-meal",
-      title: "İlk Öğün",
-      description: "İlk öğününü günlüğe kaydettin.",
-      icon: "utensils",
-      unlockedAt: isoOffset(-37),
-    },
-    {
-      id: "ach-blood-test",
-      title: "Sağlık Kontrolü",
-      description: "İlk kan tahlilini yükledin.",
-      icon: "flask",
-      unlockedAt: isoOffset(-30),
-    },
-    {
-      id: "ach-hydration",
-      title: "Su Şampiyonu",
-      description: "Günlük su hedefine ilk kez ulaştın.",
-      icon: "droplet",
-      unlockedAt: isoOffset(-20),
-    },
-    {
-      id: "ach-3kg",
-      title: "3 Kilo Daha Hafif",
-      description: "Başlangıçtan bu yana 3 kg verdin.",
-      icon: "scale",
-      unlockedAt: isoOffset(-6),
-    },
-    {
-      id: "ach-streak-7",
-      title: "7 Gün İstikrar",
-      description: "7 gün üst üste takip yaptın.",
-      icon: "flame",
-      unlockedAt: null,
-    },
-    {
-      id: "ach-5kg",
-      title: "5 Kilo Kilometre Taşı",
-      description: "Başlangıçtan bu yana 5 kg vererek bu taşı geç.",
-      icon: "target",
-      unlockedAt: null,
-    },
-    {
-      id: "ach-goal",
-      title: "Hedefe Ulaştın",
-      description: "Hedef kilona ulaş ve bu rozeti kazan.",
-      icon: "trophy",
-      unlockedAt: null,
-    },
-  ];
-}
+let profile: HealthProfile = emptyProfile();
 
-let profile: HealthProfile = seedProfile();
-const achievements: Achievement[] = seedAchievements();
+// Achievements are not yet backed by an authoritative backend endpoint. Showing
+// pre-earned demo badges would be misleading, so V1 exposes none until real
+// persisted achievement data is implemented.
+const achievements: Achievement[] = [];
 const listeners = new Set<() => void>();
 
 function emit() {
@@ -130,7 +58,7 @@ function getSnapshot() {
 }
 
 export const healthProfileStore = {
-  /** Patches the profile (e.g. from the profile editor). */
+  /** Patches the cache from authoritative backend/user data. */
   update(patch: Partial<HealthProfile>) {
     profile = { ...profile, ...patch };
     emit();
@@ -139,6 +67,11 @@ export const healthProfileStore = {
   setCurrentWeight(weightKg: number) {
     if (profile.currentWeightKg === weightKg) return;
     profile = { ...profile, currentWeightKg: weightKg };
+    emit();
+  },
+  /** Clears all user-specific cached values (e.g. after account/session switch). */
+  reset() {
+    profile = emptyProfile();
     emit();
   },
   getAchievements(): Achievement[] {
@@ -151,7 +84,7 @@ export function useHealthProfile(): HealthProfile {
   return React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
-/** Returns the (static) achievement list. */
+/** Returns persisted achievements when that backend source exists; empty for V1. */
 export function useAchievements(): Achievement[] {
   return achievements;
 }
