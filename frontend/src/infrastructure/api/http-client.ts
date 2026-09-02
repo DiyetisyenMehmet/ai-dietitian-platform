@@ -20,9 +20,21 @@ export class ApiError extends Error {
  */
 let accessTokenProvider: (() => string | null) | null = null;
 
+/**
+ * Optional single-flight refresh callback registered by the auth store. It is
+ * invoked only after an authenticated request receives HTTP 401 and must return
+ * a fresh access token, or null when the session can no longer be refreshed.
+ */
+let unauthorizedHandler: (() => Promise<string | null>) | null = null;
+
 /** Registers (or clears) the access-token getter used to authorize requests. */
 export function setAccessTokenProvider(provider: (() => string | null) | null): void {
   accessTokenProvider = provider;
+}
+
+/** Registers (or clears) the handler used to refresh an expired session. */
+export function setUnauthorizedHandler(handler: (() => Promise<string | null>) | null): void {
+  unauthorizedHandler = handler;
 }
 
 interface RequestOptions extends RequestInit {
@@ -44,11 +56,59 @@ interface ErrorEnvelope {
   error: { code: string; message: string };
 }
 
+function isFormDataBody(body: BodyInit | null | undefined): boolean {
+  return typeof FormData !== "undefined" && body instanceof FormData;
+}
+
+/**
+ * Builds request headers without forcing application/json on multipart uploads.
+ * Caller-supplied headers always win, except that an authenticated request gets
+ * the current Bearer token when one is available.
+ */
+function buildHeaders(
+  initial: HeadersInit | undefined,
+  body: BodyInit | null | undefined,
+  auth: boolean,
+  token: string | null,
+): Headers {
+  const headers = new Headers(initial);
+
+  if (body != null && !isFormDataBody(body) && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  if (auth && token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  return headers;
+}
+
+async function performFetch(
+  url: string,
+  init: RequestInit,
+  headers: HeadersInit | undefined,
+  auth: boolean,
+  token: string | null,
+): Promise<Response> {
+  try {
+    return await fetch(url, {
+      ...init,
+      headers: buildHeaders(headers, init.body, auth, token),
+    });
+  } catch {
+    throw new ApiError("Sunucuya ulaşılamadı. Lütfen bağlantınızı kontrol edin.", 0);
+  }
+}
+
 /**
  * Thin, framework-agnostic HTTP client wrapping fetch. It unwraps the backend's
  * `{ success, data }` envelope and normalizes `{ success: false, error }` into
- * a typed {@link ApiError}. Endpoints are provided by callers; this layer
- * defines no domain endpoints.
+ * a typed {@link ApiError}.
+ *
+ * Authenticated requests automatically retry once after a 401 when the auth
+ * store can rotate the refresh token. This prevents a normal 15-minute access
+ * token expiry from forcing the user to sign in again.
  */
 export async function apiRequest<TResponse>({
   path,
@@ -61,25 +121,23 @@ export async function apiRequest<TResponse>({
   }
 
   const url = `${env.apiBaseUrl.replace(/\/$/, "")}${path}`;
+  let response = await performFetch(url, init, headers, auth, accessTokenProvider?.() ?? null);
 
-  const authHeaders: Record<string, string> = {};
-  if (auth) {
-    const token = accessTokenProvider?.() ?? null;
-    if (token) authHeaders.Authorization = `Bearer ${token}`;
-  }
+  // Access tokens are deliberately short-lived. When an authenticated request
+  // receives 401, ask the auth layer to rotate the refresh token and retry the
+  // original request exactly once with the fresh access token. The refresh call
+  // itself is unauthenticated, so this path cannot recurse indefinitely.
+  if (auth && response.status === 401 && unauthorizedHandler) {
+    let refreshedToken: string | null = null;
+    try {
+      refreshedToken = await unauthorizedHandler();
+    } catch {
+      refreshedToken = null;
+    }
 
-  let response: Response;
-  try {
-    response = await fetch(url, {
-      ...init,
-      headers: {
-        "Content-Type": "application/json",
-        ...authHeaders,
-        ...headers,
-      },
-    });
-  } catch {
-    throw new ApiError("Sunucuya ulaşılamadı. Lütfen bağlantınızı kontrol edin.", 0);
+    if (refreshedToken) {
+      response = await performFetch(url, init, headers, auth, refreshedToken);
+    }
   }
 
   // 204 No Content — nothing to parse.
