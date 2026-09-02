@@ -12,11 +12,19 @@ import type {
   ExtractedBloodTestValues,
   NormalizedBloodTestValue,
 } from "../types";
+// Sprint 13: the same provider-agnostic adapter also powers nutrition-plan
+// generation. Type-only import (erased at runtime) so there is no cross-module
+// runtime dependency cycle.
 import type { NutritionPlanAIInput, NutritionPlanAIOutput } from "../../nutrition-plan/types";
+// Sprint 14: the same provider-agnostic adapter also powers the AI Dietitian
+// Chat. Type-only import (erased at runtime) so there is no cross-module
+// runtime dependency cycle.
 import type { DietitianChatAIInput, DietitianChatAIOutput } from "../../ai-chat/types";
+// Sprint 25: the adapter also powers the pre-analysis document validation gate.
 import type { DocumentValidationResult } from "../validation/document-validation.types";
-import type { FoodScanResult } from "../../food-scan/types";
 
+// Re-export the shared types so consumers of the adapter get everything from
+// a single import site.
 export type { DocumentValidationResult } from "../validation/document-validation.types";
 export type {
   AnalysisContext,
@@ -49,35 +57,57 @@ export interface IAIAdapter {
 
   /**
    * Validates whether a document is a genuine, readable laboratory blood-test
-   * report BEFORE any extraction or medical analysis is attempted.
+   * report BEFORE any extraction or medical analysis is attempted (Sprint 25).
+   *
+   * This performs classification only — it never interprets medical values.
+   * Implementations MUST return a structured verdict; the caller applies the
+   * hard confidence/parameter gate.
+   *
+   * @param content - UTF-8 text (text path) or a raw file Buffer (vision path).
+   * @param mimeType - MIME type of the content, used to choose text vs. image.
+   * @returns The structured validation verdict.
    */
   validateBloodTestDocument(
     content: string | Buffer,
     mimeType: string,
   ): Promise<DocumentValidationResult>;
 
-  /** Extracts raw laboratory values from document content. */
+  /**
+   * Extracts raw laboratory values from document content.
+   *
+   * @param content - UTF-8 text (for the text path) or a raw file Buffer (for
+   *                  the vision path).
+   * @param mimeType - MIME type of the content, used to choose text vs. image.
+   * @returns The structured values plus any recovered raw text.
+   */
   extractBloodTestValues(
     content: string | Buffer,
     mimeType: string,
   ): Promise<ExtractedBloodTestValues>;
 
-  /** Produces nutrition-focused explanations for normalized blood-test values. */
+  /**
+   * Produces plain-language explanations and nutrition-focused implications for
+   * a set of normalized values.
+   *
+   * @param normalizedValues - The normalized, reference-compared values.
+   * @param context - Non-sensitive user context to tailor the guidance.
+   * @returns The structured analysis result (explanations, implications, etc.).
+   */
   analyzeBloodTestValues(
     normalizedValues: NormalizedBloodTestValue[],
     context: AnalysisContext,
   ): Promise<BloodTestAnalysisResult>;
 
-  /** Generates a personalized nutrition plan from deterministic targets/context. */
+  /**
+   * Generates a personalized nutrition plan (meal rotation cycle, per-meal and
+   * per-recommendation explanations, and a summary) from pre-computed calorie /
+   * macro targets and the user's constraints.
+   */
   generateNutritionPlan(input: NutritionPlanAIInput): Promise<NutritionPlanAIOutput>;
 
-  /** Produces one bounded, PHI-minimized AI Dietitian chat reply. */
-  chatWithDietitian(input: DietitianChatAIInput): Promise<DietitianChatAIOutput>;
-
   /**
-   * Classifies a meal photo and, only when actual food/beverage is confidently
-   * present, returns conservative visual portion/calorie/macro estimates.
-   * Blank, unrelated or non-food images MUST return isFood=false.
+   * Produces a single AI Dietitian Chat reply from a PHI-minimized context,
+   * bounded conversation history, and the user's current (redacted) message.
    */
-  analyzeFoodImage(content: Buffer, mimeType: string): Promise<FoodScanResult>;
+  chatWithDietitian(input: DietitianChatAIInput): Promise<DietitianChatAIOutput>;
 }
