@@ -1,15 +1,9 @@
-/**
- * Payment/subscription domain types shared across the frontend. These mirror
- * the backend REST contract delivered in Sprint 15 (payments module).
- */
+/** Payment/subscription domain types mirroring the backend REST contract. */
 
-/** Subscription tiers offered by Diewish. */
 export type SubscriptionTier = "FREE" | "PREMIUM" | "PREMIUM_PLUS";
-
-/** Paid tiers that can be purchased through iyzico checkout. */
 export type PaidTier = Exclude<SubscriptionTier, "FREE">;
 
-/** A plan as returned by the public `GET /subscription/plans` endpoint. */
+/** Public plan catalog row returned by `GET /subscription/plans`. */
 export interface PlanDto {
   tier: SubscriptionTier;
   code: string;
@@ -22,54 +16,73 @@ export interface PlanDto {
   entitlements: string[];
 }
 
-/** Billing cadence for a paid subscription. */
-export type BillingCycle = "monthly" | "yearly";
+/** Backend lifecycle states for the user's current subscription. */
+export type BackendSubscriptionStatus =
+  | "NONE"
+  | "PENDING"
+  | "ACTIVE"
+  | "PAST_DUE"
+  | "CANCELED"
+  | "EXPIRED";
 
-/** Lifecycle status of a user's subscription. */
+export interface SubscriptionStatusDto {
+  tier: SubscriptionTier;
+  status: BackendSubscriptionStatus;
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
+  entitlements: string[];
+}
+
+/** Persisted payment row returned by `GET /payments`. */
+export interface PaymentDto {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  subscriptionId: string | null;
+  provider: "IYZICO";
+  status: "PENDING" | "SUCCEEDED" | "FAILED" | "REFUNDED";
+  amountMinor: number;
+  currency: string;
+  providerPaymentId: string | null;
+  providerConversationId: string | null;
+  failureReason: string | null;
+}
+
+/** Result of initiating hosted checkout (`POST /payments/checkout`). */
+export interface CheckoutResult {
+  subscriptionId: string;
+  providerToken: string;
+  paymentPageUrl?: string;
+  checkoutFormContent?: string;
+}
+
+/** Legacy presentation aliases retained for components while backend wiring lands. */
+export type BillingCycle = "monthly" | "yearly";
 export type SubscriptionStatus = "active" | "canceled" | "past_due";
 
-/** The authenticated user's current subscription state. */
 export interface UserSubscription {
   tier: SubscriptionTier;
   status: SubscriptionStatus;
   cycle: BillingCycle;
-  /** ISO date the plan started. */
   startedAt: string;
-  /** ISO date the plan renews (or ends, if canceled). */
   renewsAt: string;
-  /** When true, the plan will not auto-renew and ends at `renewsAt`. */
   cancelAtPeriodEnd: boolean;
 }
 
-/** A single past payment / invoice line. */
 export interface BillingHistoryEntry {
   id: string;
-  /** ISO date the charge was made. */
   date: string;
   description: string;
-  /** Amount in TRY (major units). */
   amount: number;
   status: "paid" | "refunded" | "failed";
-  /** Masked reference, e.g. invoice number. */
   invoiceNo: string;
 }
 
-/** A saved payment method (masked card). */
+/** Diewish does not persist card details; hosted payment provider owns them. */
 export interface PaymentMethod {
   brand: string;
-  /** Last four digits of the card. */
   last4: string;
   expMonth: number;
   expYear: number;
   holderName: string;
-}
-
-/** Result of initiating a hosted checkout (`POST /payments/checkout`). */
-export interface CheckoutResult {
-  subscriptionId: string;
-  providerToken: string;
-  /** Hosted payment page URL the client should open, when provided. */
-  paymentPageUrl?: string;
-  /** Embeddable checkout form HTML, when the provider returns content instead. */
-  checkoutFormContent?: string;
 }
