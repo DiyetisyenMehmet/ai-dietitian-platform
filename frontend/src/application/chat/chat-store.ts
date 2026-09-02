@@ -7,11 +7,8 @@ import { dailyTrackingStore } from "@/application/health/daily-tracking-store";
 import { apiRequest, ApiError } from "@/infrastructure/api/http-client";
 
 /**
- * Backend-backed AI chat store.
- *
- * Conversations and messages are persisted by the Diewish backend/Neon rather
- * than being generated from client-side canned responses. A local draft thread
- * exists only until the first message creates the real backend conversation.
+ * Backend-backed AI chat cache. Conversations/messages are persisted by the
+ * backend; local draft/pending rows only support immediate UI feedback.
  */
 
 let uid = 0;
@@ -21,11 +18,8 @@ const DRAFT_PREFIX = "draft-";
 interface ChatState {
   conversations: Conversation[];
   activeId: string;
-  /** True while the backend is generating an assistant reply. */
   isResponding: boolean;
-  /** True while conversation history is being fetched. */
   isLoading: boolean;
-  /** Last transport/backend error, when present. */
   error: string | null;
 }
 
@@ -69,6 +63,17 @@ function createEmptyConversation(): Conversation {
   };
 }
 
+function createInitialState(): ChatState {
+  const draft = createEmptyConversation();
+  return {
+    conversations: [draft],
+    activeId: draft.id,
+    isResponding: false,
+    isLoading: false,
+    error: null,
+  };
+}
+
 function toEpoch(value: string): number {
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? parsed : Date.now();
@@ -104,13 +109,23 @@ function deriveTitle(text: string): string {
   return trimmed.length > 32 ? `${trimmed.slice(0, 32)}…` : trimmed || "Yeni sohbet";
 }
 
+function isToday(timestamp: number): boolean {
+  const value = new Date(timestamp);
+  const now = new Date();
+  return (
+    value.getFullYear() === now.getFullYear() &&
+    value.getMonth() === now.getMonth() &&
+    value.getDate() === now.getDate()
+  );
+}
+
 function friendlyError(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.code === "SUBSCRIPTION_REQUIRED") {
       return "Ücretsiz AI Koç kullanım hakkın doldu. Devam etmek için plan seçeneklerini inceleyebilirsin.";
     }
     if (error.status === 401) {
-      return "Oturumunun süresi dolmuş olabilir. Lütfen yeniden giriş yap.";
+      return "Oturum yenilenemedi. Lütfen yeniden giriş yap.";
     }
     if (error.status === 429) {
       return "AI Koç kullanım limitine ulaştın. Bir süre sonra tekrar deneyebilir veya planını inceleyebilirsin.";
@@ -120,20 +135,13 @@ function friendlyError(error: unknown): string {
   return "AI Koç şu anda yanıt veremiyor. Lütfen biraz sonra tekrar dene.";
 }
 
-const initialConversation = createEmptyConversation();
-
-let state: ChatState = {
-  conversations: [initialConversation],
-  activeId: initialConversation.id,
-  isResponding: false,
-  isLoading: false,
-  error: null,
-};
-
+let state: ChatState = createInitialState();
 const listeners = new Set<() => void>();
 const loadedConversationIds = new Set<string>();
 let initialized = false;
 let initializePromise: Promise<void> | null = null;
+/** Invalidates every in-flight async mutation when account/session caches reset. */
+let sessionGeneration = 0;
 
 function setState(next: Partial<ChatState>) {
   state = { ...state, ...next };
@@ -163,7 +171,6 @@ async function fetchConversation(id: string): Promise<Conversation> {
     method: "GET",
     auth: true,
   });
-  loadedConversationIds.add(id);
   return mapDetail(result.conversation);
 }
 
@@ -171,7 +178,9 @@ async function initializeFromBackend(): Promise<void> {
   if (initialized) return;
   if (initializePromise) return initializePromise;
 
+  const generation = sessionGeneration;
   initializePromise = (async () => {
+    if (generation !== sessionGeneration) return;
     setState({ isLoading: true, error: null });
     try {
       const result = await apiRequest<ListConversationsResponse>({
@@ -179,6 +188,7 @@ async function initializeFromBackend(): Promise<void> {
         method: "GET",
         auth: true,
       });
+      if (generation !== sessionGeneration) return;
 
       if (result.conversations.length === 0) {
         const draft = createEmptyConversation();
@@ -186,19 +196,29 @@ async function initializeFromBackend(): Promise<void> {
       } else {
         const summaries = result.conversations.map(mapSummary);
         const first = await fetchConversation(summaries[0].id);
+        if (generation !== sessionGeneration) return;
+        loadedConversationIds.add(first.id);
         setState({
           conversations: summaries.map((conversation) =>
             conversation.id === first.id ? first : conversation,
           ),
           activeId: first.id,
         });
+
+        // Restore today's coach-completion flag from persisted history instead
+        // of treating every page refresh as if the user never chatted today.
+        if (first.messages.some((message) => message.role === "user" && isToday(message.createdAt))) {
+          dailyTrackingStore.markChatted();
+        }
       }
-      initialized = true;
+      if (generation === sessionGeneration) initialized = true;
     } catch (error) {
-      setState({ error: friendlyError(error) });
+      if (generation === sessionGeneration) setState({ error: friendlyError(error) });
     } finally {
-      initializePromise = null;
-      setState({ isLoading: false });
+      if (generation === sessionGeneration) {
+        initializePromise = null;
+        setState({ isLoading: false });
+      }
     }
   })();
 
@@ -214,6 +234,7 @@ export const chatStore = {
     const trimmed = text.trim();
     if (!trimmed || state.isResponding) return;
 
+    const generation = sessionGeneration;
     const targetId = state.activeId;
     const active = state.conversations.find((conversation) => conversation.id === targetId);
     if (!active) return;
@@ -253,6 +274,7 @@ export const chatStore = {
             ...(isDraft ? {} : { conversationId: targetId }),
           }),
         });
+        if (generation !== sessionGeneration) return;
 
         const assistantMessage = mapMessage(result.message);
         const serverId = result.conversationId;
@@ -286,9 +308,9 @@ export const chatStore = {
           }));
         }
 
-        // Count the daily coach task only after a real backend AI turn succeeds.
         dailyTrackingStore.markChatted();
       } catch (error) {
+        if (generation !== sessionGeneration) return;
         const message = friendlyError(error);
         updateConversation(targetId, (conversation) => ({
           ...conversation,
@@ -300,18 +322,9 @@ export const chatStore = {
         }));
         setState({ error: message });
       } finally {
-        setState({ isResponding: false });
+        if (generation === sessionGeneration) setState({ isResponding: false });
       }
     })();
-  },
-
-  /**
-   * Regeneration needs a dedicated backend endpoint so it can replace a reply
-   * without duplicating persisted user turns. Until that exists we deliberately
-   * do not fake or mutate server history.
-   */
-  regenerate() {
-    return;
   },
 
   setReaction(messageId: string, reaction: MessageReaction) {
@@ -345,21 +358,38 @@ export const chatStore = {
     setState({ activeId: id, error: null });
     if (id.startsWith(DRAFT_PREFIX) || loadedConversationIds.has(id)) return;
 
+    const generation = sessionGeneration;
     setState({ isLoading: true });
     void (async () => {
       try {
         const fullConversation = await fetchConversation(id);
+        if (generation !== sessionGeneration) return;
+        loadedConversationIds.add(id);
         updateConversation(id, () => fullConversation);
       } catch (error) {
-        setState({ error: friendlyError(error) });
+        if (generation === sessionGeneration) setState({ error: friendlyError(error) });
       } finally {
-        setState({ isLoading: false });
+        if (generation === sessionGeneration) setState({ isLoading: false });
       }
     })();
   },
+
+  /**
+   * Clears all chat cache state and invalidates in-flight requests. Called on
+   * logout/account switch so one user's conversation content can never leak into
+   * another user's browser session.
+   */
+  resetSession() {
+    sessionGeneration += 1;
+    initialized = false;
+    initializePromise = null;
+    loadedConversationIds.clear();
+    state = createInitialState();
+    listeners.forEach((listener) => listener());
+  },
 };
 
-/** Subscribe to the entire chat state and hydrate persisted server history once. */
+/** Subscribe to chat state and hydrate persisted history once per session. */
 export function useChatState(): ChatState {
   const snapshot = React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
@@ -372,6 +402,9 @@ export function useChatState(): ChatState {
 
 /** Selector for the active conversation. */
 export function useActiveConversation(): Conversation {
-  const s = useChatState();
-  return s.conversations.find((conversation) => conversation.id === s.activeId) ?? s.conversations[0];
+  const snapshot = useChatState();
+  return (
+    snapshot.conversations.find((conversation) => conversation.id === snapshot.activeId) ??
+    snapshot.conversations[0]
+  );
 }
