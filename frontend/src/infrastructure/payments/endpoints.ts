@@ -1,12 +1,9 @@
-/**
- * Payment/subscription endpoint paths (relative to NEXT_PUBLIC_API_BASE_URL).
- * These match the backend REST contract delivered in Sprint 15.
- */
+/** Payment/subscription endpoint paths relative to the configured API base URL. */
 export const PAYMENT_ENDPOINTS = {
-  /** Public plan catalog. */
   plans: "/subscription/plans",
-  /** Current subscription status (authenticated). */
   subscription: "/subscription",
-  /** Initiate a hosted checkout for a paid tier (authenticated). */
+  cancelSubscription: "/subscription/cancel",
   checkout: "/payments/checkout",
+  verify: "/payments/verify",
+  payments: "/payments",
 } as const;
