@@ -83,22 +83,38 @@ const JOURNEY_ICON: Record<JourneyEventType, Parameters<typeof healthIcon>[0]> =
 
 function WeighInForm() {
   const [value, setValue] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (saving) return;
+
     const kg = Number(value.replace(",", "."));
     if (!Number.isFinite(kg) || kg <= 0 || kg > 400) {
       toast.error("Geçerli bir kilo gir", { description: "Örn. 78.4" });
       return;
     }
+
     const rounded = Number(kg.toFixed(1));
-    weightStore.add(rounded);
-    journeyStore.add({
-      type: "weight-updated",
-      title: `Kilo güncellendi: ${rounded.toLocaleString("tr-TR")} kg`,
-    });
-    toast.success("Kilon kaydedildi", { description: `${rounded.toLocaleString("tr-TR")} kg` });
-    setValue("");
+    setSaving(true);
+    try {
+      // Persist FIRST. The UI must never claim a measurement was saved when the
+      // backend rejected or could not receive it.
+      await weightStore.add(rounded);
+      // Journey history is also backend-derived; refresh it from the same
+      // persisted weight row instead of inventing a second local event.
+      await journeyStore.hydrateJourneyFromBackend();
+      toast.success("Kilon kaydedildi", {
+        description: `${rounded.toLocaleString("tr-TR")} kg`,
+      });
+      setValue("");
+    } catch {
+      toast.error("Kilo kaydedilemedi", {
+        description: "Bağlantını kontrol edip tekrar deneyebilirsin.",
+      });
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -113,17 +129,18 @@ function WeighInForm() {
           placeholder="78.4"
           value={value}
           onChange={(e) => setValue(e.target.value)}
+          disabled={saving}
         />
       </div>
-      <Button type="submit">
+      <Button type="submit" disabled={saving}>
         <Plus className="size-4" aria-hidden="true" />
-        Kaydet
+        {saving ? "Kaydediliyor…" : "Kaydet"}
       </Button>
     </form>
   );
 }
 
-/** The Progress screen: weight tracking, AI analysis, journey timeline & goals. */
+/** The Progress screen: weight tracking, analysis, journey timeline & goals. */
 export function ProgressView() {
   const router = useRouter();
   const profile = useHealthProfile();
@@ -161,7 +178,9 @@ export function ProgressView() {
                 <p className="text-[11px] text-muted-foreground">Güncel</p>
               </div>
               <div>
-                <p className="text-lg font-bold">{analysis.targetKg.toFixed(1)}</p>
+                <p className="text-lg font-bold">
+                  {analysis.targetKg > 0 ? analysis.targetKg.toFixed(1) : "—"}
+                </p>
                 <p className="text-[11px] text-muted-foreground">Hedef</p>
               </div>
             </div>
@@ -174,7 +193,7 @@ export function ProgressView() {
         )}
       </SectionCard>
 
-      {/* AI analysis */}
+      {/* Deterministic coaching analysis */}
       {analysis.status !== "no-data" && (
         <section className={cn("rounded-2xl border p-5 shadow-card", tone.wrap)}>
           <div className="mb-3 flex items-center gap-2.5">
@@ -185,7 +204,7 @@ export function ProgressView() {
               })}
             </span>
             <div className="flex flex-col">
-              <h3 className="text-sm font-semibold">Koç Analizi</h3>
+              <h3 className="text-sm font-semibold">İlerleme Analizi</h3>
               <span
                 className={cn(
                   "mt-0.5 inline-flex w-fit rounded-full px-2 py-0.5 text-[11px] font-medium",
@@ -216,10 +235,12 @@ export function ProgressView() {
           <div className="rounded-2xl border border-border bg-card p-3">
             <p className="text-[11px] text-muted-foreground">Adım</p>
             <p className="mt-1 text-base font-bold tabular-nums">
-              {activity.steps.toLocaleString("tr-TR")}
+              {activity.stepGoal > 0 ? activity.steps.toLocaleString("tr-TR") : "—"}
             </p>
             <p className="mt-0.5 text-[11px] text-muted-foreground">
-              / {activity.stepGoal.toLocaleString("tr-TR")} hedef
+              {activity.stepGoal > 0
+                ? `/ ${activity.stepGoal.toLocaleString("tr-TR")} hedef`
+                : "Adım kaynağı henüz bağlı değil"}
             </p>
           </div>
           <div className="rounded-2xl border border-border bg-card p-3">
@@ -228,7 +249,9 @@ export function ProgressView() {
               {activity.activeMinutes} dk
             </p>
             <p className="mt-0.5 text-[11px] text-muted-foreground">
-              / {activity.activeMinutesGoal} dk hedef
+              {activity.activeMinutesGoal > 0
+                ? `/ ${activity.activeMinutesGoal} dk hedef`
+                : "Bugün kaydedilen süre"}
             </p>
           </div>
         </div>
@@ -239,7 +262,7 @@ export function ProgressView() {
         <WeighInForm />
         {analysis.isWeighInDue && analysis.status !== "no-data" && (
           <p className="mt-3 text-xs text-amber-600 dark:text-amber-400">
-            Bu haftaki tartılman gecikti — güncel kilonu eklemeyi unutma.
+            Son ölçümünün üzerinden bir hafta geçti. İstersen güncel kilonu ekleyebilirsin.
           </p>
         )}
       </SectionCard>
@@ -250,7 +273,7 @@ export function ProgressView() {
           <EmptyState
             icon={healthIcon("flag")}
             title="Yolculuğun yeni başlıyor"
-            description="Kilometre taşların burada bir zaman çizelgesinde görünecek."
+            description="Kaydettiğin ilerleme verileri burada zaman çizelgesinde görünecek."
           />
         ) : (
           <ol className="relative space-y-5 pl-8">
