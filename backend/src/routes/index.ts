@@ -14,6 +14,7 @@ import { notificationModule } from "../modules/notifications/notification.module
 import { aiCoachModule } from "../modules/ai-coach/ai-coach.module";
 import { activityModule } from "../modules/activity/activity.module";
 import { onboardingRouter } from "../modules/onboarding/onboarding.routes";
+import { foodScanRouter } from "../modules/food-scan/food-scan.routes";
 import { healthRouter } from "./health.route";
 
 /**
@@ -27,6 +28,7 @@ apiRouter.use("/health", healthRouter);
 apiRouter.use("/auth", authRouter);
 apiRouter.use("/account", accountRouter);
 apiRouter.use("/onboarding", onboardingRouter);
+apiRouter.use("/food-scan", foodScanRouter);
 
 // Blood-test analysis module (Sprint 12). `mountFirst` routers are mounted
 // before the Sprint 11 upload router so their concrete paths (e.g. /analyses)
@@ -39,14 +41,10 @@ for (const { path, router, mountFirst } of bloodTestAnalysisModule.routes) {
   if (!mountFirst) apiRouter.use(path, router);
 }
 
-// Nutrition Plan Engine (Sprint 13). Mounted at its own base path; no ordering
-// concerns since it does not share a base with any other module.
 for (const { path, router } of nutritionPlanModule.routes) {
   apiRouter.use(path, router);
 }
 
-// AI Dietitian Chat (Sprint 14, C2) and AI Usage Quota (Sprint 14, C5). Each
-// mounts at its own base path with no ordering concerns.
 for (const { path, router } of aiChatModule.routes) {
   apiRouter.use(path, router);
 }
@@ -54,8 +52,6 @@ for (const { path, router } of aiUsageModule.routes) {
   apiRouter.use(path, router);
 }
 
-// Payments & Subscriptions (Sprint 15) and Legal & Consent (Sprint 15). Each
-// mounts at its own base path with no ordering concerns.
 for (const { path, router } of paymentsModule.routes) {
   apiRouter.use(path, router);
 }
@@ -63,9 +59,6 @@ for (const { path, router } of legalModule.routes) {
   apiRouter.use(path, router);
 }
 
-// AI Health Coach Intelligence (Sprint 19): time-series tracking, the coach
-// endpoints and the scheduled-notification surface. Each mounts at its own base
-// path with no ordering concerns.
 for (const { path, router } of trackingModule.routes) {
   apiRouter.use(path, router);
 }
@@ -76,8 +69,6 @@ for (const { path, router } of aiCoachModule.routes) {
   apiRouter.use(path, router);
 }
 
-// Activity logging (Sprint 22). Mounts at its own base path with no ordering
-// concerns; feeds the AI Health Coach's activity-consistency analysis.
 for (const { path, router } of activityModule.routes) {
   apiRouter.use(path, router);
 }
