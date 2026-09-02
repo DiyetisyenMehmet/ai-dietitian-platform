@@ -4,6 +4,7 @@ import type { AuditContext } from "../../lib/audit";
 import { ApiError } from "../../utils/api-error";
 import { sendCreated, sendSuccess } from "../../utils/api-response";
 import { asyncHandler } from "../../utils/async-handler";
+import { bloodTestAnalysisService } from "../blood-test-analysis/blood-test-analysis.service";
 import { bloodTestService, type IncomingFile } from "./blood-test.service";
 import type { UploadIdParam, UploadMetadataInput } from "./blood-test.schemas";
 
@@ -39,6 +40,20 @@ export const bloodTestController = {
     sendCreated(res, { upload: result });
   }),
 
+  /**
+   * Uploads and immediately analyzes on the SAME Cloud Run instance/request.
+   * This avoids an upload request landing on one ephemeral container and the
+   * follow-up analyze request landing on another before object storage is live.
+   */
+  uploadAndAnalyze: asyncHandler(async (req: Request, res: Response) => {
+    const userId = requireUserId(req);
+    const file = requireFile(req);
+    const metadata = req.body as UploadMetadataInput;
+    const upload = await bloodTestService.upload(userId, file, metadata, auditContext(req));
+    const analysis = await bloodTestAnalysisService.analyze(userId, upload.id);
+    sendCreated(res, { upload, analysis });
+  }),
+
   list: asyncHandler(async (req: Request, res: Response) => {
     const userId = requireUserId(req);
     const uploads = await bloodTestService.list(userId);
@@ -59,7 +74,6 @@ export const bloodTestController = {
 
     res.setHeader("Content-Type", row.mimeType);
     res.setHeader("Content-Length", row.fileSizeBytes);
-    // `inline` lets browsers preview PDFs/images; the filename is used on save.
     res.setHeader(
       "Content-Disposition",
       `inline; filename="${encodeURIComponent(row.originalFilename)}"`,
