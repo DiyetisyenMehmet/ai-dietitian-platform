@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Menu } from "lucide-react";
+import { AlertCircle, Menu } from "lucide-react";
 
 import { cn } from "@/shared/lib/utils";
 import { ThemeToggle } from "@/presentation/components/layout/theme-toggle";
@@ -14,11 +14,11 @@ import { MessageBubble } from "./message-bubble";
 import { ChatInput } from "./chat-input";
 import { ScrollToBottomButton } from "./scroll-to-bottom";
 
-/** Full-screen AI chat experience: sidebar + message thread + composer. */
+/** Full-screen AI chat experience: persisted history + backend AI composer. */
 export function ChatView() {
   const conversation = useActiveConversation();
   const profile = useHealthProfile();
-  const { isResponding } = useChatState();
+  const { isResponding, isLoading, error } = useChatState();
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const [showScrollButton, setShowScrollButton] = React.useState(false);
 
@@ -37,7 +37,6 @@ export function ChatView() {
     return el.scrollHeight - el.scrollTop - el.clientHeight < 120;
   }, []);
 
-  // Auto-scroll as messages grow / stream, but only if the user is at the bottom.
   React.useEffect(() => {
     if (isNearBottom()) scrollToBottom(messages.length <= 1 ? "auto" : "smooth");
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -48,7 +47,6 @@ export function ChatView() {
   }, [isNearBottom]);
 
   const isEmpty = messages.length === 0;
-  const lastAssistantId = [...messages].reverse().find((m) => m.role === "assistant")?.id;
 
   return (
     <div className="flex h-full flex-col bg-background">
@@ -66,12 +64,19 @@ export function ChatView() {
           <div className="leading-tight">
             <p className="text-sm font-semibold">Beslenme Koçun</p>
             <p className="text-[11px] text-muted-foreground">
-              {isResponding ? "Yanıt hazırlanıyor..." : "Çevrimiçi"}
+              {isResponding ? "Yanıt hazırlanıyor..." : isLoading ? "Sohbetler yükleniyor..." : "Hazır"}
             </p>
           </div>
         </div>
         <ThemeToggle />
       </header>
+
+      {error && !isResponding && (
+        <div className="flex items-start gap-2 border-b border-amber-500/20 bg-amber-500/10 px-4 py-2.5 text-xs text-amber-700 dark:text-amber-300">
+          <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+          <span>{error}</span>
+        </div>
+      )}
 
       <div className="flex flex-1 overflow-hidden">
         <ChatSidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
@@ -79,27 +84,24 @@ export function ChatView() {
         <div className="relative flex flex-1 flex-col overflow-hidden">
           <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto">
             <div className={cn("mx-auto w-full max-w-2xl px-4 py-5", !isEmpty && "space-y-5")}>
-              {isEmpty ? (
+              {isLoading && isEmpty ? (
+                <div className="py-12 text-center text-sm text-muted-foreground">
+                  Sohbet geçmişin yükleniyor…
+                </div>
+              ) : isEmpty ? (
                 <WelcomeScreen
                   userName={profile.fullName}
                   onSelect={(prompt) => chatStore.sendMessage(prompt)}
                 />
               ) : (
-                messages.map((message) => (
-                  <MessageBubble
-                    key={message.id}
-                    message={message}
-                    isLastAssistant={message.id === lastAssistantId}
-                    busy={isResponding}
-                  />
-                ))
+                messages.map((message) => <MessageBubble key={message.id} message={message} />)
               )}
             </div>
           </div>
 
           {showScrollButton && <ScrollToBottomButton onClick={() => scrollToBottom("smooth")} />}
 
-          <ChatInput onSend={(text) => chatStore.sendMessage(text)} disabled={isResponding} />
+          <ChatInput onSend={(text) => chatStore.sendMessage(text)} disabled={isResponding || isLoading} />
         </div>
       </div>
     </div>
