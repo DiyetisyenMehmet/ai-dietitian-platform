@@ -8,11 +8,9 @@ import { trackingClient } from "@/infrastructure/tracking/tracking-client";
  * Daily-tracking store: today's water intake plus lightweight per-day coaching
  * flags (did the user chat with the coach today?). Shared via useSyncExternalStore.
  *
- * The backend is the single source of truth for water (Sprint 21.3A): today's
- * `waterMl` is hydrated from the `/api/tracking/water` logs on login / app
- * startup / refresh, and every add is persisted to the backend BEFORE the cache
- * is updated. There is no seeded/demo water value — the cache starts empty and
- * reflects only what the backend returns.
+ * The backend is the single source of truth for water: today's `waterMl` is
+ * hydrated from `/api/tracking/water`, and every add is persisted BEFORE the
+ * cache is updated. There is no seeded/demo water value.
  */
 
 interface DailyTrackingState {
@@ -20,18 +18,20 @@ interface DailyTrackingState {
   waterMl: number;
   /** Daily water goal, in millilitres (sourced from the profile). */
   waterGoalMl: number;
-  /** True once the user has messaged the coach today. */
+  /** True once the user has messaged the coach today in this app session/day. */
   chattedToday: boolean;
 }
 
 /** Default increment used by the "add water" quick action (one glass). */
 export const WATER_GLASS_ML = 250;
 
-let state: DailyTrackingState = {
+const EMPTY_STATE: DailyTrackingState = {
   waterMl: 0,
   waterGoalMl: 0,
   chattedToday: false,
 };
+
+let state: DailyTrackingState = { ...EMPTY_STATE };
 
 /** Start of today (local) — the window used to sum "today's" water logs. */
 function startOfToday(): Date {
@@ -58,9 +58,8 @@ function getSnapshot() {
 
 export const dailyTrackingStore = {
   /**
-   * Hydrates today's water total from the backend logs (single source of
-   * truth). Called on login / app startup / refresh. Best-effort: on a
-   * transient failure the last known cache is kept and retried on next mount.
+   * Hydrates today's water total from the backend logs. On failure the total is
+   * reset to zero rather than retaining another user's stale cache.
    */
   async hydrateWaterFromBackend(): Promise<void> {
     try {
@@ -68,7 +67,7 @@ export const dailyTrackingStore = {
       const total = logs.reduce((sum, log) => sum + log.amountMl, 0);
       setState({ waterMl: Math.max(0, total) });
     } catch {
-      // Offline / transient failure: keep the last known cache.
+      setState({ waterMl: 0 });
     }
   },
   /**
@@ -85,6 +84,11 @@ export const dailyTrackingStore = {
   },
   markChatted() {
     if (!state.chattedToday) setState({ chattedToday: true });
+  },
+  /** Clears user-specific/day-specific cached values during account changes. */
+  reset() {
+    state = { ...EMPTY_STATE };
+    listeners.forEach((l) => l());
   },
 };
 
