@@ -4,15 +4,11 @@ import * as React from "react";
 
 import { bloodTestClient, type BloodTestAnalysis } from "@/infrastructure/tracking/blood-test-client";
 
-/** UI/cache representation of a persisted blood-test analysis. */
 export type BloodTestUiStatus = "analyzing" | "analyzed" | "failed";
 
 export interface BloodTestSummaryView {
-  /** Analysis id for persisted rows; temporary client id while uploading. */
   id: string;
-  /** Backend upload id used for deletion and ownership-safe server actions. */
   uploadId?: string;
-  /** ISO date (YYYY-MM-DD). */
   date: string;
   title: string;
   summary: string;
@@ -36,7 +32,6 @@ function failureSummary(message?: string | null): string {
   return value;
 }
 
-/** Converts a persisted backend analysis record into a cache summary. */
 function toSummary(
   analysis: BloodTestAnalysis,
   options?: { fileName?: string; title?: string },
@@ -90,7 +85,6 @@ function replaceById(id: string, replacement: BloodTestSummaryView) {
 }
 
 export const bloodTestStore = {
-  /** Hydrates the server-owned analysis history. FAILED is never shown as endless PROCESSING. */
   async hydrateBloodTestsFromBackend(): Promise<void> {
     try {
       const { analyses } = await bloodTestClient.listAnalyses();
@@ -103,10 +97,8 @@ export const bloodTestStore = {
   },
 
   /**
-   * Real upload -> validation/extraction/AI-analysis pipeline.
-   * A temporary card is shown only while the request is in flight. On any
-   * failure we re-hydrate the authoritative server state so a FAILED analysis
-   * is surfaced instead of leaving an immortal "Analiz ediliyor" placeholder.
+   * Uploads and analyzes in one server request so Cloud Run's ephemeral local
+   * filesystem cannot split the upload and analysis across different instances.
    */
   async uploadAndAnalyze(file: File): Promise<BloodTestSummaryView> {
     const temporaryId = nextId();
@@ -114,7 +106,7 @@ export const bloodTestStore = {
       id: temporaryId,
       date: today(),
       title: file.name.replace(/\.[^.]+$/, "") || "Kan Tahlili",
-      summary: "Dosya yükleniyor ve doğrulanıyor…",
+      summary: "Dosya doğrulanıyor ve analiz ediliyor…",
       flaggedCount: 0,
       status: "analyzing",
       fileName: file.name,
@@ -123,20 +115,15 @@ export const bloodTestStore = {
     emit();
 
     try {
-      const { upload } = await bloodTestClient.upload(file);
-      replaceById(temporaryId, {
-        ...temporary,
-        uploadId: upload.id,
-        summary: "Kan tahlili doğrulanıyor ve analiz ediliyor…",
-      });
-
-      const { analysis } = await bloodTestClient.analyze(upload.id);
+      const { upload, analysis } = await bloodTestClient.uploadAndAnalyze(file);
       const completed = toSummary(analysis, { fileName: file.name, title: temporary.title });
+      completed.uploadId = upload.id;
       replaceById(temporaryId, completed);
       return completed;
     } catch (error) {
-      // The backend may have persisted a FAILED analysis before returning the
-      // operational error. Re-read it so the UI reflects the real terminal state.
+      // The backend may have persisted a terminal FAILED analysis before
+      // returning an operational error. Re-read the authoritative state so the
+      // UI never remains stuck on a fake PROCESSING card.
       try {
         const { analyses } = await bloodTestClient.listAnalyses();
         tests = analyses.map((analysis) => toSummary(analysis));
@@ -149,7 +136,6 @@ export const bloodTestStore = {
     }
   },
 
-  /** Deletes the real server upload and only then removes its cached analysis. */
   async remove(test: BloodTestSummaryView): Promise<void> {
     if (!test.uploadId) {
       tests = tests.filter((item) => item.id !== test.id);
@@ -167,7 +153,6 @@ export const bloodTestStore = {
   },
 };
 
-/** Subscribe to the blood-test history (newest -> oldest). */
 export function useBloodTests(): BloodTestSummaryView[] {
   const raw = React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
   return React.useMemo(() => sorted(raw), [raw]);
