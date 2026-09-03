@@ -128,12 +128,6 @@ export const LAB_REPORT_KEYWORDS = [
  */
 export const MIN_NUMERIC_VALUES = 3;
 
-/**
- * User-facing (Turkish) message returned when an uploaded document is not
- * recognized as a valid blood-test report.
- */
+/** User-facing rejection kept intentionally concise for mobile UI. */
 export const NOT_A_BLOOD_TEST_MESSAGE =
-  "Yüklenen dosya geçerli bir laboratuvar kan tahlili raporu olarak " +
-  "doğrulanamadı. Lütfen üzerinde ölçüm değerleri, birimleri (örn. mg/dL, " +
-  "mmol/L) ve referans aralıkları bulunan gerçek bir kan tahlili raporu " +
-  "(PDF veya görüntü) yükleyin.";
+  "Bu dosya kan tahlili olarak doğrulanamadı. Değer, birim ve referans aralığı içeren bir laboratuvar raporu yükleyin.";
