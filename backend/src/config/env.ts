@@ -36,25 +36,17 @@ const envSchema = z.object({
   STORAGE_LOCAL_ROOT: z.string().default("./storage/uploads"),
   BLOOD_TEST_MAX_FILE_SIZE_MB: z.coerce.number().int().positive().default(15),
 
-  // Provider-agnostic OpenAI-compatible endpoint.
   AI_API_KEY: z.string().optional(),
   AI_API_BASE_URL: z.string().url().default("https://api.openai.com/v1"),
   AI_MODEL: z.string().default("gpt-4o"),
   AI_MAX_TOKENS: z.coerce.number().int().positive().default(4096),
   AI_TEMPERATURE: z.coerce.number().min(0).max(2).default(0.2),
-  // Hard timeout for one external AI HTTP attempt. Prevents PROCESSING records
-  // from hanging forever when a provider/socket stalls.
   AI_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(5_000).max(180_000).default(60_000),
 
-  // Abacus RouteLLM is OpenAI-compatible. Official self-serve base URL:
-  // https://routellm.abacus.ai/v1 with Authorization: Bearer <RouteLLM key>.
-  // Keep the provider selector so Diewish remains vendor-agnostic at callers.
   AI_PROVIDER: z.enum(["openai", "abacus"]).optional(),
   ABACUS_API_KEY: z.string().optional(),
   ABACUS_API_BASE_URL: z.string().url().default("https://routellm.abacus.ai/v1"),
   ABACUS_MODEL: z.string().default("route-llm"),
-  // Legacy discovery variable is accepted for deployment compatibility but is
-  // no longer used by the RouteLLM transport.
   ABACUS_API_ENDPOINT_URL: z
     .string()
     .url()
@@ -73,10 +65,18 @@ const envSchema = z.object({
   IYZICO_CALLBACK_URL: z.string().url().default("http://localhost:3000/billing/callback"),
   BILLING_CURRENCY: z.string().length(3).default("TRY"),
 
-  LEGAL_PRIVACY_POLICY_VERSION: z.string().default("2026-07-01"),
-  LEGAL_TERMS_OF_SERVICE_VERSION: z.string().default("2026-07-01"),
-  LEGAL_MEDICAL_DISCLAIMER_VERSION: z.string().default("2026-07-01"),
-  LEGAL_KVKK_CONSENT_VERSION: z.string().default("2026-07-01"),
+  // Public legal identity. These are not secrets; production values must match
+  // the merchant/contact details displayed on the Diewish website.
+  LEGAL_CONTROLLER_NAME: z.string().default("Diewish"),
+  LEGAL_CONTROLLER_ADDRESS: z.string().default(""),
+  LEGAL_CONTROLLER_EMAIL: z.string().email().default("diewishdestek@hotmail.com"),
+  LEGAL_CONTROLLER_KEP: z.string().default(""),
+  LEGAL_CONTROLLER_PHONE: z.string().default(""),
+
+  LEGAL_PRIVACY_POLICY_VERSION: z.string().default("2026-09-03"),
+  LEGAL_TERMS_OF_SERVICE_VERSION: z.string().default("2026-09-03"),
+  LEGAL_MEDICAL_DISCLAIMER_VERSION: z.string().default("2026-09-03"),
+  LEGAL_KVKK_CONSENT_VERSION: z.string().default("2026-09-03"),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -88,7 +88,7 @@ function loadEnv(): Env {
     const issues = parsed.error.issues
       .map((issue) => `  - ${issue.path.join(".")}: ${issue.message}`)
       .join("\n");
-    console.error(`\u274c Invalid environment configuration:\n${issues}`);
+    console.error(`❌ Invalid environment configuration:\n${issues}`);
     process.exit(1);
   }
 
