@@ -6,24 +6,19 @@ import { paymentsClient } from "@/infrastructure/payments/payments-client";
 import type { PaidTier } from "@/domain/payments/types";
 
 /**
- * Outcome of a checkout attempt. The presentation layer decides how to act on
- * each variant (navigate, render the hosted form, or surface an error) so this
- * helper stays free of any DOM/router concerns.
+ * Outcome of a checkout attempt. Diewish only navigates to a provider-hosted
+ * payment URL; provider-supplied HTML is never written into the Diewish origin.
  */
 export type CheckoutOutcome =
   | { kind: "auth-required"; redirectTo: string }
   | { kind: "redirect"; url: string }
-  | { kind: "form"; html: string }
   | { kind: "error"; message: string };
 
 /**
- * Orchestrates the "Buy now" flow for a paid tier against the existing Sprint 15
- * iyzico backend. Unauthenticated visitors are routed to registration (carrying
- * the chosen plan); authenticated users receive a hosted payment page URL or an
- * embeddable checkout form from `POST /payments/checkout`.
- *
- * This does NOT re-implement payments — it consumes the established REST
- * contract and simply maps the response to a UI-actionable outcome.
+ * Orchestrates the paid-access checkout flow. Guests are routed to registration;
+ * authenticated users may continue only when the backend returns a hosted
+ * provider URL. If the provider returns embeddable HTML only, checkout fails
+ * closed until a sandboxed/isolated presentation is explicitly implemented.
  */
 export async function beginCheckout(tier: PaidTier): Promise<CheckoutOutcome> {
   const { status } = authStore.getSnapshot();
@@ -38,12 +33,12 @@ export async function beginCheckout(tier: PaidTier): Promise<CheckoutOutcome> {
     if (result.paymentPageUrl) {
       return { kind: "redirect", url: result.paymentPageUrl };
     }
-    if (result.checkoutFormContent) {
-      return { kind: "form", html: result.checkoutFormContent };
-    }
+
     return {
       kind: "error",
-      message: "Ödeme sayfası başlatılamadı. Lütfen daha sonra tekrar deneyin.",
+      message: result.checkoutFormContent
+        ? "Ödeme sağlayıcısı yalnızca gömülü form döndürdü. Güvenli yönlendirme akışı tamamlanmadan ödeme açılamaz."
+        : "Ödeme sayfası başlatılamadı. Lütfen daha sonra tekrar deneyin.",
     };
   } catch (error) {
     const message =
