@@ -1,8 +1,8 @@
 import type { AiUsageEvent, AiUsageFeature, SubscriptionTier } from "@prisma/client";
 
-import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/api-error";
 import { ENTITLEMENT_REQUIRED_CODE } from "../payments/constants";
+import { resolveEffectiveSubscriptionTier } from "../payments/subscription-state";
 import { aiUsageRepository } from "./ai-usage.repository";
 import {
   FREE_LIFETIME_TRIAL,
@@ -41,20 +41,15 @@ function buildWindow(used: number, limit: number | null, resetsAt: Date): Window
 /**
  * AI usage quota service (Sprint 14, C5).
  *
- * Enforces per-tier, per-feature usage limits over rolling daily and monthly
- * windows to protect against external AI cost explosion and to differentiate
- * subscription tiers. The tier is resolved from the user's `subscriptionTier`
- * (defaulting to FREE) so enforcement is "subscription-aware" without coupling
- * to the (future) payments module.
+ * Enforces per-tier, per-feature usage limits over daily and monthly windows to
+ * protect against external AI cost explosion and to differentiate subscription
+ * tiers. Paid access is revalidated against the paid-through date before quota
+ * selection, so a stale cached PREMIUM tier can never grant post-expiry calls.
  */
 export const aiUsageService = {
-  /** Resolves the effective subscription tier for a user (FREE fallback). */
+  /** Resolves the effective, currently-entitled tier for a user (FREE fallback). */
   async resolveTier(userId: string): Promise<SubscriptionTier> {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { subscriptionTier: true },
-    });
-    return user?.subscriptionTier ?? "FREE";
+    return (await resolveEffectiveSubscriptionTier(userId)) ?? "FREE";
   },
 
   /**
@@ -107,11 +102,8 @@ export const aiUsageService = {
   },
 
   /**
-   * Throws a 429 {@link ApiError} when the user has no remaining quota for the
-   * feature; otherwise resolves with the current status so callers can surface
-   * remaining allowance to the client.
-   *
-   * @throws {ApiError} 429 when a window is exhausted.
+   * Throws when the user has no remaining quota for the feature; otherwise
+   * resolves with the current status so callers can surface remaining allowance.
    */
   async assertWithinQuota(
     userId: string,
