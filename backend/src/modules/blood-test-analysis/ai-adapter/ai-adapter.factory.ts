@@ -1,21 +1,19 @@
 import { env } from "../../../config/env";
 import { ApiError } from "../../../utils/api-error";
 import { OpenAICompatibleAdapter } from "./openai-compatible.adapter";
+import { RouteLLMAdapter } from "./route-llm.adapter";
 import type { IAIAdapter } from "./ai-adapter.interface";
 
 /**
  * Factory for the active provider-agnostic AI adapter.
  *
- * Abacus RouteLLM is exposed through the official OpenAI-compatible endpoint,
- * so both supported providers share the same hardened transport/parser instead
- * of maintaining a second legacy cluster-proxy code path.
+ * Abacus RouteLLM uses the official OpenAI-compatible endpoint, with a hardened
+ * timeout/retry transport. Other OpenAI-compatible providers keep the generic
+ * adapter. Callers remain completely vendor-agnostic.
  */
 let cached: IAIAdapter | undefined;
 
 function normalizedAbacusModel(model: string): string {
-  // Old deployments used the cluster-proxy identifier OPENAI_GPT4O. That value
-  // is not a RouteLLM model id; transparently move the legacy default to the
-  // recommended smart-router model. Explicit modern model ids pass through.
   return model.trim().toUpperCase() === "OPENAI_GPT4O" ? "route-llm" : model.trim();
 }
 
@@ -35,7 +33,7 @@ export function getAIAdapter(): IAIAdapter {
       );
     }
 
-    cached = new OpenAICompatibleAdapter({
+    cached = new RouteLLMAdapter({
       apiKey: env.ABACUS_API_KEY,
       baseUrl: env.ABACUS_API_BASE_URL,
       model: normalizedAbacusModel(env.ABACUS_MODEL),
