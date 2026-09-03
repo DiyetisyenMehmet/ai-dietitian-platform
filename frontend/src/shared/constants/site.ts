@@ -38,7 +38,7 @@ export const PUBLIC_BUSINESS_INFO = {
   taxNumber: process.env.NEXT_PUBLIC_TAX_NUMBER?.trim() ?? "",
   registeredAddress: process.env.NEXT_PUBLIC_REGISTERED_ADDRESS?.trim() ?? "",
   kepAddress: process.env.NEXT_PUBLIC_KEP_ADDRESS?.trim() ?? "",
-  email: process.env.NEXT_PUBLIC_BUSINESS_EMAIL?.trim() || "diewishdestek@hotmail.com",
+  email: process.env.NEXT_PUBLIC_BUSINESS_EMAIL?.trim() || "diewishdestek@gmail.com",
   phone: process.env.NEXT_PUBLIC_BUSINESS_PHONE?.trim() ?? "",
   chamberName: process.env.NEXT_PUBLIC_CHAMBER_NAME?.trim() ?? "",
   chamberRulesUrl: process.env.NEXT_PUBLIC_CHAMBER_RULES_URL?.trim() ?? "",
