@@ -1,14 +1,6 @@
-import { AppShell } from "@/presentation/components/layout/app-shell";
-import { GoalEditView } from "@/presentation/components/goals/goal-edit-view";
+import { redirect } from "next/navigation";
 
-export default async function EditGoalPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-
-  return (
-    <AppShell title="Hedefi Düzenle" showBack hideBottomNav>
-      <div className="animate-fade-in">
-        <GoalEditView goalId={id} />
-      </div>
-    </AppShell>
-  );
+/** Persisted weight/water targets are edited in the health profile. */
+export default function EditGoalPage() {
+  redirect("/profile/edit");
 }
