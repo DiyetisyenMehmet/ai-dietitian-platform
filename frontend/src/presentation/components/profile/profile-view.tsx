@@ -11,6 +11,7 @@ import {
   LineChart,
   LogOut,
   Lock,
+  ShieldCheck,
   Trophy,
   UserPen,
 } from "lucide-react";
@@ -197,6 +198,12 @@ export function ProfileView() {
           label="Bildirim tercihleri"
           description="Hatırlatmaları ve özetleri ayarla"
           href="/profile/notifications"
+        />
+        <SettingRow
+          icon={ShieldCheck}
+          label="Gizlilik ve izinler"
+          description="Yasal onayları ve sağlık verisi rızanı yönet"
+          href="/profile/privacy"
         />
         <SettingRow
           icon={Lock}
