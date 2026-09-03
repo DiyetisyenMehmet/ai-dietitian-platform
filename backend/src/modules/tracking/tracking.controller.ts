@@ -8,6 +8,7 @@ import type {
   CreateMealLogInput,
   CreateWaterLogInput,
   CreateWeightLogInput,
+  UpdateMealLogInput,
 } from "./tracking.schemas";
 
 /** Resolves the authenticated user id or throws 401. */
@@ -50,6 +51,16 @@ export const trackingController = {
     const userId = requireUserId(req);
     const logs = await trackingService.listMeals(userId, parseSince(req));
     sendSuccess(res, { logs });
+  }),
+
+  updateMeal: asyncHandler(async (req: Request, res: Response) => {
+    const userId = requireUserId(req);
+    const log = await trackingService.updateMeal(
+      userId,
+      req.params.id,
+      req.body as UpdateMealLogInput,
+    );
+    sendSuccess(res, { log });
   }),
 
   deleteMeal: asyncHandler(async (req: Request, res: Response) => {
