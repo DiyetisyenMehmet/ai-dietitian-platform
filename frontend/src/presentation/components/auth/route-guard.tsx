@@ -42,13 +42,14 @@ function Splash() {
 }
 
 /**
- * Global session + consent + onboarding gate.
+ * Global session + onboarding gate with consent-aware first-run behavior.
  *
- * Account creation intentionally precedes health-data consent: a user can create
- * an account without health data being processed. Before onboarding or any
- * authenticated health feature is shown, the current versions of all mandatory
- * legal documents must be granted. A later document-version bump therefore
- * routes existing users back through `/consent` before health caches rehydrate.
+ * A NEW account cannot enter onboarding until current mandatory consent exists,
+ * because onboarding itself collects health data. Once onboarding has already
+ * been completed, however, withdrawing consent must NOT trap the user on a
+ * consent screen. They keep access to their account and already-held data so
+ * they can review/delete it or manage privacy settings. Backend guards prevent
+ * new health-data writes and AI processing while consent is missing.
  */
 export function RouteGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -79,7 +80,9 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
     consentState.status === "ready" &&
     consentState.consent?.allMandatoryGranted === true;
 
-  // Only hydrate health/profile caches after current mandatory consent exists.
+  // Hydrate health/profile caches only while current mandatory consent exists.
+  // Withdrawing consent stops this automatic health-data processing, but does
+  // not block navigation to account/privacy/data-management screens.
   React.useEffect(() => {
     if (
       status === "authenticated" &&
@@ -108,16 +111,16 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
   if (!onMarketing && status !== "loading" && !consentLoading) {
     if (!authed && !onAuthRoute) {
       redirectTo = "/login";
-    } else if (authed && !consentGranted && !onConsent) {
-      redirectTo = CONSENT_ROUTE;
-    } else if (authed && consentGranted && !onboardingDone && !onOnboarding) {
-      redirectTo = ONBOARDING_ROUTE;
-    } else if (
-      authed &&
-      consentGranted &&
-      onboardingDone &&
-      (onAuthRoute || onOnboarding || onConsent)
-    ) {
+    } else if (authed && !onboardingDone) {
+      // First run: consent must precede any health-data onboarding.
+      if (!consentGranted && !onConsent) {
+        redirectTo = CONSENT_ROUTE;
+      } else if (consentGranted && !onOnboarding) {
+        redirectTo = ONBOARDING_ROUTE;
+      }
+    } else if (authed && onboardingDone && (onAuthRoute || onOnboarding)) {
+      // Established users may visit /consent deliberately to review/re-grant
+      // consent, including after a withdrawal or legal-version change.
       redirectTo = APP_HOME;
     }
   }
