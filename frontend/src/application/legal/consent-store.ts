@@ -47,29 +47,6 @@ function getSnapshot() {
   return state;
 }
 
-function mergeGranted(type: LegalDocumentType): ConsentStatusView | null {
-  if (!state.consent) return null;
-  const items = state.consent.items.map((item) =>
-    item.type === type
-      ? {
-          ...item,
-          granted: true,
-          consentedVersion: item.currentVersion,
-          grantedAt: new Date().toISOString(),
-          withdrawnAt: null,
-        }
-      : item,
-  );
-  const missingMandatory = items
-    .filter((item) => item.mandatory && !item.granted)
-    .map((item) => item.type);
-  return {
-    items,
-    missingMandatory,
-    allMandatoryGranted: missingMandatory.length === 0,
-  };
-}
-
 export const consentStore = {
   getSnapshot,
 
@@ -116,13 +93,15 @@ export const consentStore = {
     return inFlight;
   },
 
-  /** Grants one explicit document consent, then refreshes server truth. */
-  async grant(userId: string, type: LegalDocumentType): Promise<void> {
-    await legalClient.grantConsent(type);
-    if (state.ownerId === userId) {
-      const optimistic = mergeGranted(type);
-      if (optimistic) emit({ ...state, consent: optimistic, error: null });
-    }
+  /**
+   * Grants the individually selected documents and refreshes server truth once.
+   * Each consent remains its own auditable backend record; the calls may succeed
+   * independently, so a partial network failure never fabricates an all-granted
+   * client state.
+   */
+  async grantMany(userId: string, types: LegalDocumentType[]): Promise<void> {
+    const unique = [...new Set(types)];
+    await Promise.all(unique.map((type) => legalClient.grantConsent(type)));
     await this.hydrate(userId, true);
   },
 
