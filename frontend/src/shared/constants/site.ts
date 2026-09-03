@@ -18,7 +18,55 @@ export const SITE_URL = (
   process.env.NEXT_PUBLIC_SITE_URL ?? "https://diewish.com"
 ).replace(/\/$/, "");
 
-/** Fully public marketing routes. */
+export type BusinessEntityType = "TACIR" | "ESNAF" | "UNCONFIGURED";
+
+const entityTypeRaw = process.env.NEXT_PUBLIC_BUSINESS_ENTITY_TYPE?.trim().toUpperCase();
+
+/**
+ * Public merchant identity required for iyzico/e-commerce review and KVKK
+ * notices. These values are deliberately build-time public configuration: they
+ * must be truthful, visible on the website and must never be replaced with fake
+ * placeholders. Secrets/API keys do not belong here.
+ */
+export const PUBLIC_BUSINESS_INFO = {
+  entityType: (
+    entityTypeRaw === "TACIR" || entityTypeRaw === "ESNAF" ? entityTypeRaw : "UNCONFIGURED"
+  ) as BusinessEntityType,
+  legalName: process.env.NEXT_PUBLIC_LEGAL_NAME?.trim() ?? "",
+  brandName: process.env.NEXT_PUBLIC_BRAND_NAME?.trim() || "Diewish",
+  mersisNumber: process.env.NEXT_PUBLIC_MERSIS_NUMBER?.trim() ?? "",
+  taxNumber: process.env.NEXT_PUBLIC_TAX_NUMBER?.trim() ?? "",
+  registeredAddress: process.env.NEXT_PUBLIC_REGISTERED_ADDRESS?.trim() ?? "",
+  kepAddress: process.env.NEXT_PUBLIC_KEP_ADDRESS?.trim() ?? "",
+  email: process.env.NEXT_PUBLIC_BUSINESS_EMAIL?.trim() || "diewishdestek@hotmail.com",
+  phone: process.env.NEXT_PUBLIC_BUSINESS_PHONE?.trim() ?? "",
+  chamberName: process.env.NEXT_PUBLIC_CHAMBER_NAME?.trim() ?? "",
+  chamberRulesUrl: process.env.NEXT_PUBLIC_CHAMBER_RULES_URL?.trim() ?? "",
+} as const;
+
+/** Human-readable fields that still block an iyzico production review. */
+export const BUSINESS_INFO_MISSING_FIELDS: readonly string[] = (() => {
+  const missing: string[] = [];
+  if (PUBLIC_BUSINESS_INFO.entityType === "UNCONFIGURED") missing.push("işletme türü");
+  if (!PUBLIC_BUSINESS_INFO.legalName) missing.push("ticari unvan / ad soyad");
+  if (PUBLIC_BUSINESS_INFO.entityType === "TACIR" && !PUBLIC_BUSINESS_INFO.mersisNumber) {
+    missing.push("MERSİS numarası");
+  }
+  if (PUBLIC_BUSINESS_INFO.entityType === "ESNAF" && !PUBLIC_BUSINESS_INFO.taxNumber) {
+    missing.push("vergi kimlik numarası");
+  }
+  if (!PUBLIC_BUSINESS_INFO.registeredAddress) missing.push("merkez adresi");
+  if (!PUBLIC_BUSINESS_INFO.kepAddress) missing.push("KEP adresi");
+  if (!PUBLIC_BUSINESS_INFO.email) missing.push("e-posta");
+  if (!PUBLIC_BUSINESS_INFO.phone) missing.push("telefon");
+  if (!PUBLIC_BUSINESS_INFO.chamberName) missing.push("meslek odası");
+  if (!PUBLIC_BUSINESS_INFO.chamberRulesUrl) missing.push("meslek kuralları bağlantısı");
+  return missing;
+})();
+
+export const BUSINESS_INFO_COMPLETE = BUSINESS_INFO_MISSING_FIELDS.length === 0;
+
+/** Fully public marketing/legal routes. */
 export const MARKETING_ROUTES: readonly string[] = [
   "/",
   "/features",
@@ -30,6 +78,9 @@ export const MARKETING_ROUTES: readonly string[] = [
   "/terms",
   "/cookies",
   "/kvkk",
+  "/health-data-consent",
+  "/distance-sales",
+  "/delivery-refund",
 ] as const;
 
 /** Primary marketing navigation shown in the public site header. */
@@ -165,17 +216,22 @@ export const FAQ_ITEMS: readonly FaqItem[] = [
   {
     question: "Ücretli erişim nasıl çalışır?",
     answer:
-      "Mevcut V1 ödeme modeli 30 günlük ücretli erişim dönemidir. Otomatik yenileme veya yıllık ödeme henüz sunulmaz; yeni bir dönem istersen yeniden ödeme başlatırsın.",
+      "Mevcut V1 ödeme modeli tek seferlik 30 günlük ücretli erişim dönemidir. Otomatik yenileme veya yıllık ödeme henüz sunulmaz; yeni bir dönem istersen yeniden ödeme başlatırsın.",
+  },
+  {
+    question: "Ücretli erişimi iptal edebilir miyim?",
+    answer:
+      "Mevcut 30 günlük erişim otomatik yenilenmez. Cayma, iptal ve iade koşulları dijital hizmetin ifasına başlanıp başlanmamasına ve yürürlükteki tüketici mevzuatına göre değerlendirilir; ayrıntılar Teslimat, İptal ve İade Koşulları sayfasında yer alır.",
   },
   {
     question: "Kart bilgilerim Diewish'te saklanıyor mu?",
     answer:
-      "Hayır. Ödeme özelliği etkinleştirildiğinde kart işlemi ödeme sağlayıcısının ödeme akışında tamamlanır; Diewish kart numaranı kendi veritabanında saklamaz.",
+      "Hayır. Ödeme özelliği etkinleştirildiğinde kart işlemi ödeme sağlayıcısının ödeme akışında tamamlanır; Diewish kart numaranı veya CVV bilgisini kendi veritabanında saklamaz.",
   },
   {
     question: "Verilerim nasıl korunuyor?",
     answer:
-      "Uygulama verileri kullanıcı hesabına göre yetkilendirilir. Hesabın ve ilişkili verilerin için uygulama üzerinden silme talebi oluşturabilirsin. Sağlık verilerinin işlenmesi için gerekli rıza ve yasal metinler ayrıca sunulur.",
+      "Uygulama verileri kullanıcı hesabına göre yetkilendirilir. Hesabın ve ilişkili verilerin için uygulama üzerinden silme talebi oluşturabilirsin. Sağlık verilerinin işlenmesi için aydınlatma ve açık rıza işlemleri ayrı sunulur.",
   },
   {
     question: "Hangi cihazlarda kullanabilirim?",
@@ -184,12 +240,13 @@ export const FAQ_ITEMS: readonly FaqItem[] = [
   },
 ] as const;
 
-/** Current public support channel. Custom-domain mail replaces this after setup. */
+/** Current public support channel. */
 export const CONTACT_INFO = {
-  email: "diewishdestek@hotmail.com",
+  email: PUBLIC_BUSINESS_INFO.email,
   supportHours: "Destek talepleri e-posta üzerinden alınır.",
-  company: "Diewish",
-  addressLine: "Türkiye",
+  company: PUBLIC_BUSINESS_INFO.legalName || PUBLIC_BUSINESS_INFO.brandName,
+  addressLine: PUBLIC_BUSINESS_INFO.registeredAddress || "Türkiye",
+  phone: PUBLIC_BUSINESS_INFO.phone,
 } as const;
 
 /** No social account is advertised until an official URL is configured. */
@@ -218,9 +275,12 @@ export const FOOTER_LINKS: readonly {
     heading: "Yasal",
     links: [
       { label: "Gizlilik Politikası", href: "/privacy" },
+      { label: "KVKK Aydınlatma Metni", href: "/kvkk" },
+      { label: "Sağlık Verisi Açık Rıza", href: "/health-data-consent" },
       { label: "Kullanım Koşulları", href: "/terms" },
+      { label: "Mesafeli Satış Sözleşmesi", href: "/distance-sales" },
+      { label: "Teslimat, İptal ve İade", href: "/delivery-refund" },
       { label: "Çerez Politikası", href: "/cookies" },
-      { label: "KVKK / GDPR", href: "/kvkk" },
     ],
   },
 ] as const;
@@ -285,7 +345,7 @@ export const PUBLIC_PLANS: readonly PublicPlan[] = [
       "Premium'dan daha yüksek yapay zekâ sohbet kotası",
       "30 ve 60 günlük beslenme planlarında daha yüksek oluşturma kotası",
       "Kan tahlili analizinde daha yüksek kullanım kotası",
-      "Öncelikli destek yetkisi",
+      "Kilo, öğün, su ve aktivite takibi",
     ],
   },
 ] as const;
