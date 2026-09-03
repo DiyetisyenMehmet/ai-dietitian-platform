@@ -1,14 +1,17 @@
 import { Router } from "express";
 
 import { authenticate } from "../../middleware/authenticate";
+import { requireConsent } from "../../middleware/require-consent";
 import { validate } from "../../middleware/validate";
 import { aiChatController } from "./ai-chat.controller";
 import { conversationIdParamSchema, sendMessageSchema } from "./dto/ai-chat.schemas";
 
 /**
  * AI Dietitian Chat router (mounted at /api/ai-chat). Every route requires a
- * valid access token; the service scopes all access by owner. Concrete paths
- * are declared before the parameterized `/conversations/:id` route.
+ * valid access token; the service scopes all access by owner. Sending a new
+ * message processes health/nutrition context through the AI provider and thus
+ * requires current mandatory consent. Existing conversation read/delete access
+ * stays available after consent withdrawal.
  */
 export const aiChatRouter = Router();
 
@@ -32,12 +35,14 @@ export const aiChatRouter = Router();
  *     responses:
  *       201: { description: The assistant reply and refreshed usage quota. }
  *       401: { description: Missing or invalid access token. }
+ *       403: { description: Current mandatory consent is missing. }
  *       404: { description: Conversation not found. }
  *       429: { description: AI usage quota exceeded for the caller's plan. }
  */
 aiChatRouter.post(
   "/messages",
   authenticate,
+  requireConsent,
   validate({ body: sendMessageSchema }),
   aiChatController.sendMessage,
 );
