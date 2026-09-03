@@ -1,6 +1,7 @@
 import { Router } from "express";
 
 import { authenticate } from "../../middleware/authenticate";
+import { requireConsent } from "../../middleware/require-consent";
 import { validate } from "../../middleware/validate";
 import { nutritionPlanController } from "./nutrition-plan.controller";
 import {
@@ -11,9 +12,9 @@ import {
 
 /**
  * Nutrition-plan router (mounted at /api/nutrition-plans). Every route requires
- * a valid access token; the service scopes all access by owner. Concrete paths
- * (`/generate`, `/active`) are declared before the parameterized `/:id` route
- * so they are never shadowed.
+ * a valid access token; the service scopes all access by owner. Generation and
+ * regeneration process health/profile context and therefore require current
+ * mandatory consent; existing plans remain readable after consent withdrawal.
  */
 export const nutritionPlanRouter = Router();
 
@@ -37,10 +38,12 @@ export const nutritionPlanRouter = Router();
  *       201: { description: The generated plan. }
  *       400: { description: Onboarding profile is incomplete. }
  *       401: { description: Missing or invalid access token. }
+ *       403: { description: Current mandatory consent is missing. }
  */
 nutritionPlanRouter.post(
   "/generate",
   authenticate,
+  requireConsent,
   validate({ body: generatePlanSchema }),
   nutritionPlanController.generate,
 );
@@ -97,11 +100,13 @@ nutritionPlanRouter.get("/", authenticate, nutritionPlanController.list);
  *     responses:
  *       201: { description: The newly generated plan version. }
  *       401: { description: Missing or invalid access token. }
+ *       403: { description: Current mandatory consent is missing. }
  *       404: { description: Source plan not found. }
  */
 nutritionPlanRouter.post(
   "/:id/regenerate",
   authenticate,
+  requireConsent,
   validate({ params: planIdParamSchema }),
   nutritionPlanController.regenerate,
 );
