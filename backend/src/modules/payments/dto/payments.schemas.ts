@@ -20,6 +20,12 @@ export const verifyPaymentSchema = z.object({
 });
 export type VerifyPaymentInput = z.infer<typeof verifyPaymentSchema>;
 
+/** Google Play purchaseToken received from the Android Billing Library. */
+export const verifyGooglePlaySubscriptionSchema = z.object({
+  purchaseToken: z.string().min(1).max(4096),
+});
+export type VerifyGooglePlaySubscriptionInput = z.infer<typeof verifyGooglePlaySubscriptionSchema>;
+
 /** Cancel a subscription. */
 export const cancelSubscriptionSchema = z.object({
   atPeriodEnd: z.boolean().default(true),
