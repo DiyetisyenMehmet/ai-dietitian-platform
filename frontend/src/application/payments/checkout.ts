@@ -3,24 +3,18 @@
 import { authStore } from "@/application/auth/auth-store";
 import { ApiError } from "@/infrastructure/api/http-client";
 import { paymentsClient } from "@/infrastructure/payments/payments-client";
-import type { PaidTier } from "@/domain/payments/types";
+import type { PaidTier, PurchaseAcceptance } from "@/domain/payments/types";
 
-/**
- * Outcome of a checkout attempt. Diewish only navigates to a provider-hosted
- * payment URL; provider-supplied HTML is never written into the Diewish origin.
- */
 export type CheckoutOutcome =
   | { kind: "auth-required"; redirectTo: string }
   | { kind: "redirect"; url: string }
   | { kind: "error"; message: string };
 
-/**
- * Orchestrates the paid-access checkout flow. Guests are routed to registration;
- * authenticated users may continue only when the backend returns a hosted
- * provider URL. If the provider returns embeddable HTML only, checkout fails
- * closed until a sandboxed/isolated presentation is explicitly implemented.
- */
-export async function beginCheckout(tier: PaidTier): Promise<CheckoutOutcome> {
+/** Starts hosted checkout only after explicit purchase disclosures are accepted. */
+export async function beginCheckout(
+  tier: PaidTier,
+  purchaseAcceptance: PurchaseAcceptance,
+): Promise<CheckoutOutcome> {
   const { status } = authStore.getSnapshot();
 
   if (status !== "authenticated") {
@@ -28,7 +22,7 @@ export async function beginCheckout(tier: PaidTier): Promise<CheckoutOutcome> {
   }
 
   try {
-    const result = await paymentsClient.startCheckout(tier);
+    const result = await paymentsClient.startCheckout(tier, purchaseAcceptance);
 
     if (result.paymentPageUrl) {
       return { kind: "redirect", url: result.paymentPageUrl };
