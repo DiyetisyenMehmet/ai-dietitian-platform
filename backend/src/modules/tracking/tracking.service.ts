@@ -8,6 +8,7 @@ import type {
   CreateMealLogInput,
   CreateWaterLogInput,
   CreateWeightLogInput,
+  UpdateMealLogInput,
 } from "./tracking.schemas";
 
 /** Parses an optional ISO string into a Date, or undefined. */
@@ -29,7 +30,6 @@ export const trackingService = {
       loggedAt: toDate(input.loggedAt),
     });
 
-    // Hook: re-evaluate the nutrition plan after a new weight signal.
     void nutritionAdaptationService.analyzeAndAdapt(userId).catch((error: unknown) => {
       logger.warn({ err: error, userId }, "Nutrition adaptation after weight log failed");
     });
@@ -58,6 +58,14 @@ export const trackingService = {
 
   listMeals(userId: string, since?: Date): Promise<MealLog[]> {
     return trackingRepository.listMealLogs(userId, since);
+  },
+
+  async updateMeal(userId: string, id: string, input: UpdateMealLogInput): Promise<MealLog> {
+    const updated = await trackingRepository.updateMealLogForUser(id, userId, input);
+    if (!updated) {
+      throw ApiError.notFound("Meal log not found.");
+    }
+    return updated;
   },
 
   async deleteMeal(userId: string, id: string): Promise<void> {
