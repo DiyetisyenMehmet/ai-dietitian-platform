@@ -1,32 +1,27 @@
 import { env } from "../../../config/env";
 import { ApiError } from "../../../utils/api-error";
-import { AbacusAIAdapter } from "./abacus-ai.adapter";
 import { OpenAICompatibleAdapter } from "./openai-compatible.adapter";
 import type { IAIAdapter } from "./ai-adapter.interface";
 
 /**
- * Factory for the active {@link IAIAdapter}.
+ * Factory for the active provider-agnostic AI adapter.
  *
- * The adapter is resolved from environment configuration so the AI provider can
- * be swapped without any code change:
- *  - `AI_PROVIDER=abacus` (or an `ABACUS_API_KEY` with no external `AI_API_KEY`)
- *    selects the Abacus.AI cluster-proxy adapter (the platform default).
- *  - `AI_PROVIDER=openai` (or an `AI_API_KEY`) selects the OpenAI-compatible
- *    adapter.
- * The instance is memoized for the process lifetime.
+ * Abacus RouteLLM is exposed through the official OpenAI-compatible endpoint,
+ * so both supported providers share the same hardened transport/parser instead
+ * of maintaining a second legacy cluster-proxy code path.
  */
 let cached: IAIAdapter | undefined;
 
-/**
- * Returns the configured AI adapter, constructing it on first use.
- *
- * @throws {ApiError} 500 when no AI provider credentials are configured.
- */
+function normalizedAbacusModel(model: string): string {
+  // Old deployments used the cluster-proxy identifier OPENAI_GPT4O. That value
+  // is not a RouteLLM model id; transparently move the legacy default to the
+  // recommended smart-router model. Explicit modern model ids pass through.
+  return model.trim().toUpperCase() === "OPENAI_GPT4O" ? "route-llm" : model.trim();
+}
+
 export function getAIAdapter(): IAIAdapter {
   if (cached) return cached;
 
-  // Explicit selector wins; otherwise infer from whichever credential is set,
-  // preferring the Abacus cluster proxy (the platform's built-in provider).
   const useAbacus =
     env.AI_PROVIDER === "abacus" ||
     (env.AI_PROVIDER !== "openai" && Boolean(env.ABACUS_API_KEY) && !env.AI_API_KEY);
@@ -39,11 +34,13 @@ export function getAIAdapter(): IAIAdapter {
         { code: "AI_NOT_CONFIGURED", isOperational: false },
       );
     }
-    cached = new AbacusAIAdapter({
+
+    cached = new OpenAICompatibleAdapter({
       apiKey: env.ABACUS_API_KEY,
-      model: env.ABACUS_MODEL,
+      baseUrl: env.ABACUS_API_BASE_URL,
+      model: normalizedAbacusModel(env.ABACUS_MODEL),
       maxTokens: env.AI_MAX_TOKENS,
-      discoveryUrl: env.ABACUS_API_ENDPOINT_URL,
+      temperature: env.AI_TEMPERATURE,
     });
     return cached;
   }
