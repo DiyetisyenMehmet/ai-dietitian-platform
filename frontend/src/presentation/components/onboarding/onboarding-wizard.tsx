@@ -26,7 +26,10 @@ import {
 } from "@/domain/onboarding/types";
 import { onboardingService } from "@/application/onboarding/onboarding-service";
 import { authStore, useAuth } from "@/application/auth/auth-store";
-import { hydrateProfileFromBackend } from "@/application/health/profile-hydration";
+import {
+  hydrateProfileFromBackend,
+  hydrateStoresFromProfile,
+} from "@/application/health/profile-hydration";
 import { FormField } from "@/presentation/components/ui/form-field";
 import { Input } from "@/presentation/components/ui/input";
 import { Button } from "@/presentation/components/ui/button";
@@ -51,11 +54,9 @@ const ALLERGY_CHIPS: readonly string[] = [NO_ALLERGY, ...ALLERGY_PRESETS];
  * removes a previously chosen "none".
  */
 function reconcileNoneSelection(next: string[], noneValue: string): string[] {
-  // "none" was the most recent pick → make it exclusive.
   if (next[next.length - 1] === noneValue) {
     return [noneValue];
   }
-  // A real entry was picked while "none" was still selected → drop "none".
   if (next.includes(noneValue) && next.some((v) => v !== noneValue)) {
     return next.filter((v) => v !== noneValue);
   }
@@ -138,18 +139,25 @@ export function OnboardingWizard() {
           onboardingCompleted: true,
           fullName: result.data.fullName,
         });
-        // Backend is the single source of truth: onboarding is already saved
-        // above, so re-read the profile from the backend and hydrate the caches
-        // from that response instead of writing the raw form values into the
-        // stores. Every screen then reflects the persisted profile.
-        await hydrateProfileFromBackend(result.data.fullName);
+
+        // Cache ownership needs the authenticated user id. In the unlikely case
+        // auth state is temporarily unavailable after a successful submission,
+        // hydrate only the returned scalar profile rather than failing onboarding
+        // or guessing an owner id; the normal authenticated app hydration will
+        // complete the remaining backend caches immediately afterwards.
+        if (user?.id) {
+          await hydrateProfileFromBackend(user.id, result.data.fullName);
+        } else {
+          hydrateStoresFromProfile(result.data.profile, result.data.fullName);
+        }
+
         toast.success("Profiliniz hazır! Diewish'e hoş geldiniz.");
         router.replace("/dashboard");
         return;
       }
       toast.error(result.error);
     },
-    [router],
+    [router, user?.id],
   );
 
   const isLastStep = step === TOTAL_STEPS - 1;
@@ -177,7 +185,6 @@ export function OnboardingWizard() {
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} noValidate className="animate-fade-in space-y-5">
-          {/* Step 1 — identity */}
           {step === 0 && (
             <>
               <FormField id="fullName" label="Ad Soyad" error={errors.fullName?.message}>
@@ -198,7 +205,6 @@ export function OnboardingWizard() {
             </>
           )}
 
-          {/* Step 2 — measurements */}
           {step === 1 && (
             <>
               <FormField id="heightCm" label="Boy (cm)" error={errors.heightCm?.message}>
@@ -231,7 +237,6 @@ export function OnboardingWizard() {
             </>
           )}
 
-          {/* Step 3 — activity */}
           {step === 2 && (
             <FormField id="activityLevel" label="Aktivite Seviyesi" error={errors.activityLevel?.message}>
               <OptionCards
@@ -243,7 +248,6 @@ export function OnboardingWizard() {
             </FormField>
           )}
 
-          {/* Step 4 — health */}
           {step === 3 && (
             <>
               <FormField
@@ -281,7 +285,6 @@ export function OnboardingWizard() {
             </>
           )}
 
-          {/* Step 5 — diet & water */}
           {step === 4 && (
             <>
               <FormField
