@@ -25,8 +25,10 @@ const envSchema = z.object({
   EMAIL_VERIFICATION_TTL_HOURS: z.coerce.number().int().positive().default(24),
   PASSWORD_RESET_TTL_MINUTES: z.coerce.number().int().positive().default(60),
   ACCOUNT_DELETION_GRACE_DAYS: z.coerce.number().int().nonnegative().default(30),
-  STORAGE_PROVIDER: z.enum(["local"]).default("local"),
+  STORAGE_PROVIDER: z.enum(["local", "gcs"]).default("local"),
   STORAGE_LOCAL_ROOT: z.string().default("./storage/uploads"),
+  STORAGE_GCS_BUCKET: z.string().default(""),
+  STORAGE_GCS_PREFIX: z.string().default("diewish"),
   BLOOD_TEST_MAX_FILE_SIZE_MB: z.coerce.number().int().positive().default(15),
   AI_API_KEY: z.string().optional(),
   AI_API_BASE_URL: z.string().url().default("https://api.openai.com/v1"),
@@ -80,6 +82,10 @@ function loadEnv(): Env {
   if (!parsed.success) {
     const issues = parsed.error.issues.map((issue) => `  - ${issue.path.join(".")}: ${issue.message}`).join("\n");
     console.error(`❌ Invalid environment configuration:\n${issues}`);
+    process.exit(1);
+  }
+  if (parsed.data.STORAGE_PROVIDER === "gcs" && !parsed.data.STORAGE_GCS_BUCKET.trim()) {
+    console.error("❌ Invalid environment configuration:\n  - STORAGE_GCS_BUCKET: required when STORAGE_PROVIDER=gcs");
     process.exit(1);
   }
   return parsed.data;
