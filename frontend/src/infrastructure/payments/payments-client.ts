@@ -1,13 +1,15 @@
 import { apiRequest } from "@/infrastructure/api/http-client";
-import type { CheckoutResult, PaidTier, PlanDto } from "@/domain/payments/types";
+import type {
+  CheckoutResult,
+  PaidTier,
+  PaymentDto,
+  PlanDto,
+  SubscriptionStatusDto,
+} from "@/domain/payments/types";
 import { PAYMENT_ENDPOINTS } from "./endpoints";
 
-/**
- * Transport-layer client for the payments/subscription API. Thin wrappers over
- * the shared HTTP client; all business decisions live in the application layer.
- */
+/** Thin transport client for the real backend subscription/payments contract. */
 export const paymentsClient = {
-  /** Fetches the public plan catalog. No authentication required. */
   listPlans(): Promise<{ plans: PlanDto[] }> {
     return apiRequest<{ plans: PlanDto[] }>({
       path: PAYMENT_ENDPOINTS.plans,
@@ -15,16 +17,46 @@ export const paymentsClient = {
     });
   },
 
-  /**
-   * Initiates a hosted iyzico checkout for a paid tier. Requires an
-   * authenticated session (bearer token attached automatically).
-   */
+  getSubscription(): Promise<SubscriptionStatusDto> {
+    return apiRequest<SubscriptionStatusDto>({
+      path: PAYMENT_ENDPOINTS.subscription,
+      method: "GET",
+      auth: true,
+    });
+  },
+
+  listPayments(): Promise<{ payments: PaymentDto[] }> {
+    return apiRequest<{ payments: PaymentDto[] }>({
+      path: PAYMENT_ENDPOINTS.payments,
+      method: "GET",
+      auth: true,
+    });
+  },
+
   startCheckout(tier: PaidTier): Promise<CheckoutResult> {
     return apiRequest<CheckoutResult>({
       path: PAYMENT_ENDPOINTS.checkout,
       method: "POST",
       auth: true,
       body: JSON.stringify({ tier }),
+    });
+  },
+
+  verifyPayment(token: string): Promise<SubscriptionStatusDto> {
+    return apiRequest<SubscriptionStatusDto>({
+      path: PAYMENT_ENDPOINTS.verify,
+      method: "POST",
+      auth: true,
+      body: JSON.stringify({ token }),
+    });
+  },
+
+  cancelSubscription(atPeriodEnd = true): Promise<SubscriptionStatusDto> {
+    return apiRequest<SubscriptionStatusDto>({
+      path: PAYMENT_ENDPOINTS.cancelSubscription,
+      method: "POST",
+      auth: true,
+      body: JSON.stringify({ atPeriodEnd }),
     });
   },
 } as const;
