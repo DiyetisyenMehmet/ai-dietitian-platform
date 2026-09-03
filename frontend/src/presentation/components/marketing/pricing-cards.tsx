@@ -1,18 +1,19 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, Loader2 } from "lucide-react";
+import { Check, Loader2, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 
 import { PUBLIC_PLANS, type PublicPlan } from "@/shared/constants/site";
 import { beginCheckout } from "@/application/payments/checkout";
 import { paymentsClient } from "@/infrastructure/payments/payments-client";
-import type { PaidTier, PlanDto } from "@/domain/payments/types";
+import type { PaidTier, PlanDto, PurchaseAcceptance } from "@/domain/payments/types";
 import { Button } from "@/presentation/components/ui/button";
+import { Checkbox } from "@/presentation/components/ui/checkbox";
 import { cn } from "@/shared/lib/utils";
 
-/** Formats backend-owned minor currency units for display. */
 function formatMoney(plan: PlanDto): string {
   return new Intl.NumberFormat("tr-TR", {
     style: "currency",
@@ -21,15 +22,12 @@ function formatMoney(plan: PlanDto): string {
   }).format(plan.priceMinor / 100);
 }
 
-/**
- * Public pricing cards. Price and billing period come from the backend catalog,
- * which is the commercial source of truth. V1 sells one 30-day access period;
- * no annual or automatic-renewal promise is shown until recurring billing is
- * actually implemented at the payment-provider layer.
- */
 export function PricingCards() {
   const router = useRouter();
   const [pendingTier, setPendingTier] = React.useState<PaidTier | null>(null);
+  const [selectedTier, setSelectedTier] = React.useState<PaidTier | null>(null);
+  const [acceptedTerms, setAcceptedTerms] = React.useState(false);
+  const [acceptedImmediatePerformance, setAcceptedImmediatePerformance] = React.useState(false);
   const [backendPlans, setBackendPlans] = React.useState<PlanDto[]>([]);
   const [plansLoading, setPlansLoading] = React.useState(true);
   const [plansError, setPlansError] = React.useState(false);
@@ -56,16 +54,31 @@ export function PricingCards() {
     };
   }, []);
 
-  async function handleSelect(plan: PublicPlan) {
+  function selectPlan(plan: PublicPlan) {
     if (plan.tier === "FREE") {
       router.push("/register");
       return;
     }
+    setSelectedTier(plan.tier as PaidTier);
+    setAcceptedTerms(false);
+    setAcceptedImmediatePerformance(false);
+  }
 
-    const tier = plan.tier as PaidTier;
-    setPendingTier(tier);
+  async function confirmCheckout() {
+    if (!selectedTier || pendingTier) return;
+    const backendPlan = backendPlans.find((plan) => plan.tier === selectedTier);
+    if (!backendPlan || !acceptedTerms || !acceptedImmediatePerformance) return;
+
+    const purchaseAcceptance: PurchaseAcceptance = {
+      termsVersion: backendPlan.purchaseTermsVersion,
+      distanceSalesAccepted: true,
+      deliveryRefundAccepted: true,
+      immediateDigitalPerformanceRequested: true,
+    };
+
+    setPendingTier(selectedTier);
     try {
-      const outcome = await beginCheckout(tier);
+      const outcome = await beginCheckout(selectedTier, purchaseAcceptance);
       switch (outcome.kind) {
         case "auth-required":
           router.push(outcome.redirectTo);
@@ -82,12 +95,16 @@ export function PricingCards() {
     }
   }
 
+  const selectedPlan = selectedTier
+    ? backendPlans.find((plan) => plan.tier === selectedTier)
+    : null;
+
   return (
     <div className="space-y-8">
       <div className="mx-auto max-w-2xl rounded-2xl border border-border bg-muted/40 p-4 text-center">
         <p className="text-sm font-medium">Şu an desteklenen ücretli dönem: 30 günlük erişim</p>
         <p className="mt-1 text-xs text-muted-foreground">
-          Otomatik yenileme ve yıllık ödeme henüz sunulmuyor. Yeni dönem için kullanıcı yeniden ödeme başlatır.
+          Otomatik yenileme ve yıllık ödeme yoktur. Yeni dönem için kullanıcı yeniden ödeme başlatır.
         </p>
       </div>
 
@@ -148,9 +165,8 @@ export function PricingCards() {
               <Button
                 className="mt-6 w-full"
                 variant={plan.featured ? "default" : "outline"}
-                isLoading={pendingTier === plan.tier}
                 disabled={paidUnavailable || plansLoading || pendingTier !== null}
-                onClick={() => void handleSelect(plan)}
+                onClick={() => selectPlan(plan)}
               >
                 {plan.cta}
               </Button>
@@ -167,6 +183,54 @@ export function PricingCards() {
           );
         })}
       </div>
+
+      {selectedTier && selectedPlan && (
+        <section className="mx-auto max-w-2xl rounded-3xl border border-primary/30 bg-card p-5 shadow-card sm:p-6">
+          <div className="flex items-start gap-3">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <ShieldCheck className="size-5" aria-hidden="true" />
+            </span>
+            <div>
+              <h3 className="font-semibold">Satın alma öncesi bilgilendirme</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {selectedPlan.name} — {formatMoney(selectedPlan)} — {selectedPlan.periodDays} günlük dijital erişim. Otomatik yenileme yoktur.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-5 space-y-4 text-sm">
+            <label className="flex cursor-pointer items-start gap-3">
+              <Checkbox checked={acceptedTerms} onCheckedChange={(value) => setAcceptedTerms(value === true)} className="mt-0.5" />
+              <span>
+                <Link href="/distance-sales" target="_blank" className="font-medium underline underline-offset-2">Mesafeli Satış Sözleşmesini</Link>
+                {" "}ve{" "}
+                <Link href="/delivery-refund" target="_blank" className="font-medium underline underline-offset-2">Teslimat, İptal ve İade Koşullarını</Link>
+                {" "}okudum ve kabul ediyorum.
+              </span>
+            </label>
+            <label className="flex cursor-pointer items-start gap-3">
+              <Checkbox checked={acceptedImmediatePerformance} onCheckedChange={(value) => setAcceptedImmediatePerformance(value === true)} className="mt-0.5" />
+              <span>
+                Ödeme doğrulandıktan sonra dijital hizmetin 30 günlük erişim süresi içinde hemen başlamasını talep ediyorum; hizmetin ifasına başlanmasının uygulanabilir cayma hakkımı etkileyebileceği konusunda bilgilendirildim.
+              </span>
+            </label>
+          </div>
+
+          <div className="mt-5 flex flex-col gap-2 sm:flex-row">
+            <Button
+              className="flex-1"
+              disabled={!acceptedTerms || !acceptedImmediatePerformance || pendingTier !== null}
+              isLoading={pendingTier === selectedTier}
+              onClick={() => void confirmCheckout()}
+            >
+              Ödemeye geç
+            </Button>
+            <Button variant="ghost" onClick={() => setSelectedTier(null)} disabled={pendingTier !== null}>
+              Vazgeç
+            </Button>
+          </div>
+        </section>
+      )}
 
       <p className="text-center text-xs text-muted-foreground">
         Fiyat ve dönem bilgileri Diewish ödeme sunucusundan doğrulanır. Kart bilgileri Diewish sunucularında saklanmaz.
