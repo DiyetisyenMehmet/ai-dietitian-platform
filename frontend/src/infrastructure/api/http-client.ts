@@ -42,6 +42,12 @@ interface RequestOptions extends RequestInit {
   path: string;
   /** When true, attaches the current access token as a Bearer header. */
   auth?: boolean;
+  /**
+   * Retry once after HTTP 401 by rotating the refresh token. Disable this for
+   * endpoints where 401 is a valid business response (e.g. wrong current
+   * password) rather than evidence that the access token expired.
+   */
+  retryOnUnauthorized?: boolean;
 }
 
 /** Standard success envelope returned by the backend. */
@@ -108,12 +114,14 @@ async function performFetch(
  *
  * Authenticated requests automatically retry once after a 401 when the auth
  * store can rotate the refresh token. This prevents a normal 15-minute access
- * token expiry from forcing the user to sign in again.
+ * token expiry from forcing the user to sign in again. Callers can opt out when
+ * an endpoint deliberately uses 401 for a business-level credential failure.
  */
 export async function apiRequest<TResponse>({
   path,
   headers,
   auth = false,
+  retryOnUnauthorized = true,
   ...init
 }: RequestOptions): Promise<TResponse> {
   if (!isApiConfigured()) {
@@ -127,7 +135,7 @@ export async function apiRequest<TResponse>({
   // receives 401, ask the auth layer to rotate the refresh token and retry the
   // original request exactly once with the fresh access token. The refresh call
   // itself is unauthenticated, so this path cannot recurse indefinitely.
-  if (auth && response.status === 401 && unauthorizedHandler) {
+  if (auth && retryOnUnauthorized && response.status === 401 && unauthorizedHandler) {
     let refreshedToken: string | null = null;
     try {
       refreshedToken = await unauthorizedHandler();

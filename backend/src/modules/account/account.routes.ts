@@ -17,9 +17,8 @@ import {
  *
  * Unauthenticated, abuse-prone endpoints (email verification confirm, forgot
  * password, reset password) sit behind the stricter `authRateLimiter`. The
- * authenticated email-verification *request* is also rate-limited because it
- * triggers outbound email. Destructive actions require re-authentication with
- * the account password (validated in the service).
+ * authenticated email-verification request and password-confirming security
+ * actions are also rate-limited because they trigger email or verify a secret.
  */
 export const accountRouter = Router();
 
@@ -146,9 +145,11 @@ accountRouter.post(
  *       200: { description: Password changed; other sessions revoked. }
  *       401: { description: Not authenticated or current password incorrect. }
  *       422: { description: Validation failed. }
+ *       429: { description: Too many password attempts. }
  */
 accountRouter.post(
   "/password/change",
+  authRateLimiter,
   authenticate,
   validate({ body: changePasswordSchema }),
   accountController.changePassword,
@@ -175,9 +176,11 @@ accountRouter.post(
  *       200: { description: Deletion requested; returns grace-period details. }
  *       401: { description: Not authenticated or password incorrect. }
  *       422: { description: Validation failed. }
+ *       429: { description: Too many password attempts. }
  */
 accountRouter.post(
   "/deletion/request",
+  authRateLimiter,
   authenticate,
   validate({ body: confirmPasswordSchema }),
   accountController.requestAccountDeletion,
@@ -219,9 +222,11 @@ accountRouter.post("/deletion/cancel", authenticate, accountController.cancelAcc
  *       200: { description: Account permanently deleted. }
  *       401: { description: Not authenticated or password incorrect. }
  *       422: { description: Validation failed. }
+ *       429: { description: Too many password attempts. }
  */
 accountRouter.delete(
   "/",
+  authRateLimiter,
   authenticate,
   validate({ body: confirmPasswordSchema }),
   accountController.deleteAccount,
