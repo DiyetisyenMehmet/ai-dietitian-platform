@@ -13,20 +13,12 @@ import {
 
 import type { SubscriptionTier } from "@/domain/payments/types";
 
-/**
- * Canonical public URL of the marketing site. Used for SEO metadata (canonical
- * URLs, Open Graph, sitemap). Configurable per environment; falls back to the
- * production domain so build-time SEO output is never empty.
- */
+/** Canonical public URL used for SEO metadata. */
 export const SITE_URL = (
   process.env.NEXT_PUBLIC_SITE_URL ?? "https://diewish.com"
 ).replace(/\/$/, "");
 
-/**
- * Fully public marketing routes. These render server-side without an auth
- * splash or redirect (essential for SEO and the iyzico merchant review), so the
- * RouteGuard treats them as always-accessible.
- */
+/** Fully public marketing routes. */
 export const MARKETING_ROUTES: readonly string[] = [
   "/",
   "/features",
@@ -49,67 +41,66 @@ export const MARKETING_NAV: readonly { label: string; href: string }[] = [
   { label: "İletişim", href: "/contact" },
 ] as const;
 
-/** A single hero/feature capability card. */
 export interface FeatureItem {
   icon: LucideIcon;
   title: string;
   description: string;
 }
 
-/** The four core AI capabilities highlighted across the site. */
+/** Product capabilities that have real backend/application support. */
 export const CORE_FEATURES: readonly FeatureItem[] = [
   {
     icon: Sparkles,
     title: "Yapay Zekâ Destekli Beslenme",
     description:
-      "Hedeflerine, tercihlerine ve yaşam tarzına göre uyarlanan akıllı beslenme rehberliği ile her gün doğru adımı at.",
+      "Hedeflerini, tercihlerini ve kaydettiğin verileri dikkate alan kişiselleştirilmiş beslenme rehberliği.",
   },
   {
     icon: ClipboardList,
     title: "Kişiselleştirilmiş Beslenme Planları",
     description:
-      "30 ve 60 günlük, sana özel hazırlanan; öğün öğün detaylandırılmış beslenme planlarıyla ilerlemeni sürdür.",
+      "30 veya 60 günlük plan dönemleri; kalori ve makro hesapları deterministik, öğün içeriği yapay zekâ desteklidir.",
   },
   {
     icon: TestTube2,
     title: "Kan Tahlili Analizi",
     description:
-      "Laboratuvar sonuçlarını yükle; yapay zekâ referans aralıklarına göre anlaşılır, sade bir özet sunsun.",
+      "Laboratuvar sonucunu yükle; sistem uygun dosyalarda sonuçları çıkarıp bilgilendirme amaçlı sade bir özet oluştursun.",
   },
   {
     icon: MessageSquareHeart,
-    title: "Yapay Zekâ Diyetisyen Asistanı",
+    title: "Yapay Zekâ Beslenme Asistanı",
     description:
-      "Beslenme sorularını 7/24 sor; kişisel bağlamını dikkate alan diyetisyen asistanından anında yanıt al.",
+      "Beslenme sorularını sor; profilini ve ilgili kayıtlarını dikkate alan yapay zekâ yanıtları al.",
   },
 ] as const;
 
-/** Extended feature grid used on the Features page. */
 export const EXTENDED_FEATURES: readonly FeatureItem[] = [
   ...CORE_FEATURES,
   {
     icon: Utensils,
     title: "Öğün ve Besin Takibi",
-    description: "Günlük öğünlerini, makro ve kalori dengeni kolayca kaydet ve takip et.",
+    description: "Günlük öğünlerini ve besin kayıtlarını tek yerde takip et.",
   },
   {
     icon: Activity,
-    title: "Hedef ve İlerleme Takibi",
-    description: "Kilo, su ve aktivite hedeflerini belirle; ilerlemeni görsel grafiklerle izle.",
+    title: "İlerleme Takibi",
+    description: "Kilo, su ve aktivite kayıtlarını takip et; mevcut verilerinden oluşturulan grafikleri incele.",
   },
   {
     icon: HeartPulse,
-    title: "Sağlık Odaklı Yaklaşım",
-    description: "Öneriler bilgilendirme amaçlıdır; sağlık kararların için uzmanına danışmanı önerir.",
+    title: "Sağlık Güvenliği Odaklı Yaklaşım",
+    description:
+      "İçerikler bilgilendirme amaçlıdır; Diewish teşhis veya tedavi hizmeti sunmaz ve sağlık uzmanının yerini almaz.",
   },
   {
     icon: ShieldCheck,
-    title: "KVKK Uyumlu Gizlilik",
-    description: "Verilerin şifreli saklanır; dilediğin an hesabını ve tüm verilerini silebilirsin.",
+    title: "Gizlilik ve Veri Kontrolü",
+    description:
+      "Kullanıcı verileri hesap bazlı erişim kontrolleriyle ayrılır; hesabın için silme talebi oluşturabilirsin.",
   },
 ] as const;
 
-/** A single step in the "How it works" flow. */
 export interface HowItWorksStep {
   step: number;
   title: string;
@@ -117,73 +108,39 @@ export interface HowItWorksStep {
   icon: LucideIcon;
 }
 
-/** The three-step onboarding narrative shown on the landing page. */
 export const HOW_IT_WORKS: readonly HowItWorksStep[] = [
   {
     step: 1,
     title: "Ücretsiz hesap oluştur",
     description:
-      "Birkaç dakikada kaydol ve kısa onboarding ile hedeflerini, tercihlerini ve sağlık bilgilerini paylaş.",
+      "Kaydol, gerekli onayları verdikten sonra hedeflerini, tercihlerini ve kişiselleştirme için gerekli profil bilgilerini tamamla.",
     icon: ClipboardList,
   },
   {
     step: 2,
-    title: "Yapay zekâ seni tanısın",
+    title: "Profiline göre kişiselleştir",
     description:
-      "Diewish profiline göre kişisel beslenme planları oluşturur ve kan tahlillerini analiz eder.",
+      "Diewish, kayıtlı profilini kullanarak beslenme planı ve desteklenen analiz özelliklerini kişiselleştirir.",
     icon: Bot,
   },
   {
     step: 3,
-    title: "Her gün ilerle",
+    title: "Kayıtlarını takip et",
     description:
-      "Diyetisyen asistanınla sohbet et, öğünlerini takip et ve hedeflerine emin adımlarla ulaş.",
+      "Öğün, su, kilo ve aktivite kayıtlarını güncel tut; ilerlemeni ve yapay zekâ destekli içgörüleri incele.",
     icon: HeartPulse,
   },
 ] as const;
 
-/** Key benefits (value proposition) bullets. */
 export const KEY_BENEFITS: readonly string[] = [
-  "Sana özel, tek tip olmayan beslenme rehberliği",
-  "7/24 erişilebilen yapay zekâ diyetisyen asistanı",
-  "Kan tahlillerinden anlaşılır sağlık içgörüleri",
-  "İlerlemeni ölçülebilir kılan hedef takibi",
-  "İstediğin zaman iptal — taahhüt yok",
-  "KVKK uyumlu, güvenli veri işleme",
+  "Profil ve hedeflerine göre kişiselleştirilen beslenme rehberliği",
+  "Yapay zekâ beslenme asistanı",
+  "Kan tahlillerinden bilgilendirme amaçlı sade özetler",
+  "Kilo, su, öğün ve aktivite takibi",
+  "Ücretsiz planda sınırlı AI deneme hakları",
+  "Hesap bazlı veri erişimi ve kullanıcı veri kontrolü",
 ] as const;
 
-/** Placeholder testimonials (clearly illustrative until real reviews arrive). */
-export interface Testimonial {
-  quote: string;
-  name: string;
-  role: string;
-  initials: string;
-}
-
-export const TESTIMONIALS: readonly Testimonial[] = [
-  {
-    quote:
-      "Diewish sayesinde beslenme planıma sadık kalmak çok daha kolay. Asistan gerçekten sorularımı anlıyor.",
-    name: "A. Yılmaz",
-    role: "Premium kullanıcı",
-    initials: "AY",
-  },
-  {
-    quote:
-      "Kan tahlili analizi bölümü, sonuçlarımı ilk kez bu kadar sade anlamamı sağladı. Çok pratik.",
-    name: "M. Demir",
-    role: "Premium Plus kullanıcı",
-    initials: "MD",
-  },
-  {
-    quote: "Hedeflerimi takip etmek ve motive kalmak için ihtiyacım olan her şey tek bir yerde.",
-    name: "S. Kaya",
-    role: "Premium kullanıcı",
-    initials: "SK",
-  },
-] as const;
-
-/** Frequently asked questions shown on the FAQ page and landing FAQ preview. */
 export interface FaqItem {
   question: string;
   answer: string;
@@ -193,56 +150,51 @@ export const FAQ_ITEMS: readonly FaqItem[] = [
   {
     question: "Diewish nedir?",
     answer:
-      "Diewish; yapay zekâ destekli kişisel beslenme planları, kan tahlili analizi ve diyetisyen asistanı sunan bir sağlık ve beslenme platformudur. Amacı, sağlıklı yaşam yolculuğunda sana kişiselleştirilmiş rehberlik sağlamaktır.",
+      "Diewish; yapay zekâ destekli beslenme planları, kan tahlili özeti, öğün ve ilerleme takibi ile yapay zekâ beslenme asistanı sunan bir yazılım platformudur.",
   },
   {
     question: "Diewish tıbbi tavsiye veriyor mu?",
     answer:
-      "Hayır. Diewish'in sunduğu içerikler yalnızca bilgilendirme amaçlıdır ve profesyonel tıbbi tavsiyenin yerine geçmez. Sağlığınla ilgili kararlar almadan önce mutlaka bir sağlık uzmanına danışmalısın.",
+      "Hayır. Diewish'in sunduğu içerikler bilgilendirme amaçlıdır; teşhis, tedavi veya profesyonel tıbbi tavsiye yerine geçmez. Sağlık kararlarında yetkili sağlık profesyoneline danışmalısın.",
   },
   {
     question: "Ücretsiz plan neler içeriyor?",
     answer:
-      "Ücretsiz plan; temel beslenme takibi ve sınırlı yapay zekâ kullanımı sunar. Diewish'i denemek ve temel özellikleri kullanmak için idealdir.",
+      "Ücretsiz hesapta temel takip özelliklerinin yanında toplam 5 yapay zekâ sohbet yanıtı, 1 kan tahlili analizi ve 1 beslenme planı oluşturma denemesi bulunur. Bu AI deneme hakları yenilenmez.",
   },
   {
-    question: "Aboneliğimi istediğim zaman iptal edebilir miyim?",
+    question: "Ücretli erişim nasıl çalışır?",
     answer:
-      "Evet. Ücretli aboneliğini dilediğin an panelinden iptal edebilirsin. İptal ettiğinde mevcut dönem sonuna kadar erişimin devam eder, sonrasında ücretsiz plana geçersin.",
+      "Mevcut V1 ödeme modeli 30 günlük ücretli erişim dönemidir. Otomatik yenileme veya yıllık ödeme henüz sunulmaz; yeni bir dönem istersen yeniden ödeme başlatırsın.",
   },
   {
-    question: "Ödemeler güvenli mi?",
+    question: "Kart bilgilerim Diewish'te saklanıyor mu?",
     answer:
-      "Tüm ödemeler, Türkiye'nin lisanslı ödeme kuruluşu iyzico altyapısı üzerinden güvenli şekilde işlenir. Kart bilgilerin Diewish sunucularında saklanmaz.",
+      "Hayır. Ödeme özelliği etkinleştirildiğinde kart işlemi ödeme sağlayıcısının ödeme akışında tamamlanır; Diewish kart numaranı kendi veritabanında saklamaz.",
   },
   {
     question: "Verilerim nasıl korunuyor?",
     answer:
-      "Verilerin 6698 sayılı KVKK kapsamında işlenir ve güvenli şekilde saklanır. Dilediğin an hesabını ve ilişkili tüm verilerini uygulama üzerinden kalıcı olarak silebilirsin.",
+      "Uygulama verileri kullanıcı hesabına göre yetkilendirilir. Hesabın ve ilişkili verilerin için uygulama üzerinden silme talebi oluşturabilirsin. Sağlık verilerinin işlenmesi için gerekli rıza ve yasal metinler ayrıca sunulur.",
   },
   {
     question: "Hangi cihazlarda kullanabilirim?",
     answer:
-      "Diewish mobil öncelikli, tamamen duyarlı bir web uygulamasıdır. Telefon, tablet ve masaüstü tarayıcılardan sorunsuz kullanabilirsin.",
+      "Diewish mobil öncelikli duyarlı bir web uygulamasıdır; modern telefon, tablet ve masaüstü tarayıcılarda kullanılabilir.",
   },
 ] as const;
 
-/** Company / contact information surfaced on public pages. */
+/** Current public support channel. Custom-domain mail replaces this after setup. */
 export const CONTACT_INFO = {
-  email: "destek@diewish.com",
-  supportHours: "Hafta içi 09:00 – 18:00 (GMT+3)",
+  email: "diewishdestek@hotmail.com",
+  supportHours: "Destek talepleri e-posta üzerinden alınır.",
   company: "Diewish",
-  addressLine: "İstanbul, Türkiye",
+  addressLine: "Türkiye",
 } as const;
 
-/** Social media placeholders (kept as safe non-navigating placeholders). */
-export const SOCIAL_LINKS: readonly { label: string; href: string }[] = [
-  { label: "Instagram", href: "#" },
-  { label: "X (Twitter)", href: "#" },
-  { label: "LinkedIn", href: "#" },
-] as const;
+/** No social account is advertised until an official URL is configured. */
+export const SOCIAL_LINKS: readonly { label: string; href: string }[] = [] as const;
 
-/** Footer link groups. */
 export const FOOTER_LINKS: readonly {
   heading: string;
   links: { label: string; href: string }[];
@@ -273,76 +225,67 @@ export const FOOTER_LINKS: readonly {
   },
 ] as const;
 
-/** A purchasable plan as presented on the public pricing page. */
+/** A plan's public presentation. Live price/period are fetched from backend. */
 export interface PublicPlan {
   tier: SubscriptionTier;
   name: string;
   tagline: string;
-  /** Monthly price in TRY (major units). */
+  /** Legacy display fields kept for internal compatibility; pricing UI does not trust them. */
   monthlyPrice: number;
-  /** Effective monthly price when billed yearly (TRY, major units). */
   yearlyMonthlyPrice: number;
-  /** Total yearly price in TRY (major units). */
   yearlyPrice: number;
   featured: boolean;
   features: string[];
   cta: string;
 }
 
-/**
- * Public pricing catalog (major TRY units for display). Monthly prices mirror
- * the backend PLAN_CATALOG (kuruş → TRY): Premium 149,99₺, Premium Plus 299,99₺.
- * Yearly pricing offers ~2 months free (10× monthly).
- */
 export const PUBLIC_PLANS: readonly PublicPlan[] = [
   {
     tier: "FREE",
     name: "Free",
-    tagline: "Diewish'i keşfetmeye başla",
+    tagline: "Temel takibi kullan, AI özelliklerini sınırlı olarak dene",
     monthlyPrice: 0,
     yearlyMonthlyPrice: 0,
     yearlyPrice: 0,
     featured: false,
     cta: "Ücretsiz Başla",
     features: [
-      "Temel öğün ve besin takibi",
-      "Sınırlı yapay zekâ diyetisyen sohbeti",
-      "Hedef ve ilerleme takibi",
-      "Topluluk desteği",
+      "Temel öğün, su, kilo ve ilerleme takibi",
+      "Toplam 5 ücretsiz yapay zekâ sohbet yanıtı",
+      "1 ücretsiz kan tahlili analizi",
+      "1 ücretsiz beslenme planı oluşturma",
     ],
   },
   {
     tier: "PREMIUM",
     name: "Premium",
-    tagline: "Kişisel yolculuğun için tam donanım",
+    tagline: "Daha yüksek AI kullanım kotalarıyla 30 günlük erişim",
     monthlyPrice: 149.99,
-    yearlyMonthlyPrice: 124.99,
-    yearlyPrice: 1499.9,
+    yearlyMonthlyPrice: 0,
+    yearlyPrice: 0,
     featured: true,
-    cta: "Premium'a Geç",
+    cta: "30 Günlük Premium Al",
     features: [
-      "Genişletilmiş yapay zekâ diyetisyen sohbeti",
-      "Kişiselleştirilmiş 30 & 60 günlük beslenme planları",
-      "Kan tahlili analizi",
-      "Detaylı ilerleme içgörüleri",
-      "E-posta desteği",
+      "Genişletilmiş yapay zekâ sohbet kotası",
+      "30 ve 60 günlük beslenme planı oluşturma",
+      "Genişletilmiş kan tahlili analiz kotası",
+      "Kilo, öğün, su ve aktivite takibi",
     ],
   },
   {
     tier: "PREMIUM_PLUS",
     name: "Premium Plus",
-    tagline: "En üst seviye kişiselleştirme ve öncelik",
+    tagline: "En yüksek mevcut AI kotalarıyla 30 günlük erişim",
     monthlyPrice: 299.99,
-    yearlyMonthlyPrice: 249.99,
-    yearlyPrice: 2999.9,
+    yearlyMonthlyPrice: 0,
+    yearlyPrice: 0,
     featured: false,
-    cta: "Premium Plus'a Geç",
+    cta: "30 Günlük Premium Plus Al",
     features: [
-      "En yüksek yapay zekâ kotaları",
-      "Öncelikli yapay zekâ yanıtları",
-      "Sınırsız beslenme planı oluşturma",
-      "Gelişmiş kan tahlili analizi",
-      "Öncelikli destek",
+      "Premium'dan daha yüksek yapay zekâ sohbet kotası",
+      "30 ve 60 günlük beslenme planlarında daha yüksek oluşturma kotası",
+      "Kan tahlili analizinde daha yüksek kullanım kotası",
+      "Öncelikli destek yetkisi",
     ],
   },
 ] as const;
