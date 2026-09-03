@@ -23,10 +23,10 @@ interface EditFoodModalProps {
   food: FoodItem | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSave: (values: EditFoodInput) => void;
+  onSave: (values: EditFoodInput) => Promise<void>;
 }
 
-/** Modal form for editing a food entry with validation, loading and success toast. */
+/** Modal form for editing a persisted food entry with real loading/error state. */
 export function EditFoodModal({ food, open, onOpenChange, onSave }: EditFoodModalProps) {
   const {
     register,
@@ -52,17 +52,19 @@ export function EditFoodModal({ food, open, onOpenChange, onSave }: EditFoodModa
 
   const onSubmit = React.useCallback(
     async (values: EditFoodInput) => {
-      // Simulate async persistence for realistic loading UX (no backend).
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      onSave(values);
-      toast.success("Besin güncellendi");
-      onOpenChange(false);
+      try {
+        await onSave(values);
+        toast.success("Besin güncellendi");
+        onOpenChange(false);
+      } catch {
+        toast.error("Besin güncellenemedi. Lütfen tekrar dene.");
+      }
     },
     [onSave, onOpenChange],
   );
 
   return (
-    <Modal open={open} onOpenChange={onOpenChange}>
+    <Modal open={open} onOpenChange={(nextOpen) => !isSubmitting && onOpenChange(nextOpen)}>
       <ModalContent>
         <ModalHeader>
           <ModalTitle>Besini Düzenle</ModalTitle>
@@ -106,7 +108,12 @@ export function EditFoodModal({ food, open, onOpenChange, onSave }: EditFoodModa
             </FormField>
           </div>
           <ModalFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isSubmitting}
+              onClick={() => onOpenChange(false)}
+            >
               İptal
             </Button>
             <Button type="submit" isLoading={isSubmitting}>
