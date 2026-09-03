@@ -7,21 +7,18 @@ import { GreetingSection } from "@/presentation/components/dashboard/greeting-se
 import { TodayActionsSection } from "@/presentation/components/dashboard/today-actions-section";
 import { CoachHeroSection } from "@/presentation/components/dashboard/coach-hero-section";
 import { TodayProgressSection } from "@/presentation/components/dashboard/today-progress-section";
-import { HealthScoreSection } from "@/presentation/components/dashboard/health-score-section";
 import { CoachInsightCard } from "@/presentation/components/health/coach-insight-card";
 import { useHealthProfile } from "@/application/health/health-profile-store";
 import { useCoachInsights } from "@/application/health/coach";
 
 /**
- * Calm, action-first home screen. The dashboard intentionally does NOT repeat
- * every feature in Diewish: detailed weight/activity/history belongs under
- * Progress, while the home answers only "what can I do today?".
+ * Calm, action-first home screen. Detailed scores, weight trends, activity and
+ * history do not compete for attention here; the dashboard answers only
+ * "what can I do today?" and routes deeper analysis to its dedicated screens.
  */
 export function DashboardView() {
   const profile = useHealthProfile();
   const insights = useCoachInsights(3);
-  // The primary insight is already represented by CoachHeroSection. Surface at
-  // most two additional items so the user is not buried in recommendations.
   const secondaryInsights = insights.slice(1, 3);
 
   return (
@@ -33,8 +30,6 @@ export function DashboardView() {
       <CoachHeroSection />
 
       <TodayProgressSection />
-
-      <HealthScoreSection />
 
       {secondaryInsights.length > 0 && (
         <section className="space-y-3">
