@@ -1,6 +1,7 @@
 import { Router } from "express";
 
 import { authenticate } from "../../middleware/authenticate";
+import { requireConsent } from "../../middleware/require-consent";
 import { validate } from "../../middleware/validate";
 import { bloodTestController } from "./blood-test.controller";
 import { uploadIdParamSchema, uploadMetadataSchema } from "./blood-test.schemas";
@@ -9,7 +10,8 @@ import { uploadSingleFile } from "./blood-test.upload";
 /**
  * Blood-test upload router (mounted at /api/blood-tests). Every route requires a
  * valid access token; the service additionally scopes all access by owner so a
- * user can only ever see or mutate their own uploads.
+ * user can only ever see or mutate their own uploads. New file intake requires
+ * current mandatory consent BEFORE multipart parsing receives health data.
  */
 export const bloodTestRouter = Router();
 
@@ -21,6 +23,7 @@ export const bloodTestRouter = Router();
 bloodTestRouter.post(
   "/analyze-upload",
   authenticate,
+  requireConsent,
   uploadSingleFile(),
   validate({ body: uploadMetadataSchema }),
   bloodTestController.uploadAndAnalyze,
@@ -30,6 +33,7 @@ bloodTestRouter.post(
 bloodTestRouter.post(
   "/",
   authenticate,
+  requireConsent,
   uploadSingleFile(),
   validate({ body: uploadMetadataSchema }),
   bloodTestController.upload,
@@ -61,6 +65,7 @@ bloodTestRouter.get(
 bloodTestRouter.put(
   "/:id/file",
   authenticate,
+  requireConsent,
   validate({ params: uploadIdParamSchema }),
   uploadSingleFile(),
   bloodTestController.replace,
