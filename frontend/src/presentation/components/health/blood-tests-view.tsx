@@ -66,6 +66,13 @@ export function BloodTestsView() {
 
   const latest = tests[0];
 
+  // The backend/Neon is the source of truth. Reload persisted analysis history
+  // whenever this page mounts so a browser refresh never loses completed/failed
+  // results and an old PROCESSING card cannot survive only in client memory.
+  React.useEffect(() => {
+    void bloodTestStore.hydrateBloodTestsFromBackend();
+  }, []);
+
   const onPick = React.useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = "";
