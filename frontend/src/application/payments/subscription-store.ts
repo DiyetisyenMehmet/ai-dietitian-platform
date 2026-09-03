@@ -8,13 +8,13 @@ import type {
   PaidTier,
   PaymentDto,
   PlanDto,
+  PurchaseAcceptance,
   SubscriptionStatusDto,
   SubscriptionTier,
 } from "@/domain/payments/types";
 import { PUBLIC_PLANS, type PublicPlan } from "@/shared/constants/site";
 import { paymentsClient } from "@/infrastructure/payments/payments-client";
 
-/** Ordered tiers for upgrade comparisons. */
 export const TIER_ORDER: Record<SubscriptionTier, number> = {
   FREE: 0,
   PREMIUM: 1,
@@ -66,12 +66,10 @@ function getSnapshot() {
   return state;
 }
 
-/** Looks up the public display definition for a tier. */
 export function planForTier(tier: SubscriptionTier): PublicPlan {
   return PUBLIC_PLANS.find((plan) => plan.tier === tier) ?? PUBLIC_PLANS[0];
 }
 
-/** Legacy display helper retained for marketing components; checkout is monthly-only in V1. */
 export function priceForCycle(plan: PublicPlan, cycle: BillingCycle): number {
   return cycle === "yearly" ? plan.yearlyPrice : plan.monthlyPrice;
 }
@@ -107,7 +105,6 @@ async function hydrate(): Promise<void> {
       emit();
     } catch (error) {
       if (generation !== sessionGeneration) return;
-      // Fail closed to FREE/unknown rather than showing a fabricated paid plan.
       state = {
         ...state,
         subscription: emptySubscription(),
@@ -132,20 +129,19 @@ export const subscriptionStore = {
     await hydrate();
   },
 
-  /** Starts the real iyzico hosted checkout. It never grants premium locally. */
-  async startCheckout(tier: PaidTier): Promise<CheckoutResult> {
-    const result = await paymentsClient.startCheckout(tier);
-    return result;
+  async startCheckout(
+    tier: PaidTier,
+    purchaseAcceptance: PurchaseAcceptance,
+  ): Promise<CheckoutResult> {
+    return paymentsClient.startCheckout(tier, purchaseAcceptance);
   },
 
-  /** Schedules cancellation at period end through the backend. */
   async cancelAtPeriodEnd(): Promise<void> {
     const subscription = await paymentsClient.cancelSubscription(true);
     state = { ...state, subscription, error: null };
     emit();
   },
 
-  /** Clears all account-owned billing cache on logout/account switch. */
   resetSession(): void {
     sessionGeneration += 1;
     hydrated = false;
@@ -169,7 +165,6 @@ export interface SubscriptionSnapshot {
   error: string | null;
 }
 
-/** Subscribe to real backend-owned billing state. */
 export function useSubscription(): SubscriptionSnapshot {
   const snapshot = React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
