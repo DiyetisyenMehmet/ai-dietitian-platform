@@ -84,10 +84,25 @@ paymentsRouter.post(
 
 /**
  * @openapi
+ * /api/payments/callback:
+ *   post:
+ *     tags: [Payments]
+ *     summary: iyzico Checkout Form browser callback
+ *     responses:
+ *       303: { description: Payment retrieved server-side and browser redirected to Diewish. }
+ */
+paymentsRouter.post(
+  "/callback",
+  validate({ body: verifyPaymentSchema }),
+  paymentsController.checkoutCallback,
+);
+
+/**
+ * @openapi
  * /api/payments/verify:
  *   post:
  *     tags: [Payments]
- *     summary: Finalize a checkout from the provider token (callback handling)
+ *     summary: Finalize a checkout from the provider token (authenticated fallback)
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: Payment verified; subscription updated. }
@@ -116,7 +131,7 @@ paymentsRouter.get("/", authenticate, paymentsController.listPayments);
  * /api/payments/webhook:
  *   post:
  *     tags: [Payments]
- *     summary: Provider payment webhook (signature-verified, idempotent)
+ *     summary: Provider payment webhook (V3 signature-verified, idempotent)
  *     responses:
  *       200: { description: Acknowledged. }
  */
