@@ -1,7 +1,6 @@
 import type { NextFunction, Request, RequestHandler, Response } from "express";
 import type { SubscriptionTier } from "@prisma/client";
 
-import { prisma } from "../lib/prisma";
 import { ApiError } from "../utils/api-error";
 import { ENTITLEMENT_REQUIRED_CODE } from "../modules/payments/constants";
 import {
@@ -9,34 +8,22 @@ import {
   tierHasFeature,
   type EntitlementFeature,
 } from "../modules/payments/entitlements";
+import { resolveEffectiveSubscriptionTier } from "../modules/payments/subscription-state";
 
 /**
  * Subscription / entitlement guards (Sprint 15).
  *
- * These are reusable infrastructure: a feature module can mount `requireFeature`
- * or `requireTier` after `authenticate` to gate a route on the caller's current
- * subscription tier. The caller's tier is read from the persisted
- * `User.subscriptionTier`, which the payments module keeps in sync with the
- * active subscription (activation/cancellation/expiry). On insufficient
- * entitlement a 403 is returned with the stable `SUBSCRIPTION_REQUIRED` code so
- * clients can present an upgrade prompt.
- *
- * NOTE: these guards are intentionally NOT wired onto the existing Sprint 12–14
- * feature routes; per-tier *volume* there is already enforced by the AI-usage
- * quota matrix. They exist so future gated surfaces (and the frontend) have a
- * single, consistent entitlement mechanism.
+ * These reusable guards validate the caller's current paid-through period before
+ * trusting the cached `User.subscriptionTier`. Expired access is repaired back
+ * to FREE by the shared subscription-state resolver, preventing a stale database
+ * tier from granting post-expiry entitlements.
  */
 
-/** Reads the authenticated user's current subscription tier from the DB. */
+/** Reads the authenticated user's currently entitled subscription tier. */
 async function resolveTier(userId: string): Promise<SubscriptionTier> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { subscriptionTier: true },
-  });
-  if (!user) {
-    throw ApiError.unauthorized("Authentication required.");
-  }
-  return user.subscriptionTier;
+  const tier = await resolveEffectiveSubscriptionTier(userId);
+  if (!tier) throw ApiError.unauthorized("Authentication required.");
+  return tier;
 }
 
 /** Guard requiring the caller's tier to be entitled to a specific feature. */
