@@ -7,6 +7,7 @@
  * PCI scope — so only tokens/ids and non-sensitive status flow through here.
  */
 
+import { env } from "../../../config/env";
 import { logger } from "../../../lib/logger";
 import type {
   InitializeCheckoutInput,
@@ -48,12 +49,21 @@ export const iyzicoProvider: PaymentProvider = {
   },
 
   async initializeCheckout(input: InitializeCheckoutInput): Promise<InitializeCheckoutResult> {
+    // The current account/profile model does not yet collect iyzico's required
+    // real buyer identity + billing-address fields. Sandbox may use documented
+    // test placeholders, but production must fail closed rather than submit
+    // fabricated identity/address data to a payment processor.
+    if (env.IYZICO_ENV === "production") {
+      throw new Error(
+        "Live iyzico checkout is blocked until real buyer identity and billing address fields are collected.",
+      );
+    }
+
     const price = toDecimalString(input.priceMinor);
     const { name, surname } = splitName(input.buyer.fullName);
 
-    // Minimal, hosted-checkout-appropriate payload. Address/identity fields are
-    // required by iyzico; for a digital subscription we send neutral defaults
-    // (the hosted form collects/validates real billing details). No card data.
+    // Sandbox-only payload. These neutral/test values must never be used when
+    // IYZICO_ENV=production (guarded above). No card data is handled by Diewish.
     const payload: Record<string, unknown> = {
       locale: "tr",
       conversationId: input.conversationId,
@@ -95,7 +105,14 @@ export const iyzicoProvider: PaymentProvider = {
     const { body } = await iyzicoClient.post(INITIALIZE_PATH, payload);
     if (str(body, "status") !== "success") {
       const message = str(body, "errorMessage") ?? "iyzico checkout initialization failed";
-      logger.error({ conversationId: input.conversationId, body }, "iyzico initialize failed");
+      logger.error(
+        {
+          conversationId: input.conversationId,
+          errorCode: str(body, "errorCode"),
+          errorMessage: message,
+        },
+        "iyzico initialize failed",
+      );
       throw new Error(message);
     }
 
@@ -133,17 +150,27 @@ export const iyzicoProvider: PaymentProvider = {
     } catch {
       return false;
     }
-    // Canonical signed string per iyzico's notification scheme: a concatenation
-    // of the stable event fields. The HMAC key is the account/webhook secret
-    // (applied inside the client). If iyzico's exact field order differs for a
-    // given event version, adjust ONLY this canonical builder.
-    const canonical = [
-      str(payload, "iyziEventType") ?? "",
-      str(payload, "iyziPaymentId") ?? str(payload, "paymentId") ?? "",
-      str(payload, "paymentConversationId") ?? str(payload, "conversationId") ?? "",
-      str(payload, "status") ?? "",
-    ].join("");
-    return iyzicoClient.verifyWebhookSignature(canonical, signatureHeader);
+
+    const eventType = str(payload, "iyziEventType") ?? "";
+    const paymentConversationId =
+      str(payload, "paymentConversationId") ?? str(payload, "conversationId") ?? "";
+    const status = str(payload, "status") ?? "";
+    const token = str(payload, "token");
+
+    // Checkout Form / HPP V3 format:
+    // secretKey + iyziEventType + iyziPaymentId + token +
+    // paymentConversationId + status
+    if (token) {
+      const iyziPaymentId = str(payload, "iyziPaymentId") ?? str(payload, "paymentId") ?? "";
+      const canonicalFields = [eventType, iyziPaymentId, token, paymentConversationId, status].join("");
+      return iyzicoClient.verifyWebhookSignature(canonicalFields, signatureHeader);
+    }
+
+    // Direct-payment V3 fallback:
+    // secretKey + iyziEventType + paymentId + paymentConversationId + status
+    const paymentId = str(payload, "paymentId") ?? str(payload, "iyziPaymentId") ?? "";
+    const canonicalFields = [eventType, paymentId, paymentConversationId, status].join("");
+    return iyzicoClient.verifyWebhookSignature(canonicalFields, signatureHeader);
   },
 
   parseWebhook(payload: unknown): ParsedWebhookEvent {
