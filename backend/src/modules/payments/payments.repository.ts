@@ -18,7 +18,7 @@ import type {
 
 import { prisma } from "../../lib/prisma";
 
-/** Non-terminal subscription statuses that represent a "current" subscription. */
+/** Non-terminal records useful for support/reconciliation views. */
 const LIVE_STATUSES: SubscriptionStatus[] = ["PENDING", "ACTIVE", "PAST_DUE"];
 
 export const paymentsRepository = {
@@ -30,10 +30,38 @@ export const paymentsRepository = {
     });
   },
 
-  /** The user's current live (ACTIVE/PENDING/PAST_DUE) subscription, or null. */
+  /** Most recent non-terminal record (NOT necessarily an entitled subscription). */
   findActiveSubscription(userId: string): Promise<Subscription | null> {
     return prisma.subscription.findFirst({
       where: { userId, status: { in: LIVE_STATUSES } },
+      orderBy: { createdAt: "desc" },
+    });
+  },
+
+  /**
+   * The ACTIVE subscription that actually entitles the user right now.
+   * Pending/failed checkouts are deliberately excluded, and the paid-through
+   * timestamp must be in the future.
+   */
+  findEntitlingSubscription(
+    userId: string,
+    tier?: SubscriptionTier,
+  ): Promise<Subscription | null> {
+    return prisma.subscription.findFirst({
+      where: {
+        userId,
+        ...(tier ? { tier } : {}),
+        status: "ACTIVE",
+        currentPeriodEnd: { gt: new Date() },
+      },
+      orderBy: { currentPeriodEnd: "desc" },
+    });
+  },
+
+  /** Most recent checkout that is still awaiting a provider outcome. */
+  findPendingSubscription(userId: string): Promise<Subscription | null> {
+    return prisma.subscription.findFirst({
+      where: { userId, status: "PENDING" },
       orderBy: { createdAt: "desc" },
     });
   },
