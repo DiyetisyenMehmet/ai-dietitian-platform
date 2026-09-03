@@ -18,6 +18,7 @@ import type { PaidTier, PaymentDto } from "@/domain/payments/types";
 import {
   isAndroidApp,
   isAndroidBillingAvailable,
+  isServerVerificationReady,
   loadAndroidBillingCatalog,
   purchaseAndroidTier,
   recurringPrice,
@@ -66,6 +67,7 @@ export function SubscriptionView() {
 
   const currentPlan = planForTier(subscription.tier);
   const isPaid = subscription.tier !== "FREE";
+  const serverReady = isServerVerificationReady(catalog);
 
   const loadCatalog = React.useCallback(async () => {
     if (!isAndroidApp() || !isAndroidBillingAvailable()) return;
@@ -95,8 +97,8 @@ export function SubscriptionView() {
 
   const purchase = React.useCallback(
     async (tier: PaidTier) => {
-      if (!catalog) {
-        toast.error("Google Play ürün bilgileri henüz hazır değil.");
+      if (!catalog || !catalog.config.serverVerificationReady) {
+        toast.error("Google Play sunucu doğrulaması henüz hazır değil.");
         return;
       }
       setPurchasingTier(tier);
@@ -195,14 +197,22 @@ export function SubscriptionView() {
           </span>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold">
-              {androidHost ? "Google Play satın alma hazır" : "Premium satın alma Android uygulamasından yapılır"}
+              {!androidHost
+                ? "Premium satın alma Android uygulamasından yapılır"
+                : !billingReady
+                  ? "Google Play bağlantısı hazırlanıyor"
+                  : serverReady
+                    ? "Google Play satın alma hazır"
+                    : "Google Play sunucu doğrulaması hazırlanıyor"}
             </p>
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              {androidHost
-                ? billingReady
-                  ? "Fiyatlar Google Play'den doğrulanır. Satın alma sonrası erişim Diewish backend'i tarafından tekrar doğrulanır ve aynı hesabınla webde de geçerli olur."
-                  : "Google Play bağlantısı hazırlanıyor. Birkaç saniye sonra tekrar deneyebilirsin."
-                : "Web üzerinden yeni ödeme başlatılmıyor. Premium ve Premium Plus Google Play üzerinden sunulur; aktif erişim aynı Diewish hesabıyla webde de geçerlidir."}
+              {!androidHost
+                ? "Web üzerinden yeni ödeme başlatılmıyor. Premium ve Premium Plus Google Play üzerinden sunulur; aktif erişim aynı Diewish hesabıyla webde de geçerlidir."
+                : !billingReady
+                  ? "Google Play bağlantısı birkaç saniye içinde hazır olur."
+                  : serverReady
+                    ? "Fiyatlar Google Play'den doğrulanır. Satın alma sonrası erişim Diewish backend'i tarafından tekrar doğrulanır ve aynı hesabınla webde de geçerli olur."
+                    : "Satın alma butonları, Play Console ürünleri ve güvenli sunucu doğrulaması tamamlanana kadar kapalı tutulur."}
             </p>
             {androidHost && (
               <Button
@@ -210,7 +220,7 @@ export function SubscriptionView() {
                 variant="ghost"
                 size="sm"
                 className="mt-2 -ml-2"
-                disabled={!billingReady || restoring}
+                disabled={!billingReady || !serverReady || restoring}
                 isLoading={restoring}
                 onClick={() => void restore()}
               >
@@ -297,11 +307,15 @@ export function SubscriptionView() {
                   <Button
                     className="w-full"
                     variant={plan.featured ? "default" : "outline"}
-                    disabled={!billingReady || !product || purchasingTier !== null}
+                    disabled={!billingReady || !serverReady || !product || purchasingTier !== null}
                     isLoading={purchasingTier === paidTier}
                     onClick={() => paidTier && void purchase(paidTier)}
                   >
-                    {product ? `${playPrice ? `${playPrice} · ` : ""}Google Play ile devam et` : "Google Play ürünü hazırlanıyor"}
+                    {!serverReady
+                      ? "Play Console kurulumu bekleniyor"
+                      : product
+                        ? `${playPrice ? `${playPrice} · ` : ""}Google Play ile devam et`
+                        : "Google Play ürünü hazırlanıyor"}
                   </Button>
                 ) : (
                   <Button className="w-full" variant={plan.featured ? "default" : "outline"} disabled>
