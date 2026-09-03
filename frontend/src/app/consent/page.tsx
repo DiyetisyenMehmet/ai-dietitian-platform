@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronDown, Leaf, Loader2, LogOut, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
@@ -122,10 +123,30 @@ export default function ConsentPage() {
   }
 
   if (consentState.consent?.allMandatoryGranted) {
+    const destination = user?.onboardingCompleted ? "/dashboard" : "/onboarding";
     return (
-      <div className="flex min-h-dvh items-center justify-center bg-background">
-        <Loader2 className="size-6 animate-spin text-primary" aria-label="Yönlendiriliyor" />
-      </div>
+      <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center px-4 py-8">
+        <Card>
+          <CardContent className="space-y-4 p-6 text-center">
+            <ShieldCheck className="mx-auto size-9 text-primary" aria-hidden="true" />
+            <div className="space-y-1">
+              <h1 className="text-xl font-bold">Güncel onayların kayıtlı</h1>
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                Güncel zorunlu metinler için onayların mevcut. Sağlık verisi açık rızanı profilindeki
+                Gizlilik ve İzinler bölümünden istediğin zaman yönetebilirsin.
+              </p>
+            </div>
+            <Button asChild className="w-full">
+              <Link href={destination}>{user?.onboardingCompleted ? "Uygulamaya dön" : "Profilini oluştur"}</Link>
+            </Button>
+            {user?.onboardingCompleted && (
+              <Button asChild variant="outline" className="w-full">
+                <Link href="/profile/privacy">Gizlilik ve izinleri yönet</Link>
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      </main>
     );
   }
 
