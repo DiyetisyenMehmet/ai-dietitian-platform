@@ -15,6 +15,8 @@ export interface GooglePlayConfigDto {
   premiumProductId: string;
   premiumPlusProductId: string;
   obfuscatedAccountId: string;
+  /** False until backend Google Play API credentials are configured. */
+  serverVerificationReady: boolean;
 }
 
 export interface GooglePlayVerifyDto {
