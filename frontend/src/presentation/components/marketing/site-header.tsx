@@ -13,9 +13,9 @@ import { ThemeToggle } from "@/presentation/components/layout/theme-toggle";
 import { cn } from "@/shared/lib/utils";
 
 /**
- * Public marketing site header: a responsive, sticky SaaS navigation bar with a
- * mobile hamburger menu. Auth-aware — signed-in visitors get a direct link to
- * their dashboard instead of the login/register calls to action.
+ * Public marketing site header. Medium-width phones/tablets retain the compact
+ * hamburger navigation; the full desktop navigation appears only at `lg` where
+ * all labels and account actions have enough room without shrinking the page.
  */
 export function SiteHeader() {
   const pathname = usePathname();
@@ -24,7 +24,6 @@ export function SiteHeader() {
 
   const authed = status === "authenticated";
 
-  // Close the mobile menu whenever the route changes.
   React.useEffect(() => {
     setOpen(false);
   }, [pathname]);
@@ -34,17 +33,16 @@ export function SiteHeader() {
       <div className="container flex h-16 items-center justify-between gap-4">
         <Link
           href="/"
-          className="flex items-center gap-2 font-bold tracking-tight"
+          className="flex min-w-0 items-center gap-2 font-bold tracking-tight"
           aria-label={`${APP_CONFIG.name} ana sayfa`}
         >
-          <span className="flex size-9 items-center justify-center rounded-xl bg-primary/10">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10">
             <Leaf className="size-5 text-primary" aria-hidden="true" />
           </span>
-          <span className="text-lg">{APP_CONFIG.name}</span>
+          <span className="truncate text-lg">{APP_CONFIG.name}</span>
         </Link>
 
-        {/* Desktop navigation */}
-        <nav className="hidden items-center gap-1 md:flex" aria-label="Ana gezinme">
+        <nav className="hidden items-center gap-1 lg:flex" aria-label="Ana gezinme">
           {MARKETING_NAV.map((item) => {
             const active = pathname === item.href;
             return (
@@ -62,7 +60,7 @@ export function SiteHeader() {
           })}
         </nav>
 
-        <div className="hidden items-center gap-2 md:flex">
+        <div className="hidden items-center gap-2 lg:flex">
           <ThemeToggle />
           {authed ? (
             <Button asChild size="sm">
@@ -80,8 +78,7 @@ export function SiteHeader() {
           )}
         </div>
 
-        {/* Mobile controls */}
-        <div className="flex items-center gap-1 md:hidden">
+        <div className="flex shrink-0 items-center gap-1 lg:hidden">
           <ThemeToggle />
           <Button
             variant="ghost"
@@ -95,9 +92,8 @@ export function SiteHeader() {
         </div>
       </div>
 
-      {/* Mobile menu */}
       {open && (
-        <div className="border-t border-border/70 bg-background md:hidden">
+        <div className="border-t border-border/70 bg-background lg:hidden">
           <nav className="container flex flex-col gap-1 py-4" aria-label="Mobil gezinme">
             {MARKETING_NAV.map((item) => (
               <Link
