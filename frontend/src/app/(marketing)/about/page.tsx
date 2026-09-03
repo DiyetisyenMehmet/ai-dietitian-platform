@@ -8,7 +8,7 @@ import { CtaSection } from "@/presentation/components/marketing/cta-section";
 export const metadata: Metadata = {
   title: "Hakkımızda",
   description:
-    "Diewish; yapay zekâyı sağlıklı yaşamla buluşturarak herkesin kişiselleştirilmiş, erişilebilir ve güvenilir beslenme rehberliğine ulaşmasını amaçlar.",
+    "Diewish, kullanıcıların kendi hesapları üzerinden kullandığı yapay zekâ destekli beslenme ve takip yazılım platformudur.",
   alternates: { canonical: "/about" },
 };
 
@@ -16,22 +16,22 @@ const VALUES = [
   {
     icon: Target,
     title: "Kişiselleştirme",
-    description: "Herkesin ihtiyacı farklıdır; rehberliğimiz sana özeldir, tek tip değildir.",
+    description: "Kayıtlı profil ve hedefleri dikkate alan, tek tip olmayan yazılım deneyimi.",
   },
   {
     icon: ShieldCheck,
     title: "Güven ve Gizlilik",
-    description: "Verilerin KVKK uyumlu şekilde, güvenle işlenir ve korunur.",
+    description: "Veri minimizasyonu, hesap bazlı erişim ve açık rıza kontrollerini ürünün parçası olarak ele alırız.",
   },
   {
     icon: HeartPulse,
-    title: "Sağlık Odaklılık",
-    description: "İçeriklerimiz bilgilendirme amaçlıdır ve uzmana danışmayı teşvik eder.",
+    title: "Sağlık Güvenliği",
+    description: "İçerikler bilgilendirme amaçlıdır; teşhis veya tedavi yerine geçmez ve uzmana başvurmayı teşvik eder.",
   },
   {
     icon: Sparkles,
-    title: "Yenilikçilik",
-    description: "Yapay zekâyı sağlıklı yaşamı kolaylaştırmak için sorumlulukla kullanırız.",
+    title: "Sorumlu Yapay Zekâ",
+    description: "Yapay zekâyı beslenme takibini ve bilgiyi anlamayı kolaylaştıran bir yazılım aracı olarak kullanırız.",
   },
 ];
 
@@ -45,14 +45,14 @@ export default function AboutPage() {
             Hakkımızda
           </span>
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
-            Sağlıklı yaşamı herkes için erişilebilir kılıyoruz
+            Yapay zekâ destekli beslenme ve takip yazılımı
           </h1>
           <p className="text-base leading-relaxed text-muted-foreground sm:text-lg">
-            {APP_CONFIG.name}, yapay zekânın gücünü kişisel beslenme rehberliğiyle birleştirir.
-            Amacımız; karmaşık beslenme bilgisini herkesin anlayabileceği, uygulanabilir ve
-            kişiselleştirilmiş adımlara dönüştürmektir. Kan tahlili analizinden 30 ve 60 günlük
-            beslenme planlarına, 7/24 diyetisyen asistanından hedef takibine kadar tüm araçları tek
-            bir platformda sunarız.
+            {APP_CONFIG.name}, kullanıcıların kendi hesapları üzerinden kullandığı dijital bir yazılım
+            platformudur. Profil, hedef ve kullanıcı tarafından kaydedilen verileri kullanarak beslenme
+            planı oluşturma, öğün ve ilerleme takibi, kan tahlili sonuçlarını bilgilendirme amaçlı
+            sadeleştirme ve yapay zekâ beslenme asistanı özellikleri sunar. Diewish üzerinden bire bir
+            hekim veya diyetisyen danışmanlığı satılmaz.
           </p>
         </div>
       </Section>
@@ -77,11 +77,11 @@ export default function AboutPage() {
 
       <Section>
         <div className="mx-auto max-w-3xl rounded-3xl border border-border bg-card p-8 text-center shadow-card">
-          <h2 className="text-2xl font-bold tracking-tight">Önemli Not</h2>
+          <h2 className="text-2xl font-bold tracking-tight">Önemli sağlık notu</h2>
           <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
             Diewish bir hekim, diyetisyen veya sağlık kuruluşu değildir. Sunulan içerikler yalnızca
             bilgilendirme amaçlıdır ve profesyonel tıbbi tavsiyenin yerine geçmez. Sağlığınla ilgili
-            kararlar almadan önce mutlaka yetkili bir sağlık uzmanına danış.
+            kararlar almadan önce yetkili bir sağlık uzmanına danışmalısın.
           </p>
         </div>
       </Section>
