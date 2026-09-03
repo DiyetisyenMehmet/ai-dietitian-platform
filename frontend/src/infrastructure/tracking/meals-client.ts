@@ -33,6 +33,17 @@ export interface LogMealInput {
   loggedAt?: string;
 }
 
+/** Editable nutrition-bearing fields. Meal type/time stay immutable here. */
+export interface UpdateMealInput {
+  name?: string;
+  calories?: number;
+  proteinG?: number;
+  carbsG?: number;
+  fatG?: number;
+  sodiumMg?: number;
+  sugarG?: number;
+}
+
 export const mealsClient = {
   /** Lists meal logs, optionally only those logged on/after `since`. */
   listMeals(since?: Date) {
@@ -49,6 +60,16 @@ export const mealsClient = {
     return apiRequest<{ log: MealLog }>({
       path: TRACKING_ENDPOINTS.meals,
       method: "POST",
+      auth: true,
+      body: JSON.stringify(input),
+    });
+  },
+
+  /** Persists an owner-scoped food edit and returns the updated row. */
+  updateMeal(id: string, input: UpdateMealInput) {
+    return apiRequest<{ log: MealLog }>({
+      path: `${TRACKING_ENDPOINTS.meals}/${encodeURIComponent(id)}`,
+      method: "PATCH",
       auth: true,
       body: JSON.stringify(input),
     });
