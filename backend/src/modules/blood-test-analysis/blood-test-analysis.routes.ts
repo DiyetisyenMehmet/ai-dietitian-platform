@@ -1,6 +1,7 @@
 import { Router } from "express";
 
 import { authenticate } from "../../middleware/authenticate";
+import { requireConsent } from "../../middleware/require-consent";
 import { validate } from "../../middleware/validate";
 import { bloodTestAnalysisController } from "./blood-test-analysis.controller";
 import { bloodTestIdParamSchema } from "./dto/blood-test-analysis.schemas";
@@ -9,6 +10,7 @@ import { bloodTestIdParamSchema } from "./dto/blood-test-analysis.schemas";
  * Blood-test analysis router (mounted at /api/blood-tests, BEFORE the Sprint 11
  * upload router so `/analyses` and `/:id/analysis(e)` resolve here first). Every
  * route requires a valid access token; the service scopes all access by owner.
+ * Starting a new analysis additionally requires current mandatory consent.
  */
 export const bloodTestAnalysisRouter = Router();
 
@@ -40,11 +42,13 @@ bloodTestAnalysisRouter.get("/analyses", authenticate, bloodTestAnalysisControll
  *     responses:
  *       201: { description: The completed analysis record. }
  *       401: { description: Missing or invalid access token. }
+ *       403: { description: Current mandatory consent is missing. }
  *       404: { description: Upload not found or not owned by the caller. }
  */
 bloodTestAnalysisRouter.post(
   "/:id/analyze",
   authenticate,
+  requireConsent,
   validate({ params: bloodTestIdParamSchema }),
   bloodTestAnalysisController.analyze,
 );
