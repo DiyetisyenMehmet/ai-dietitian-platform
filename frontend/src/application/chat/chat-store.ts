@@ -6,11 +6,6 @@ import type { ChatMessage, Conversation, MessageReaction } from "@/domain/chat/t
 import { dailyTrackingStore } from "@/application/health/daily-tracking-store";
 import { apiRequest, ApiError } from "@/infrastructure/api/http-client";
 
-/**
- * Backend-backed AI chat cache. Conversations/messages are persisted by the
- * backend; local draft/pending rows only support immediate UI feedback.
- */
-
 let uid = 0;
 const nextId = (prefix: string) => `${prefix}-${Date.now()}-${uid++}`;
 const DRAFT_PREFIX = "draft-";
@@ -119,10 +114,14 @@ function isToday(timestamp: number): boolean {
   );
 }
 
+/** Convert transport/backend failures into user-safe Turkish product messages. */
 function friendlyError(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.code === "SUBSCRIPTION_REQUIRED") {
       return "Ücretsiz AI Koç kullanım hakkın doldu. Devam etmek için plan seçeneklerini inceleyebilirsin.";
+    }
+    if (error.code === "CONSENT_REQUIRED") {
+      return "AI Koç'u kullanmak için güncel yasal onaylarını tamamlaman gerekiyor.";
     }
     if (error.status === 401) {
       return "Oturum yenilenemedi. Lütfen yeniden giriş yap.";
@@ -130,7 +129,12 @@ function friendlyError(error: unknown): string {
     if (error.status === 429) {
       return "AI Koç kullanım limitine ulaştın. Bir süre sonra tekrar deneyebilir veya planını inceleyebilirsin.";
     }
-    return error.message;
+    // Never expose provider names, environment variables, secret configuration,
+    // stack details or upstream messages to an end user.
+    if (error.status === 0 || error.status >= 500) {
+      return "AI Koç şu anda kullanılamıyor. Lütfen daha sonra tekrar dene.";
+    }
+    return "AI Koç isteği tamamlanamadı. Lütfen tekrar dene.";
   }
   return "AI Koç şu anda yanıt veremiyor. Lütfen biraz sonra tekrar dene.";
 }
@@ -140,7 +144,6 @@ const listeners = new Set<() => void>();
 const loadedConversationIds = new Set<string>();
 let initialized = false;
 let initializePromise: Promise<void> | null = null;
-/** Invalidates every in-flight async mutation when account/session caches reset. */
 let sessionGeneration = 0;
 
 function setState(next: Partial<ChatState>) {
@@ -205,8 +208,6 @@ async function initializeFromBackend(): Promise<void> {
           activeId: first.id,
         });
 
-        // Restore today's coach-completion flag from persisted history instead
-        // of treating every page refresh as if the user never chatted today.
         if (first.messages.some((message) => message.role === "user" && isToday(message.createdAt))) {
           dailyTrackingStore.markChatted();
         }
@@ -320,7 +321,9 @@ export const chatStore = {
               : item,
           ),
         }));
-        setState({ error: message });
+        // The failed assistant bubble already communicates this request's error.
+        // Avoid duplicating the same message in the global chat warning banner.
+        setState({ error: null });
       } finally {
         if (generation === sessionGeneration) setState({ isResponding: false });
       }
@@ -374,11 +377,6 @@ export const chatStore = {
     })();
   },
 
-  /**
-   * Clears all chat cache state and invalidates in-flight requests. Called on
-   * logout/account switch so one user's conversation content can never leak into
-   * another user's browser session.
-   */
   resetSession() {
     sessionGeneration += 1;
     initialized = false;
@@ -389,7 +387,6 @@ export const chatStore = {
   },
 };
 
-/** Subscribe to chat state and hydrate persisted history once per session. */
 export function useChatState(): ChatState {
   const snapshot = React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
@@ -400,7 +397,6 @@ export function useChatState(): ChatState {
   return snapshot;
 }
 
-/** Selector for the active conversation. */
 export function useActiveConversation(): Conversation {
   const snapshot = useChatState();
   return (
