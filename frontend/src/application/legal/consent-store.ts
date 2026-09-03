@@ -105,6 +105,17 @@ export const consentStore = {
     await this.hydrate(userId, true);
   },
 
+  /**
+   * Withdraws one consent as a versioned backend record, then refreshes the
+   * authoritative consent snapshot. No health data is deleted implicitly; the
+   * withdrawal controls future processing and the user retains separate access
+   * to existing-data/account deletion controls.
+   */
+  async withdraw(userId: string, type: LegalDocumentType): Promise<void> {
+    await legalClient.withdrawConsent(type);
+    await this.hydrate(userId, true);
+  },
+
   loadDocument(type: LegalDocumentType): Promise<LegalDocumentView> {
     return legalClient.getDocument(type);
   },
