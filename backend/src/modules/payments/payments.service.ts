@@ -26,6 +26,7 @@ import {
 import { entitlementsForTier } from "./entitlements";
 import { getPaymentProvider } from "./iyzico";
 import { paymentsRepository } from "./payments.repository";
+import type { ProviderPaymentResult } from "./types";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -70,7 +71,7 @@ export const paymentsService = {
   },
 
   /**
-   * Starts a hosted-checkout for a paid tier. Creates a PENDING subscription +
+   * Starts a hosted checkout for a paid tier. Creates a PENDING subscription +
    * payment keyed by a fresh conversation id (our correlation ref), then asks
    * the provider to initialize the payment page.
    */
@@ -88,6 +89,16 @@ export const paymentsService = {
     if (!provider.isConfigured()) {
       throw new ApiError(503, "Payment provider is not configured.", {
         code: PAYMENT_PROVIDER_UNCONFIGURED_CODE,
+      });
+    }
+
+    // The current profile does not yet collect iyzico's required real billing
+    // identity/address fields. Never let a production processor receive the
+    // sandbox placeholders used by the adapter during integration testing.
+    if (env.IYZICO_ENV === "production") {
+      throw new ApiError(503, "Live payment checkout is not ready yet.", {
+        code: PAYMENT_PROVIDER_UNCONFIGURED_CODE,
+        details: { reason: "LIVE_BUYER_PROFILE_REQUIRED" },
       });
     }
 
@@ -111,21 +122,42 @@ export const paymentsService = {
       currency: plan.currency,
     });
 
-    const result = await provider.initializeCheckout({
-      conversationId,
-      tier,
-      priceMinor: plan.priceMinor,
-      currency: plan.currency,
-      planName: plan.name,
-      planCode: plan.code,
-      buyer: {
-        id: user.id,
-        email: user.email,
-        fullName: user.fullName,
-        ipAddress: context.ipAddress ?? null,
-      },
-      callbackUrl: env.IYZICO_CALLBACK_URL,
-    });
+    let result;
+    try {
+      result = await provider.initializeCheckout({
+        conversationId,
+        tier,
+        priceMinor: plan.priceMinor,
+        currency: plan.currency,
+        planName: plan.name,
+        planCode: plan.code,
+        buyer: {
+          id: user.id,
+          email: user.email,
+          fullName: user.fullName,
+          ipAddress: context.ipAddress ?? null,
+        },
+        callbackUrl: env.IYZICO_CALLBACK_URL,
+      });
+    } catch (error) {
+      await paymentsRepository.markCheckoutInitializationFailed({
+        subscriptionId: subscription.id,
+        failureReason: "Payment provider checkout initialization failed.",
+      });
+      logger.error(
+        { err: error, userId, tier, subscriptionId: subscription.id },
+        "Payment checkout initialization failed",
+      );
+      throw new ApiError(502, "Payment checkout could not be initialized. Please try again later.");
+    }
+
+    if (!result.providerToken) {
+      await paymentsRepository.markCheckoutInitializationFailed({
+        subscriptionId: subscription.id,
+        failureReason: "Payment provider returned no checkout token.",
+      });
+      throw new ApiError(502, "Payment provider returned an invalid checkout response.");
+    }
 
     await recordAudit({
       action: "SUBSCRIPTION_CHECKOUT_STARTED",
@@ -143,9 +175,9 @@ export const paymentsService = {
   },
 
   /**
-   * Finalizes a checkout from the provider token (called after the callback
-   * redirect). Payment success is confirmed against the provider — never
-   * trusted from the client — then the subscription is activated idempotently.
+   * Finalizes a checkout from the provider token for an authenticated user.
+   * Payment success is confirmed against the provider — never trusted from the
+   * client — then the subscription is activated idempotently.
    */
   async verifyAndFinalize(
     userId: string,
@@ -164,26 +196,99 @@ export const paymentsService = {
       throw ApiError.notFound("Subscription not found.");
     }
 
-    await this.applyPaymentOutcome(subscription.id, subscription.userId, subscription.tier, result, context);
+    await this.applyPaymentOutcome(
+      subscription.id,
+      subscription.userId,
+      subscription.tier,
+      result,
+      context,
+    );
     return this.getStatus(userId);
   },
 
   /**
+   * Handles iyzico's browser POST callback without relying on a Diewish access
+   * token. The provider-issued checkout token is retrieved server-to-server and
+   * correlated to our pending subscription before any entitlement is changed.
+   */
+  async finalizeCheckoutCallback(
+    token: string,
+    context: AuditContext,
+  ): Promise<SubscriptionStatusView> {
+    const provider = getPaymentProvider();
+    const result = await provider.retrievePayment(token);
+    const conversationId = result.conversationId;
+    if (!conversationId) {
+      throw ApiError.badRequest("Payment could not be correlated to a subscription.");
+    }
+    const subscription = await paymentsRepository.findSubscriptionByProviderRef(conversationId);
+    if (!subscription) throw ApiError.notFound("Subscription not found.");
+
+    await this.applyPaymentOutcome(
+      subscription.id,
+      subscription.userId,
+      subscription.tier,
+      result,
+      context,
+    );
+    return this.getStatus(subscription.userId);
+  },
+
+  /**
    * Applies a confirmed provider payment outcome to a subscription. Idempotent:
-   * an already-ACTIVE subscription is left untouched.
+   * an already-ACTIVE subscription is left untouched. A provider-reported
+   * SUCCESS is not enough: amount and currency must exactly match our pending
+   * payment before Premium access is granted.
    */
   async applyPaymentOutcome(
     subscriptionId: string,
     userId: string,
     tier: SubscriptionTier,
-    result: { status: string; rawStatus: string; providerPaymentId?: string | null; failureReason?: string | null },
+    result: ProviderPaymentResult,
     context: AuditContext,
   ): Promise<void> {
     const current = await paymentsRepository.findSubscriptionById(subscriptionId);
     if (!current) throw ApiError.notFound("Subscription not found.");
-    if (current.status === "ACTIVE") return; // idempotent no-op
+    if (current.status === "ACTIVE") return;
 
     if (result.status === "SUCCEEDED") {
+      const expectedPayment = await paymentsRepository.findPaymentForSubscription(subscriptionId);
+      const amountMatches =
+        expectedPayment !== null &&
+        result.paidPriceMinor !== null &&
+        result.paidPriceMinor !== undefined &&
+        result.paidPriceMinor === expectedPayment.amountMinor;
+      const currencyMatches =
+        expectedPayment !== null &&
+        typeof result.currency === "string" &&
+        result.currency.toUpperCase() === expectedPayment.currency.toUpperCase();
+
+      if (!amountMatches || !currencyMatches) {
+        logger.error(
+          {
+            subscriptionId,
+            userId,
+            expectedAmountMinor: expectedPayment?.amountMinor ?? null,
+            receivedAmountMinor: result.paidPriceMinor ?? null,
+            expectedCurrency: expectedPayment?.currency ?? null,
+            receivedCurrency: result.currency ?? null,
+          },
+          "Rejected successful payment with amount/currency mismatch",
+        );
+        await paymentsRepository.markPaymentFailed({
+          subscriptionId,
+          rawStatus: result.rawStatus,
+          failureReason: "Payment amount/currency verification failed.",
+        });
+        await recordAudit({
+          action: "PAYMENT_FAILED",
+          userId,
+          context,
+          metadata: { subscriptionId, reason: "AMOUNT_OR_CURRENCY_MISMATCH" },
+        });
+        throw new ApiError(502, "Payment verification failed.");
+      }
+
       const now = new Date();
       const plan = PLAN_CATALOG[tier];
       await paymentsRepository.activateSubscription({
@@ -195,23 +300,39 @@ export const paymentsService = {
         providerPaymentId: result.providerPaymentId ?? null,
         rawStatus: result.rawStatus,
       });
-      await recordAudit({ action: "PAYMENT_SUCCEEDED", userId, context, metadata: { subscriptionId } });
-      await recordAudit({ action: "SUBSCRIPTION_ACTIVATED", userId, context, metadata: { subscriptionId, tier } });
+      await recordAudit({
+        action: "PAYMENT_SUCCEEDED",
+        userId,
+        context,
+        metadata: { subscriptionId },
+      });
+      await recordAudit({
+        action: "SUBSCRIPTION_ACTIVATED",
+        userId,
+        context,
+        metadata: { subscriptionId, tier },
+      });
     } else if (result.status === "FAILED") {
       await paymentsRepository.markPaymentFailed({
         subscriptionId,
         rawStatus: result.rawStatus,
         failureReason: result.failureReason ?? null,
       });
-      await recordAudit({ action: "PAYMENT_FAILED", userId, context, metadata: { subscriptionId } });
+      await recordAudit({
+        action: "PAYMENT_FAILED",
+        userId,
+        context,
+        metadata: { subscriptionId },
+      });
     }
     // PENDING: leave as-is; a later webhook/verify will finalize.
   },
 
   /**
-   * Processes an inbound provider webhook. Verifies the signature and
-   * de-duplicates by event id BEFORE any state change; confirms the payment
-   * against the provider rather than trusting the notification body.
+   * Processes an inbound provider webhook. Signature validation happens BEFORE
+   * writing the unique idempotency key so an attacker cannot pre-seed a fake
+   * event id and suppress a later legitimate iyzico delivery. A valid event is
+   * still confirmed against the provider before any paid access is granted.
    */
   async handleWebhook(
     rawBody: string,
@@ -229,26 +350,29 @@ export const paymentsService = {
     }
     const event = provider.parseWebhook(payload);
 
+    if (!signatureValid) {
+      await recordAudit({
+        action: "PAYMENT_WEBHOOK_RECEIVED",
+        context,
+        metadata: { eventType: event.eventType, signatureValid: false },
+      });
+      logger.warn({ eventType: event.eventType }, "Rejected webhook with invalid signature");
+      return { received: true, processed: false };
+    }
+
     const isNew = await paymentsRepository.recordWebhookEventIfNew({
       providerEventId: event.providerEventId,
       eventType: event.eventType,
-      signatureValid,
+      signatureValid: true,
       payload: (payload ?? {}) as object,
     });
     await recordAudit({
       action: "PAYMENT_WEBHOOK_RECEIVED",
       context,
-      metadata: { eventType: event.eventType, signatureValid, duplicate: !isNew },
+      metadata: { eventType: event.eventType, signatureValid: true, duplicate: !isNew },
     });
 
-    // Fail closed: never act on an unverified or replayed event.
-    if (!signatureValid) {
-      logger.warn({ eventType: event.eventType }, "Rejected webhook with invalid signature");
-      return { received: true, processed: false };
-    }
-    if (!isNew) {
-      return { received: true, processed: false };
-    }
+    if (!isNew) return { received: true, processed: false };
     if (!event.conversationId || !event.providerPaymentToken) {
       return { received: true, processed: false };
     }
@@ -258,7 +382,13 @@ export const paymentsService = {
 
     // Confirm the real outcome with the provider before granting access.
     const result = await provider.retrievePayment(event.providerPaymentToken);
-    await this.applyPaymentOutcome(subscription.id, subscription.userId, subscription.tier, result, context);
+    await this.applyPaymentOutcome(
+      subscription.id,
+      subscription.userId,
+      subscription.tier,
+      result,
+      context,
+    );
     await paymentsRepository.markWebhookProcessed(event.providerEventId);
     return { received: true, processed: true };
   },
@@ -275,7 +405,11 @@ export const paymentsService = {
         code: ENTITLEMENT_REQUIRED_CODE,
       });
     }
-    await paymentsRepository.cancelSubscription({ subscriptionId: subscription.id, userId, atPeriodEnd });
+    await paymentsRepository.cancelSubscription({
+      subscriptionId: subscription.id,
+      userId,
+      atPeriodEnd,
+    });
     await recordAudit({
       action: "SUBSCRIPTION_CANCELED",
       userId,
