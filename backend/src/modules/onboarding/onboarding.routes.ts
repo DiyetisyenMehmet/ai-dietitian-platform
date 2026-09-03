@@ -1,13 +1,15 @@
 import { Router } from "express";
 
 import { authenticate } from "../../middleware/authenticate";
+import { requireConsent } from "../../middleware/require-consent";
 import { validate } from "../../middleware/validate";
 import { onboardingController } from "./onboarding.controller";
 import { onboardingSchema } from "./onboarding.schemas";
 
 /**
- * Onboarding router. Both endpoints require a valid access token; the profile
- * write also passes through `validate` against the mandatory-onboarding schema.
+ * Onboarding router. Reading an existing profile only requires authentication;
+ * submitting health/profile data additionally requires current mandatory
+ * consent before the payload is processed.
  */
 export const onboardingRouter = Router();
 
@@ -61,6 +63,13 @@ onboardingRouter.get("/", authenticate, onboardingController.getProfile);
  *     responses:
  *       200: { description: Onboarding completed; app unlocked. }
  *       401: { description: Missing or invalid access token. }
+ *       403: { description: Current mandatory consent is missing. }
  *       422: { description: Validation failed. }
  */
-onboardingRouter.post("/", authenticate, validate({ body: onboardingSchema }), onboardingController.complete);
+onboardingRouter.post(
+  "/",
+  authenticate,
+  requireConsent,
+  validate({ body: onboardingSchema }),
+  onboardingController.complete,
+);
