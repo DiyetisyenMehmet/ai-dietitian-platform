@@ -57,11 +57,11 @@ function isMealCheckIn(log: MealLog): boolean {
   );
 }
 
-function toFoodItem(log: MealLog): FoodItem {
+function toFoodItem(log: MealLog, quantity = ""): FoodItem {
   return {
     id: log.id,
     name: log.name ?? "",
-    quantity: "",
+    quantity,
     calories: log.calories ?? 0,
     protein: log.proteinG ?? 0,
     carbs: log.carbsG ?? 0,
@@ -109,7 +109,7 @@ export const mealsStore = {
           slot,
           label,
           time: defaultTime,
-          foods: slotLogs.filter((log) => !isMealCheckIn(log)).map(toFoodItem),
+          foods: slotLogs.filter((log) => !isMealCheckIn(log)).map((log) => toFoodItem(log)),
           isEaten: checkIn !== null,
           checkInId: checkIn?.id ?? null,
         };
@@ -134,7 +134,7 @@ export const mealsStore = {
         ? {
             ...meal,
             time: time || meal.time,
-            foods: [...meal.foods, { ...toFoodItem(log), quantity: food.quantity }],
+            foods: [...meal.foods, toFoodItem(log, food.quantity)],
           }
         : meal,
     );
@@ -165,10 +165,30 @@ export const mealsStore = {
     emit();
   },
 
-  updateFood(slot: MealSlot, foodId: string, patch: Partial<Omit<FoodItem, "id">>) {
+  /** Persist-first edit: nutrition/name changes survive refresh. */
+  async updateFood(
+    slot: MealSlot,
+    foodId: string,
+    patch: Partial<Omit<FoodItem, "id">>,
+  ): Promise<void> {
+    const { log } = await mealsClient.updateMeal(foodId, {
+      ...(patch.name !== undefined ? { name: patch.name } : {}),
+      ...(patch.calories !== undefined ? { calories: patch.calories } : {}),
+      ...(patch.protein !== undefined ? { proteinG: patch.protein } : {}),
+      ...(patch.carbs !== undefined ? { carbsG: patch.carbs } : {}),
+      ...(patch.fat !== undefined ? { fatG: patch.fat } : {}),
+    });
+
     meals = meals.map((meal) =>
       meal.slot === slot
-        ? { ...meal, foods: meal.foods.map((f) => (f.id === foodId ? { ...f, ...patch } : f)) }
+        ? {
+            ...meal,
+            foods: meal.foods.map((food) =>
+              food.id === foodId
+                ? toFoodItem(log, patch.quantity !== undefined ? patch.quantity : food.quantity)
+                : food,
+            ),
+          }
         : meal,
     );
     emit();
