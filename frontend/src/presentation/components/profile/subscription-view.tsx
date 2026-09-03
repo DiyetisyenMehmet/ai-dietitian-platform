@@ -1,8 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { toast } from "sonner";
-import { Check, CreditCard, Crown, Loader2, Sparkles } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Check, CreditCard, Crown, Sparkles } from "lucide-react";
 
 import { cn } from "@/shared/lib/utils";
 import { formatLongDate } from "@/shared/lib/format";
@@ -15,8 +15,7 @@ import {
   planForTier,
   TIER_ORDER,
 } from "@/application/payments/subscription-store";
-import { ApiError } from "@/infrastructure/api/http-client";
-import type { PaidTier, PaymentDto } from "@/domain/payments/types";
+import type { PaymentDto } from "@/domain/payments/types";
 
 const STATUS_LABEL: Record<string, string> = {
   NONE: "Ücretsiz",
@@ -47,50 +46,13 @@ function paymentReference(payment: PaymentDto): string {
   return `#${reference.slice(-8)}`;
 }
 
-function checkoutError(error: unknown): string {
-  if (error instanceof ApiError) {
-    if (error.code === "PAYMENT_PROVIDER_UNCONFIGURED") {
-      return "Güvenli ödeme sistemi henüz bu ortamda etkinleştirilmemiş.";
-    }
-    return error.message;
-  }
-  return "Ödeme sayfası başlatılamadı. Lütfen tekrar dene.";
-}
-
-/**
- * Billing screen backed only by real server state. V1 paid access is a fixed
- * provider-verified 30-day period; it does not claim automatic renewal or
- * annual billing. Diewish never grants Premium locally before verification.
- */
+/** Billing screen backed only by real server state. */
 export function SubscriptionView() {
+  const router = useRouter();
   const { subscription, plans, payments, loading, error } = useSubscription();
-  const [checkoutTier, setCheckoutTier] = React.useState<PaidTier | null>(null);
 
   const currentPlan = planForTier(subscription.tier);
   const isPaid = subscription.tier !== "FREE";
-
-  const onCheckout = React.useCallback(async (tier: PaidTier) => {
-    if (checkoutTier) return;
-    setCheckoutTier(tier);
-    try {
-      const result = await subscriptionStore.startCheckout(tier);
-      if (result.paymentPageUrl) {
-        window.location.assign(result.paymentPageUrl);
-        return;
-      }
-
-      toast.error("Ödeme sayfası açılamadı", {
-        description:
-          result.checkoutFormContent
-            ? "Ödeme sağlayıcısı yalnızca gömülü form döndürdü. Güvenli yönlendirme akışı tamamlanmadan ödeme açılamaz."
-            : "Ödeme sağlayıcısından yönlendirme bağlantısı alınamadı.",
-      });
-    } catch (checkoutFailure) {
-      toast.error("Ödeme başlatılamadı", { description: checkoutError(checkoutFailure) });
-    } finally {
-      setCheckoutTier(null);
-    }
-  }, [checkoutTier]);
 
   return (
     <div className="space-y-6">
@@ -130,7 +92,7 @@ export function SubscriptionView() {
               {formatLongDate(new Date(subscription.currentPeriodEnd))}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Otomatik yenileme yoktur. Süre dolduğunda hesap Free plana döner; yeni dönem istersen yeniden ödeme başlatırsın.
+              Otomatik yenileme yoktur. Süre dolduğunda hesap Free plana döner; yeni dönem istersen yeniden satın alma başlatırsın.
             </p>
           </div>
         )}
@@ -140,12 +102,7 @@ export function SubscriptionView() {
         <Card className="border-amber-500/30">
           <CardContent className="p-4 text-sm text-muted-foreground">
             Erişim bilgileri şu anda doğrulanamadı. Güvenlik nedeniyle ücretli plan gösterilmiyor.
-            <Button
-              variant="ghost"
-              size="sm"
-              className="ml-1"
-              onClick={() => void subscriptionStore.refresh()}
-            >
+            <Button variant="ghost" size="sm" className="ml-1" onClick={() => void subscriptionStore.refresh()}>
               Tekrar dene
             </Button>
           </CardContent>
@@ -156,7 +113,7 @@ export function SubscriptionView() {
         <div>
           <h3 className="text-base font-semibold">Planları karşılaştır</h3>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            V1 ödeme modeli 30 günlük tek erişim dönemidir. Yıllık veya otomatik yenilenen abonelik henüz sunulmuyor.
+            V1 ödeme modeli 30 günlük tek erişim dönemidir. Yıllık veya otomatik yenilenen abonelik sunulmuyor.
           </p>
         </div>
 
@@ -164,17 +121,9 @@ export function SubscriptionView() {
           const isCurrent = plan.tier === subscription.tier;
           const backendPlan = plans.find((item) => item.tier === plan.tier);
           const isUpgrade = TIER_ORDER[plan.tier] > TIER_ORDER[subscription.tier];
-          const paidTier = plan.tier === "FREE" ? null : (plan.tier as PaidTier);
-          const isStarting = checkoutTier === paidTier;
 
           return (
-            <Card
-              key={plan.tier}
-              className={cn(
-                "overflow-hidden",
-                isCurrent ? "border-primary ring-1 ring-primary" : "",
-              )}
-            >
+            <Card key={plan.tier} className={cn("overflow-hidden", isCurrent ? "border-primary ring-1 ring-primary" : "")}>
               <CardContent className="space-y-4 p-5">
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -197,9 +146,7 @@ export function SubscriptionView() {
                           : "—"}
                     </p>
                     {plan.tier !== "FREE" && backendPlan && (
-                      <p className="text-[11px] text-muted-foreground">
-                        / {backendPlan.periodDays} gün
-                      </p>
+                      <p className="text-[11px] text-muted-foreground">/ {backendPlan.periodDays} gün</p>
                     )}
                   </div>
                 </div>
@@ -214,25 +161,18 @@ export function SubscriptionView() {
                 </ul>
 
                 {isCurrent ? (
-                  <Button variant="outline" className="w-full" disabled>
-                    Mevcut erişimin
-                  </Button>
-                ) : paidTier ? (
+                  <Button variant="outline" className="w-full" disabled>Mevcut erişimin</Button>
+                ) : plan.tier !== "FREE" ? (
                   <Button
                     variant={isUpgrade || plan.featured ? "default" : "outline"}
                     className="w-full"
-                    disabled={!backendPlan || checkoutTier !== null || loading || isPaid}
-                    onClick={() => void onCheckout(paidTier)}
+                    disabled={!backendPlan || loading || isPaid}
+                    onClick={() => router.push("/pricing")}
                   >
-                    {isStarting && <Loader2 className="animate-spin" aria-hidden="true" />}
-                    {isPaid
-                      ? "Mevcut erişim bitince seçilebilir"
-                      : `${backendPlan?.periodDays ?? 30} günlük ${plan.name} al`}
+                    {isPaid ? "Mevcut erişim bitince seçilebilir" : "Satın alma ve sözleşme ekranına git"}
                   </Button>
                 ) : (
-                  <Button variant="outline" className="w-full" disabled>
-                    Ücretsiz plan
-                  </Button>
+                  <Button variant="outline" className="w-full" disabled>Ücretsiz plan</Button>
                 )}
               </CardContent>
             </Card>
@@ -250,7 +190,7 @@ export function SubscriptionView() {
             <div>
               <p className="text-sm font-semibold">Kart bilgileri Diewish&apos;te saklanmaz</p>
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                Ödeme özelliği etkinleştirildiğinde kart işlemi iyzico ödeme akışında tamamlanır. Diewish ödeme durumunu ve gerekli işlem referanslarını saklar.
+                Ödeme özelliği etkinleştirildiğinde kart işlemi iyzico ödeme akışında tamamlanır. Diewish yalnızca ödeme durumu ve gerekli işlem referanslarını saklar.
               </p>
             </div>
           </CardContent>
