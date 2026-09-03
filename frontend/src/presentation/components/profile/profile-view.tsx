@@ -117,7 +117,6 @@ export function ProfileView() {
 
   return (
     <div className="space-y-6">
-      {/* Hero with avatar upload */}
       <section className="rounded-3xl border border-border bg-gradient-to-br from-primary/10 via-card to-card p-5 shadow-card">
         <div className="flex items-center gap-4">
           <button
@@ -211,12 +210,6 @@ export function ProfileView() {
           description="Hesap güvenliğini güncelle"
           href="/profile/security"
         />
-        <SettingRow
-          icon={LogOut}
-          label={loggingOut ? "Çıkış yapılıyor..." : "Çıkış yap"}
-          tone="danger"
-          onClick={loggingOut ? undefined : onLogout}
-        />
       </SettingGroup>
 
       <SettingGroup title="Sağlık Verilerim">
@@ -254,7 +247,6 @@ export function ProfileView() {
         <ChipList items={profile.allergies} tone="danger" empty="Bilinen bir alerji yok." />
       </SectionCard>
 
-      {/* Achievement data is shown only once a real persisted source exists. */}
       {achievements.length > 0 && (
         <SectionCard
           icon="trophy"
@@ -282,6 +274,15 @@ export function ProfileView() {
           </div>
         </SectionCard>
       )}
+
+      <SettingGroup title="Oturum">
+        <SettingRow
+          icon={LogOut}
+          label={loggingOut ? "Çıkış yapılıyor..." : "Çıkış yap"}
+          tone="danger"
+          onClick={loggingOut ? undefined : onLogout}
+        />
+      </SettingGroup>
     </div>
   );
 }
