@@ -1,6 +1,7 @@
 import { Router } from "express";
 
 import { authenticate } from "../../middleware/authenticate";
+import { requireConsent } from "../../middleware/require-consent";
 import { validate } from "../../middleware/validate";
 import { trackingController } from "./tracking.controller";
 import {
@@ -11,8 +12,9 @@ import {
 
 /**
  * Tracking router (mounted at /api/tracking). Every route is owner-scoped and
- * requires a valid access token. These logs feed the AI Health Coach's
- * trend/consistency/risk analysis.
+ * requires a valid access token. New health/nutrition log writes require current
+ * mandatory consent, while existing logs remain readable after withdrawal.
+ * These logs feed the AI Health Coach's trend/consistency/risk analysis.
  *
  * @openapi
  * tags:
@@ -40,6 +42,7 @@ export const trackingRouter = Router();
 trackingRouter.post(
   "/weight",
   authenticate,
+  requireConsent,
   validate({ body: createWeightLogSchema }),
   trackingController.createWeight,
 );
@@ -64,6 +67,7 @@ trackingRouter.get("/weight", authenticate, trackingController.listWeight);
 trackingRouter.post(
   "/meals",
   authenticate,
+  requireConsent,
   validate({ body: createMealLogSchema }),
   trackingController.createMeal,
 );
@@ -88,6 +92,7 @@ trackingRouter.get("/meals", authenticate, trackingController.listMeals);
 trackingRouter.post(
   "/water",
   authenticate,
+  requireConsent,
   validate({ body: createWaterLogSchema }),
   trackingController.createWater,
 );
