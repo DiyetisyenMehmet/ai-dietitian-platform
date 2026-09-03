@@ -62,8 +62,32 @@ interface ErrorEnvelope {
   error: { code: string; message: string };
 }
 
+const CONSENT_REQUIRED_CODE = "CONSENT_REQUIRED";
+const CONSENT_ROUTE = "/consent";
+const CONSENT_RETURN_TO_KEY = "diewish:consent:return-to";
+
 function isFormDataBody(body: BodyInit | null | undefined): boolean {
   return typeof FormData !== "undefined" && body instanceof FormData;
+}
+
+/**
+ * A protected write can legitimately fail when an established user's legal
+ * consent is missing/stale (for example after a legal-document version bump or
+ * after withdrawal). Existing data remains accessible, but the user needs a
+ * clear recovery path instead of a raw backend error. A hard navigation gives
+ * the consent screen a fresh server-backed consent snapshot.
+ */
+function redirectToConsent(): void {
+  if (typeof window === "undefined" || window.location.pathname === CONSENT_ROUTE) return;
+
+  const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  try {
+    window.sessionStorage.setItem(CONSENT_RETURN_TO_KEY, returnTo);
+  } catch {
+    // Storage can be unavailable in hardened/private browser contexts. The
+    // consent flow still works; it simply falls back to the dashboard afterwards.
+  }
+  window.location.assign(CONSENT_ROUTE);
 }
 
 /**
@@ -162,8 +186,19 @@ export async function apiRequest<TResponse>({
 
   if (!response.ok) {
     const err = body as ErrorEnvelope | null;
+    const code = err?.error?.code;
+
+    if (auth && code === CONSENT_REQUIRED_CODE) {
+      redirectToConsent();
+      throw new ApiError(
+        "Devam etmek için güncel yasal onaylarını tamamlaman gerekiyor.",
+        response.status,
+        code,
+      );
+    }
+
     const message = err?.error?.message ?? `İstek başarısız oldu (${response.status}).`;
-    throw new ApiError(message, response.status, err?.error?.code);
+    throw new ApiError(message, response.status, code);
   }
 
   // Unwrap the success envelope when present; otherwise return the raw body.
