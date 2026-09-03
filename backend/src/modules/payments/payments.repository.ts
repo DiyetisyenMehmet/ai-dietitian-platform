@@ -47,6 +47,14 @@ export const paymentsRepository = {
     return prisma.subscription.findFirst({ where: { providerRef } });
   },
 
+  /** Latest payment attempt associated with a subscription. */
+  findPaymentForSubscription(subscriptionId: string): Promise<Payment | null> {
+    return prisma.payment.findFirst({
+      where: { subscriptionId },
+      orderBy: { createdAt: "desc" },
+    });
+  },
+
   /** Creates a PENDING subscription plus its PENDING payment atomically. */
   async createPendingSubscription(input: {
     userId: string;
@@ -78,6 +86,30 @@ export const paymentsRepository = {
       });
       return { subscription, payment };
     });
+  },
+
+  /**
+   * Cleans up a checkout that could not even be initialized at the provider.
+   * This prevents orphan PENDING subscriptions from being shown as current.
+   */
+  async markCheckoutInitializationFailed(input: {
+    subscriptionId: string;
+    failureReason: string;
+  }): Promise<void> {
+    await prisma.$transaction([
+      prisma.payment.updateMany({
+        where: { subscriptionId: input.subscriptionId, status: "PENDING" },
+        data: {
+          status: "FAILED",
+          rawStatus: "INITIALIZE_FAILED",
+          failureReason: input.failureReason,
+        },
+      }),
+      prisma.subscription.updateMany({
+        where: { id: input.subscriptionId, status: "PENDING" },
+        data: { status: "CANCELED", canceledAt: new Date() },
+      }),
+    ]);
   },
 
   /**
@@ -186,9 +218,10 @@ export const paymentsRepository = {
   // --- Webhook idempotency -------------------------------------------------
 
   /**
-   * Records an inbound webhook event, returning `false` when the event id was
-   * already seen (idempotent no-op). Uses the UNIQUE `providerEventId` so a
-   * replayed delivery cannot double-apply a state change.
+   * Records an already-signature-verified inbound webhook event, returning
+   * `false` when the provider event id was already seen. Invalid events must be
+   * rejected BEFORE this method is called so an attacker cannot poison the
+   * unique idempotency key for a later legitimate delivery.
    */
   async recordWebhookEventIfNew(input: {
     providerEventId: string;
