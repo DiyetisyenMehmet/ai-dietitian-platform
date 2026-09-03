@@ -1,8 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
-import { Check, CreditCard, Crown, Sparkles } from "lucide-react";
+import { Check, CreditCard, Crown, Smartphone, Sparkles } from "lucide-react";
 
 import { cn } from "@/shared/lib/utils";
 import { formatLongDate } from "@/shared/lib/format";
@@ -13,13 +12,12 @@ import {
   useSubscription,
   subscriptionStore,
   planForTier,
-  TIER_ORDER,
 } from "@/application/payments/subscription-store";
 import type { PaymentDto } from "@/domain/payments/types";
 
 const STATUS_LABEL: Record<string, string> = {
   NONE: "Ücretsiz",
-  PENDING: "Ödeme bekliyor",
+  PENDING: "İşlem bekliyor",
   ACTIVE: "Aktif",
   PAST_DUE: "Ödeme sorunu",
   CANCELED: "İptal edildi",
@@ -46,10 +44,13 @@ function paymentReference(payment: PaymentDto): string {
   return `#${reference.slice(-8)}`;
 }
 
-/** Billing screen backed only by real server state. */
+/**
+ * Account subscription screen backed by the authoritative backend entitlement.
+ * New paid purchases are intentionally not initiated on the web for launch;
+ * Android/Google Play will own purchase and subscription management.
+ */
 export function SubscriptionView() {
-  const router = useRouter();
-  const { subscription, plans, payments, loading, error } = useSubscription();
+  const { subscription, payments, loading, error } = useSubscription();
 
   const currentPlan = planForTier(subscription.tier);
   const isPaid = subscription.tier !== "FREE";
@@ -87,12 +88,9 @@ export function SubscriptionView() {
 
         {isPaid && subscription.currentPeriodEnd && (
           <div className="mt-4 rounded-2xl border border-border/60 bg-card/60 p-3 backdrop-blur">
-            <p className="text-[11px] text-muted-foreground">30 günlük erişim bitiş tarihi</p>
+            <p className="text-[11px] text-muted-foreground">Mevcut erişim dönemi bitişi</p>
             <p className="text-sm font-semibold">
               {formatLongDate(new Date(subscription.currentPeriodEnd))}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Otomatik yenileme yoktur. Süre dolduğunda hesap Free plana döner; yeni dönem istersen yeniden satın alma başlatırsın.
             </p>
           </div>
         )}
@@ -109,18 +107,33 @@ export function SubscriptionView() {
         </Card>
       )}
 
+      <Card className="border-primary/20 bg-primary/5">
+        <CardContent className="flex items-start gap-3 p-4">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <Smartphone className="size-5" aria-hidden="true" />
+          </span>
+          <div>
+            <p className="text-sm font-semibold">Premium satın alma Android uygulamasından yapılacak</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              Web üzerinden yeni ödeme başlatılmıyor. Premium ve Premium Plus Google Play üzerinden
+              sunulduğunda satın alma, yenileme ve iptal işlemleri Google Play tarafından yönetilecek.
+              Aktif Diewish erişimin aynı hesapla webde de geçerli olacak.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
       <section className="space-y-3">
         <div>
           <h3 className="text-base font-semibold">Planları karşılaştır</h3>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            V1 ödeme modeli 30 günlük tek erişim dönemidir. Yıllık veya otomatik yenilenen abonelik sunulmuyor.
+            Google Play fiyatı ve abonelik dönemi Android uygulamasında ürünler yayına alındığında gösterilecek.
           </p>
         </div>
 
         {PUBLIC_PLANS.map((plan) => {
           const isCurrent = plan.tier === subscription.tier;
-          const backendPlan = plans.find((item) => item.tier === plan.tier);
-          const isUpgrade = TIER_ORDER[plan.tier] > TIER_ORDER[subscription.tier];
+          const isFree = plan.tier === "FREE";
 
           return (
             <Card key={plan.tier} className={cn("overflow-hidden", isCurrent ? "border-primary ring-1 ring-primary" : "")}>
@@ -135,19 +148,17 @@ export function SubscriptionView() {
                         </span>
                       )}
                     </div>
-                    <p className="mt-0.5 text-xs text-muted-foreground">{plan.tagline}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {isFree
+                        ? plan.tagline
+                        : plan.tier === "PREMIUM"
+                          ? "Daha yüksek yapay zekâ kullanım kotaları ve reklamsız deneyim"
+                          : "En yüksek mevcut yapay zekâ kotaları ve reklamsız deneyim"}
+                    </p>
                   </div>
                   <div className="text-right">
-                    <p className="text-lg font-bold tabular-nums">
-                      {plan.tier === "FREE"
-                        ? "Ücretsiz"
-                        : backendPlan
-                          ? formatMoney(backendPlan.priceMinor, backendPlan.currency)
-                          : "—"}
-                    </p>
-                    {plan.tier !== "FREE" && backendPlan && (
-                      <p className="text-[11px] text-muted-foreground">/ {backendPlan.periodDays} gün</p>
-                    )}
+                    <p className="text-base font-bold">{isFree ? "Ücretsiz" : "Google Play"}</p>
+                    {!isFree && <p className="text-[11px] text-muted-foreground">Fiyat uygulamada</p>}
                   </div>
                 </div>
 
@@ -158,21 +169,22 @@ export function SubscriptionView() {
                       <span className="text-muted-foreground">{feature}</span>
                     </li>
                   ))}
+                  {!isFree && (
+                    <li className="flex items-start gap-2 text-sm">
+                      <Check className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
+                      <span className="text-muted-foreground">Reklamsız kullanım</span>
+                    </li>
+                  )}
                 </ul>
 
                 {isCurrent ? (
                   <Button variant="outline" className="w-full" disabled>Mevcut erişimin</Button>
-                ) : plan.tier !== "FREE" ? (
-                  <Button
-                    variant={isUpgrade || plan.featured ? "default" : "outline"}
-                    className="w-full"
-                    disabled={!backendPlan || loading || isPaid}
-                    onClick={() => router.push("/pricing")}
-                  >
-                    {isPaid ? "Mevcut erişim bitince seçilebilir" : "Satın alma ve sözleşme ekranına git"}
-                  </Button>
-                ) : (
+                ) : isFree ? (
                   <Button variant="outline" className="w-full" disabled>Ücretsiz plan</Button>
+                ) : (
+                  <Button className="w-full" variant={plan.featured ? "default" : "outline"} disabled>
+                    Google Play&apos;de yakında
+                  </Button>
                 )}
               </CardContent>
             </Card>
@@ -188,9 +200,11 @@ export function SubscriptionView() {
               <CreditCard className="size-5" aria-hidden="true" />
             </span>
             <div>
-              <p className="text-sm font-semibold">Kart bilgileri Diewish&apos;te saklanmaz</p>
+              <p className="text-sm font-semibold">Ödeme kartı bilgileri Diewish&apos;te saklanmaz</p>
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                Ödeme özelliği etkinleştirildiğinde kart işlemi iyzico ödeme akışında tamamlanır. Diewish yalnızca ödeme durumu ve gerekli işlem referanslarını saklar.
+                Android satın almaları Google Play ödeme akışında tamamlanacak. Diewish backend&apos;i
+                yalnızca satın alma doğrulaması ve erişim durumunu yönetmek için gerekli işlem
+                referanslarını kullanır; kart numarası veya CVV saklamaz.
               </p>
             </div>
           </CardContent>
