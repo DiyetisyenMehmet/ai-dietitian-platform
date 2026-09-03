@@ -12,8 +12,10 @@ import { asyncHandler } from "../../utils/async-handler";
 import type {
   CancelSubscriptionInput,
   CheckoutInput,
+  VerifyGooglePlaySubscriptionInput,
   VerifyPaymentInput,
 } from "./dto/payments.schemas";
+import { googlePlayBilling } from "./google-play";
 import { paymentsService } from "./payments.service";
 
 function auditContext(req: Request): AuditContext {
@@ -46,6 +48,29 @@ export const paymentsController = {
   getSubscription: asyncHandler(async (req: Request, res: Response) => {
     const userId = requireUserId(req);
     sendSuccess(res, await paymentsService.getStatus(userId));
+  }),
+
+  googlePlayConfig: asyncHandler(async (req: Request, res: Response) => {
+    const userId = requireUserId(req);
+    sendSuccess(res, googlePlayBilling.clientConfig(userId));
+  }),
+
+  googlePlayVerify: asyncHandler(async (req: Request, res: Response) => {
+    const userId = requireUserId(req);
+    const { purchaseToken } = req.body as VerifyGooglePlaySubscriptionInput;
+    const verified = await googlePlayBilling.verifySubscription(purchaseToken, userId);
+
+    // Verification is intentionally separated from entitlement persistence for
+    // now. The next payment-domain migration adds a provider-neutral, unique
+    // purchase-token ledger so the same Play purchase can never be claimed by
+    // two Diewish accounts. Never acknowledge before that durable grant exists.
+    sendSuccess(res, {
+      verified: true,
+      tier: verified.tier,
+      productId: verified.productId,
+      expiresAt: verified.expiresAt,
+      acknowledgementPending: verified.acknowledgementPending,
+    });
   }),
 
   checkout: asyncHandler(async (req: Request, res: Response) => {
