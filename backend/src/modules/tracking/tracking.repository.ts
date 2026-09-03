@@ -57,6 +57,26 @@ export const trackingRepository = {
     });
   },
 
+  async updateMealLogForUser(
+    id: string,
+    userId: string,
+    data: {
+      name?: string;
+      calories?: number;
+      proteinG?: number;
+      carbsG?: number;
+      fatG?: number;
+      sodiumMg?: number;
+      sugarG?: number;
+    },
+  ): Promise<MealLog | null> {
+    return prisma.$transaction(async (tx) => {
+      const updated = await tx.mealLog.updateMany({ where: { id, userId }, data });
+      if (updated.count === 0) return null;
+      return tx.mealLog.findFirst({ where: { id, userId } });
+    });
+  },
+
   deleteMealLogForUser(id: string, userId: string): Promise<{ count: number }> {
     return prisma.mealLog.deleteMany({ where: { id, userId } });
   },
