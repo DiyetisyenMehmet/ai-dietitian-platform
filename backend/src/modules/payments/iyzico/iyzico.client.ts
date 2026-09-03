@@ -27,14 +27,9 @@ function base64(input: string): string {
   return Buffer.from(input, "utf8").toString("base64");
 }
 
-/** HMAC-SHA256 hex digest — used for the IYZWSv2 request signature. */
+/** HMAC-SHA256 hex digest — used for request and V3 webhook signatures. */
 function hmacHex(key: string, data: string): string {
   return crypto.createHmac("sha256", key).update(data, "utf8").digest("hex");
-}
-
-/** HMAC-SHA256 base64 digest — used for webhook signature verification. */
-function hmacBase64(key: string, data: string): string {
-  return crypto.createHmac("sha256", key).update(data, "utf8").digest("base64");
 }
 
 /** Timing-safe string comparison that never throws on length mismatch. */
@@ -77,7 +72,7 @@ export const iyzicoClient = {
 
   /**
    * Signs and sends a POST to an iyzico endpoint. Network/parse failures are
-   * surfaced to the caller (the payment service maps them to a 502-style error).
+   * surfaced to the caller.
    */
   async post(uriPath: string, payload: Record<string, unknown>): Promise<IyzicoResponse> {
     const payloadJson = JSON.stringify(payload);
@@ -96,15 +91,19 @@ export const iyzicoClient = {
   },
 
   /**
-   * Verifies a webhook signature. iyzico signs notifications with an HMAC over
-   * a canonical concatenation of the secret and stable event fields; the result
-   * is base64-encoded and delivered in the signature header. We recompute it and
-   * compare constant-time. Fails CLOSED when no secret is configured.
+   * Verifies an `X-IYZ-SIGNATURE-V3` value.
+   *
+   * iyzico V3 signatures use HMAC-SHA256 with a HEX digest. The signed message
+   * starts with the merchant secret itself, followed by the format-specific
+   * event fields supplied by the provider layer. We keep the secret inside this
+   * low-level client so callers never need to read or concatenate it directly.
+   * Comparison is constant-time and fails closed when configuration/header data
+   * is missing.
    */
-  verifyWebhookSignature(canonicalString: string, providedSignature: string | undefined): boolean {
+  verifyWebhookSignature(canonicalFields: string, providedSignature: string | undefined): boolean {
     const secret = this.webhookSecret();
     if (!secret || !providedSignature) return false;
-    const expected = hmacBase64(secret, canonicalString);
-    return safeEqual(expected, providedSignature.trim());
+    const expected = hmacHex(secret, secret + canonicalFields).toLowerCase();
+    return safeEqual(expected, providedSignature.trim().toLowerCase());
   },
 };
