@@ -10,8 +10,8 @@ import { Label } from "@/presentation/components/ui/label";
 
 /**
  * Contact form that composes a pre-filled email to the Diewish support address.
- * Keeps the flow entirely client-side (no backend endpoint required) by opening
- * the visitor's mail client with the message pre-populated.
+ * It does not claim to submit a message to a backend: the visitor reviews and
+ * sends the message from their own mail application.
  */
 export function ContactForm() {
   const [name, setName] = React.useState("");
@@ -28,7 +28,7 @@ export function ContactForm() {
     const subject = encodeURIComponent(`Diewish İletişim — ${name}`);
     const body = encodeURIComponent(`Ad: ${name}\nE-posta: ${email}\n\n${message}`);
     window.location.href = `mailto:${CONTACT_INFO.email}?subject=${subject}&body=${body}`;
-    toast.success("E-posta uygulaman açılıyor. Mesajını gönderebilirsin.");
+    toast.info("E-posta uygulaman açılıyor. Göndermeden önce mesajını kontrol edebilirsin.");
   }
 
   return (
@@ -68,8 +68,11 @@ export function ContactForm() {
           className="flex w-full rounded-xl border border-input bg-background px-3 py-2 text-sm shadow-soft transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50"
         />
       </div>
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        Bu form mesajı doğrudan göndermez; cihazındaki e-posta uygulamasında doldurulmuş bir taslak açar.
+      </p>
       <Button type="submit" className="w-full sm:w-auto">
-        Mesaj Gönder
+        E-posta taslağını aç
       </Button>
     </form>
   );
