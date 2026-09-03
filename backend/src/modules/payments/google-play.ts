@@ -24,6 +24,8 @@ interface GoogleSubscriptionPurchaseV2 {
   subscriptionState?: string;
   acknowledgementState?: string;
   latestOrderId?: string;
+  startTime?: string;
+  linkedPurchaseToken?: string;
   externalAccountIdentifiers?: {
     obfuscatedExternalAccountId?: string;
     obfuscatedExternalProfileId?: string;
@@ -35,10 +37,13 @@ export interface VerifiedGooglePlaySubscription {
   tier: SubscriptionTier;
   productId: string;
   purchaseToken: string;
+  linkedPurchaseToken: string | null;
+  startedAt: Date | null;
   expiresAt: Date;
   acknowledgementPending: boolean;
   orderId: string | null;
   obfuscatedAccountId: string | null;
+  rawState: "SUBSCRIPTION_STATE_ACTIVE";
 }
 
 let cachedAccessToken: { token: string; expiresAtMs: number } | null = null;
@@ -108,7 +113,7 @@ async function accessToken(): Promise<string> {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
-      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      grant_type: "urn:ietf:params:oauth2:grant-type:jwt-bearer",
       assertion,
     }),
     signal: AbortSignal.timeout(15_000),
@@ -140,13 +145,15 @@ export const googlePlayBilling = {
       premiumProductId: env.GOOGLE_PLAY_PREMIUM_PRODUCT_ID,
       premiumPlusProductId: env.GOOGLE_PLAY_PREMIUM_PLUS_PRODUCT_ID,
       obfuscatedAccountId: obfuscatedAccountId(userId),
+      serverVerificationReady: isConfigured(),
     };
   },
 
   /**
-   * Verifies a subscription purchase directly with Google Play. The client-sent
-   * product id is never trusted: the tier is derived from Google's line item.
-   * PENDING/paused/expired/canceled purchases never grant Diewish entitlement.
+   * Verifies an initial/active subscription directly with Google Play. The
+   * client-sent product id is never trusted: the tier and paid-through time are
+   * derived from Google's Purchases.subscriptionsv2 response. Pending, paused,
+   * expired and canceled states never grant a new Diewish entitlement here.
    */
   async verifySubscription(
     purchaseToken: string,
@@ -205,14 +212,20 @@ export const googlePlayBilling = {
     const tier = tierForProduct(lineItem.productId);
     if (!tier) throw new ApiError(409, "Google Play product is not recognized by Diewish.");
 
+    const start = purchase.startTime ? new Date(purchase.startTime) : null;
+    const startedAt = start && Number.isFinite(start.getTime()) ? start : null;
+
     return {
       tier,
       productId: lineItem.productId,
       purchaseToken,
+      linkedPurchaseToken: purchase.linkedPurchaseToken ?? null,
+      startedAt,
       expiresAt: lineItem.expiry,
       acknowledgementPending: purchase.acknowledgementState === "ACKNOWLEDGEMENT_STATE_PENDING",
       orderId: purchase.latestOrderId ?? null,
       obfuscatedAccountId: purchase.externalAccountIdentifiers?.obfuscatedExternalAccountId ?? null,
+      rawState: "SUBSCRIPTION_STATE_ACTIVE",
     };
   },
 
