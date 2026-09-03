@@ -9,13 +9,14 @@ import {
   createWaterLogSchema,
   createWeightLogSchema,
   mealLogIdParamsSchema,
+  updateMealLogSchema,
 } from "./tracking.schemas";
 
 /**
  * Tracking router (mounted at /api/tracking). Every route is owner-scoped and
- * requires a valid access token. New health/nutrition writes require current
- * mandatory consent, while reads and user-initiated deletes remain available
- * after withdrawal so users can still access/remove their existing data.
+ * requires a valid access token. New or changed health/nutrition data requires
+ * current mandatory consent, while reads and user-initiated deletes remain
+ * available after withdrawal so users can access/remove existing data.
  */
 export const trackingRouter = Router();
 
@@ -31,9 +32,7 @@ trackingRouter.get("/weight", authenticate, trackingController.listWeight);
 
 /**
  * Meal time-series. A body containing only `mealType` is a valid explicit meal
- * check-in ("I ate this meal"); nutrition-bearing rows continue to represent
- * individual logged foods. DELETE is owner-scoped and intentionally does not
- * require current processing consent because deletion is a data-subject action.
+ * check-in ("I ate this meal"); nutrition-bearing rows represent logged foods.
  */
 trackingRouter.post(
   "/meals",
@@ -43,6 +42,13 @@ trackingRouter.post(
   trackingController.createMeal,
 );
 trackingRouter.get("/meals", authenticate, trackingController.listMeals);
+trackingRouter.patch(
+  "/meals/:id",
+  authenticate,
+  requireConsent,
+  validate({ params: mealLogIdParamsSchema, body: updateMealLogSchema }),
+  trackingController.updateMeal,
+);
 trackingRouter.delete(
   "/meals/:id",
   authenticate,
