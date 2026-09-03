@@ -4,11 +4,16 @@
 
 import type { Request, Response } from "express";
 
+import { env } from "../../config/env";
 import type { AuditContext } from "../../lib/audit";
 import { ApiError } from "../../utils/api-error";
 import { sendSuccess } from "../../utils/api-response";
 import { asyncHandler } from "../../utils/async-handler";
-import type { CancelSubscriptionInput, CheckoutInput, VerifyPaymentInput } from "./dto/payments.schemas";
+import type {
+  CancelSubscriptionInput,
+  CheckoutInput,
+  VerifyPaymentInput,
+} from "./dto/payments.schemas";
 import { paymentsService } from "./payments.service";
 
 /** Derives best-effort request context for audit records. */
@@ -25,13 +30,16 @@ function requireUserId(req: Request): string {
   return req.user.id;
 }
 
-/** Extracts the iyzico webhook signature header (version-tolerant). */
+/** Extracts the currently supported iyzico webhook signature header. */
 function signatureHeader(req: Request): string | undefined {
-  const v =
-    req.headers["x-iyz-signature-v3"] ??
-    req.headers["x-iyz-signature"] ??
-    req.headers["x-iyzico-signature"];
+  const v = req.headers["x-iyz-signature-v3"];
   return Array.isArray(v) ? v[0] : v;
+}
+
+/** Builds a fixed frontend destination after a provider callback. */
+function billingReturnUrl(status: "success" | "pending" | "failed"): string {
+  const base = env.APP_WEB_URL.replace(/\/$/, "");
+  return `${base}/profile/subscription?payment=${status}`;
 }
 
 export const paymentsController = {
@@ -57,6 +65,18 @@ export const paymentsController = {
     sendSuccess(res, await paymentsService.verifyAndFinalize(userId, token, auditContext(req)));
   }),
 
+  /**
+   * Public browser callback used directly by iyzico Checkout Form. The posted
+   * token is verified server-to-server and correlated to our pending payment;
+   * no Diewish bearer token is trusted or required for this provider callback.
+   */
+  checkoutCallback: asyncHandler(async (req: Request, res: Response) => {
+    const { token } = req.body as VerifyPaymentInput;
+    const status = await paymentsService.finalizeCheckoutCallback(token, auditContext(req));
+    const outcome = status.status === "ACTIVE" ? "success" : status.status === "PENDING" ? "pending" : "failed";
+    res.redirect(303, billingReturnUrl(outcome));
+  }),
+
   cancel: asyncHandler(async (req: Request, res: Response) => {
     const userId = requireUserId(req);
     const { atPeriodEnd } = req.body as CancelSubscriptionInput;
@@ -70,13 +90,16 @@ export const paymentsController = {
 
   /**
    * Public webhook endpoint. Verifies the provider signature against the raw
-   * request bytes, then processes idempotently. Always acknowledges with 200 so
-   * the provider does not enter a retry storm; `processed` reflects whether a
-   * state change actually occurred.
+   * request bytes, then processes idempotently. Invalid or duplicate deliveries
+   * are acknowledged without changing paid access.
    */
   webhook: asyncHandler(async (req: Request, res: Response) => {
     const rawBody = req.rawBody?.toString("utf8") ?? JSON.stringify(req.body ?? {});
-    const result = await paymentsService.handleWebhook(rawBody, signatureHeader(req), auditContext(req));
+    const result = await paymentsService.handleWebhook(
+      rawBody,
+      signatureHeader(req),
+      auditContext(req),
+    );
     sendSuccess(res, result);
   }),
 };
