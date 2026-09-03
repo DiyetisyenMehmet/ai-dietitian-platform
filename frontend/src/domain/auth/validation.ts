@@ -1,9 +1,10 @@
 import { z } from "zod";
 
 /**
- * Auth validation schemas — single source of truth for client-side
- * input validation. Framework-agnostic (Zod only); consumed by forms
- * and the application service layer.
+ * Auth validation schemas — single source of truth for client-side input
+ * validation. Legal/health consent is deliberately NOT represented as a signup
+ * form boolean: consent is versioned and persisted through the legal API after
+ * account creation, before onboarding or health-data processing begins.
  */
 
 const email = z
@@ -38,9 +39,6 @@ export const registerSchema = z
     email,
     password: strongPassword,
     confirmPassword: z.string().min(1, "Şifre tekrarı gereklidir."),
-    acceptTerms: z.literal(true, {
-      errorMap: () => ({ message: "Devam etmek için koşulları kabul etmelisiniz." }),
-    }),
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: "Şifreler eşleşmiyor.",
