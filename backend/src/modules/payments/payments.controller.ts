@@ -1,5 +1,5 @@
 /**
- * HTTP controllers for the subscription/payments module (Sprint 15).
+ * HTTP controllers for the subscription/payments module.
  */
 
 import type { Request, Response } from "express";
@@ -16,7 +16,6 @@ import type {
 } from "./dto/payments.schemas";
 import { paymentsService } from "./payments.service";
 
-/** Derives best-effort request context for audit records. */
 function auditContext(req: Request): AuditContext {
   return {
     userAgent: req.headers["user-agent"] ?? null,
@@ -24,19 +23,16 @@ function auditContext(req: Request): AuditContext {
   };
 }
 
-/** Returns the authenticated user id or throws a 401. */
 function requireUserId(req: Request): string {
   if (!req.user) throw ApiError.unauthorized("Authentication required.");
   return req.user.id;
 }
 
-/** Extracts the currently supported iyzico webhook signature header. */
 function signatureHeader(req: Request): string | undefined {
   const v = req.headers["x-iyz-signature-v3"];
   return Array.isArray(v) ? v[0] : v;
 }
 
-/** Builds a fixed frontend destination after a provider callback. */
 function billingReturnUrl(status: "success" | "pending" | "failed"): string {
   const base = env.APP_WEB_URL.replace(/\/$/, "");
   return `${base}/profile/subscription?payment=${status}`;
@@ -54,8 +50,13 @@ export const paymentsController = {
 
   checkout: asyncHandler(async (req: Request, res: Response) => {
     const userId = requireUserId(req);
-    const { tier } = req.body as CheckoutInput;
-    const result = await paymentsService.initiateCheckout(userId, tier, auditContext(req));
+    const { tier, purchaseAcceptance } = req.body as CheckoutInput;
+    const result = await paymentsService.initiateCheckout(
+      userId,
+      tier,
+      purchaseAcceptance,
+      auditContext(req),
+    );
     sendSuccess(res, result, 201);
   }),
 
@@ -65,11 +66,6 @@ export const paymentsController = {
     sendSuccess(res, await paymentsService.verifyAndFinalize(userId, token, auditContext(req)));
   }),
 
-  /**
-   * Public browser callback used directly by iyzico Checkout Form. The posted
-   * token is verified server-to-server and correlated to our pending payment;
-   * no Diewish bearer token is trusted or required for this provider callback.
-   */
   checkoutCallback: asyncHandler(async (req: Request, res: Response) => {
     const { token } = req.body as VerifyPaymentInput;
     const status = await paymentsService.finalizeCheckoutCallback(token, auditContext(req));
@@ -88,11 +84,6 @@ export const paymentsController = {
     sendSuccess(res, { payments: await paymentsService.listPayments(userId) });
   }),
 
-  /**
-   * Public webhook endpoint. Verifies the provider signature against the raw
-   * request bytes, then processes idempotently. Invalid or duplicate deliveries
-   * are acknowledged without changing paid access.
-   */
   webhook: asyncHandler(async (req: Request, res: Response) => {
     const rawBody = req.rawBody?.toString("utf8") ?? JSON.stringify(req.body ?? {});
     const result = await paymentsService.handleWebhook(
