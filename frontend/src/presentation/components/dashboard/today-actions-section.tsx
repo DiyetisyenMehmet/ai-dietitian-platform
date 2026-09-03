@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Bot, Droplets, Footprints, Plus, Utensils } from "lucide-react";
+import { Droplets, Footprints, Plus, Utensils } from "lucide-react";
 import { toast } from "sonner";
 
 import { Card, CardContent } from "@/presentation/components/ui/card";
@@ -11,7 +11,7 @@ import {
   WATER_GLASS_ML,
 } from "@/application/health/daily-tracking-store";
 
-/** The dashboard's compact action launcher: food, water, movement and coach. */
+/** The dashboard's compact action launcher: food, water and movement. */
 export function TodayActionsSection() {
   const [addingWater, setAddingWater] = React.useState(false);
 
@@ -39,7 +39,7 @@ export function TodayActionsSection() {
         </p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <Link href="/meals/add" className="group block">
           <Card className="h-full transition-colors group-hover:border-primary/40 group-hover:bg-primary/[0.03]">
             <CardContent className="flex items-center gap-3 p-4 lg:flex-col lg:items-start">
@@ -88,20 +88,6 @@ export function TodayActionsSection() {
                 <p className="mt-0.5 text-xs text-muted-foreground">Yürüyüş veya egzersiz ekle</p>
               </div>
               <Plus className="ml-auto size-4 text-muted-foreground lg:hidden" aria-hidden="true" />
-            </CardContent>
-          </Card>
-        </Link>
-
-        <Link href="/ai" className="group block">
-          <Card className="h-full transition-colors group-hover:border-primary/40 group-hover:bg-primary/[0.03]">
-            <CardContent className="flex items-center gap-3 p-4 lg:flex-col lg:items-start">
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <Bot className="size-5" aria-hidden="true" />
-              </span>
-              <div>
-                <p className="text-sm font-semibold">Koçuna danış</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">Aklındakini sor</p>
-              </div>
             </CardContent>
           </Card>
         </Link>
