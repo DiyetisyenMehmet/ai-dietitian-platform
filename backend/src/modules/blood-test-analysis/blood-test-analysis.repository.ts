@@ -88,6 +88,38 @@ export const bloodTestAnalysisRepository = {
     });
   },
 
+  /**
+   * Converts abandoned PROCESSING rows into a terminal FAILED state. A normal
+   * analysis is synchronous and should finish well inside the caller-provided
+   * cutoff. This recovery path covers hard request/container interruption where
+   * JavaScript `catch/finally` never got a chance to persist failure.
+   */
+  async failStaleProcessingForUser(userId: string, cutoff: Date): Promise<number> {
+    const stale = await prisma.bloodTestAnalysis.findMany({
+      where: { userId, status: "PROCESSING", updatedAt: { lt: cutoff } },
+      select: { id: true, bloodTestId: true },
+    });
+    if (stale.length === 0) return 0;
+
+    const analysisIds = stale.map((row) => row.id);
+    const bloodTestIds = stale.map((row) => row.bloodTestId);
+    const failureMessage =
+      "Analiz beklenmedik şekilde kesildi ve tamamlanamadı. Lütfen daha sonra tekrar deneyin.";
+
+    await prisma.$transaction([
+      prisma.bloodTestAnalysis.updateMany({
+        where: { id: { in: analysisIds }, userId, status: "PROCESSING" },
+        data: { status: "FAILED", errorMessage: failureMessage },
+      }),
+      prisma.bloodTestUpload.updateMany({
+        where: { id: { in: bloodTestIds }, userId, status: "ANALYZING" },
+        data: { status: "FAILED" },
+      }),
+    ]);
+
+    return stale.length;
+  },
+
   /** Fetches an analysis by its owning upload id, scoped to the user. */
   findByBloodTestIdForUser(bloodTestId: string, userId: string): Promise<BloodTestAnalysis | null> {
     return prisma.bloodTestAnalysis.findFirst({ where: { bloodTestId, userId } });
