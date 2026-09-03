@@ -2,6 +2,7 @@ import { Router } from "express";
 import rateLimit from "express-rate-limit";
 
 import { authenticate } from "../../middleware/authenticate";
+import { requireConsent } from "../../middleware/require-consent";
 import { sendError } from "../../utils/api-response";
 import { foodScanController } from "./food-scan.controller";
 import { uploadFoodImage } from "./food-scan.upload";
@@ -21,11 +22,13 @@ const foodScanLimiter = rateLimit({
 
 /**
  * POST /api/food-scan/analyze
- * The image is processed in memory and is not persisted by this module.
+ * The image is processed in memory and is not persisted by this module. Current
+ * mandatory consent is checked before multipart parsing or provider work starts.
  */
 foodScanRouter.post(
   "/analyze",
   authenticate,
+  requireConsent,
   foodScanLimiter,
   uploadFoodImage(),
   foodScanController.analyze,
