@@ -1,13 +1,3 @@
-/**
- * Shared types for Diewish's AI Dietitian Chat (Sprint 14, C2).
- *
- * These types form the contract between the chat orchestrator, the PHI
- * minimizer, and the provider-agnostic AI adapter. The context types are
- * deliberately built from DERIVED, NON-IDENTIFYING fields only (AD-039): no
- * name, email, user id, exact date of birth, or raw document text ever leaves
- * the system boundary.
- */
-
 /** A single turn replayed to the model as conversation history. */
 export interface ChatHistoryTurn {
   role: "user" | "assistant";
@@ -53,38 +43,43 @@ export interface MinimizedBloodContext {
 }
 
 /**
- * The full non-identifying context assembled for a chat turn. Everything here
- * is derived/aggregated; it carries no direct identifiers (AD-039).
+ * Deterministic, non-identifying recent behavior summary. Raw log rows and
+ * timestamps are never sent to the provider; only aggregates needed for useful
+ * coaching are exposed.
  */
+export interface MinimizedRecentTrackingContext {
+  windowHours: number;
+  mealCount: number;
+  calories?: number;
+  proteinG?: number;
+  carbsG?: number;
+  fatG?: number;
+  waterMl: number;
+  /** Latest recorded weight from the recent trend window, when available. */
+  latestWeightKg?: number;
+  /** Difference latest - oldest over the recent trend window. */
+  weightChangeKg?: number;
+}
+
+/** Full non-identifying context assembled for a chat turn. */
 export interface MinimizedChatContext {
   profile?: MinimizedProfileContext;
   activePlan?: MinimizedPlanContext;
   bloodAnalysis?: MinimizedBloodContext;
-  /**
-   * AI Long-Term Memory context (Sprint 19). A pre-rendered, non-identifying
-   * Turkish summary of the user's durable coaching memory (trends, habits,
-   * goals, recorded notes) so the model never repeats identical advice for an
-   * unchanged situation. Optional and may be empty.
-   */
+  recentTracking?: MinimizedRecentTrackingContext;
+  /** Pre-rendered, bounded, non-identifying long-term coaching memory. */
   memory?: string;
 }
 
 /** Input passed to the AI adapter to produce a dietitian chat reply. */
 export interface DietitianChatAIInput {
   context: MinimizedChatContext;
-  /** Bounded, PHI-redacted prior turns (oldest first). */
   history: ChatHistoryTurn[];
-  /** The current user message (PHI-redacted for the external call). */
   message: string;
-  /**
-   * When true, the caller is on a premium tier: the adapter may produce a
-   * longer, deeper reply (higher token budget). Sprint 19, Section 8.
-   */
   premium?: boolean;
 }
 
 /** Structured output returned by the AI adapter's chat generator. */
 export interface DietitianChatAIOutput {
-  /** The assistant reply (sanitized; disclaimer appended when relevant). */
   reply: string;
 }
