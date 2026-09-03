@@ -66,7 +66,7 @@ const envSchema = z.object({
   // the merchant/contact details displayed on the Diewish website.
   LEGAL_CONTROLLER_NAME: z.string().default("Diewish"),
   LEGAL_CONTROLLER_ADDRESS: z.string().default(""),
-  LEGAL_CONTROLLER_EMAIL: z.string().email().default("diewishdestek@hotmail.com"),
+  LEGAL_CONTROLLER_EMAIL: z.string().email().default("diewishdestek@gmail.com"),
   LEGAL_CONTROLLER_KEP: z.string().default(""),
   LEGAL_CONTROLLER_PHONE: z.string().default(""),
   LEGAL_PRIVACY_POLICY_VERSION: z.string().default("2026-09-03"),
