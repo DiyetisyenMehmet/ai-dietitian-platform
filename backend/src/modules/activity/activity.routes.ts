@@ -1,14 +1,17 @@
 import { Router } from "express";
 
 import { authenticate } from "../../middleware/authenticate";
+import { requireConsent } from "../../middleware/require-consent";
 import { validate } from "../../middleware/validate";
 import { activityController } from "./activity.controller";
 import { createActivitySchema } from "./activity.schemas";
 
 /**
  * Activity router (mounted at /api/activity). Every route is owner-scoped and
- * requires a valid access token. These entries feed the AI Health Coach's
- * activity-consistency and inactivity analysis (Sprint 22).
+ * requires a valid access token. Creating a new health/activity log requires
+ * current mandatory consent; existing logs remain readable after withdrawal.
+ * These entries feed the AI Health Coach's activity-consistency and inactivity
+ * analysis (Sprint 22).
  *
  * @openapi
  * tags:
@@ -36,6 +39,7 @@ export const activityRouter = Router();
 activityRouter.post(
   "/",
   authenticate,
+  requireConsent,
   validate({ body: createActivitySchema }),
   activityController.create,
 );
