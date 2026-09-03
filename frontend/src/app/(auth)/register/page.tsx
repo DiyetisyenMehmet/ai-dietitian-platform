@@ -14,7 +14,6 @@ import { AuthLayout } from "@/presentation/components/layout/auth-layout";
 import { FormField } from "@/presentation/components/ui/form-field";
 import { Input } from "@/presentation/components/ui/input";
 import { PasswordInput } from "@/presentation/components/ui/password-input";
-import { Checkbox } from "@/presentation/components/ui/checkbox";
 import { Button } from "@/presentation/components/ui/button";
 
 export default function RegisterPage() {
@@ -22,8 +21,6 @@ export default function RegisterPage() {
   const {
     register,
     handleSubmit,
-    setValue,
-    watch,
     formState: { errors, isSubmitting },
   } = useForm<RegisterInput>({
     resolver: zodResolver(registerSchema),
@@ -32,19 +29,16 @@ export default function RegisterPage() {
       email: "",
       password: "",
       confirmPassword: "",
-      acceptTerms: false as unknown as true,
     },
   });
-
-  const acceptTerms = watch("acceptTerms");
 
   const onSubmit = React.useCallback(
     async (values: RegisterInput) => {
       const result = await authService.register(values);
       if (result.ok) {
         authStore.setSession(result.data);
-        toast.success("Aramıza hoş geldiniz! Şimdi profilinizi oluşturalım.");
-        router.replace("/onboarding");
+        toast.success("Aramıza hoş geldiniz. Devam etmeden önce güncel onayları inceleyin.");
+        router.replace("/consent");
         return;
       }
       toast.error(result.error);
@@ -100,31 +94,17 @@ export default function RegisterPage() {
           />
         </FormField>
 
-        <div className="space-y-1.5">
-          <label className="flex cursor-pointer items-start gap-2.5 text-sm">
-            <Checkbox
-              className="mt-0.5"
-              checked={acceptTerms === true}
-              onCheckedChange={(checked) =>
-                setValue("acceptTerms", (checked === true) as true, { shouldValidate: true })
-              }
-            />
-            <span>
-              <Link href="/terms" className="font-medium text-primary hover:underline">
-                Kullanım koşullarını
-              </Link>{" "}
-              ve{" "}
-              <Link href="/privacy" className="font-medium text-primary hover:underline">
-                gizlilik politikasını
-              </Link>{" "}
-              kabul ediyorum.
-            </span>
-          </label>
-          {errors.acceptTerms && (
-            <p role="alert" className="text-sm text-destructive">
-              {errors.acceptTerms.message}
-            </p>
-          )}
+        <div className="rounded-xl border border-border bg-muted/30 p-3 text-xs leading-relaxed text-muted-foreground">
+          Hesabınız oluşturulduktan sonra güncel{" "}
+          <Link href="/terms" className="font-medium text-primary hover:underline">
+            Kullanım Koşulları
+          </Link>
+          ,{" "}
+          <Link href="/privacy" className="font-medium text-primary hover:underline">
+            Gizlilik Politikası
+          </Link>{" "}
+          ve sağlık verilerine ilişkin onaylar ayrı ayrı sunulur. Sağlık verileri bu onaylar
+          kaydedilmeden işlenmez.
         </div>
 
         <Button type="submit" size="lg" className="w-full" isLoading={isSubmitting}>
