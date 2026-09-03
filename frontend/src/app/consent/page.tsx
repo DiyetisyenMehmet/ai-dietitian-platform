@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronDown, Leaf, Loader2, LogOut, ShieldCheck } from "lucide-react";
+import { ChevronDown, Info, Leaf, Loader2, LogOut, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 
 import { authService } from "@/application/auth/auth-service";
@@ -21,13 +21,12 @@ const ORDER: LegalDocumentType[] = [
   "KVKK_EXPLICIT_CONSENT",
 ];
 
-const CONSENT_LABEL: Record<LegalDocumentType, string> = {
-  PRIVACY_POLICY: "Gizlilik Politikasını okudum ve kişisel verilerin işlenmesi hakkında bilgilendirildim.",
+const CONSENT_LABEL: Partial<Record<LegalDocumentType, string>> = {
   TERMS_OF_SERVICE: "Kullanım Koşullarını okudum ve kabul ediyorum.",
   MEDICAL_DISCLAIMER:
     "Diewish'in tıbbi teşhis veya tedavi hizmeti sunmadığını ve sağlık profesyonelinin yerini almadığını anladım.",
   KVKK_EXPLICIT_CONSENT:
-    "Sağlık verilerimin açık rıza metninde belirtilen amaçlarla işlenmesine özgür irademle açık rıza veriyorum.",
+    "Sağlık verilerimin açık rıza metninde belirtilen belirli amaçlarla işlenmesine özgür irademle açık rıza veriyorum.",
 };
 
 export default function ConsentPage() {
@@ -44,9 +43,7 @@ export default function ConsentPage() {
   const allMissingChecked = missing.length > 0 && missing.every((type) => checked[type] === true);
 
   React.useEffect(() => {
-    if (user?.id && consentState.status === "idle") {
-      void consentStore.hydrate(user.id);
-    }
+    if (user?.id && consentState.status === "idle") void consentStore.hydrate(user.id);
   }, [user?.id, consentState.status]);
 
   async function loadBody(type: LegalDocumentType) {
@@ -65,7 +62,7 @@ export default function ConsentPage() {
   async function submit() {
     if (!user?.id || saving) return;
     if (!allMissingChecked) {
-      toast.error("Devam etmek için eksik zorunlu onayları ayrı ayrı işaretleyin.");
+      toast.error("Devam etmek için zorunlu beyanları ayrı ayrı işaretleyin.");
       return;
     }
 
@@ -74,13 +71,13 @@ export default function ConsentPage() {
       await consentStore.grantMany(user.id, missing);
       const current = consentStore.getSnapshot();
       if (current.consent?.allMandatoryGranted) {
-        toast.success("Yasal onaylar kaydedildi.");
+        toast.success("Onayların kaydedildi.");
         router.replace(user.onboardingCompleted ? "/dashboard" : "/onboarding");
       } else {
-        toast.error("Bazı onaylar kaydedilemedi. Lütfen eksik olanları tekrar kontrol edin.");
+        toast.error("Bazı onaylar kaydedilemedi. Lütfen tekrar kontrol edin.");
       }
     } catch {
-      toast.error("Onaylar kaydedilemedi. Bağlantınızı kontrol edip tekrar deneyin.");
+      toast.error("Onaylar kaydedilemedi. Bağlantını kontrol edip tekrar dene.");
       if (user.id) await consentStore.hydrate(user.id, true);
     } finally {
       setSaving(false);
@@ -95,29 +92,19 @@ export default function ConsentPage() {
   }
 
   if (consentState.status === "loading" || consentState.status === "idle") {
-    return (
-      <div className="flex min-h-dvh items-center justify-center bg-background">
-        <Loader2 className="size-6 animate-spin text-primary" aria-label="Yasal onaylar yükleniyor" />
-      </div>
-    );
+    return <div className="flex min-h-dvh items-center justify-center bg-background"><Loader2 className="size-6 animate-spin text-primary" aria-label="Yasal bilgiler yükleniyor" /></div>;
   }
 
   if (consentState.status === "error") {
     return (
       <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center gap-4 px-4 py-8">
-        <Card>
-          <CardContent className="space-y-4 p-6 text-center">
-            <ShieldCheck className="mx-auto size-8 text-primary" aria-hidden="true" />
-            <h1 className="text-xl font-bold">Yasal onay durumu alınamadı</h1>
-            <p className="text-sm text-muted-foreground">{consentState.error}</p>
-            <Button className="w-full" onClick={() => user?.id && void consentStore.hydrate(user.id, true)}>
-              Tekrar dene
-            </Button>
-            <Button variant="ghost" className="w-full" onClick={() => void logout()}>
-              <LogOut aria-hidden="true" /> Çıkış yap
-            </Button>
-          </CardContent>
-        </Card>
+        <Card><CardContent className="space-y-4 p-6 text-center">
+          <ShieldCheck className="mx-auto size-8 text-primary" aria-hidden="true" />
+          <h1 className="text-xl font-bold">Yasal durum alınamadı</h1>
+          <p className="text-sm text-muted-foreground">{consentState.error}</p>
+          <Button className="w-full" onClick={() => user?.id && void consentStore.hydrate(user.id, true)}>Tekrar dene</Button>
+          <Button variant="ghost" className="w-full" onClick={() => void logout()}><LogOut aria-hidden="true" /> Çıkış yap</Button>
+        </CardContent></Card>
       </main>
     );
   }
@@ -126,46 +113,26 @@ export default function ConsentPage() {
     const destination = user?.onboardingCompleted ? "/dashboard" : "/onboarding";
     return (
       <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center px-4 py-8">
-        <Card>
-          <CardContent className="space-y-4 p-6 text-center">
-            <ShieldCheck className="mx-auto size-9 text-primary" aria-hidden="true" />
-            <div className="space-y-1">
-              <h1 className="text-xl font-bold">Güncel onayların kayıtlı</h1>
-              <p className="text-sm leading-relaxed text-muted-foreground">
-                Güncel zorunlu metinler için onayların mevcut. Sağlık verisi açık rızanı profilindeki
-                Gizlilik ve İzinler bölümünden istediğin zaman yönetebilirsin.
-              </p>
-            </div>
-            <Button asChild className="w-full">
-              <Link href={destination}>{user?.onboardingCompleted ? "Uygulamaya dön" : "Profilini oluştur"}</Link>
-            </Button>
-            {user?.onboardingCompleted && (
-              <Button asChild variant="outline" className="w-full">
-                <Link href="/profile/privacy">Gizlilik ve izinleri yönet</Link>
-              </Button>
-            )}
-          </CardContent>
-        </Card>
+        <Card><CardContent className="space-y-4 p-6 text-center">
+          <ShieldCheck className="mx-auto size-9 text-primary" aria-hidden="true" />
+          <div className="space-y-1">
+            <h1 className="text-xl font-bold">Güncel onayların kayıtlı</h1>
+            <p className="text-sm leading-relaxed text-muted-foreground">KVKK aydınlatma metnini her zaman inceleyebilir, sağlık verisi açık rızanı Gizlilik ve İzinler bölümünden yönetebilirsin.</p>
+          </div>
+          <Button asChild className="w-full"><Link href={destination}>{user?.onboardingCompleted ? "Uygulamaya dön" : "Profilini oluştur"}</Link></Button>
+          {user?.onboardingCompleted && <Button asChild variant="outline" className="w-full"><Link href="/profile/privacy">Gizlilik ve izinleri yönet</Link></Button>}
+        </CardContent></Card>
       </main>
     );
   }
 
   return (
     <main className="mx-auto min-h-dvh w-full max-w-2xl px-4 py-8 sm:py-12">
-      <div className="mb-6 flex items-center gap-2 font-semibold">
-        <span className="flex size-9 items-center justify-center rounded-xl bg-primary/10">
-          <Leaf className="size-5 text-primary" aria-hidden="true" />
-        </span>
-        Diewish
-      </div>
+      <div className="mb-6 flex items-center gap-2 font-semibold"><span className="flex size-9 items-center justify-center rounded-xl bg-primary/10"><Leaf className="size-5 text-primary" aria-hidden="true" /></span>Diewish</div>
 
       <div className="mb-6 space-y-2">
-        <h1 className="text-2xl font-bold tracking-tight">Gizlilik ve sağlık verisi onayları</h1>
-        <p className="text-sm leading-relaxed text-muted-foreground">
-          Sağlık ve beslenme bilgilerini işlemeye başlamadan önce güncel metinleri ayrı ayrı inceleyip
-          zorunlu onaylarını vermen gerekiyor. Kutular önceden işaretli değildir. Açık rızanı daha sonra
-          geri çekebilirsin; bu durumda rızaya bağlı sağlık özellikleri kullanılamaz.
-        </p>
+        <h1 className="text-2xl font-bold tracking-tight">Bilgilendirme ve onaylar</h1>
+        <p className="text-sm leading-relaxed text-muted-foreground">KVKK aydınlatması bir izin değildir ve ayrı olarak sunulur. Kullanım koşulları, tıbbi sınırlar ve sağlık verisi açık rızası için gerekli olumlu beyanları ayrı ayrı verirsin. Kutular önceden işaretlenmez.</p>
       </div>
 
       <div className="space-y-4">
@@ -175,48 +142,33 @@ export default function ConsentPage() {
           if (!item || !summary) return null;
           const granted = item.granted;
           const body = bodies[type];
+          const requiresAffirmativeConsent = item.mandatory;
 
           return (
             <Card key={type} className={type === "KVKK_EXPLICIT_CONSENT" ? "border-primary/30" : undefined}>
               <CardContent className="space-y-4 p-5">
                 <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h2 className="font-semibold">{summary.title}</h2>
-                    <p className="mt-1 text-xs text-muted-foreground">Sürüm {summary.version}</p>
-                  </div>
-                  {granted && (
-                    <span className="rounded-full bg-emerald-500/15 px-2 py-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
-                      Onaylı
-                    </span>
+                  <div><h2 className="font-semibold">{summary.title}</h2><p className="mt-1 text-xs text-muted-foreground">Sürüm {summary.version}</p></div>
+                  {requiresAffirmativeConsent ? (
+                    granted && <span className="rounded-full bg-emerald-500/15 px-2 py-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">Onaylı</span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-1 text-[11px] font-semibold text-muted-foreground"><Info className="size-3" aria-hidden="true" /> Bilgilendirme</span>
                   )}
                 </div>
 
-                <details
-                  className="rounded-xl border border-border bg-muted/30 p-3"
-                  onToggle={(event) => {
-                    if (event.currentTarget.open) void loadBody(type);
-                  }}
-                >
-                  <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-medium">
-                    Güncel metni oku
-                    <ChevronDown className="size-4" aria-hidden="true" />
-                  </summary>
-                  <div className="mt-3 max-h-72 overflow-y-auto border-t border-border pt-3 text-xs leading-relaxed text-muted-foreground whitespace-pre-wrap">
-                    {bodyLoading === type && !body ? "Yükleniyor…" : body?.body ?? "Metni açmak için tekrar deneyin."}
-                  </div>
+                <details className="rounded-xl border border-border bg-muted/30 p-3" onToggle={(event) => { if (event.currentTarget.open) void loadBody(type); }}>
+                  <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-medium">Güncel metni oku<ChevronDown className="size-4" aria-hidden="true" /></summary>
+                  <div className="mt-3 max-h-72 overflow-y-auto whitespace-pre-wrap border-t border-border pt-3 text-xs leading-relaxed text-muted-foreground">{bodyLoading === type && !body ? "Yükleniyor…" : body?.body ?? "Metni açmak için tekrar deneyin."}</div>
                 </details>
 
-                <label className="flex cursor-pointer items-start gap-3 text-sm leading-relaxed">
-                  <Checkbox
-                    className="mt-0.5"
-                    checked={granted || checked[type] === true}
-                    disabled={granted}
-                    onCheckedChange={(value) =>
-                      setChecked((current) => ({ ...current, [type]: value === true }))
-                    }
-                  />
-                  <span>{CONSENT_LABEL[type]}</span>
-                </label>
+                {requiresAffirmativeConsent ? (
+                  <label className="flex cursor-pointer items-start gap-3 text-sm leading-relaxed">
+                    <Checkbox className="mt-0.5" checked={granted || checked[type] === true} disabled={granted} onCheckedChange={(value) => setChecked((current) => ({ ...current, [type]: value === true }))} />
+                    <span>{CONSENT_LABEL[type]}</span>
+                  </label>
+                ) : (
+                  <p className="text-xs leading-relaxed text-muted-foreground">Bu metin aydınlatma/bilgilendirme amacıyla sunulur. Kişisel verilerin işlenmesine toplu bir “izin” kutusu olarak kullanılmaz.</p>
+                )}
               </CardContent>
             </Card>
           );
@@ -224,12 +176,8 @@ export default function ConsentPage() {
       </div>
 
       <div className="mt-6 space-y-3">
-        <Button size="lg" className="w-full" disabled={!allMissingChecked || saving} isLoading={saving} onClick={() => void submit()}>
-          {saving ? "Onaylar kaydediliyor…" : "Onayla ve Devam Et"}
-        </Button>
-        <Button variant="ghost" className="w-full" onClick={() => void logout()}>
-          <LogOut aria-hidden="true" /> Onay vermeden çıkış yap
-        </Button>
+        <Button size="lg" className="w-full" disabled={!allMissingChecked || saving} isLoading={saving} onClick={() => void submit()}>{saving ? "Onaylar kaydediliyor…" : "Onayla ve Devam Et"}</Button>
+        <Button variant="ghost" className="w-full" onClick={() => void logout()}><LogOut aria-hidden="true" /> Onay vermeden çıkış yap</Button>
       </div>
     </main>
   );
