@@ -108,22 +108,38 @@ class LocalStorageProvider implements StorageProvider {
   }
 }
 
-let provider: StorageProvider | undefined;
+const providers = new Map<string, StorageProvider>();
 
 /**
- * Returns the configured storage provider (singleton). Selection is driven by
- * the validated `STORAGE_PROVIDER` env var; only `local` is implemented today.
+ * Resolves a storage backend by the provider name persisted on the database
+ * row. Reads/deletes MUST use this function rather than today's configured
+ * provider, otherwise changing STORAGE_PROVIDER would make historical objects
+ * unreadable or, worse, delete from the wrong backend.
  */
-export function getStorageProvider(): StorageProvider {
-  if (provider) return provider;
+export function getStorageProviderByName(name: string): StorageProvider {
+  const existing = providers.get(name);
+  if (existing) return existing;
 
-  switch (env.STORAGE_PROVIDER) {
+  let provider: StorageProvider;
+  switch (name) {
     case "local":
-    default:
       provider = new LocalStorageProvider(env.STORAGE_LOCAL_ROOT);
       logger.info({ provider: provider.name, root: env.STORAGE_LOCAL_ROOT }, "Storage provider initialized");
       break;
+    default:
+      logger.error({ provider: name }, "Stored object references unsupported storage provider");
+      throw new Error(`Unsupported storage provider: ${name}`);
   }
 
+  providers.set(name, provider);
   return provider;
+}
+
+/**
+ * Returns the storage provider used for NEW writes. Existing objects must be
+ * resolved from their persisted `storageProvider` value with
+ * `getStorageProviderByName`.
+ */
+export function getStorageProvider(): StorageProvider {
+  return getStorageProviderByName(env.STORAGE_PROVIDER);
 }

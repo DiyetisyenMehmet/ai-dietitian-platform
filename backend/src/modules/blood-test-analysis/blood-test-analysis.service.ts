@@ -2,7 +2,7 @@ import type { BloodTestAnalysis } from "@prisma/client";
 
 import { logger } from "../../lib/logger";
 import { prisma } from "../../lib/prisma";
-import { getStorageProvider } from "../../lib/storage";
+import { getStorageProviderByName } from "../../lib/storage";
 import { ApiError } from "../../utils/api-error";
 import { bloodTestRepository } from "../blood-test/blood-test.repository";
 import { getAIAdapter } from "./ai-adapter/ai-adapter.factory";
@@ -172,8 +172,10 @@ export const bloodTestAnalysisService = {
 
     const startedAt = Date.now();
     try {
-      // 1. Load the stored document bytes.
-      const buffer = await getStorageProvider().getBuffer({
+      // 1. Load the stored document bytes from the provider persisted on this
+      // upload. Historical files must not silently follow today's provider env.
+      const storage = getStorageProviderByName(upload.storageProvider);
+      const buffer = await storage.getBuffer({
         namespace: storageNamespace(userId),
         key: upload.storageKey,
       });

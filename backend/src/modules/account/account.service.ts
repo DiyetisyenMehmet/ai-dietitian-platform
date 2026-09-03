@@ -6,6 +6,7 @@ import { env } from "../../config/env";
 import { recordAudit, type AuditContext } from "../../lib/audit";
 import { logger } from "../../lib/logger";
 import { mailer } from "../../lib/mailer";
+import { getStorageProviderByName } from "../../lib/storage";
 import { ApiError } from "../../utils/api-error";
 import { generateOpaqueToken, hashToken } from "../../utils/jwt";
 import { hashPassword, verifyPassword } from "../../utils/password";
@@ -45,6 +46,10 @@ async function issueToken(
     expiresAt: new Date(Date.now() + ttlMs),
   });
   return rawToken;
+}
+
+function bloodTestStorageNamespace(userId: string): string {
+  return `blood-tests/${userId}`;
 }
 
 export const accountService = {
@@ -206,8 +211,10 @@ export const accountService = {
 
   /**
    * Permanently and irreversibly deletes the account after re-authenticating
-   * with the password. The audit entry is written before deletion (and, being
-   * FK-free, survives it) so the action remains traceable.
+   * with the password. External health-document binaries are deleted BEFORE the
+   * database cascade. If object deletion fails, the database references are
+   * deliberately retained so cleanup can be retried instead of silently
+   * orphaning health data in storage.
    */
   async deleteAccountPermanently(
     userId: string,
@@ -224,16 +231,37 @@ export const accountService = {
       throw ApiError.unauthorized("Password is incorrect.");
     }
 
-    // Record the audit entry first so the trail persists even as the user row
-    // (and its cascaded data) is removed. Email is kept only as a coarse
-    // reference for support/compliance, not as PHI.
+    const storageRefs = await accountRepository.listBloodTestStorageRefs(user.id);
+    try {
+      for (const ref of storageRefs) {
+        const storage = getStorageProviderByName(ref.storageProvider);
+        await storage.delete({
+          namespace: bloodTestStorageNamespace(user.id),
+          key: ref.storageKey,
+        });
+      }
+    } catch (error) {
+      logger.error(
+        { err: error, userId: user.id, storageObjectCount: storageRefs.length },
+        "Permanent account deletion blocked because external health data could not be removed",
+      );
+      throw new ApiError(503, "Account deletion could not be completed safely. Please try again later.", {
+        code: "ACCOUNT_STORAGE_CLEANUP_FAILED",
+      });
+    }
+
+    // Keep the surviving audit record data-minimal: userId is sufficient for
+    // reconciliation. Do not retain the deleted account's email in metadata.
     await recordAudit({
       action: "ACCOUNT_DELETED",
       userId: user.id,
       context,
-      metadata: { email: user.email },
+      metadata: { externalHealthObjectsDeleted: storageRefs.length },
     });
     await accountRepository.deleteAccount(user.id);
-    logger.info({ userId: user.id }, "Account permanently deleted");
+    logger.info(
+      { userId: user.id, externalHealthObjectsDeleted: storageRefs.length },
+      "Account permanently deleted",
+    );
   },
 };

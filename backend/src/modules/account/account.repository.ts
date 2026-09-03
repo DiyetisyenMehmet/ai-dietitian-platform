@@ -2,6 +2,11 @@ import type { AccountToken, AccountTokenType, User } from "@prisma/client";
 
 import { prisma } from "../../lib/prisma";
 
+export interface AccountStorageRef {
+  storageProvider: string;
+  storageKey: string;
+}
+
 /**
  * Data-access layer for the account-lifecycle module. All Prisma queries for
  * account tokens and lifecycle-related user mutations live here so the service
@@ -15,6 +20,19 @@ export const accountRepository = {
 
   findUserById(id: string): Promise<User | null> {
     return prisma.user.findUnique({ where: { id } });
+  },
+
+  /**
+   * Returns every externally stored blood-test object owned by the user. These
+   * references must be removed before the account row is deleted, because the
+   * database cascade cannot delete binaries living outside PostgreSQL.
+   */
+  listBloodTestStorageRefs(userId: string): Promise<AccountStorageRef[]> {
+    return prisma.bloodTestUpload.findMany({
+      where: { userId },
+      select: { storageProvider: true, storageKey: true },
+      orderBy: { createdAt: "asc" },
+    });
   },
 
   /**
@@ -135,7 +153,8 @@ export const accountRepository = {
   /**
    * Permanently deletes the account. Related profile, refresh tokens and
    * account tokens are removed via `onDelete: Cascade`; audit logs intentionally
-   * survive (no FK relation).
+   * survive (no FK relation). External objects must be removed before calling
+   * this method.
    */
   async deleteAccount(userId: string): Promise<void> {
     await prisma.user.delete({ where: { id: userId } });

@@ -5,7 +5,11 @@ import type { BloodTestUpload } from "@prisma/client";
 
 import { recordAudit, type AuditContext } from "../../lib/audit";
 import { logger } from "../../lib/logger";
-import { getStorageProvider, type StoredObjectRef } from "../../lib/storage";
+import {
+  getStorageProvider,
+  getStorageProviderByName,
+  type StoredObjectRef,
+} from "../../lib/storage";
 import { ApiError } from "../../utils/api-error";
 import {
   detectAllowedMimeType,
@@ -161,8 +165,10 @@ export const bloodTestService = {
   },
 
   /**
-   * Opens the stored file for download/streaming. Returns the stream plus the
-   * metadata needed to set response headers. 404 if not owned/found.
+   * Opens the stored file for download/streaming. The provider is resolved from
+   * the row that owns the object, not from today's runtime configuration, so a
+   * future storage migration cannot redirect historical reads to the wrong
+   * backend. 404 if not owned/found.
    */
   async getFile(
     userId: string,
@@ -172,7 +178,8 @@ export const bloodTestService = {
     if (!row) {
       throw ApiError.notFound("Blood test upload not found.");
     }
-    const { stream } = await getStorageProvider().get(refFor(userId, row.storageKey));
+    const storage = getStorageProviderByName(row.storageProvider);
+    const { stream } = await storage.get(refFor(userId, row.storageKey));
     return { row, stream };
   },
 
@@ -217,11 +224,14 @@ export const bloodTestService = {
       throw error;
     }
 
-    // Remove the superseded object; failure is non-fatal (a stray blob at worst).
-    if (existing.storageKey !== storageKey) {
-      await storage.delete(refFor(userId, existing.storageKey)).catch((err: unknown) => {
+    // Remove the superseded object from the provider recorded on the old row.
+    // Failure is non-fatal because the new record already points at valid bytes;
+    // the warning keeps the stale object visible for operational cleanup.
+    if (existing.storageKey !== storageKey || existing.storageProvider !== storage.name) {
+      const oldStorage = getStorageProviderByName(existing.storageProvider);
+      await oldStorage.delete(refFor(userId, existing.storageKey)).catch((err: unknown) => {
         logger.warn(
-          { err, uploadId: id, staleKey: existing.storageKey },
+          { err, uploadId: id, staleProvider: existing.storageProvider },
           "Failed to remove superseded blood-test object",
         );
       });
@@ -239,27 +249,27 @@ export const bloodTestService = {
     return toPublic(updated as BloodTestUpload);
   },
 
-  /** Deletes an upload's record and its stored object (best-effort). */
+  /**
+   * Deletes a stored object before deleting its metadata row. This is
+   * deliberately fail-closed for privacy: if object storage refuses deletion,
+   * we retain the database reference and return an error rather than orphaning
+   * health data that can no longer be located for a later retry.
+   */
   async remove(userId: string, id: string, context: AuditContext): Promise<void> {
     const existing = await bloodTestRepository.findByIdForUser(id, userId);
     if (!existing) {
       throw ApiError.notFound("Blood test upload not found.");
     }
 
+    const storage = getStorageProviderByName(existing.storageProvider);
+    await storage.delete(refFor(userId, existing.storageKey));
+
     const result = await bloodTestRepository.deleteForUser(id, userId);
     if (result.count === 0) {
-      // Raced with another delete — treat as not found.
+      // Raced with another delete. The object deletion is idempotent; report the
+      // metadata race as not-found and do not fabricate a successful audit.
       throw ApiError.notFound("Blood test upload not found.");
     }
-
-    await getStorageProvider()
-      .delete(refFor(userId, existing.storageKey))
-      .catch((err: unknown) => {
-        logger.warn(
-          { err, uploadId: id, storageKey: existing.storageKey },
-          "Failed to remove blood-test object after record deletion",
-        );
-      });
 
     await recordAudit({
       action: "BLOOD_TEST_DELETED",
