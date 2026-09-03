@@ -1,11 +1,9 @@
 /**
  * Subscription & payments service.
  *
- * Orchestrates hosted checkout, callback finalization and idempotent webhook
- * processing. Provider-reported success is always verified against Diewish's
- * pending payment before paid access is granted.
+ * Orchestrates the dormant web/iyzico checkout path while exposing one unified
+ * entitlement view across Google Play and legacy web purchases.
  */
-
 import crypto from "node:crypto";
 
 import type { SubscriptionTier } from "@prisma/client";
@@ -23,6 +21,7 @@ import {
 } from "./constants";
 import type { CheckoutInput } from "./dto/payments.schemas";
 import { entitlementsForTier } from "./entitlements";
+import { googlePlayEntitlementsService } from "./google-play-entitlements.service";
 import { getPaymentProvider } from "./iyzico";
 import { paymentsRepository } from "./payments.repository";
 import { resolveEffectiveSubscriptionTier } from "./subscription-state";
@@ -36,10 +35,11 @@ export interface SubscriptionStatusView {
   currentPeriodEnd: Date | null;
   cancelAtPeriodEnd: boolean;
   entitlements: string[];
+  provider: "GOOGLE_PLAY" | "IYZICO" | null;
 }
 
 export const paymentsService = {
-  /** Returns the public plan catalog (all tiers, prices, descriptions). */
+  /** Returns the public plan catalog. Web prices are legacy display data only. */
   listPlans() {
     return Object.values(PLAN_CATALOG).map((plan) => ({
       tier: plan.tier,
@@ -55,9 +55,24 @@ export const paymentsService = {
     }));
   },
 
-  /** Current, paid-through subscription + entitlement snapshot for a user. */
+  /** Current paid-through entitlement snapshot, regardless of purchase channel. */
   async getStatus(userId: string): Promise<SubscriptionStatusView> {
     const tier = (await resolveEffectiveSubscriptionTier(userId)) ?? "FREE";
+
+    if (tier !== "FREE") {
+      const play = await googlePlayEntitlementsService.findActiveForUser(userId);
+      if (play) {
+        return {
+          tier: play.tier,
+          status: "ACTIVE",
+          currentPeriodEnd: play.expiresAt,
+          cancelAtPeriodEnd: false,
+          entitlements: entitlementsForTier(play.tier),
+          provider: "GOOGLE_PLAY",
+        };
+      }
+    }
+
     const subscription =
       tier === "FREE"
         ? await paymentsRepository.findPendingSubscription(userId)
@@ -69,13 +84,13 @@ export const paymentsService = {
       currentPeriodEnd: subscription?.currentPeriodEnd ?? null,
       cancelAtPeriodEnd: subscription?.cancelAtPeriodEnd ?? false,
       entitlements: entitlementsForTier(tier),
+      provider: subscription ? "IYZICO" : null,
     };
   },
 
   /**
-   * Starts a hosted checkout for a paid tier. Purchase disclosures are validated
-   * by the request schema and their version/affirmative acceptance is recorded
-   * in the append-only audit trail together with request context.
+   * Starts the legacy hosted checkout for a paid tier. The launch UI does not
+   * call this path; it remains fail-closed for future web-commerce activation.
    */
   async initiateCheckout(
     userId: string,
@@ -395,6 +410,14 @@ export const paymentsService = {
     atPeriodEnd: boolean,
     context: AuditContext,
   ): Promise<SubscriptionStatusView> {
+    const play = await googlePlayEntitlementsService.findActiveForUser(userId);
+    if (play) {
+      throw new ApiError(409, "Google Play subscriptions must be managed in Google Play.", {
+        code: "STORE_MANAGED_SUBSCRIPTION",
+        details: { provider: "GOOGLE_PLAY" },
+      });
+    }
+
     const tier = (await resolveEffectiveSubscriptionTier(userId)) ?? "FREE";
     const subscription =
       tier === "FREE" ? null : await paymentsRepository.findEntitlingSubscription(userId, tier);
