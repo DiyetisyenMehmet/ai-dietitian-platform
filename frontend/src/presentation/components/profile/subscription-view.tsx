@@ -16,7 +16,7 @@ import {
   TIER_ORDER,
 } from "@/application/payments/subscription-store";
 import { ApiError } from "@/infrastructure/api/http-client";
-import type { PaidTier, PaymentDto, SubscriptionTier } from "@/domain/payments/types";
+import type { PaidTier, PaymentDto } from "@/domain/payments/types";
 
 const STATUS_LABEL: Record<string, string> = {
   NONE: "Ücretsiz",
@@ -80,9 +80,6 @@ export function SubscriptionView() {
         return;
       }
 
-      // We deliberately do not inject provider-supplied HTML into the Diewish
-      // origin. If iyzico returns only checkoutFormContent, the safe hosted-form
-      // presentation must be implemented before live billing is enabled.
       toast.error("Ödeme sayfası açılamadı", {
         description:
           result.checkoutFormContent
@@ -284,7 +281,7 @@ export function SubscriptionView() {
               <CreditCard className="size-5" aria-hidden="true" />
             </span>
             <div>
-              <p className="text-sm font-semibold">Kart bilgileri Diewish'te saklanmaz</p>
+              <p className="text-sm font-semibold">Kart bilgileri Diewish&apos;te saklanmaz</p>
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
                 Ödeme işlemi güvenli iyzico ödeme akışında tamamlanır. Diewish yalnızca ödeme durumunu ve gerekli işlem referanslarını saklar.
               </p>
