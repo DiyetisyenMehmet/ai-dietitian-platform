@@ -5,22 +5,18 @@ import { usePathname, useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
 import { authStore, useAuth } from "@/application/auth/auth-store";
+import { consentStore, useConsentState } from "@/application/legal/consent-store";
 import {
   clearHydratedProfileCaches,
   hydrateProfileFromBackend,
 } from "@/application/health/profile-hydration";
 import { MARKETING_ROUTES } from "@/shared/constants/site";
 
-/** Home destination for fully onboarded, authenticated users. */
 const APP_HOME = "/dashboard";
+const CONSENT_ROUTE = "/consent";
+const ONBOARDING_ROUTE = "/onboarding";
 
-/**
- * Fully public marketing routes. Rendered immediately on server and client with
- * no auth splash and no redirect — critical for SEO and the iyzico review.
- */
 const MARKETING_ROUTE_SET = new Set<string>(MARKETING_ROUTES);
-
-/** Authentication routes: public, but off-limits once fully onboarded. */
 const AUTH_ROUTES = new Set<string>([
   "/login",
   "/register",
@@ -28,8 +24,6 @@ const AUTH_ROUTES = new Set<string>([
   "/reset-password",
   "/verify-email",
 ]);
-
-const ONBOARDING_ROUTE = "/onboarding";
 
 function isMarketing(pathname: string): boolean {
   return MARKETING_ROUTE_SET.has(pathname);
@@ -39,7 +33,6 @@ function isAuthRoute(pathname: string): boolean {
   return AUTH_ROUTES.has(pathname);
 }
 
-/** Full-screen loading state shown while the session is being resolved. */
 function Splash() {
   return (
     <div className="flex min-h-dvh items-center justify-center bg-background">
@@ -49,23 +42,19 @@ function Splash() {
 }
 
 /**
- * Global authentication + onboarding gate.
+ * Global session + consent + onboarding gate.
  *
- * Enforces three rules on every navigation:
- *  1. Unauthenticated users may only see public/auth routes.
- *  2. Authenticated users who have NOT completed onboarding are locked to
- *     `/onboarding` until they finish.
- *  3. Fully onboarded users are kept out of auth/onboarding routes.
- *
- * It also owns the lifecycle of user-specific browser caches: hydration is
- * keyed by authenticated user id, and caches are cleared when the session ends,
- * preventing sensitive data from one account leaking into another on the same
- * device.
+ * Account creation intentionally precedes health-data consent: a user can create
+ * an account without health data being processed. Before onboarding or any
+ * authenticated health feature is shown, the current versions of all mandatory
+ * legal documents must be granted. A later document-version bump therefore
+ * routes existing users back through `/consent` before health caches rehydrate.
  */
 export function RouteGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const { status, user } = useAuth();
+  const consentState = useConsentState();
 
   React.useEffect(() => {
     authStore.hydrate();
@@ -74,39 +63,61 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
   const authed = status === "authenticated" && !!user;
   const onboardingDone = authed && user.onboardingCompleted;
 
-  // Backend = single source of truth: whenever a fully-onboarded session becomes
-  // active, hydrate the user-specific caches. Keying by user id (not just name)
-  // is essential for safe account switching on shared devices.
+  React.useEffect(() => {
+    if (status === "authenticated" && user?.id) {
+      void consentStore.hydrate(user.id);
+    }
+  }, [status, user?.id]);
+
+  const consentOwnedByUser = authed && consentState.ownerId === user.id;
+  const consentLoading =
+    authed &&
+    (!consentOwnedByUser || consentState.status === "idle" || consentState.status === "loading");
+  const consentGranted =
+    authed &&
+    consentOwnedByUser &&
+    consentState.status === "ready" &&
+    consentState.consent?.allMandatoryGranted === true;
+
+  // Only hydrate health/profile caches after current mandatory consent exists.
   React.useEffect(() => {
     if (
       status === "authenticated" &&
       user?.onboardingCompleted &&
       user.id &&
-      user.fullName
+      user.fullName &&
+      consentGranted
     ) {
       void hydrateProfileFromBackend(user.id, user.fullName);
     }
-  }, [status, user?.id, user?.onboardingCompleted, user?.fullName]);
+  }, [status, user?.id, user?.onboardingCompleted, user?.fullName, consentGranted]);
 
   React.useEffect(() => {
     if (status === "unauthenticated") {
       clearHydratedProfileCaches();
+      consentStore.clear();
     }
   }, [status]);
 
   const onMarketing = isMarketing(pathname);
   const onAuthRoute = isAuthRoute(pathname);
+  const onConsent = pathname === CONSENT_ROUTE;
   const onOnboarding = pathname === ONBOARDING_ROUTE;
 
-  // Decide the single allowed destination for the current session state.
-  // Marketing routes are always accessible and never trigger a redirect.
   let redirectTo: string | null = null;
-  if (!onMarketing && status !== "loading") {
+  if (!onMarketing && status !== "loading" && !consentLoading) {
     if (!authed && !onAuthRoute) {
       redirectTo = "/login";
-    } else if (authed && !onboardingDone && !onOnboarding) {
+    } else if (authed && !consentGranted && !onConsent) {
+      redirectTo = CONSENT_ROUTE;
+    } else if (authed && consentGranted && !onboardingDone && !onOnboarding) {
       redirectTo = ONBOARDING_ROUTE;
-    } else if (authed && onboardingDone && (onAuthRoute || onOnboarding)) {
+    } else if (
+      authed &&
+      consentGranted &&
+      onboardingDone &&
+      (onAuthRoute || onOnboarding || onConsent)
+    ) {
       redirectTo = APP_HOME;
     }
   }
@@ -117,14 +128,10 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
     }
   }, [redirectTo, pathname, router]);
 
-  // Marketing pages render real HTML immediately (server + client) so search
-  // engines and reviewers never see a loading spinner.
-  if (onMarketing) {
-    return <>{children}</>;
-  }
+  // Marketing pages remain public even when a signed-in user's consent is stale.
+  if (onMarketing) return <>{children}</>;
 
-  // While resolving the session or performing a redirect, avoid flashing content.
-  if (status === "loading" || redirectTo) {
+  if (status === "loading" || consentLoading || redirectTo) {
     return <Splash />;
   }
 
