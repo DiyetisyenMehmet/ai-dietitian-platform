@@ -167,13 +167,15 @@ export interface WeightAnalysis {
 /**
  * Derives weight progress + a supportive coaching verdict.
  * Never shames the user: "behind" is framed as a gentle nudge.
+ * A percentage is only meaningful once at least two persisted measurements
+ * exist; a single onboarding/current-weight snapshot is not a trend.
  */
 export function analyzeWeight(entries: WeightEntry[], targetKg: number): WeightAnalysis {
   const list = sorted(entries);
   const first = list[0] ?? null;
   const latest = list.at(-1) ?? null;
 
-  if (!first || !latest || targetKg <= 0) {
+  if (!first || !latest || targetKg <= 0 || list.length < 2) {
     return {
       direction: "maintain",
       latestKg: latest?.weightKg ?? null,
@@ -189,7 +191,8 @@ export function analyzeWeight(entries: WeightEntry[], targetKg: number): WeightA
           )
         : null,
       status: "no-data",
-      message: "Kilo hedefin ve ölçümlerin hazır olduğunda ilerlemeni burada takip edeceğiz.",
+      message:
+        "İlerleme yüzdesi için en az iki farklı kilo ölçümü gerekir. Düzenli ölçüm yaptıkça eğilimin burada görünecek.",
     };
   }
 
