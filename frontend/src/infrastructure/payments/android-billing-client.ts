@@ -141,6 +141,10 @@ export function recurringPrice(product: GooglePlayProduct | undefined): string |
   return phase?.formattedPrice ?? null;
 }
 
+export function isServerVerificationReady(catalog: AndroidBillingCatalog | null): boolean {
+  return catalog?.config.serverVerificationReady === true;
+}
+
 export async function loadAndroidBillingCatalog(): Promise<AndroidBillingCatalog> {
   const native = bridge();
   if (!native || !isAndroidBillingAvailable()) {
@@ -179,6 +183,12 @@ export async function purchaseAndroidTier(
   if (!native || !isAndroidBillingAvailable()) {
     throw new AndroidBillingError("Google Play faturalandırması hazır değil.", "BILLING_UNAVAILABLE");
   }
+  if (!catalog.config.serverVerificationReady) {
+    throw new AndroidBillingError(
+      "Google Play sunucu doğrulaması henüz hazır değil.",
+      "SERVER_VERIFICATION_UNAVAILABLE",
+    );
+  }
 
   const productId = productIdForTier(catalog, tier);
   const product = catalog.products.find((item) => item.productId === productId);
@@ -212,6 +222,14 @@ export async function restoreAndroidPurchases(): Promise<GooglePlayVerifyDto[]> 
   const native = bridge();
   if (!native || !isAndroidBillingAvailable()) {
     throw new AndroidBillingError("Google Play faturalandırması hazır değil.", "BILLING_UNAVAILABLE");
+  }
+
+  const config = await paymentsClient.googlePlayConfig();
+  if (!config.serverVerificationReady) {
+    throw new AndroidBillingError(
+      "Google Play sunucu doğrulaması henüz hazır değil.",
+      "SERVER_VERIFICATION_UNAVAILABLE",
+    );
   }
 
   const detail = await waitForCustomEvent<PurchaseEventDetail>(
