@@ -26,6 +26,7 @@ import {
 import { entitlementsForTier } from "./entitlements";
 import { getPaymentProvider } from "./iyzico";
 import { paymentsRepository } from "./payments.repository";
+import { resolveEffectiveSubscriptionTier } from "./subscription-state";
 import type { ProviderPaymentResult } from "./types";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -54,13 +55,18 @@ export const paymentsService = {
     }));
   },
 
-  /** Current subscription + entitlement snapshot for a user. */
+  /** Current, paid-through subscription + entitlement snapshot for a user. */
   async getStatus(userId: string): Promise<SubscriptionStatusView> {
-    const [user, subscription] = await Promise.all([
-      prisma.user.findUnique({ where: { id: userId }, select: { subscriptionTier: true } }),
-      paymentsRepository.findActiveSubscription(userId),
-    ]);
-    const tier: SubscriptionTier = user?.subscriptionTier ?? "FREE";
+    const tier = (await resolveEffectiveSubscriptionTier(userId)) ?? "FREE";
+
+    // A pending checkout must never obscure an already-paid tier. Conversely,
+    // FREE users may see that a checkout is pending without receiving paid
+    // entitlements until provider verification succeeds.
+    const subscription =
+      tier === "FREE"
+        ? await paymentsRepository.findPendingSubscription(userId)
+        : await paymentsRepository.findEntitlingSubscription(userId, tier);
+
     return {
       tier,
       status: subscription?.status ?? "NONE",
@@ -393,13 +399,15 @@ export const paymentsService = {
     return { received: true, processed: true };
   },
 
-  /** Cancels the user's active subscription (at period end by default). */
+  /** Cancels currently entitled paid access (at period end by default). */
   async cancelSubscription(
     userId: string,
     atPeriodEnd: boolean,
     context: AuditContext,
   ): Promise<SubscriptionStatusView> {
-    const subscription = await paymentsRepository.findActiveSubscription(userId);
+    const tier = (await resolveEffectiveSubscriptionTier(userId)) ?? "FREE";
+    const subscription =
+      tier === "FREE" ? null : await paymentsRepository.findEntitlingSubscription(userId, tier);
     if (!subscription) {
       throw new ApiError(404, "No active subscription to cancel.", {
         code: ENTITLEMENT_REQUIRED_CODE,
