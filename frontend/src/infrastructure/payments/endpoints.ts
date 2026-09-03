@@ -6,4 +6,6 @@ export const PAYMENT_ENDPOINTS = {
   checkout: "/payments/checkout",
   verify: "/payments/verify",
   payments: "/payments",
+  googlePlayConfig: "/payments/google-play/config",
+  googlePlayVerify: "/payments/google-play/subscription/verify",
 } as const;

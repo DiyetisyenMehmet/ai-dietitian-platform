@@ -6,8 +6,24 @@ import type {
   PlanDto,
   PurchaseAcceptance,
   SubscriptionStatusDto,
+  SubscriptionTier,
 } from "@/domain/payments/types";
 import { PAYMENT_ENDPOINTS } from "./endpoints";
+
+export interface GooglePlayConfigDto {
+  packageName: string;
+  premiumProductId: string;
+  premiumPlusProductId: string;
+  obfuscatedAccountId: string;
+}
+
+export interface GooglePlayVerifyDto {
+  verified: true;
+  tier: SubscriptionTier;
+  productId: string;
+  expiresAt: string;
+  acknowledgementPending: boolean;
+}
 
 /** Thin transport client for the real backend subscription/payments contract. */
 export const paymentsClient = {
@@ -31,6 +47,23 @@ export const paymentsClient = {
       path: PAYMENT_ENDPOINTS.payments,
       method: "GET",
       auth: true,
+    });
+  },
+
+  googlePlayConfig(): Promise<GooglePlayConfigDto> {
+    return apiRequest<GooglePlayConfigDto>({
+      path: PAYMENT_ENDPOINTS.googlePlayConfig,
+      method: "GET",
+      auth: true,
+    });
+  },
+
+  verifyGooglePlaySubscription(purchaseToken: string): Promise<GooglePlayVerifyDto> {
+    return apiRequest<GooglePlayVerifyDto>({
+      path: PAYMENT_ENDPOINTS.googlePlayVerify,
+      method: "POST",
+      auth: true,
+      body: JSON.stringify({ purchaseToken }),
     });
   },
 
