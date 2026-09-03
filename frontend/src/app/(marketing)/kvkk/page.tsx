@@ -4,9 +4,9 @@ import { KVKK_POLICY } from "@/shared/constants/legal";
 import { LegalPage } from "@/presentation/components/marketing/legal-page";
 
 export const metadata: Metadata = {
-  title: "KVKK / GDPR",
+  title: "KVKK Aydınlatma Metni",
   description:
-    "Diewish KVKK / GDPR Aydınlatma ve Açık Rıza metni: veri sorumlusu, işlenen sağlık verileri, açık rıza ve veri sahibi haklarınız.",
+    "Diewish KVKK Aydınlatma Metni: veri sorumlusu, işlenen veri kategorileri, amaçlar, hukuki sebepler, aktarım ve ilgili kişi hakları.",
   alternates: { canonical: "/kvkk" },
 };
 
