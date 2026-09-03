@@ -1,10 +1,8 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ChevronRight, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 
 import { cn } from "@/shared/lib/utils";
 import { formatLongDate } from "@/shared/lib/format";
@@ -20,13 +18,6 @@ import { useHealthProfile } from "@/application/health/health-profile-store";
 import { useWeightEntries, weightStore, analyzeWeight } from "@/application/health/weight-store";
 import { useActivity } from "@/application/health/activity-store";
 import { journeyStore, useJourneyEvents } from "@/application/health/journey-store";
-import { useGoals } from "@/application/goals/goals-store";
-import { computeProgress, computeStatus } from "@/application/goals/goal-insights";
-import {
-  getGoalTypeMeta,
-  GOAL_STATUS_LABEL,
-  type GoalStatus,
-} from "@/domain/goals/types";
 import type { JourneyEventType, WeightEntry } from "@/domain/health/types";
 
 const STATUS_TONE: Record<
@@ -51,7 +42,7 @@ const STATUS_TONE: Record<
   behind: {
     wrap: "border-amber-500/30 bg-amber-500/5",
     badge: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
-    label: "Nazik hatırlatma",
+    label: "Takip gerekiyor",
   },
   "no-data": {
     wrap: "border-border bg-muted/40",
@@ -60,14 +51,7 @@ const STATUS_TONE: Record<
   },
 };
 
-const GOAL_STATUS_TONE: Record<GoalStatus, string> = {
-  completed: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
-  ahead: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
-  "on-track": "bg-primary/15 text-primary",
-  behind: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
-};
-
-const JOURNEY_ICON: Record<JourneyEventType, Parameters<typeof healthIcon>[0]> = {
+const HISTORY_ICON: Record<JourneyEventType, Parameters<typeof healthIcon>[0]> = {
   "profile-created": "user",
   "blood-test": "flask",
   "first-plan": "sparkles",
@@ -85,8 +69,8 @@ function WeighInForm() {
   const [value, setValue] = React.useState("");
   const [saving, setSaving] = React.useState(false);
 
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
     if (saving) return;
 
     const kg = Number(value.replace(",", "."));
@@ -98,11 +82,7 @@ function WeighInForm() {
     const rounded = Number(kg.toFixed(1));
     setSaving(true);
     try {
-      // Persist FIRST. The UI must never claim a measurement was saved when the
-      // backend rejected or could not receive it.
       await weightStore.add(rounded);
-      // Journey history is also backend-derived; refresh it from the same
-      // persisted weight row instead of inventing a second local event.
       await journeyStore.hydrateJourneyFromBackend();
       toast.success("Kilon kaydedildi", {
         description: `${rounded.toLocaleString("tr-TR")} kg`,
@@ -128,7 +108,7 @@ function WeighInForm() {
           inputMode="decimal"
           placeholder="78.4"
           value={value}
-          onChange={(e) => setValue(e.target.value)}
+          onChange={(event) => setValue(event.target.value)}
           disabled={saving}
         />
       </div>
@@ -140,14 +120,18 @@ function WeighInForm() {
   );
 }
 
-/** The Progress screen: weight tracking, analysis, journey timeline & goals. */
+/**
+ * Progress has one job: show how the user's recorded data changes over time.
+ * The former independent demo "Goals" system is intentionally absent; weight
+ * target comes from the real profile, activity from real tracking, and events
+ * from persisted history so the user does not have to learn overlapping Goal /
+ * Journey / Progress concepts.
+ */
 export function ProgressView() {
-  const router = useRouter();
   const profile = useHealthProfile();
   const entries = useWeightEntries();
   const activity = useActivity();
-  const journey = useJourneyEvents();
-  const goals = useGoals();
+  const history = useJourneyEvents();
 
   const analysis = React.useMemo(
     () => analyzeWeight(entries, profile.targetWeightKg),
@@ -158,13 +142,12 @@ export function ProgressView() {
 
   return (
     <div className="space-y-5">
-      {/* Weight overview */}
-      <SectionCard icon="scale" title="Kilo Takibi">
+      <SectionCard icon="scale" title="Kilo İlerlemen">
         {entries.length === 0 ? (
           <EmptyState
             icon={healthIcon("scale")}
             title="Henüz kilo kaydın yok"
-            description="İlk kilonu kaydet; grafiğin ve hedef çizgin burada belirsin."
+            description="İlk kilonu kaydet; grafiğin ve profilindeki hedef kilo burada görünsün."
           />
         ) : (
           <>
@@ -193,7 +176,6 @@ export function ProgressView() {
         )}
       </SectionCard>
 
-      {/* Deterministic coaching analysis */}
       {analysis.status !== "no-data" && (
         <section className={cn("rounded-2xl border p-5 shadow-card", tone.wrap)}>
           <div className="mb-3 flex items-center gap-2.5">
@@ -218,7 +200,7 @@ export function ProgressView() {
           <p className="text-sm leading-relaxed text-muted-foreground">{analysis.message}</p>
           <div className="mt-4">
             <div className="mb-1.5 flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Hedefe ilerleme</span>
+              <span className="text-muted-foreground">Hedef kiloya ilerleme</span>
               <span className="font-semibold">%{analysis.progressPercent}</span>
             </div>
             <ProgressBar value={analysis.progressPercent} />
@@ -226,11 +208,18 @@ export function ProgressView() {
         </section>
       )}
 
-      {/* Weekly / monthly analytics */}
       <ProgressStatsSection />
 
-      {/* Activity summary */}
-      <SectionCard icon="activity" title="Aktivite Özeti">
+      <SectionCard icon="scale" title="Kilonu Kaydet">
+        <WeighInForm />
+        {analysis.isWeighInDue && analysis.status !== "no-data" && (
+          <p className="mt-3 text-xs text-amber-600 dark:text-amber-400">
+            Son ölçümünün üzerinden bir hafta geçti. İstersen güncel kilonu ekleyebilirsin.
+          </p>
+        )}
+      </SectionCard>
+
+      <SectionCard icon="activity" title="Aktivite">
         <div className="grid grid-cols-2 gap-3">
           <div className="rounded-2xl border border-border bg-card p-3">
             <p className="text-[11px] text-muted-foreground">Adım</p>
@@ -244,10 +233,8 @@ export function ProgressView() {
             </p>
           </div>
           <div className="rounded-2xl border border-border bg-card p-3">
-            <p className="text-[11px] text-muted-foreground">Egzersiz</p>
-            <p className="mt-1 text-base font-bold tabular-nums">
-              {activity.activeMinutes} dk
-            </p>
+            <p className="text-[11px] text-muted-foreground">Aktif süre</p>
+            <p className="mt-1 text-base font-bold tabular-nums">{activity.activeMinutes} dk</p>
             <p className="mt-0.5 text-[11px] text-muted-foreground">
               {activity.activeMinutesGoal > 0
                 ? `/ ${activity.activeMinutesGoal} dk hedef`
@@ -257,32 +244,21 @@ export function ProgressView() {
         </div>
       </SectionCard>
 
-      {/* Weigh-in */}
-      <SectionCard icon="scale" title="Kilonu Kaydet">
-        <WeighInForm />
-        {analysis.isWeighInDue && analysis.status !== "no-data" && (
-          <p className="mt-3 text-xs text-amber-600 dark:text-amber-400">
-            Son ölçümünün üzerinden bir hafta geçti. İstersen güncel kilonu ekleyebilirsin.
-          </p>
-        )}
-      </SectionCard>
-
-      {/* Health journey */}
-      <SectionCard icon="flag" title="Sağlık Yolculuğun">
-        {journey.length === 0 ? (
+      <SectionCard icon="calendar" title="Geçmiş">
+        {history.length === 0 ? (
           <EmptyState
-            icon={healthIcon("flag")}
-            title="Yolculuğun yeni başlıyor"
-            description="Kaydettiğin ilerleme verileri burada zaman çizelgesinde görünecek."
+            icon={healthIcon("calendar")}
+            title="Henüz geçmiş kaydın yok"
+            description="Kilo, öğün ve diğer ilerleme kayıtların zamanla burada görünecek."
           />
         ) : (
           <ol className="relative space-y-5 pl-8">
             <span
-              className="absolute left-[13px] top-1.5 bottom-1.5 w-px bg-border"
+              className="absolute bottom-1.5 left-[13px] top-1.5 w-px bg-border"
               aria-hidden="true"
             />
-            {journey.map((event) => {
-              const Icon = healthIcon(JOURNEY_ICON[event.type]);
+            {history.map((event) => {
+              const Icon = healthIcon(HISTORY_ICON[event.type]);
               return (
                 <li key={event.id} className="relative">
                   <span className="absolute -left-8 flex size-7 items-center justify-center rounded-full border border-border bg-card text-primary">
@@ -299,64 +275,6 @@ export function ProgressView() {
               );
             })}
           </ol>
-        )}
-      </SectionCard>
-
-      {/* Goals summary */}
-      <SectionCard
-        icon="target"
-        title="Hedeflerin"
-        action={
-          <Button asChild variant="ghost" size="sm">
-            <Link href="/goals">
-              Tümü
-              <ChevronRight className="size-4" aria-hidden="true" />
-            </Link>
-          </Button>
-        }
-      >
-        {goals.length === 0 ? (
-          <EmptyState
-            icon={healthIcon("target")}
-            title="Henüz hedefin yok"
-            description="İlk hedefini oluştur; ilerlemeni burada takip edelim."
-            action={{ label: "Hedef Oluştur", onClick: () => router.push("/goals/new") }}
-          />
-        ) : (
-          <ul className="space-y-4">
-            {goals.slice(0, 4).map((goal) => {
-              const meta = getGoalTypeMeta(goal.type);
-              const progress = computeProgress(goal);
-              const status = computeStatus(goal);
-              return (
-                <li key={goal.id}>
-                  <Link
-                    href={`/goals/${goal.id}`}
-                    className="block rounded-xl border border-border bg-background/40 p-3 transition-colors hover:bg-accent/40"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="truncate text-sm font-medium">{goal.title}</span>
-                      <span
-                        className={cn(
-                          "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium",
-                          GOAL_STATUS_TONE[status],
-                        )}
-                      >
-                        {GOAL_STATUS_LABEL[status]}
-                      </span>
-                    </div>
-                    <div className="mt-2">
-                      <ProgressBar value={progress} />
-                    </div>
-                    <p className="mt-1.5 text-[11px] text-muted-foreground">
-                      {goal.currentValue.toLocaleString("tr-TR")} /{" "}
-                      {goal.targetValue.toLocaleString("tr-TR")} {meta.unit} • %{progress}
-                    </p>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
         )}
       </SectionCard>
     </div>
