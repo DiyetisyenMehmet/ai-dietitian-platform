@@ -1,20 +1,16 @@
 import type { SubscriptionTier } from "@prisma/client";
 
 import { prisma } from "../../lib/prisma";
+import { googlePlayEntitlementsRepository } from "./google-play-entitlements.repository";
 
 /**
  * Resolves the tier that is entitled *right now* and repairs stale persisted
- * state when a paid period has elapsed.
+ * state. Google Play is checked first because Play purchases are stored in the
+ * dedicated token-hash ledger; the legacy Subscription rows remain the source
+ * for dormant iyzico/web purchases.
  *
- * `User.subscriptionTier` is a fast cache used across the application, but a
- * cache must never grant paid access beyond `Subscription.currentPeriodEnd`.
- * This helper therefore validates every non-FREE cached tier against an ACTIVE
- * subscription with a future period end. If no such row exists, expired ACTIVE
- * rows are closed and the user is downgraded to FREE atomically. If a different
- * valid ACTIVE row exists (for example after a plan change), its tier becomes
- * the repaired cache value.
- *
- * Returns `null` only when the user no longer exists.
+ * User.subscriptionTier is only a cache. It is never sufficient on its own to
+ * grant paid access.
  */
 export async function resolveEffectiveSubscriptionTier(
   userId: string,
@@ -24,6 +20,18 @@ export async function resolveEffectiveSubscriptionTier(
     select: { subscriptionTier: true },
   });
   if (!user) return null;
+
+  const play = await googlePlayEntitlementsRepository.findBestActiveForUser(userId);
+  if (play) {
+    if (user.subscriptionTier !== play.tier) {
+      await prisma.user.update({
+        where: { id: userId },
+        data: { subscriptionTier: play.tier },
+      });
+    }
+    return play.tier;
+  }
+
   if (user.subscriptionTier === "FREE") return "FREE";
 
   const now = new Date();
@@ -39,8 +47,8 @@ export async function resolveEffectiveSubscriptionTier(
   if (cachedTierStillValid) return user.subscriptionTier;
 
   return prisma.$transaction(async (tx) => {
-    // Close ACTIVE rows that can no longer entitle the account. An ACTIVE row
-    // with no period end also fails closed; paid access must always be bounded.
+    // Close legacy ACTIVE rows that can no longer entitle the account. An ACTIVE
+    // row with no period end fails closed; paid access must always be bounded.
     await tx.subscription.updateMany({
       where: {
         userId,
@@ -50,9 +58,6 @@ export async function resolveEffectiveSubscriptionTier(
       data: { status: "EXPIRED" },
     });
 
-    // A newer valid purchase may coexist with the stale cached tier. Prefer the
-    // valid ACTIVE row with the furthest paid-through date instead of blindly
-    // downgrading such an account.
     const valid = await tx.subscription.findFirst({
       where: {
         userId,
