@@ -3,6 +3,13 @@
 export type SubscriptionTier = "FREE" | "PREMIUM" | "PREMIUM_PLUS";
 export type PaidTier = Exclude<SubscriptionTier, "FREE">;
 
+export interface PurchaseAcceptance {
+  termsVersion: string;
+  distanceSalesAccepted: true;
+  deliveryRefundAccepted: true;
+  immediateDigitalPerformanceRequested: true;
+}
+
 /** Public plan catalog row returned by `GET /subscription/plans`. */
 export interface PlanDto {
   tier: SubscriptionTier;
@@ -14,9 +21,9 @@ export interface PlanDto {
   periodDays: number;
   description: string;
   entitlements: string[];
+  purchaseTermsVersion: string;
 }
 
-/** Backend lifecycle states for the user's current subscription. */
 export type BackendSubscriptionStatus =
   | "NONE"
   | "PENDING"
@@ -33,7 +40,6 @@ export interface SubscriptionStatusDto {
   entitlements: string[];
 }
 
-/** Persisted payment row returned by `GET /payments`. */
 export interface PaymentDto {
   id: string;
   createdAt: string;
@@ -48,7 +54,6 @@ export interface PaymentDto {
   failureReason: string | null;
 }
 
-/** Result of initiating hosted checkout (`POST /payments/checkout`). */
 export interface CheckoutResult {
   subscriptionId: string;
   providerToken: string;
