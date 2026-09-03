@@ -1,12 +1,9 @@
 /**
- * Subscription & payments service (Sprint 15, D1–D3).
+ * Subscription & payments service.
  *
- * Orchestrates the hosted-checkout purchase flow, callback finalization and
- * idempotent webhook processing on top of the provider abstraction and the
- * repository. Security posture: an unverified or replayed webhook must never
- * grant paid access — signatures are verified and events are de-duplicated
- * before any state change, and payment success is always confirmed against the
- * provider (never trusted from the client).
+ * Orchestrates hosted checkout, callback finalization and idempotent webhook
+ * processing. Provider-reported success is always verified against Diewish's
+ * pending payment before paid access is granted.
  */
 
 import crypto from "node:crypto";
@@ -22,7 +19,9 @@ import {
   ENTITLEMENT_REQUIRED_CODE,
   PAYMENT_PROVIDER_UNCONFIGURED_CODE,
   PLAN_CATALOG,
+  PURCHASE_TERMS_VERSION,
 } from "./constants";
+import type { CheckoutInput } from "./dto/payments.schemas";
 import { entitlementsForTier } from "./entitlements";
 import { getPaymentProvider } from "./iyzico";
 import { paymentsRepository } from "./payments.repository";
@@ -52,16 +51,13 @@ export const paymentsService = {
       periodDays: plan.periodDays,
       description: plan.description,
       entitlements: entitlementsForTier(plan.tier),
+      purchaseTermsVersion: PURCHASE_TERMS_VERSION,
     }));
   },
 
   /** Current, paid-through subscription + entitlement snapshot for a user. */
   async getStatus(userId: string): Promise<SubscriptionStatusView> {
     const tier = (await resolveEffectiveSubscriptionTier(userId)) ?? "FREE";
-
-    // A pending checkout must never obscure an already-paid tier. Conversely,
-    // FREE users may see that a checkout is pending without receiving paid
-    // entitlements until provider verification succeeds.
     const subscription =
       tier === "FREE"
         ? await paymentsRepository.findPendingSubscription(userId)
@@ -77,13 +73,14 @@ export const paymentsService = {
   },
 
   /**
-   * Starts a hosted checkout for a paid tier. Creates a PENDING subscription +
-   * payment keyed by a fresh conversation id (our correlation ref), then asks
-   * the provider to initialize the payment page.
+   * Starts a hosted checkout for a paid tier. Purchase disclosures are validated
+   * by the request schema and their version/affirmative acceptance is recorded
+   * in the append-only audit trail together with request context.
    */
   async initiateCheckout(
     userId: string,
     tier: SubscriptionTier,
+    purchaseAcceptance: CheckoutInput["purchaseAcceptance"],
     context: AuditContext,
   ): Promise<{
     subscriptionId: string;
@@ -99,13 +96,21 @@ export const paymentsService = {
     }
 
     // The current profile does not yet collect iyzico's required real billing
-    // identity/address fields. Never let a production processor receive the
-    // sandbox placeholders used by the adapter during integration testing.
+    // identity/address fields. Never let production receive test placeholders.
     if (env.IYZICO_ENV === "production") {
       throw new ApiError(503, "Live payment checkout is not ready yet.", {
         code: PAYMENT_PROVIDER_UNCONFIGURED_CODE,
         details: { reason: "LIVE_BUYER_PROFILE_REQUIRED" },
       });
+    }
+
+    if (
+      purchaseAcceptance.termsVersion !== PURCHASE_TERMS_VERSION ||
+      !purchaseAcceptance.distanceSalesAccepted ||
+      !purchaseAcceptance.deliveryRefundAccepted ||
+      !purchaseAcceptance.immediateDigitalPerformanceRequested
+    ) {
+      throw ApiError.badRequest("Current purchase disclosures must be accepted before checkout.");
     }
 
     const plan = PLAN_CATALOG[tier];
@@ -169,7 +174,17 @@ export const paymentsService = {
       action: "SUBSCRIPTION_CHECKOUT_STARTED",
       userId,
       context,
-      metadata: { tier, subscriptionId: subscription.id },
+      metadata: {
+        tier,
+        subscriptionId: subscription.id,
+        amountMinor: plan.priceMinor,
+        currency: plan.currency,
+        periodDays: plan.periodDays,
+        purchaseTermsVersion: purchaseAcceptance.termsVersion,
+        distanceSalesAccepted: true,
+        deliveryRefundAccepted: true,
+        immediateDigitalPerformanceRequested: true,
+      },
     });
 
     return {
@@ -180,11 +195,6 @@ export const paymentsService = {
     };
   },
 
-  /**
-   * Finalizes a checkout from the provider token for an authenticated user.
-   * Payment success is confirmed against the provider — never trusted from the
-   * client — then the subscription is activated idempotently.
-   */
   async verifyAndFinalize(
     userId: string,
     token: string,
@@ -212,11 +222,6 @@ export const paymentsService = {
     return this.getStatus(userId);
   },
 
-  /**
-   * Handles iyzico's browser POST callback without relying on a Diewish access
-   * token. The provider-issued checkout token is retrieved server-to-server and
-   * correlated to our pending subscription before any entitlement is changed.
-   */
   async finalizeCheckoutCallback(
     token: string,
     context: AuditContext,
@@ -240,12 +245,6 @@ export const paymentsService = {
     return this.getStatus(subscription.userId);
   },
 
-  /**
-   * Applies a confirmed provider payment outcome to a subscription. Idempotent:
-   * an already-ACTIVE subscription is left untouched. A provider-reported
-   * SUCCESS is not enough: amount and currency must exactly match our pending
-   * payment before Premium access is granted.
-   */
   async applyPaymentOutcome(
     subscriptionId: string,
     userId: string,
@@ -331,15 +330,8 @@ export const paymentsService = {
         metadata: { subscriptionId },
       });
     }
-    // PENDING: leave as-is; a later webhook/verify will finalize.
   },
 
-  /**
-   * Processes an inbound provider webhook. Signature validation happens BEFORE
-   * writing the unique idempotency key so an attacker cannot pre-seed a fake
-   * event id and suppress a later legitimate iyzico delivery. A valid event is
-   * still confirmed against the provider before any paid access is granted.
-   */
   async handleWebhook(
     rawBody: string,
     signatureHeader: string | undefined,
@@ -386,7 +378,6 @@ export const paymentsService = {
     const subscription = await paymentsRepository.findSubscriptionByProviderRef(event.conversationId);
     if (!subscription) return { received: true, processed: false };
 
-    // Confirm the real outcome with the provider before granting access.
     const result = await provider.retrievePayment(event.providerPaymentToken);
     await this.applyPaymentOutcome(
       subscription.id,
@@ -399,7 +390,6 @@ export const paymentsService = {
     return { received: true, processed: true };
   },
 
-  /** Cancels currently entitled paid access (at period end by default). */
   async cancelSubscription(
     userId: string,
     atPeriodEnd: boolean,
@@ -427,7 +417,6 @@ export const paymentsService = {
     return this.getStatus(userId);
   },
 
-  /** Payment history for the authenticated user. */
   listPayments(userId: string) {
     return paymentsRepository.listPayments(userId);
   },
