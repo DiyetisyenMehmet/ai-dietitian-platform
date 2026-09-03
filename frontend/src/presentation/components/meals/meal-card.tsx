@@ -64,9 +64,9 @@ export function MealCard({ meal, defaultOpen = false }: MealCardProps) {
   }, [meal.foods, profile]);
 
   const handleEditSave = React.useCallback(
-    (values: EditFoodInput) => {
-      if (editing) mealsStore.updateFood(meal.slot, editing.id, values);
-      setEditing(null);
+    async (values: EditFoodInput) => {
+      if (!editing) return;
+      await mealsStore.updateFood(meal.slot, editing.id, values);
     },
     [editing, meal.slot],
   );
