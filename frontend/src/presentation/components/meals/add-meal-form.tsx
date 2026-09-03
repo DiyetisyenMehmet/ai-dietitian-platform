@@ -30,6 +30,11 @@ const DEFAULT_TIME: Record<MealSlot, string> = {
   snack: "16:00",
 };
 
+const HOURS = Array.from({ length: 24 }, (_, index) => String(index).padStart(2, "0"));
+const MINUTES = Array.from({ length: 60 }, (_, index) => String(index).padStart(2, "0"));
+const TIME_SELECT_CLASS =
+  "h-11 w-full rounded-xl border border-input bg-background px-3 text-base tabular-nums outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring";
+
 /** Add Meal form: search + manual entry, meal type, time, validation and toasts. */
 export function AddMealForm({ initialSlot = "breakfast" }: AddMealFormProps) {
   const router = useRouter();
@@ -56,9 +61,6 @@ export function AddMealForm({ initialSlot = "breakfast" }: AddMealFormProps) {
 
   const onSubmit = React.useCallback(
     async (values: AddMealInput) => {
-      // Backend-first: persist to the single source of truth, then update the
-      // cache from the persisted record. No optimistic update — on failure the
-      // meal is not added and the user is informed.
       try {
         await mealsStore.addFood({
           slot: values.mealSlot,
@@ -91,7 +93,7 @@ export function AddMealForm({ initialSlot = "breakfast" }: AddMealFormProps) {
           <div>
             <h2 className="text-sm font-semibold">Besin Ara</h2>
             <p className="text-xs text-muted-foreground">
-              Kataloqdan seçin veya aşağıdan manuel girin.
+              Katalogdan seçin veya aşağıdan manuel girin.
             </p>
           </div>
           <MealSearch
@@ -124,32 +126,16 @@ export function AddMealForm({ initialSlot = "breakfast" }: AddMealFormProps) {
 
           <div className="grid grid-cols-2 gap-3">
             <FormField id="calories" label="Kalori (kcal)" error={errors.calories?.message}>
-              <Input
-                type="number"
-                inputMode="numeric"
-                {...register("calories", { valueAsNumber: true })}
-              />
+              <Input type="number" inputMode="numeric" {...register("calories", { valueAsNumber: true })} />
             </FormField>
             <FormField id="protein" label="Protein (g)" error={errors.protein?.message}>
-              <Input
-                type="number"
-                inputMode="numeric"
-                {...register("protein", { valueAsNumber: true })}
-              />
+              <Input type="number" inputMode="numeric" {...register("protein", { valueAsNumber: true })} />
             </FormField>
             <FormField id="carbs" label="Karbonhidrat (g)" error={errors.carbs?.message}>
-              <Input
-                type="number"
-                inputMode="numeric"
-                {...register("carbs", { valueAsNumber: true })}
-              />
+              <Input type="number" inputMode="numeric" {...register("carbs", { valueAsNumber: true })} />
             </FormField>
             <FormField id="fat" label="Yağ (g)" error={errors.fat?.message}>
-              <Input
-                type="number"
-                inputMode="numeric"
-                {...register("fat", { valueAsNumber: true })}
-              />
+              <Input type="number" inputMode="numeric" {...register("fat", { valueAsNumber: true })} />
             </FormField>
           </div>
         </CardContent>
@@ -175,7 +161,7 @@ export function AddMealForm({ initialSlot = "breakfast" }: AddMealFormProps) {
                         type="button"
                         onClick={() => {
                           field.onChange(slot);
-                          setValue("time", DEFAULT_TIME[slot]);
+                          setValue("time", DEFAULT_TIME[slot], { shouldValidate: true });
                         }}
                         className={cn(
                           "flex flex-col items-center gap-1.5 rounded-xl border p-3 text-xs font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
@@ -201,12 +187,45 @@ export function AddMealForm({ initialSlot = "breakfast" }: AddMealFormProps) {
           />
 
           <FormField id="time" label="Saat" error={errors.time?.message}>
-            <Input type="time" {...register("time")} />
+            <Controller
+              control={control}
+              name="time"
+              render={({ field }) => {
+                const [hour = "00", minute = "00"] = (field.value || "00:00").split(":");
+                return (
+                  <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                    <select
+                      id="time"
+                      aria-label="Saat"
+                      value={hour}
+                      onBlur={field.onBlur}
+                      onChange={(event) => field.onChange(`${event.target.value}:${minute}`)}
+                      className={TIME_SELECT_CLASS}
+                    >
+                      {HOURS.map((value) => (
+                        <option key={value} value={value}>{value}</option>
+                      ))}
+                    </select>
+                    <span className="text-lg font-semibold text-muted-foreground" aria-hidden="true">:</span>
+                    <select
+                      aria-label="Dakika"
+                      value={minute}
+                      onBlur={field.onBlur}
+                      onChange={(event) => field.onChange(`${hour}:${event.target.value}`)}
+                      className={TIME_SELECT_CLASS}
+                    >
+                      {MINUTES.map((value) => (
+                        <option key={value} value={value}>{value}</option>
+                      ))}
+                    </select>
+                  </div>
+                );
+              }}
+            />
           </FormField>
         </CardContent>
       </Card>
 
-      {/* Sticky action bar — stays visible above the mobile keyboard. */}
       <div className="sticky bottom-0 -mx-4 border-t border-border/60 bg-background/90 px-4 py-3 backdrop-blur-lg">
         <div className="mx-auto flex max-w-2xl gap-3">
           <Button
