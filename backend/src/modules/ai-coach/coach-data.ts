@@ -1,4 +1,5 @@
 import type {
+  Activity,
   BloodTestAnalysis,
   MealLog,
   NutritionPlan,
@@ -13,24 +14,16 @@ import { bloodTestAnalysisRepository } from "../blood-test-analysis/blood-test-a
 import { trackingRepository } from "../tracking/tracking.repository";
 import { average, daysAgo, groupByDay } from "./metrics";
 
-/**
- * Forward-looking, optional health signals the AI Health Coach may reason over
- * in future sprints (e.g. activity minutes, steps, sleep, resting heart rate).
- *
- * Intentionally open-ended and optional so new signals can be threaded through
- * the analysis pipeline without breaking existing callers or altering current
- * coaching behaviour. This field is currently unpopulated by `loadCoachData`,
- * so it has no effect on any existing insight, output or endpoint.
- */
+/** Optional health signals threaded through the coach without schema coupling. */
 export interface CoachHealthSignals {
+  /** Real persisted physical-activity logs over the same bounded window. */
+  activities?: Activity[];
   [signal: string]: unknown;
 }
 
 /**
- * A bundle of the signals the AI Health Coach reasons over for one user, loaded
- * once and shared across the memory, risk, review and adaptation services to
- * avoid redundant queries. `windowDays` bounds the time-series pulls (premium =
- * 90 days, free = 14).
+ * Bundle of signals the AI Health Coach reasons over for one user. `windowDays`
+ * bounds time-series pulls (premium = 90 days, free = 14).
  */
 export interface CoachDataBundle {
   windowDays: number;
@@ -41,12 +34,6 @@ export interface CoachDataBundle {
   waterLogs: WaterLog[];
   latestAnalysis: BloodTestAnalysis | null;
   lastAnalysisAt: Date | null;
-  /**
-   * Optional extensible health signals for future intelligence work. Left
-   * undefined by current loaders; present so downstream services can accept
-   * additional signals without interface churn. No current behaviour depends
-   * on it.
-   */
   healthSignals?: CoachHealthSignals;
 }
 
@@ -81,16 +68,14 @@ export async function loadCoachData(userId: string, windowDays: number): Promise
     waterLogs: waterLogs ?? [],
     latestAnalysis,
     lastAnalysisAt,
-    healthSignals: {
-      activities: activities ?? [],
-    },
+    healthSignals: { activities: activities ?? [] },
   };
 }
 
 /** Weight-trend direction over the window. */
 export type TrendDirection = "IMPROVING" | "STABLE" | "DECLINING";
 
-/** Derived weight statistics from the log window (newest-first input). */
+/** Derived weight statistics from newest-first input. */
 export interface WeightDerived {
   latestKg: number | null;
   earliestKg: number | null;
@@ -100,9 +85,8 @@ export interface WeightDerived {
 }
 
 /**
- * Derives weight trend from logs. "IMPROVING"/"DECLINING" are interpreted
- * relative to the user's goal direction (losing vs. gaining), so the coach's
- * language matches the user's objective rather than raw sign of change.
+ * Derives weight trend relative to the user's goal direction (losing/gaining),
+ * not merely the raw sign of the change.
  */
 export function deriveWeight(weightLogs: WeightLog[], profile: UserProfile | null): WeightDerived {
   if (weightLogs.length === 0) {
@@ -114,14 +98,13 @@ export function deriveWeight(weightLogs: WeightLog[], profile: UserProfile | nul
       trend: "STABLE",
     };
   }
-  // Logs arrive newest-first.
+
   const latest = weightLogs[0];
   const earliest = weightLogs[weightLogs.length - 1];
   const latestKg = latest.weightKg;
   const earliestKg = earliest.weightKg;
   const deltaKg = latestKg - earliestKg;
 
-  // Week-over-week: compare the most recent 7 days' average to the prior 7.
   const now = latest.loggedAt;
   const lastWeek = weightLogs.filter((w) => w.loggedAt >= daysAgo(7, now));
   const priorWeek = weightLogs.filter(
@@ -146,12 +129,18 @@ export function deriveWeight(weightLogs: WeightLog[], profile: UserProfile | nul
   return { latestKg, earliestKg, deltaKg, weekOverWeekKg, trend };
 }
 
-/** Distinct Turkey-local days that had at least `minMeals` meals logged. */
+/**
+ * Distinct Turkey-local days that had at least `minMeals` meal TYPES logged.
+ * Counting raw MealLog rows is incorrect because one breakfast can contain
+ * several food rows (and now an explicit check-in row) while still being one
+ * meal. Distinct types keeps consistency metrics truthful.
+ */
 export function daysWithMeals(mealLogs: MealLog[], minMeals: number): number {
   const byDay = groupByDay(mealLogs);
   let count = 0;
   for (const meals of byDay.values()) {
-    if (meals.length >= minMeals) count += 1;
+    const distinctMealTypes = new Set(meals.map((meal) => meal.mealType)).size;
+    if (distinctMealTypes >= minMeals) count += 1;
   }
   return count;
 }

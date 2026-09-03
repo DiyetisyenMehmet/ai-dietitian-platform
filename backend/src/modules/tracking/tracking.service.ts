@@ -1,6 +1,7 @@
 import type { MealLog, WaterLog, WeightLog } from "@prisma/client";
 
 import { logger } from "../../lib/logger";
+import { ApiError } from "../../utils/api-error";
 import { nutritionAdaptationService } from "../ai-coach/nutrition-adaptation.service";
 import { trackingRepository } from "./tracking.repository";
 import type {
@@ -15,10 +16,9 @@ function toDate(iso?: string): Date | undefined {
 }
 
 /**
- * Tracking service (Sprint 19). Persists the time-series signals the AI Health
- * Coach depends on. Saving a weight entry additionally triggers Dynamic
- * Nutrition Adaptation (Section 4) as a best-effort, non-blocking hook — a
- * failure there must never fail the user's log write.
+ * Tracking service. Persists the time-series signals the AI Health Coach
+ * depends on. Saving a weight entry additionally triggers Dynamic Nutrition
+ * Adaptation as a best-effort, non-blocking hook.
  */
 export const trackingService = {
   async logWeight(userId: string, input: CreateWeightLogInput): Promise<WeightLog> {
@@ -58,6 +58,13 @@ export const trackingService = {
 
   listMeals(userId: string, since?: Date): Promise<MealLog[]> {
     return trackingRepository.listMealLogs(userId, since);
+  },
+
+  async deleteMeal(userId: string, id: string): Promise<void> {
+    const deleted = await trackingRepository.deleteMealLogForUser(id, userId);
+    if (deleted.count === 0) {
+      throw ApiError.notFound("Meal log not found.");
+    }
   },
 
   logWater(userId: string, input: CreateWaterLogInput): Promise<WaterLog> {

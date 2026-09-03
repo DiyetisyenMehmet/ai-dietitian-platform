@@ -3,7 +3,8 @@ import type { MealLog, WaterLog, WeightLog } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 
 /**
- * Data access for tracking logs. All reads/writes are owner-scoped by `userId`.
+ * Data access for tracking logs. All reads/writes/deletes are owner-scoped by
+ * `userId` so record ids from another account can never be used as an IDOR.
  */
 export const trackingRepository = {
   /**
@@ -54,6 +55,10 @@ export const trackingRepository = {
       where: { userId, ...(since ? { loggedAt: { gte: since } } : {}) },
       orderBy: { loggedAt: "desc" },
     });
+  },
+
+  deleteMealLogForUser(id: string, userId: string): Promise<{ count: number }> {
+    return prisma.mealLog.deleteMany({ where: { id, userId } });
   },
 
   createWaterLog(data: { userId: string; amountMl: number; loggedAt?: Date }): Promise<WaterLog> {

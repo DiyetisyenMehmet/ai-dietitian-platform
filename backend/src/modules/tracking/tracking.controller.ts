@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 
 import { ApiError } from "../../utils/api-error";
-import { sendCreated, sendSuccess } from "../../utils/api-response";
+import { sendCreated, sendNoContent, sendSuccess } from "../../utils/api-response";
 import { asyncHandler } from "../../utils/async-handler";
 import { trackingService } from "./tracking.service";
 import type {
@@ -26,7 +26,7 @@ function parseSince(req: Request): Date | undefined {
   return Number.isNaN(date.getTime()) ? undefined : date;
 }
 
-/** Controller for the Sprint 19 tracking logs. */
+/** Controller for the tracking logs. */
 export const trackingController = {
   createWeight: asyncHandler(async (req: Request, res: Response) => {
     const userId = requireUserId(req);
@@ -50,6 +50,12 @@ export const trackingController = {
     const userId = requireUserId(req);
     const logs = await trackingService.listMeals(userId, parseSince(req));
     sendSuccess(res, { logs });
+  }),
+
+  deleteMeal: asyncHandler(async (req: Request, res: Response) => {
+    const userId = requireUserId(req);
+    await trackingService.deleteMeal(userId, req.params.id);
+    sendNoContent(res);
   }),
 
   createWater: asyncHandler(async (req: Request, res: Response) => {

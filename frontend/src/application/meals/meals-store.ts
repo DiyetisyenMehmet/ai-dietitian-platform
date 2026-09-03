@@ -12,26 +12,25 @@ import {
 import { mealsClient, type MealLog, type MealLogType } from "@/infrastructure/tracking/meals-client";
 
 /**
- * Meals store shared across routes via useSyncExternalStore.
+ * Meals store shared across routes via useSyncExternalStore. The backend is the
+ * single source of truth; this cache contains no seeded/demo meals.
  *
- * The backend is the single source of truth (Sprint 21.3B): today's meals are
- * hydrated from the `/api/tracking/meals` logs on login / app startup / refresh
- * via `hydrateMealsFromBackend`. This store is a cache only — it holds no
- * seeded/demo meals; it starts as empty slots and reflects only what the
- * backend returns.
+ * A backend MealLog containing only `mealType` is reserved as an explicit,
+ * reversible "I ate this meal" check-in. It is never rendered as a food and
+ * never contributes fake calories/macros.
  */
 
-/** Empty (foodless) meal slots — the cache's initial, pre-hydration state. */
 function emptyMeals(): Meal[] {
   return MEAL_SLOTS.map(({ slot, label, defaultTime }) => ({
     slot,
     label,
     time: defaultTime,
     foods: [],
+    isEaten: false,
+    checkInId: null,
   }));
 }
 
-/** Maps a backend meal-type enum to the client-side meal slot. */
 const SLOT_BY_MEAL_TYPE: Record<MealLogType, MealSlot> = {
   BREAKFAST: "breakfast",
   LUNCH: "lunch",
@@ -39,7 +38,6 @@ const SLOT_BY_MEAL_TYPE: Record<MealLogType, MealSlot> = {
   SNACK: "snack",
 };
 
-/** Maps a client-side meal slot to the backend meal-type enum. */
 const MEAL_TYPE_BY_SLOT: Record<MealSlot, MealLogType> = {
   breakfast: "BREAKFAST",
   lunch: "LUNCH",
@@ -47,7 +45,18 @@ const MEAL_TYPE_BY_SLOT: Record<MealSlot, MealLogType> = {
   snack: "SNACK",
 };
 
-/** Converts a persisted backend meal log into a client-side food entry. */
+function isMealCheckIn(log: MealLog): boolean {
+  return (
+    log.name === null &&
+    log.calories === null &&
+    log.proteinG === null &&
+    log.carbsG === null &&
+    log.fatG === null &&
+    log.sodiumMg === null &&
+    log.sugarG === null
+  );
+}
+
 function toFoodItem(log: MealLog): FoodItem {
   return {
     id: log.id,
@@ -60,7 +69,6 @@ function toFoodItem(log: MealLog): FoodItem {
   };
 }
 
-/** Start of today (local) — the window used to fetch "today's" meal logs. */
 function startOfToday(): Date {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
@@ -91,34 +99,27 @@ export interface AddFoodPayload {
 }
 
 export const mealsStore = {
-  /**
-   * Hydrates today's meals from the backend logs (single source of truth).
-   * Called on login / app startup / refresh. Best-effort: on a transient
-   * failure the last known cache is kept and retried on next mount.
-   */
   async hydrateMealsFromBackend(): Promise<void> {
     try {
       const { logs } = await mealsClient.listMeals(startOfToday());
-      meals = MEAL_SLOTS.map(({ slot, label, defaultTime }) => ({
-        slot,
-        label,
-        time: defaultTime,
-        foods: logs.filter((log) => SLOT_BY_MEAL_TYPE[log.mealType] === slot).map(toFoodItem),
-      }));
+      meals = MEAL_SLOTS.map(({ slot, label, defaultTime }) => {
+        const slotLogs = logs.filter((log) => SLOT_BY_MEAL_TYPE[log.mealType] === slot);
+        const checkIn = slotLogs.find(isMealCheckIn) ?? null;
+        return {
+          slot,
+          label,
+          time: defaultTime,
+          foods: slotLogs.filter((log) => !isMealCheckIn(log)).map(toFoodItem),
+          isEaten: checkIn !== null,
+          checkInId: checkIn?.id ?? null,
+        };
+      });
       emit();
     } catch {
-      // Offline / transient failure: keep the last known cache.
+      // Offline/transient failure: keep last known cache and retry later.
     }
   },
-  /**
-   * Persists a new food entry to the backend FIRST (single source of truth),
-   * then updates the cache from the persisted record. No optimistic update:
-   * throws on failure so the caller can surface an error and avoid showing a
-   * meal that was never saved. The store never generates its own meal data —
-   * the created entry uses the backend `id` and persisted macros; only the
-   * display-only `quantity` (not part of the backend contract) is kept from
-   * the user's input.
-   */
+
   async addFood({ slot, time, food }: AddFoodPayload): Promise<void> {
     const { log } = await mealsClient.logMeal({
       mealType: MEAL_TYPE_BY_SLOT[slot],
@@ -139,6 +140,31 @@ export const mealsStore = {
     );
     emit();
   },
+
+  /** Persists a bare MealLog as the explicit "I ate this meal" check-in. */
+  async markMealEaten(slot: MealSlot): Promise<void> {
+    const current = meals.find((meal) => meal.slot === slot);
+    if (current?.isEaten) return;
+
+    const { log } = await mealsClient.logMeal({ mealType: MEAL_TYPE_BY_SLOT[slot] });
+    meals = meals.map((meal) =>
+      meal.slot === slot ? { ...meal, isEaten: true, checkInId: log.id } : meal,
+    );
+    emit();
+  },
+
+  /** Removes only the explicit check-in; food records are left untouched. */
+  async unmarkMealEaten(slot: MealSlot): Promise<void> {
+    const current = meals.find((meal) => meal.slot === slot);
+    if (!current?.checkInId) return;
+
+    await mealsClient.deleteMeal(current.checkInId);
+    meals = meals.map((meal) =>
+      meal.slot === slot ? { ...meal, isEaten: false, checkInId: null } : meal,
+    );
+    emit();
+  },
+
   updateFood(slot: MealSlot, foodId: string, patch: Partial<Omit<FoodItem, "id">>) {
     meals = meals.map((meal) =>
       meal.slot === slot
@@ -147,29 +173,26 @@ export const mealsStore = {
     );
     emit();
   },
-  deleteFood(slot: MealSlot, foodId: string) {
+
+  /** Persist-first deletion prevents removed food from reappearing after refresh. */
+  async deleteFood(slot: MealSlot, foodId: string): Promise<void> {
+    await mealsClient.deleteMeal(foodId);
     meals = meals.map((meal) =>
       meal.slot === slot ? { ...meal, foods: meal.foods.filter((f) => f.id !== foodId) } : meal,
     );
     emit();
   },
+
   reset() {
-    meals = MEAL_SLOTS.map(({ slot, label, defaultTime }) => ({
-      slot,
-      label,
-      time: defaultTime,
-      foods: [],
-    }));
+    meals = emptyMeals();
     emit();
   },
 };
 
-/** Subscribe to the shared meals list. */
 export function useMeals(): Meal[] {
   return React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
-/** Compute macro/calorie totals across all meals (or a subset). */
 export function computeTotals(source: Meal[]): NutritionTotals {
   return source.reduce<NutritionTotals>(
     (acc, meal) => {
@@ -185,7 +208,6 @@ export function computeTotals(source: Meal[]): NutritionTotals {
   );
 }
 
-/** Compute totals for a single meal. */
 export function mealTotals(meal: Meal): NutritionTotals {
   return computeTotals([meal]);
 }

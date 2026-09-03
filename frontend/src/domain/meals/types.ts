@@ -13,13 +13,17 @@ export interface FoodItem {
   fat: number;
 }
 
-/** A meal slot with its logged foods and scheduled time. */
+/** A meal slot with its logged foods, scheduled time and explicit check-in. */
 export interface Meal {
   slot: MealSlot;
   label: string;
   /** Local time in HH:MM (24h). */
   time: string;
   foods: FoodItem[];
+  /** Explicit user confirmation that this meal was eaten today. */
+  isEaten: boolean;
+  /** Backend id of the bare MealLog used as the reversible check-in. */
+  checkInId: string | null;
 }
 
 /** A searchable food from the placeholder catalog (per stated serving). */
@@ -41,7 +45,7 @@ export interface NutritionTotals {
   fat: number;
 }
 
-/** Daily nutrition goals used by the summary progress bars. */
+/** Legacy fallback goals; active-plan targets are used by production dashboard surfaces. */
 export const NUTRITION_GOALS: NutritionTotals = {
   calories: 2200,
   protein: 120,

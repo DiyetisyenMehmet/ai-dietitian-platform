@@ -1,14 +1,10 @@
 import { apiRequest } from "@/infrastructure/api/http-client";
 import { TRACKING_ENDPOINTS } from "@/infrastructure/auth/endpoints";
 
-/** Backend meal-type enum (Sprint 19 tracking module). */
+/** Backend meal-type enum. */
 export type MealLogType = "BREAKFAST" | "LUNCH" | "DINNER" | "SNACK";
 
-/**
- * A persisted meal-log entry, as returned by the backend tracking module
- * (Sprint 19). The backend is the single source of truth; the frontend meals
- * store is a cache hydrated from these records.
- */
+/** Persisted meal-log entry returned by the backend tracking module. */
 export interface MealLog {
   id: string;
   userId: string;
@@ -24,11 +20,7 @@ export interface MealLog {
   createdAt: string;
 }
 
-/**
- * Payload for persisting a new meal log. Mirrors the backend
- * `createMealLogSchema` (Sprint 19 tracking module) — all macro fields are
- * optional; only `mealType` is required.
- */
+/** Payload for a food log or a bare explicit meal check-in. */
 export interface LogMealInput {
   mealType: MealLogType;
   name?: string;
@@ -41,11 +33,6 @@ export interface LogMealInput {
   loggedAt?: string;
 }
 
-/**
- * Infrastructure-level meals client. Authenticated (the HTTP client attaches
- * the access token). Reuses the existing `/api/tracking/meals` endpoints — no
- * new backend contract. No UI or store logic here.
- */
 export const mealsClient = {
   /** Lists meal logs, optionally only those logged on/after `since`. */
   listMeals(since?: Date) {
@@ -57,13 +44,22 @@ export const mealsClient = {
     });
   },
 
-  /** Persists a new meal log and returns the created record. */
+  /** Persists a food entry or a bare meal check-in and returns it. */
   logMeal(input: LogMealInput) {
     return apiRequest<{ log: MealLog }>({
       path: TRACKING_ENDPOINTS.meals,
       method: "POST",
       auth: true,
       body: JSON.stringify(input),
+    });
+  },
+
+  /** Permanently removes one owner-scoped meal log. */
+  deleteMeal(id: string) {
+    return apiRequest<void>({
+      path: `${TRACKING_ENDPOINTS.meals}/${encodeURIComponent(id)}`,
+      method: "DELETE",
+      auth: true,
     });
   },
 } as const;

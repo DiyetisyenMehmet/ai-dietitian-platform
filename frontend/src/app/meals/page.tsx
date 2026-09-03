@@ -1,11 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { Plus, ScanLine, UtensilsCrossed } from "lucide-react";
+import { Plus, ScanLine } from "lucide-react";
 
 import { AppShell } from "@/presentation/components/layout/app-shell";
 import { Button } from "@/presentation/components/ui/button";
-import { EmptyState } from "@/presentation/components/feedback/empty-state";
 import { NutritionSummary } from "@/presentation/components/meals/nutrition-summary";
 import { MealCard } from "@/presentation/components/meals/meal-card";
 import { useMeals, computeTotals } from "@/application/meals/meals-store";
@@ -36,7 +35,6 @@ export default function MealsPage() {
       <div className="animate-fade-in space-y-6">
         <NutritionSummary totals={totals} />
 
-        {/* Food scanner entry */}
         <Link
           href="/meals/scan"
           className="flex items-center gap-3 rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 via-accent to-background p-4 shadow-card transition-shadow hover:shadow-card-hover"
@@ -47,32 +45,31 @@ export default function MealsPage() {
           <span className="min-w-0 flex-1">
             <span className="block text-sm font-semibold">Besin Tarayıcı</span>
             <span className="block text-xs text-muted-foreground">
-              Yemeğinin fotoğrafını çek, koçun kalori ve makroları hesaplasın
+              Yemeğinin fotoğrafını çek, koçun yaklaşık kalori ve makroları çıkarsın
             </span>
           </span>
         </Link>
 
-        {totalFoods > 0 ? (
-          <section className="space-y-3">
-            {meals.map((meal, index) => (
-              <MealCard key={meal.slot} meal={meal} defaultOpen={index === 0} />
-            ))}
-          </section>
-        ) : (
-          <EmptyState
-            icon={UtensilsCrossed}
-            title="Bugün henüz öğün eklemedin"
-            description="İlk besinini ekleyerek günlük beslenme takibine başlayabilirsin."
-            className="rounded-2xl border border-dashed border-border"
-          />
-        )}
+        <section className="space-y-3" aria-labelledby="meal-checklist-heading">
+          <div>
+            <h2 id="meal-checklist-heading" className="text-base font-semibold">
+              Bugünün öğünleri
+            </h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Öğünü yaptıysan “Yedim” olarak işaretle. Yediklerini ayrıntılı eklemek isteğe bağlıdır.
+            </p>
+          </div>
+          {meals.map((meal, index) => (
+            <MealCard key={meal.slot} meal={meal} defaultOpen={index === 0 && totalFoods > 0} />
+          ))}
+        </section>
 
         {totalFoods === 0 && (
           <div className="flex justify-center">
             <Button asChild>
               <Link href="/meals/add">
                 <Plus aria-hidden="true" />
-                İlk öğününü ekle
+                İlk besinini ekle
               </Link>
             </Button>
           </div>

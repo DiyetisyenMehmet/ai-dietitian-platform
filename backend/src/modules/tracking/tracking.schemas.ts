@@ -1,11 +1,9 @@
 import { z } from "zod";
 
 /**
- * Validation schemas for the Sprint 19 tracking domain (weight / meals / water).
- *
- * These lightweight logs are the time-series data sources the AI Health Coach
- * reasons over (trends, consistency, risk). Inputs are validated defensively so
- * a bad client cannot poison the coach's signals.
+ * Validation schemas for the tracking domain (weight / meals / water).
+ * Inputs are validated defensively so a bad client cannot poison the time-series
+ * signals the AI Health Coach reasons over.
  */
 
 /** Optional ISO timestamp; defaults to "now" when omitted. */
@@ -30,6 +28,10 @@ export const createMealLogSchema = z.object({
   sodiumMg: z.number().min(0).max(50000).optional(),
   sugarG: z.number().min(0).max(2000).optional(),
   loggedAt: optionalLoggedAt,
+});
+
+export const mealLogIdParamsSchema = z.object({
+  id: z.string().uuid("id must be a valid UUID."),
 });
 
 export const createWaterLogSchema = z.object({

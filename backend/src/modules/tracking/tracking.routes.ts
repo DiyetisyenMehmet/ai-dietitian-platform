@@ -8,37 +8,18 @@ import {
   createMealLogSchema,
   createWaterLogSchema,
   createWeightLogSchema,
+  mealLogIdParamsSchema,
 } from "./tracking.schemas";
 
 /**
  * Tracking router (mounted at /api/tracking). Every route is owner-scoped and
- * requires a valid access token. New health/nutrition log writes require current
- * mandatory consent, while existing logs remain readable after withdrawal.
- * These logs feed the AI Health Coach's trend/consistency/risk analysis.
- *
- * @openapi
- * tags:
- *   - name: Tracking
- *     description: Weight, meal and water time-series logging (Sprint 19).
+ * requires a valid access token. New health/nutrition writes require current
+ * mandatory consent, while reads and user-initiated deletes remain available
+ * after withdrawal so users can still access/remove their existing data.
  */
 export const trackingRouter = Router();
 
-/**
- * @openapi
- * /api/tracking/weight:
- *   post:
- *     tags: [Tracking]
- *     summary: Log a weight measurement
- *     security: [{ bearerAuth: [] }]
- *     responses:
- *       201: { description: The created weight log. }
- *   get:
- *     tags: [Tracking]
- *     summary: List weight measurements (optionally since a date)
- *     security: [{ bearerAuth: [] }]
- *     responses:
- *       200: { description: Weight logs, newest first. }
- */
+/** Weight time-series. */
 trackingRouter.post(
   "/weight",
   authenticate,
@@ -49,20 +30,10 @@ trackingRouter.post(
 trackingRouter.get("/weight", authenticate, trackingController.listWeight);
 
 /**
- * @openapi
- * /api/tracking/meals:
- *   post:
- *     tags: [Tracking]
- *     summary: Log a meal
- *     security: [{ bearerAuth: [] }]
- *     responses:
- *       201: { description: The created meal log. }
- *   get:
- *     tags: [Tracking]
- *     summary: List meals (optionally since a date)
- *     security: [{ bearerAuth: [] }]
- *     responses:
- *       200: { description: Meal logs, newest first. }
+ * Meal time-series. A body containing only `mealType` is a valid explicit meal
+ * check-in ("I ate this meal"); nutrition-bearing rows continue to represent
+ * individual logged foods. DELETE is owner-scoped and intentionally does not
+ * require current processing consent because deletion is a data-subject action.
  */
 trackingRouter.post(
   "/meals",
@@ -72,23 +43,14 @@ trackingRouter.post(
   trackingController.createMeal,
 );
 trackingRouter.get("/meals", authenticate, trackingController.listMeals);
+trackingRouter.delete(
+  "/meals/:id",
+  authenticate,
+  validate({ params: mealLogIdParamsSchema }),
+  trackingController.deleteMeal,
+);
 
-/**
- * @openapi
- * /api/tracking/water:
- *   post:
- *     tags: [Tracking]
- *     summary: Log water intake
- *     security: [{ bearerAuth: [] }]
- *     responses:
- *       201: { description: The created water log. }
- *   get:
- *     tags: [Tracking]
- *     summary: List water intake (optionally since a date)
- *     security: [{ bearerAuth: [] }]
- *     responses:
- *       200: { description: Water logs, newest first. }
- */
+/** Water time-series. */
 trackingRouter.post(
   "/water",
   authenticate,

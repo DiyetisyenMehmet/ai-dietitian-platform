@@ -2,28 +2,24 @@
 
 import * as React from "react";
 
-import { activityClient } from "@/infrastructure/activity/activity-client";
+import {
+  activityClient,
+  type Activity,
+  type ActivityType,
+} from "@/infrastructure/activity/activity-client";
 
-/**
- * Daily-activity cache.
- *
- * Persisted active minutes come from the backend `/api/activity` source. Step
- * count has no authoritative backend source in V1 yet, so it intentionally
- * starts at zero with no fabricated goal and must not drive health decisions.
- */
-
+/** Daily activity cache backed by `/api/activity`. */
 interface ActivityState {
-  /** Steps recorded today. Zero until a real persisted/device source is wired. */
   steps: number;
-  /** Daily step goal. Zero means not configured/available. */
   stepGoal: number;
-  /** Active minutes recorded today from persisted backend activity logs. */
   activeMinutes: number;
-  /** Optional daily active-minutes coaching goal; zero means not configured. */
   activeMinutesGoal: number;
+  /** Persisted activity entries recorded today, newest first. */
+  activities: Activity[];
+  /** Sum of available best-effort burn estimates; never added to food allowance. */
+  estimatedCaloriesBurned: number;
 }
 
-/** Increment retained for future device/manual step integration. */
 export const ACTIVITY_STEP_INCREMENT = 1000;
 
 const EMPTY_STATE: ActivityState = {
@@ -31,15 +27,27 @@ const EMPTY_STATE: ActivityState = {
   stepGoal: 0,
   activeMinutes: 0,
   activeMinutesGoal: 0,
+  activities: [],
+  estimatedCaloriesBurned: 0,
 };
 
 let state: ActivityState = { ...EMPTY_STATE };
 
-/** Start of today (local) — the window used to sum today's activity logs. */
 function startOfToday(): Date {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
   return d;
+}
+
+function summarize(activities: Activity[]): Pick<ActivityState, "activeMinutes" | "estimatedCaloriesBurned"> {
+  return activities.reduce(
+    (acc, activity) => {
+      acc.activeMinutes += Math.max(0, activity.durationMinutes);
+      acc.estimatedCaloriesBurned += Math.max(0, activity.caloriesBurned ?? 0);
+      return acc;
+    },
+    { activeMinutes: 0, estimatedCaloriesBurned: 0 },
+  );
 }
 
 const listeners = new Set<() => void>();
@@ -59,40 +67,30 @@ function getSnapshot() {
 }
 
 export const activityStore = {
-  /**
-   * Hydrates today's active-minutes total from persisted backend logs. On
-   * failure the persisted signal is reset rather than retaining stale account
-   * data.
-   */
   async hydrateFromBackend(): Promise<void> {
     try {
       const { activities } = await activityClient.listActivities(startOfToday());
-      const total = activities.reduce((sum, activity) => sum + activity.durationMinutes, 0);
-      setState({ activeMinutes: Math.max(0, total) });
+      setState({ activities, ...summarize(activities) });
     } catch {
-      setState({ activeMinutes: 0 });
+      setState({ activities: [], activeMinutes: 0, estimatedCaloriesBurned: 0 });
     }
   },
-  /**
-   * Persists an activity log to the backend FIRST, then updates the cache from
-   * the persisted duration. Throws on failure so the UI cannot claim success
-   * for an unsaved activity.
-   */
+
+  /** Persist first, then refresh today's cache from the created server record. */
   async logActivity(input: {
-    type: string;
+    type: ActivityType;
     durationMinutes: number;
     name?: string;
     caloriesBurned?: number;
-  }): Promise<void> {
-    const { activity } = await activityClient.logActivity({
-      type: input.type as never,
-      name: input.name,
-      durationMinutes: input.durationMinutes,
-      caloriesBurned: input.caloriesBurned,
-    });
-    setState({ activeMinutes: Math.max(0, state.activeMinutes + activity.durationMinutes) });
+    note?: string;
+  }): Promise<Activity> {
+    const { activity } = await activityClient.logActivity(input);
+    const activities = [activity, ...state.activities.filter((item) => item.id !== activity.id)];
+    setState({ activities, ...summarize(activities) });
+    return activity;
   },
-  /** Local-only until a real step source exists. Do not use for scoring. */
+
+  /** Local-only until a real device/manual step source exists. Do not use for scoring. */
   addSteps(amount: number = ACTIVITY_STEP_INCREMENT) {
     setState({ steps: Math.max(0, state.steps + amount) });
   },
@@ -108,7 +106,6 @@ export const activityStore = {
   },
 };
 
-/** Subscribe to the daily-activity state. */
 export function useActivity(): ActivityState {
   return React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
