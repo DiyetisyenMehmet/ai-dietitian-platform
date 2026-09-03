@@ -4,6 +4,7 @@ import type {
   PaidTier,
   PaymentDto,
   PlanDto,
+  PurchaseAcceptance,
   SubscriptionStatusDto,
 } from "@/domain/payments/types";
 import { PAYMENT_ENDPOINTS } from "./endpoints";
@@ -33,12 +34,12 @@ export const paymentsClient = {
     });
   },
 
-  startCheckout(tier: PaidTier): Promise<CheckoutResult> {
+  startCheckout(tier: PaidTier, purchaseAcceptance: PurchaseAcceptance): Promise<CheckoutResult> {
     return apiRequest<CheckoutResult>({
       path: PAYMENT_ENDPOINTS.checkout,
       method: "POST",
       auth: true,
-      body: JSON.stringify({ tier }),
+      body: JSON.stringify({ tier, purchaseAcceptance }),
     });
   },
 
