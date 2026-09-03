@@ -5,9 +5,7 @@ import {
   Check,
   ClipboardList,
   MessageSquareHeart,
-  Quote,
   Sparkles,
-  Star,
   TestTube2,
 } from "lucide-react";
 
@@ -17,7 +15,6 @@ import {
   FAQ_ITEMS,
   HOW_IT_WORKS,
   KEY_BENEFITS,
-  TESTIMONIALS,
 } from "@/shared/constants/site";
 import { Button } from "@/presentation/components/ui/button";
 import { Section, SectionHeading } from "@/presentation/components/marketing/section";
@@ -27,7 +24,7 @@ import { FaqAccordion } from "@/presentation/components/marketing/faq-accordion"
 export const metadata: Metadata = {
   title: "Yapay Zekâ Destekli Kişisel Beslenme Platformu",
   description:
-    "Diewish; yapay zekâ destekli kişiselleştirilmiş beslenme planları, kan tahlili analizi ve 7/24 diyetisyen asistanı ile sağlıklı yaşam yolculuğunda yanında.",
+    "Diewish; kişiselleştirilmiş beslenme planları, kan tahlili özeti, öğün ve ilerleme takibi ile yapay zekâ beslenme asistanını tek platformda buluşturur.",
   alternates: { canonical: "/" },
 };
 
@@ -35,7 +32,6 @@ export const metadata: Metadata = {
 export default function LandingPage() {
   return (
     <>
-      {/* Hero */}
       <section className="relative overflow-hidden">
         <div
           className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-b from-primary/10 via-background to-background"
@@ -51,9 +47,9 @@ export default function LandingPage() {
             <span className="text-primary">sana özel</span> beslenme rehberin
           </h1>
           <p className="mt-6 max-w-2xl text-base text-muted-foreground sm:text-lg">
-            {APP_CONFIG.name}; hedeflerine göre kişiselleştirilmiş beslenme planları oluşturur, kan
-            tahlillerini analiz eder ve 7/24 yapay zekâ diyetisyen asistanıyla her adımda yanında
-            olur.
+            {APP_CONFIG.name}; profil ve hedeflerine göre beslenme planları oluşturur, desteklenen
+            kan tahlili dosyalarından bilgilendirme amaçlı özetler üretir ve yapay zekâ beslenme
+            asistanıyla kayıtlarını tek yerde kullanmana yardımcı olur.
           </p>
           <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row">
             <Button asChild size="lg">
@@ -67,17 +63,16 @@ export default function LandingPage() {
             </Button>
           </div>
           <p className="mt-4 text-xs text-muted-foreground">
-            Kredi kartı gerekmez · İstediğin an iptal et
+            Ücretsiz hesap oluşturmak için kredi kartı gerekmez
           </p>
         </div>
       </section>
 
-      {/* Core capabilities */}
       <Section muted>
         <SectionHeading
           eyebrow="Neler sunuyoruz"
-          title="Beslenmeni dönüştüren dört akıllı özellik"
-          description="Diewish, yapay zekâyı sağlıklı yaşam hedeflerinle buluşturur."
+          title="Beslenme takibini tek yerde birleştiren dört özellik"
+          description="Diewish, kayıtlarını ve yapay zekâ destekli özellikleri aynı deneyimde buluşturur."
         />
         <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {CORE_FEATURES.map((feature) => (
@@ -95,7 +90,6 @@ export default function LandingPage() {
         </div>
       </Section>
 
-      {/* Feature spotlight: personalized plans */}
       <Section>
         <div className="grid items-center gap-10 lg:grid-cols-2">
           <div className="space-y-4">
@@ -104,18 +98,18 @@ export default function LandingPage() {
               Kişiselleştirilmiş planlar
             </span>
             <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-              Sana özel 30 & 60 günlük beslenme planları
+              30 veya 60 günlük beslenme planları
             </h2>
             <p className="text-muted-foreground">
-              Hedeflerine, tercihlerine ve yaşam tarzına göre öğün öğün hazırlanan planlarla
-              ilerlemeni sürdür. Planların yapay zekâ tarafından oluşturulur ve ihtiyacına göre
-              güncellenir.
+              Kalori, makro ve su hedefleri profil verilerinden deterministik olarak hesaplanır;
+              öğün içeriği tercihler, alerjiler ve ilgili sağlık bağlamı dikkate alınarak yapay zekâ
+              desteğiyle oluşturulur.
             </p>
             <ul className="space-y-3">
               {[
-                "Kalori ve makro dengene uygun öğün önerileri",
-                "Alerji ve tercihlerine duyarlı içerik",
-                "İlerledikçe uyarlanan dinamik planlar",
+                "Profiline göre hesaplanan kalori ve makro hedefleri",
+                "Alerji ve beslenme tercihlerine duyarlı öğün üretimi",
+                "İstediğinde yeni sürüm olarak yeniden oluşturulabilen planlar",
               ].map((item) => (
                 <li key={item} className="flex items-start gap-2 text-sm">
                   <Check className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
@@ -131,22 +125,22 @@ export default function LandingPage() {
                 <div>
                   <p className="text-sm font-semibold">Kan Tahlili Analizi</p>
                   <p className="text-xs text-muted-foreground">
-                    Sonuçlarını yükle, sade bir özet al
+                    Uygun dosyalardan bilgilendirme amaçlı sade özet
                   </p>
                 </div>
               </div>
               <div className="flex items-center gap-3 rounded-2xl bg-card p-4 shadow-soft">
                 <MessageSquareHeart className="size-8 text-primary" aria-hidden="true" />
                 <div>
-                  <p className="text-sm font-semibold">Diyetisyen Asistanı</p>
-                  <p className="text-xs text-muted-foreground">Sorularına 7/24 anında yanıt</p>
+                  <p className="text-sm font-semibold">Yapay Zekâ Beslenme Asistanı</p>
+                  <p className="text-xs text-muted-foreground">Profil ve ilgili kayıt bağlamıyla yanıtlar</p>
                 </div>
               </div>
               <div className="flex items-center gap-3 rounded-2xl bg-card p-4 shadow-soft">
                 <Sparkles className="size-8 text-primary" aria-hidden="true" />
                 <div>
-                  <p className="text-sm font-semibold">Yapay Zekâ Önerileri</p>
-                  <p className="text-xs text-muted-foreground">Bağlamına duyarlı akıllı içgörüler</p>
+                  <p className="text-sm font-semibold">Kişisel İçgörüler</p>
+                  <p className="text-xs text-muted-foreground">Mevcut kayıtlarından türetilen takip desteği</p>
                 </div>
               </div>
             </div>
@@ -154,12 +148,11 @@ export default function LandingPage() {
         </div>
       </Section>
 
-      {/* How it works */}
       <Section muted>
         <SectionHeading
           eyebrow="Nasıl çalışır"
           title="Üç adımda başla"
-          description="Kaydolmaktan hedefine ulaşmaya kadar Diewish yanında."
+          description="Profilini tamamla, kayıtlarını tut ve desteklenen özellikleri ihtiyacına göre kullan."
         />
         <div className="mt-12 grid gap-6 md:grid-cols-3">
           {HOW_IT_WORKS.map((step) => (
@@ -174,11 +167,10 @@ export default function LandingPage() {
         </div>
       </Section>
 
-      {/* Key benefits */}
       <Section>
         <SectionHeading
           eyebrow="Neden Diewish"
-          title="Sana değer katan avantajlar"
+          title="Tek bir yerde takip ve kişiselleştirme"
           align="center"
         />
         <div className="mx-auto mt-12 grid max-w-4xl gap-4 sm:grid-cols-2">
@@ -194,46 +186,14 @@ export default function LandingPage() {
         </div>
       </Section>
 
-      {/* Testimonials */}
       <Section muted>
         <SectionHeading
-          eyebrow="Kullanıcı yorumları"
-          title="Diewish ile daha sağlıklı bir yaşam"
-          description="Kullanıcılarımızın deneyimlerinden birkaçı."
+          eyebrow="Şeffaflık"
+          title="Gerçek kullanıcı yorumları geldikçe burada yer alacak"
+          description="Diewish henüz doğrulanmış kullanıcı yorumu yayımlamıyor. Örnek veya kurgusal değerlendirmeleri gerçek müşteri yorumu gibi göstermiyoruz."
         />
-        <div className="mt-12 grid gap-6 md:grid-cols-3">
-          {TESTIMONIALS.map((t) => (
-            <figure
-              key={t.name}
-              className="flex flex-col rounded-2xl border border-border bg-card p-6 shadow-card"
-            >
-              <Quote className="size-8 text-primary/30" aria-hidden="true" />
-              <blockquote className="mt-4 flex-1 text-sm leading-relaxed text-muted-foreground">
-                “{t.quote}”
-              </blockquote>
-              <figcaption className="mt-6 flex items-center gap-3">
-                <span className="flex size-10 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
-                  {t.initials}
-                </span>
-                <span>
-                  <span className="block text-sm font-semibold">{t.name}</span>
-                  <span className="block text-xs text-muted-foreground">{t.role}</span>
-                </span>
-              </figcaption>
-              <div className="mt-4 flex gap-0.5" aria-label="5 üzerinden 5 yıldız">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <Star key={i} className="size-4 fill-primary text-primary" aria-hidden="true" />
-                ))}
-              </div>
-            </figure>
-          ))}
-        </div>
-        <p className="mt-8 text-center text-xs text-muted-foreground">
-          * Yukarıdaki yorumlar örnek amaçlıdır ve platform tanıtımı için kullanılmaktadır.
-        </p>
       </Section>
 
-      {/* FAQ preview */}
       <Section>
         <SectionHeading
           eyebrow="S.S.S."
