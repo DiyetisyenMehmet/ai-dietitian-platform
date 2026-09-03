@@ -67,6 +67,16 @@ function tierForProduct(productId: string): SubscriptionTier | null {
   return null;
 }
 
+/**
+ * Stable, non-PII account binding passed to BillingFlowParams as
+ * obfuscatedAccountId. Google returns the same value during server-side
+ * verification, allowing Diewish to reject a purchase token presented by a
+ * different account without exposing email/name to Google Play Billing.
+ */
+function obfuscatedAccountId(userId: string): string {
+  return crypto.createHash("sha256").update(`diewish:play:${userId}`).digest("hex");
+}
+
 async function accessToken(): Promise<string> {
   if (!isConfigured()) {
     throw new ApiError(503, "Google Play billing verification is not configured.", {
@@ -109,7 +119,9 @@ async function accessToken(): Promise<string> {
   }
 
   const payload = (await response.json()) as GoogleTokenResponse;
-  if (!payload.access_token) throw new ApiError(502, "Google Play returned an invalid authorization response.");
+  if (!payload.access_token) {
+    throw new ApiError(502, "Google Play returned an invalid authorization response.");
+  }
 
   cachedAccessToken = {
     token: payload.access_token,
@@ -120,14 +132,29 @@ async function accessToken(): Promise<string> {
 
 export const googlePlayBilling = {
   isConfigured,
+  obfuscatedAccountId,
+
+  clientConfig(userId: string) {
+    return {
+      packageName: env.GOOGLE_PLAY_PACKAGE_NAME,
+      premiumProductId: env.GOOGLE_PLAY_PREMIUM_PRODUCT_ID,
+      premiumPlusProductId: env.GOOGLE_PLAY_PREMIUM_PLUS_PRODUCT_ID,
+      obfuscatedAccountId: obfuscatedAccountId(userId),
+    };
+  },
 
   /**
    * Verifies a subscription purchase directly with Google Play. The client-sent
    * product id is never trusted: the tier is derived from Google's line item.
    * PENDING/paused/expired/canceled purchases never grant Diewish entitlement.
    */
-  async verifySubscription(purchaseToken: string): Promise<VerifiedGooglePlaySubscription> {
-    if (!purchaseToken || purchaseToken.length > 4096) throw ApiError.badRequest("Invalid Google Play purchase token.");
+  async verifySubscription(
+    purchaseToken: string,
+    expectedUserId?: string,
+  ): Promise<VerifiedGooglePlaySubscription> {
+    if (!purchaseToken || purchaseToken.length > 4096) {
+      throw ApiError.badRequest("Invalid Google Play purchase token.");
+    }
 
     const token = await accessToken();
     const packageName = encodeURIComponent(env.GOOGLE_PLAY_PACKAGE_NAME);
@@ -150,12 +177,30 @@ export const googlePlayBilling = {
       });
     }
 
+    if (expectedUserId) {
+      const expectedAccountId = obfuscatedAccountId(expectedUserId);
+      if (purchase.externalAccountIdentifiers?.obfuscatedExternalAccountId !== expectedAccountId) {
+        throw new ApiError(409, "Google Play purchase belongs to a different Diewish account.", {
+          code: "GOOGLE_PLAY_ACCOUNT_MISMATCH",
+        });
+      }
+    }
+
+    const now = new Date();
     const activeLineItems = (purchase.lineItems ?? [])
       .map((item) => ({ ...item, expiry: item.expiryTime ? new Date(item.expiryTime) : null }))
-      .filter((item) => item.productId && item.expiry && Number.isFinite(item.expiry.getTime()) && item.expiry > new Date());
+      .filter(
+        (item) =>
+          item.productId &&
+          item.expiry &&
+          Number.isFinite(item.expiry.getTime()) &&
+          item.expiry > now,
+      );
 
     const lineItem = activeLineItems.sort((a, b) => b.expiry!.getTime() - a.expiry!.getTime())[0];
-    if (!lineItem?.productId || !lineItem.expiry) throw new ApiError(409, "Google Play subscription has no active entitlement.");
+    if (!lineItem?.productId || !lineItem.expiry) {
+      throw new ApiError(409, "Google Play subscription has no active entitlement.");
+    }
 
     const tier = tierForProduct(lineItem.productId);
     if (!tier) throw new ApiError(409, "Google Play product is not recognized by Diewish.");
@@ -169,5 +214,38 @@ export const googlePlayBilling = {
       orderId: purchase.latestOrderId ?? null,
       obfuscatedAccountId: purchase.externalAccountIdentifiers?.obfuscatedExternalAccountId ?? null,
     };
+  },
+
+  /**
+   * Acknowledges only after Diewish has durably granted the verified entitlement.
+   * Calling this for an already-acknowledged purchase is unnecessary, so callers
+   * should use acknowledgementPending from verifySubscription first.
+   */
+  async acknowledgeSubscription(productId: string, purchaseToken: string): Promise<void> {
+    const tier = tierForProduct(productId);
+    if (!tier) throw ApiError.badRequest("Unknown Google Play subscription product.");
+
+    const token = await accessToken();
+    const packageName = encodeURIComponent(env.GOOGLE_PLAY_PACKAGE_NAME);
+    const subscriptionId = encodeURIComponent(productId);
+    const encodedPurchaseToken = encodeURIComponent(purchaseToken);
+    const response = await fetch(
+      `${ANDROID_PUBLISHER_BASE}/applications/${packageName}/purchases/subscriptions/${subscriptionId}/tokens/${encodedPurchaseToken}:acknowledge`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+        },
+        body: "{}",
+        signal: AbortSignal.timeout(15_000),
+      },
+    );
+
+    if (!response.ok) {
+      throw new ApiError(502, "Google Play purchase acknowledgement failed.", {
+        code: "GOOGLE_PLAY_ACKNOWLEDGEMENT_FAILED",
+      });
+    }
   },
 };
