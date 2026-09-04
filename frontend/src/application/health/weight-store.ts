@@ -6,16 +6,8 @@ import type { WeightEntry } from "@/domain/health/types";
 import { trackingClient, type WeightLog } from "@/infrastructure/tracking/tracking-client";
 import { healthProfileStore } from "./health-profile-store";
 
-/**
- * Weight-tracking cache backed by `/api/tracking/weight`.
- *
- * There is intentionally NO seeded/demo weight history. The backend is the
- * authoritative source for measurements; when a user has no persisted logs we
- * may show a single baseline derived from their real onboarding profile.
- */
-
-/** Recommended cadence between weigh-ins, in days. */
 export const WEIGH_IN_INTERVAL_DAYS = 7;
+const BASELINE_NOTE = "Başlangıç";
 
 function isoToday(): string {
   return new Date().toISOString().slice(0, 10);
@@ -31,20 +23,25 @@ function toEntry(log: WeightLog): WeightEntry {
 }
 
 /**
- * Backend permits multiple measurements per day. For the compact daily chart we
- * keep the newest measurement for each calendar day while preserving every row
- * in the database for audit/history purposes.
+ * Keep one latest ordinary measurement per day, but never collapse away the
+ * persisted onboarding baseline when a user weighs in again on that same day.
  */
 function collapseToLatestPerDay(logs: WeightLog[]): WeightEntry[] {
+  const baseline = logs
+    .filter((log) => log.note === BASELINE_NOTE)
+    .sort((a, b) => new Date(a.loggedAt).getTime() - new Date(b.loggedAt).getTime())[0];
   const latestByDay = new Map<string, WeightLog>();
+
   for (const log of logs) {
+    if (baseline && log.id === baseline.id) continue;
     const day = log.loggedAt.slice(0, 10);
     const existing = latestByDay.get(day);
     if (!existing || new Date(log.loggedAt).getTime() > new Date(existing.loggedAt).getTime()) {
       latestByDay.set(day, log);
     }
   }
-  return [...latestByDay.values()].map(toEntry);
+
+  return [...(baseline ? [toEntry(baseline)] : []), ...[...latestByDay.values()].map(toEntry)];
 }
 
 let entries: WeightEntry[] = [];
@@ -64,22 +61,26 @@ function getSnapshot() {
   return entries;
 }
 
-/** Entries sorted oldest → newest. */
+/** Stable chronological order; the explicit baseline always wins ties. */
 function sorted(list: WeightEntry[]): WeightEntry[] {
-  return [...list].sort((a, b) => a.date.localeCompare(b.date));
+  return [...list].sort((a, b) => {
+    const byDate = a.date.localeCompare(b.date);
+    if (byDate !== 0) return byDate;
+    if (a.note === BASELINE_NOTE && b.note !== BASELINE_NOTE) return -1;
+    if (b.note === BASELINE_NOTE && a.note !== BASELINE_NOTE) return 1;
+    return 0;
+  });
 }
 
-function syncLatestProfileWeight(): void {
-  const latest = sorted(entries).at(-1);
+function syncProfileWeights(): void {
+  const list = sorted(entries);
+  const first = list[0];
+  const latest = list.at(-1);
+  if (first) healthProfileStore.setStartWeight(first.weightKg);
   if (latest) healthProfileStore.setCurrentWeight(latest.weightKg);
 }
 
 export const weightStore = {
-  /**
-   * Replaces the cache with persisted measurements. If the account has never
-   * logged weight, an optional REAL onboarding weight can be used as the visual
-   * baseline without writing a synthetic tracking record to the backend.
-   */
   async hydrateWeightFromBackend(profileBaselineKg?: number): Promise<void> {
     try {
       const { logs } = await trackingClient.listWeight();
@@ -90,15 +91,13 @@ export const weightStore = {
             id: "profile-baseline",
             date: isoToday(),
             weightKg: profileBaselineKg,
-            note: "Başlangıç",
+            note: BASELINE_NOTE,
           },
         ];
       }
       emit();
-      syncLatestProfileWeight();
+      syncProfileWeights();
     } catch {
-      // Never keep another session/user's stale weight cache after a failed
-      // hydration. A real profile baseline is safe to show when available.
       entries =
         profileBaselineKg && profileBaselineKg > 0
           ? [
@@ -106,44 +105,39 @@ export const weightStore = {
                 id: "profile-baseline",
                 date: isoToday(),
                 weightKg: profileBaselineKg,
-                note: "Başlangıç",
+                note: BASELINE_NOTE,
               },
             ]
           : [];
       emit();
-      syncLatestProfileWeight();
+      syncProfileWeights();
     }
   },
 
-  /**
-   * Persists the measurement FIRST, then updates the cache from the authoritative
-   * backend row. Callers should await this and surface any error to the user.
-   */
   async add(weightKg: number, note?: string): Promise<void> {
     const { log } = await trackingClient.logWeight(weightKg, note);
     const entry = toEntry(log);
     entries = [
-      ...entries.filter((existing) => existing.date !== entry.date),
+      ...entries.filter(
+        (existing) => existing.note === BASELINE_NOTE || existing.date !== entry.date,
+      ),
       entry,
     ];
     emit();
-    syncLatestProfileWeight();
+    syncProfileWeights();
   },
 
-  /** Clears all user-specific cached measurements. */
   clear() {
     entries = [];
     emit();
   },
 };
 
-/** Subscribe to the chronological (oldest → newest) weight history. */
 export function useWeightEntries(): WeightEntry[] {
   const raw = React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
   return React.useMemo(() => sorted(raw), [raw]);
 }
 
-/** Direction of the weight goal derived from start vs. target. */
 export type WeightDirection = "lose" | "gain" | "maintain";
 
 export interface WeightAnalysis {
@@ -151,25 +145,14 @@ export interface WeightAnalysis {
   latestKg: number | null;
   startKg: number | null;
   targetKg: number;
-  /** Signed change since the first entry (kg). Negative = lost weight. */
   changeKg: number;
-  /** 0..100 progress toward the target. */
   progressPercent: number;
-  /** True when today is on/after the next recommended weigh-in date. */
   isWeighInDue: boolean;
   daysSinceLast: number | null;
-  /** Coaching verdict about pace vs. plan. */
   status: "ahead" | "on-track" | "behind" | "reached" | "no-data";
-  /** Encouraging, non-shaming coach message. */
   message: string;
 }
 
-/**
- * Derives weight progress + a supportive coaching verdict.
- * Never shames the user: "behind" is framed as a gentle nudge.
- * A percentage is only meaningful once at least two persisted measurements
- * exist; a single onboarding/current-weight snapshot is not a trend.
- */
 export function analyzeWeight(entries: WeightEntry[], targetKg: number): WeightAnalysis {
   const list = sorted(entries);
   const first = list[0] ?? null;
@@ -185,10 +168,7 @@ export function analyzeWeight(entries: WeightEntry[], targetKg: number): WeightA
       progressPercent: 0,
       isWeighInDue: true,
       daysSinceLast: latest
-        ? Math.max(
-            0,
-            Math.round((Date.now() - new Date(latest.date).getTime()) / 86_400_000),
-          )
+        ? Math.max(0, Math.round((Date.now() - new Date(latest.date).getTime()) / 86_400_000))
         : null,
       status: "no-data",
       message:
@@ -229,8 +209,6 @@ export function analyzeWeight(entries: WeightEntry[], targetKg: number): WeightA
     (direction === "gain" && latestKg >= targetKg) ||
     (direction === "maintain" && Math.abs(latestKg - targetKg) < 0.3);
 
-  // Expected linear pace from start date to now (temporary 90-day coaching
-  // heuristic; it does NOT change calorie targets or medical guidance).
   const daysElapsed = Math.max(
     1,
     Math.round((today.getTime() - new Date(first.date).getTime()) / 86_400_000),
