@@ -45,6 +45,7 @@ export function Header({ title, showBack = false, action, className }: HeaderPro
             variant="ghost"
             size="icon"
             aria-label="Geri"
+            data-diewish-web-back
             className="-ml-2"
             onClick={handleBack}
           >
