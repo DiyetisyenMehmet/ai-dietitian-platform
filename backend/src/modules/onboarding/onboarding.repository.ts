@@ -14,8 +14,11 @@ export const onboardingRepository = {
   /**
    * Persists the onboarding profile and flips the user's `onboardingCompleted`
    * flag in a single transaction, so the gate can never be half-set. `fullName`
-   * captured during onboarding is mirrored onto the user record. The profile is
-   * upserted to keep the operation idempotent if a client retries.
+   * captured during onboarding is mirrored onto the user record.
+   *
+   * On first completion we also persist the onboarding weight as the first
+   * WeightLog. That row is the immutable progress baseline; later weigh-ins may
+   * update `currentWeightKg` but must never rewrite where the journey started.
    */
   async completeOnboarding(
     userId: string,
@@ -23,11 +26,25 @@ export const onboardingRepository = {
     profileData: Omit<Prisma.UserProfileCreateInput, "user">,
   ): Promise<{ user: User; profile: UserProfile }> {
     return prisma.$transaction(async (tx) => {
-      const profile = await tx.userProfile.upsert({
-        where: { userId },
-        create: { ...profileData, user: { connect: { id: userId } } },
-        update: profileData,
-      });
+      const existing = await tx.userProfile.findUnique({ where: { userId } });
+
+      const profile = existing
+        ? await tx.userProfile.update({ where: { userId }, data: profileData })
+        : await tx.userProfile.create({
+            data: { ...profileData, user: { connect: { id: userId } } },
+          });
+
+      if (!existing) {
+        await tx.weightLog.create({
+          data: {
+            userId,
+            weightKg: profile.currentWeightKg,
+            note: "Başlangıç",
+            loggedAt: profile.createdAt,
+          },
+        });
+      }
+
       const user = await tx.user.update({
         where: { id: userId },
         data: { fullName, onboardingCompleted: true },
