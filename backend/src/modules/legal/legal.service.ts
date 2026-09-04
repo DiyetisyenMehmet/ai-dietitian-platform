@@ -57,6 +57,7 @@ export const legalService = {
     const items: ConsentStatusItem[] = LEGAL_DOCUMENTS.map((doc) => {
       const record = latestByType.get(doc.type);
       const granted =
+        doc.mandatory &&
         !!record &&
         record.granted &&
         record.documentVersion === doc.version;
@@ -65,9 +66,9 @@ export const legalService = {
         currentVersion: doc.version,
         mandatory: doc.mandatory,
         granted,
-        consentedVersion: record?.documentVersion ?? null,
-        grantedAt: record?.grantedAt ?? null,
-        withdrawnAt: record?.withdrawnAt ?? null,
+        consentedVersion: doc.mandatory ? record?.documentVersion ?? null : null,
+        grantedAt: doc.mandatory ? record?.grantedAt ?? null : null,
+        withdrawnAt: doc.mandatory ? record?.withdrawnAt ?? null : null,
       };
     });
 
@@ -83,9 +84,8 @@ export const legalService = {
   },
 
   /**
-   * Records an affirmative consent for a document. The grant is always stamped
-   * with the document's *current* version so a stale client cannot consent to
-   * an outdated version.
+   * Records an affirmative consent for a document. Informational notices such
+   * as the KVKK/privacy illumination text are deliberately not consentable.
    */
   async grantConsent(
     userId: string,
@@ -95,6 +95,9 @@ export const legalService = {
     const doc = LEGAL_DOCUMENT_BY_TYPE[type];
     if (!doc) {
       throw ApiError.notFound("Legal document not found.");
+    }
+    if (!doc.mandatory) {
+      throw ApiError.badRequest("This legal document is informational and does not accept consent actions.");
     }
 
     await legalRepository.recordGrant({
@@ -124,9 +127,8 @@ export const legalService = {
   },
 
   /**
-   * Withdraws consent for a document. Mandatory documents may still be
-   * withdrawn (KVKK guarantees this right); the platform's consent gate will
-   * subsequently block gated actions until consent is re-granted.
+   * Withdraws consent for an actual consent document. Informational notices do
+   * not represent a permission and therefore cannot be withdrawn.
    */
   async withdrawConsent(
     userId: string,
@@ -136,6 +138,9 @@ export const legalService = {
     const doc = LEGAL_DOCUMENT_BY_TYPE[type];
     if (!doc) {
       throw ApiError.notFound("Legal document not found.");
+    }
+    if (!doc.mandatory) {
+      throw ApiError.badRequest("This legal document is informational and cannot be withdrawn.");
     }
 
     await legalRepository.recordWithdrawal({
@@ -164,20 +169,12 @@ export const legalService = {
     };
   },
 
-  /**
-   * Returns the mandatory document types the user has NOT granted (up to date).
-   * Empty array means all mandatory consents are satisfied. Used by the
-   * require-consent middleware.
-   */
-  async getMissingMandatoryConsents(
-    userId: string,
-  ): Promise<LegalDocumentType[]> {
+  async getMissingMandatoryConsents(userId: string): Promise<LegalDocumentType[]> {
     const status = await this.getConsentStatus(userId);
     return status.missingMandatory;
   },
 
-  /** The list of mandatory consent document types. */
   mandatoryConsents(): LegalDocumentType[] {
-    return [...MANDATORY_CONSENTS];
+    return MANDATORY_CONSENTS;
   },
 };
