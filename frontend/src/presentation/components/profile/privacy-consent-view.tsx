@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { CheckCircle2, HeartPulse, Loader2, ShieldCheck, XCircle } from "lucide-react";
+import { CheckCircle2, HeartPulse, Info, Loader2, ShieldCheck, XCircle } from "lucide-react";
 import { toast } from "sonner";
 
 import { useAuth } from "@/application/auth/auth-store";
@@ -19,8 +19,8 @@ const LABELS: Record<LegalDocumentType, string> = {
 };
 
 /**
- * Privacy/consent management for established users. Health-data consent can be
- * withdrawn without deleting the account or blocking access to existing data.
+ * Privacy/consent management for established users. Informational notices are
+ * shown as notices, never as permissions that can be granted or withdrawn.
  */
 export function PrivacyConsentView() {
   const { user } = useAuth();
@@ -89,38 +89,46 @@ export function PrivacyConsentView() {
         <div className="space-y-1">
           <p className="text-sm font-semibold">Gizlilik ve izinler senin kontrolünde</p>
           <p className="text-xs leading-relaxed text-muted-foreground">
-            Sağlık verisi açık rızanı geri çekebilirsin. Bu işlem mevcut kayıtlarını otomatik olarak
-            silmez; onları görüntüleme ve hesabını/verilerini silme hakların devam eder.
+            KVKK aydınlatma ve gizlilik metni bir izin değildir. Sağlık verisi açık rızanı ise
+            dilediğin zaman geri çekebilirsin. Bu işlem mevcut kayıtlarını otomatik olarak silmez.
           </p>
         </div>
       </div>
 
       <Card>
         <CardContent className="divide-y divide-border p-0">
-          {(consentState.consent?.items ?? []).map((item) => (
-            <div key={item.type} className="flex items-center justify-between gap-4 p-4">
-              <div className="min-w-0">
-                <p className="text-sm font-medium">{LABELS[item.type]}</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  Sürüm {item.currentVersion}
-                </p>
-              </div>
-              <span
-                className={
-                  item.granted
-                    ? "inline-flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400"
-                    : "inline-flex items-center gap-1 text-xs font-medium text-destructive"
-                }
-              >
-                {item.granted ? (
-                  <CheckCircle2 className="size-4" aria-hidden="true" />
+          {(consentState.consent?.items ?? []).map((item) => {
+            const informational = !item.mandatory;
+            return (
+              <div key={item.type} className="flex items-center justify-between gap-4 p-4">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">{LABELS[item.type]}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">Sürüm {item.currentVersion}</p>
+                </div>
+                {informational ? (
+                  <span className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground">
+                    <Info className="size-4" aria-hidden="true" />
+                    Bilgilendirme metni
+                  </span>
                 ) : (
-                  <XCircle className="size-4" aria-hidden="true" />
+                  <span
+                    className={
+                      item.granted
+                        ? "inline-flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400"
+                        : "inline-flex items-center gap-1 text-xs font-medium text-destructive"
+                    }
+                  >
+                    {item.granted ? (
+                      <CheckCircle2 className="size-4" aria-hidden="true" />
+                    ) : (
+                      <XCircle className="size-4" aria-hidden="true" />
+                    )}
+                    {item.granted ? "Güncel" : "Onay gerekli"}
+                  </span>
                 )}
-                {item.granted ? "Güncel" : "Eksik / geri çekildi"}
-              </span>
-            </div>
-          ))}
+              </div>
+            );
+          })}
         </CardContent>
       </Card>
 
