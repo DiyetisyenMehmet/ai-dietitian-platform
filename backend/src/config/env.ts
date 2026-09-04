@@ -36,7 +36,10 @@ const envSchema = z.object({
   AI_MAX_TOKENS: z.coerce.number().int().positive().default(4096),
   AI_TEMPERATURE: z.coerce.number().min(0).max(2).default(0.2),
   AI_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(5_000).max(180_000).default(60_000),
-  AI_PROVIDER: z.enum(["openai", "abacus"]).optional(),
+  AI_PROVIDER: z.enum(["openai", "abacus", "vertex"]).optional(),
+  GOOGLE_CLOUD_PROJECT: z.string().default(""),
+  VERTEX_AI_LOCATION: z.string().default("global"),
+  VERTEX_AI_MODEL: z.string().default("gemini-3.5-flash"),
   ABACUS_API_KEY: z.string().optional(),
   ABACUS_API_BASE_URL: z.string().url().default("https://routellm.abacus.ai/v1"),
   ABACUS_MODEL: z.string().default("route-llm"),
@@ -86,6 +89,10 @@ function loadEnv(): Env {
   }
   if (parsed.data.STORAGE_PROVIDER === "gcs" && !parsed.data.STORAGE_GCS_BUCKET.trim()) {
     console.error("❌ Invalid environment configuration:\n  - STORAGE_GCS_BUCKET: required when STORAGE_PROVIDER=gcs");
+    process.exit(1);
+  }
+  if (parsed.data.AI_PROVIDER === "vertex" && !parsed.data.GOOGLE_CLOUD_PROJECT.trim()) {
+    console.error("❌ Invalid environment configuration:\n  - GOOGLE_CLOUD_PROJECT: required when AI_PROVIDER=vertex");
     process.exit(1);
   }
   return parsed.data;
