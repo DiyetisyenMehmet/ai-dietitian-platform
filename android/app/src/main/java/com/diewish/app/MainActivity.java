@@ -5,8 +5,11 @@ import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.graphics.Color;
+import android.graphics.Insets;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.view.WindowInsets;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.SslErrorHandler;
@@ -98,6 +101,30 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
         webView = new WebView(this);
         webView.setBackgroundColor(Color.TRANSPARENT);
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG);
+
+        // Android 15+ enforces edge-to-edge for modern targets. Keep the web
+        // surface inside the actual system-bar insets so status/navigation bars
+        // never cover Diewish content on gesture or 3-button navigation devices.
+        webView.setOnApplyWindowInsetsListener((view, insets) -> {
+            int left;
+            int top;
+            int right;
+            int bottom;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                Insets bars = insets.getInsets(WindowInsets.Type.systemBars());
+                left = bars.left;
+                top = bars.top;
+                right = bars.right;
+                bottom = bars.bottom;
+            } else {
+                left = insets.getSystemWindowInsetLeft();
+                top = insets.getSystemWindowInsetTop();
+                right = insets.getSystemWindowInsetRight();
+                bottom = insets.getSystemWindowInsetBottom();
+            }
+            view.setPadding(left, top, right, bottom);
+            return insets;
+        });
 
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
@@ -387,7 +414,10 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
         public void onPageFinished(WebView view, String url) {
             super.onPageFinished(view, url);
             if (isTrustedPage()) {
-                view.evaluateJavascript("window.__DIEWISH_ANDROID_APP__ = true;", null);
+                view.evaluateJavascript(
+                    "window.__DIEWISH_ANDROID_APP__ = true; document.documentElement.classList.add('diewish-android');",
+                    null
+                );
                 emitEvent("diewish:billing-status", jsonObject("ready", billingReady));
             }
         }
@@ -423,10 +453,27 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
         }
     }
 
+    private void handleBackNavigation() {
+        if (webView != null && webView.canGoBack()) {
+            webView.goBack();
+            return;
+        }
+
+        if (webView != null && isTrustedPage()) {
+            Uri current = Uri.parse(webView.getUrl());
+            String path = current.getPath();
+            if (path != null && !"/dashboard".equals(path) && !"/dashboard/".equals(path)) {
+                webView.loadUrl(BuildConfig.WEB_BASE_URL + "/dashboard");
+                return;
+            }
+        }
+
+        finish();
+    }
+
     @Override
     public void onBackPressed() {
-        if (webView != null && webView.canGoBack()) webView.goBack();
-        else super.onBackPressed();
+        handleBackNavigation();
     }
 
     @Override
