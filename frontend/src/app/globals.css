@@ -82,6 +82,12 @@
       "rlig" 1,
       "calt" 1;
   }
+
+  /* The native Android shell owns Back. Keep the web back button for browsers,
+     but remove the duplicate affordance after the trusted WebView marks itself. */
+  html.diewish-android [data-diewish-web-back] {
+    display: none !important;
+  }
 }
 
 @layer utilities {
