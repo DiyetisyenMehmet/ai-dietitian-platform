@@ -1,33 +1,12 @@
 "use client";
 
-import * as React from "react";
 import Link from "next/link";
-import { Droplets, Footprints, Plus, Utensils } from "lucide-react";
-import { toast } from "sonner";
+import { Footprints, Plus, Utensils } from "lucide-react";
 
 import { Card, CardContent } from "@/presentation/components/ui/card";
-import {
-  dailyTrackingStore,
-  WATER_GLASS_ML,
-} from "@/application/health/daily-tracking-store";
 
-/** The dashboard's compact action launcher: food, water and movement. */
+/** The dashboard's compact action launcher for meal and movement entry. */
 export function TodayActionsSection() {
-  const [addingWater, setAddingWater] = React.useState(false);
-
-  const addWater = React.useCallback(async () => {
-    if (addingWater) return;
-    setAddingWater(true);
-    try {
-      await dailyTrackingStore.addWater();
-      toast.success("Su eklendi", { description: `+${WATER_GLASS_ML} ml` });
-    } catch {
-      toast.error("Su eklenemedi. Lütfen tekrar dene.");
-    } finally {
-      setAddingWater(false);
-    }
-  }, [addingWater]);
-
   return (
     <section className="space-y-3" aria-labelledby="today-actions-heading">
       <div>
@@ -39,7 +18,7 @@ export function TodayActionsSection() {
         </p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2">
         <Link href="/meals/add" className="group block">
           <Card className="h-full transition-colors group-hover:border-primary/40 group-hover:bg-primary/[0.03]">
             <CardContent className="flex items-center gap-3 p-4 lg:flex-col lg:items-start">
@@ -54,28 +33,6 @@ export function TodayActionsSection() {
             </CardContent>
           </Card>
         </Link>
-
-        <button
-          type="button"
-          onClick={() => void addWater()}
-          disabled={addingWater}
-          className="group text-left disabled:opacity-60"
-        >
-          <Card className="h-full transition-colors group-hover:border-sky-500/40 group-hover:bg-sky-500/[0.03]">
-            <CardContent className="flex items-center gap-3 p-4 lg:flex-col lg:items-start">
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-sky-500/10 text-sky-500">
-                <Droplets className="size-5" aria-hidden="true" />
-              </span>
-              <div>
-                <p className="text-sm font-semibold">Suyunu takip et</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  {addingWater ? "Ekleniyor…" : `+${WATER_GLASS_ML} ml su ekle`}
-                </p>
-              </div>
-              <Plus className="ml-auto size-4 text-muted-foreground lg:hidden" aria-hidden="true" />
-            </CardContent>
-          </Card>
-        </button>
 
         <Link href="/activity" className="group block">
           <Card className="h-full transition-colors group-hover:border-primary/40 group-hover:bg-primary/[0.03]">
