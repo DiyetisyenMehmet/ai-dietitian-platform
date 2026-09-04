@@ -5,6 +5,10 @@ plugins {
 val diewishWebBaseUrl = providers.gradleProperty("DIEWISH_WEB_BASE_URL")
     .orElse("https://diewish-frontend-730419163638.europe-west1.run.app")
     .get()
+val buildRevision = providers.environmentVariable("GITHUB_SHA")
+    .orElse("local")
+    .get()
+    .take(7)
 
 android {
     namespace = "com.diewish.app"
@@ -18,6 +22,7 @@ android {
         versionName = "0.1.0"
 
         buildConfigField("String", "WEB_BASE_URL", "\"${diewishWebBaseUrl}\"")
+        buildConfigField("String", "BUILD_REVISION", "\"${buildRevision}\"")
     }
 
     buildFeatures {
@@ -25,6 +30,9 @@ android {
     }
 
     buildTypes {
+        debug {
+            versionNameSuffix = "-dev.${buildRevision}"
+        }
         release {
             isMinifyEnabled = true
             proguardFiles(
