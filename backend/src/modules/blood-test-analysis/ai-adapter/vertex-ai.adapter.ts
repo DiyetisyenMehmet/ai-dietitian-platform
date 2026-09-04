@@ -47,6 +47,27 @@ interface VertexPart {
   inlineData?: { mimeType: string; data: string };
 }
 
+const CHAT_RESPONSE_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    reply: { type: "STRING" },
+  },
+  required: ["reply"],
+} as const;
+
+const TRANSIENT_HTTP_STATUSES = new Set([429, 500, 502, 503, 504]);
+const BLOCKED_FINISH_REASONS = new Set([
+  "SAFETY",
+  "RECITATION",
+  "BLOCKLIST",
+  "PROHIBITED_CONTENT",
+  "SPII",
+  "MODEL_ARMOR",
+]);
+const PROVIDER_REQUEST_ATTEMPTS = 2;
+const CHAT_MIN_OUTPUT_TOKENS = 2048;
+const CHAT_RETRY_MAX_OUTPUT_TOKENS = 4096;
+
 /**
  * Vertex AI implementation of Diewish's existing provider-agnostic adapter.
  *
@@ -156,6 +177,10 @@ export class VertexAIAdapter extends OpenAICompatibleAdapter {
     );
   }
 
+  private async waitBeforeRetry(attempt: number): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
+  }
+
   private async generateContent(
     url: string,
     token: string,
@@ -166,59 +191,106 @@ export class VertexAIAdapter extends OpenAICompatibleAdapter {
   ): Promise<VertexGenerateContentResponse> {
     const isGemini3 = this.isGemini3Model();
 
-    let response: Response;
-    try {
-      response = await fetch(url, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          ...(systemText ? { systemInstruction: { parts: [{ text: systemText }] } } : {}),
-          contents,
-          generationConfig: {
-            maxOutputTokens,
-            responseMimeType: "application/json",
-            // Gemini 3.x manages sampling internally. For interactive chat, LOW
-            // thinking leaves enough of the bounded output budget for the final
-            // structured answer while keeping latency/cost appropriate for chat.
-            ...(isGemini3
-              ? interactiveChat
-                ? { thinkingConfig: { thinkingLevel: "LOW" } }
-                : {}
-              : { temperature: this.vertex.temperature }),
+    for (let attempt = 1; attempt <= PROVIDER_REQUEST_ATTEMPTS; attempt += 1) {
+      let response: Response;
+      try {
+        response = await fetch(url, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
           },
-        }),
-        signal: AbortSignal.timeout(env.AI_REQUEST_TIMEOUT_MS),
-      });
-    } catch (error) {
-      logger.error({ err: error, model: this.vertex.model }, "Vertex AI request failed");
-      throw new ApiError(502, "Vertex AI could not be reached.", {
-        code: "AI_PROVIDER_UNREACHABLE",
-        isOperational: false,
-      });
+          body: JSON.stringify({
+            ...(systemText ? { systemInstruction: { parts: [{ text: systemText }] } } : {}),
+            contents,
+            generationConfig: {
+              maxOutputTokens,
+              responseMimeType: "application/json",
+              ...(interactiveChat ? { responseSchema: CHAT_RESPONSE_SCHEMA } : {}),
+              // Gemini 3.x manages sampling internally. LOW thinking keeps the
+              // interactive coach responsive while retaining light reasoning.
+              ...(isGemini3
+                ? interactiveChat
+                  ? { thinkingConfig: { thinkingLevel: "LOW" } }
+                  : {}
+                : { temperature: this.vertex.temperature }),
+            },
+          }),
+          signal: AbortSignal.timeout(env.AI_REQUEST_TIMEOUT_MS),
+        });
+      } catch (error) {
+        if (attempt < PROVIDER_REQUEST_ATTEMPTS) {
+          logger.warn(
+            { attempt, model: this.vertex.model },
+            "Vertex AI transport failed; retrying once",
+          );
+          await this.waitBeforeRetry(attempt);
+          continue;
+        }
+
+        logger.error({ err: error, model: this.vertex.model }, "Vertex AI request failed");
+        throw new ApiError(502, "Vertex AI could not be reached.", {
+          code: "AI_PROVIDER_UNREACHABLE",
+          isOperational: false,
+        });
+      }
+
+      if (!response.ok) {
+        if (TRANSIENT_HTTP_STATUSES.has(response.status) && attempt < PROVIDER_REQUEST_ATTEMPTS) {
+          logger.warn(
+            { status: response.status, attempt, model: this.vertex.model },
+            "Vertex AI returned a transient error; retrying once",
+          );
+          await this.waitBeforeRetry(attempt);
+          continue;
+        }
+
+        // Do not log the provider response body: it may contain request-derived
+        // context. Status/model are sufficient for operational diagnosis.
+        logger.error(
+          { status: response.status, model: this.vertex.model },
+          "Vertex AI returned an error",
+        );
+        throw new ApiError(502, "Vertex AI returned an error.", {
+          code: "AI_PROVIDER_ERROR",
+          isOperational: false,
+        });
+      }
+
+      try {
+        return (await response.json()) as VertexGenerateContentResponse;
+      } catch (error) {
+        if (attempt < PROVIDER_REQUEST_ATTEMPTS) {
+          logger.warn(
+            { attempt, model: this.vertex.model },
+            "Vertex AI returned an invalid envelope; retrying once",
+          );
+          await this.waitBeforeRetry(attempt);
+          continue;
+        }
+
+        logger.error(
+          { err: error, model: this.vertex.model },
+          "Vertex AI returned an invalid response envelope",
+        );
+        throw new ApiError(502, "Vertex AI returned an invalid response.", {
+          code: "AI_PROVIDER_MALFORMED",
+          isOperational: false,
+        });
+      }
     }
 
-    if (!response.ok) {
-      // Do not log the provider response body: it may contain request-derived
-      // context. Status/model are sufficient for operational diagnosis.
-      logger.error({ status: response.status, model: this.vertex.model }, "Vertex AI returned an error");
-      throw new ApiError(502, "Vertex AI returned an error.", {
-        code: "AI_PROVIDER_ERROR",
-        isOperational: false,
-      });
-    }
+    throw new ApiError(502, "Vertex AI could not complete the request.", {
+      code: "AI_PROVIDER_ERROR",
+      isOperational: false,
+    });
+  }
 
-    try {
-      return (await response.json()) as VertexGenerateContentResponse;
-    } catch (error) {
-      logger.error({ err: error, model: this.vertex.model }, "Vertex AI returned an invalid response envelope");
-      throw new ApiError(502, "Vertex AI returned an invalid response.", {
-        code: "AI_PROVIDER_MALFORMED",
-        isOperational: false,
-      });
-    }
+  private blockedReply(): string {
+    return JSON.stringify({
+      reply:
+        "Bu isteğe güvenli biçimde yanıt veremiyorum. Beslenme ve genel iyi oluş çerçevesinde farklı bir şekilde sorarsan yardımcı olabilirim.",
+    });
   }
 
   protected override async chat(messages: ChatMessage[], maxTokensOverride?: number): Promise<string> {
@@ -250,27 +322,42 @@ export class VertexAIAdapter extends OpenAICompatibleAdapter {
 
     const requestedMaxTokens = maxTokensOverride ?? this.vertex.maxTokens;
     // Today the only bounded override comes from the interactive dietitian chat
-    // path (FREE/PREMIUM reply budgets). Keep analysis/generation workloads on
-    // the model's default reasoning level until the dedicated AI router lands.
+    // path. Gemini 3 thinking tokens share the output budget, so a 500-token
+    // provider ceiling can exhaust itself before a complete JSON reply exists.
+    // Keep the product-level concise/thorough prompt distinction, but give the
+    // provider enough headroom to finish the structured response reliably.
     const interactiveChat = maxTokensOverride !== undefined;
+    const providerMaxTokens = interactiveChat
+      ? Math.max(requestedMaxTokens, CHAT_MIN_OUTPUT_TOKENS)
+      : requestedMaxTokens;
 
     const first = await this.generateContent(
       url,
       token,
       systemText,
       contents,
-      requestedMaxTokens,
+      providerMaxTokens,
       interactiveChat,
     );
     const firstFinishReason = first.candidates?.[0]?.finishReason;
     const firstContent = this.extractText(first);
 
+    if (firstFinishReason && BLOCKED_FINISH_REASONS.has(firstFinishReason)) {
+      logger.warn(
+        { model: this.vertex.model, ...this.safeResponseMetadata(first) },
+        "Vertex AI blocked an interactive response",
+      );
+      return interactiveChat ? this.blockedReply() : firstContent;
+    }
+
     if (firstFinishReason === "MAX_TOKENS") {
-      const retryMaxTokens = Math.min(Math.max(requestedMaxTokens * 2, 1024), 4096);
+      const retryMaxTokens = interactiveChat
+        ? CHAT_RETRY_MAX_OUTPUT_TOKENS
+        : Math.min(Math.max(providerMaxTokens * 2, 1024), 4096);
       logger.warn(
         {
           model: this.vertex.model,
-          maxOutputTokens: requestedMaxTokens,
+          maxOutputTokens: providerMaxTokens,
           retryMaxOutputTokens: retryMaxTokens,
           ...this.safeResponseMetadata(first),
         },
@@ -287,6 +374,14 @@ export class VertexAIAdapter extends OpenAICompatibleAdapter {
       );
       const retryFinishReason = retry.candidates?.[0]?.finishReason;
       const retryContent = this.extractText(retry);
+
+      if (retryFinishReason && BLOCKED_FINISH_REASONS.has(retryFinishReason)) {
+        logger.warn(
+          { model: this.vertex.model, ...this.safeResponseMetadata(retry) },
+          "Vertex AI blocked an interactive response after retry",
+        );
+        return interactiveChat ? this.blockedReply() : retryContent;
+      }
 
       if (retryContent && retryFinishReason !== "MAX_TOKENS") {
         return retryContent;
