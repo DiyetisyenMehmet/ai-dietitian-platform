@@ -22,12 +22,24 @@ interface MetadataTokenResponse {
   expires_in?: number;
 }
 
+interface VertexUsageMetadata {
+  promptTokenCount?: number;
+  candidatesTokenCount?: number;
+  thoughtsTokenCount?: number;
+  totalTokenCount?: number;
+}
+
 interface VertexGenerateContentResponse {
   candidates?: Array<{
     content?: {
       parts?: Array<{ text?: string }>;
     };
+    finishReason?: string;
   }>;
+  usageMetadata?: VertexUsageMetadata;
+  promptFeedback?: {
+    blockReason?: string;
+  };
 }
 
 interface VertexPart {
@@ -119,6 +131,96 @@ export class VertexAIAdapter extends OpenAICompatibleAdapter {
     return { inlineData: { mimeType: match[1], data: match[2] } };
   }
 
+  private isGemini3Model(): boolean {
+    return /^gemini-3(?:[.-]|$)/i.test(this.vertex.model);
+  }
+
+  private safeResponseMetadata(body: VertexGenerateContentResponse) {
+    const candidate = body.candidates?.[0];
+    return {
+      finishReason: candidate?.finishReason ?? null,
+      promptBlockReason: body.promptFeedback?.blockReason ?? null,
+      promptTokenCount: body.usageMetadata?.promptTokenCount ?? null,
+      candidatesTokenCount: body.usageMetadata?.candidatesTokenCount ?? null,
+      thoughtsTokenCount: body.usageMetadata?.thoughtsTokenCount ?? null,
+      totalTokenCount: body.usageMetadata?.totalTokenCount ?? null,
+    };
+  }
+
+  private extractText(body: VertexGenerateContentResponse): string {
+    return (
+      body.candidates?.[0]?.content?.parts
+        ?.map((part) => part.text ?? "")
+        .join("")
+        .trim() ?? ""
+    );
+  }
+
+  private async generateContent(
+    url: string,
+    token: string,
+    systemText: string,
+    contents: Array<{ role: string; parts: VertexPart[] }>,
+    maxOutputTokens: number,
+    interactiveChat: boolean,
+  ): Promise<VertexGenerateContentResponse> {
+    const isGemini3 = this.isGemini3Model();
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ...(systemText ? { systemInstruction: { parts: [{ text: systemText }] } } : {}),
+          contents,
+          generationConfig: {
+            maxOutputTokens,
+            responseMimeType: "application/json",
+            // Gemini 3.x manages sampling internally. For interactive chat, LOW
+            // thinking leaves enough of the bounded output budget for the final
+            // structured answer while keeping latency/cost appropriate for chat.
+            ...(isGemini3
+              ? interactiveChat
+                ? { thinkingConfig: { thinkingLevel: "LOW" } }
+                : {}
+              : { temperature: this.vertex.temperature }),
+          },
+        }),
+        signal: AbortSignal.timeout(env.AI_REQUEST_TIMEOUT_MS),
+      });
+    } catch (error) {
+      logger.error({ err: error, model: this.vertex.model }, "Vertex AI request failed");
+      throw new ApiError(502, "Vertex AI could not be reached.", {
+        code: "AI_PROVIDER_UNREACHABLE",
+        isOperational: false,
+      });
+    }
+
+    if (!response.ok) {
+      // Do not log the provider response body: it may contain request-derived
+      // context. Status/model are sufficient for operational diagnosis.
+      logger.error({ status: response.status, model: this.vertex.model }, "Vertex AI returned an error");
+      throw new ApiError(502, "Vertex AI returned an error.", {
+        code: "AI_PROVIDER_ERROR",
+        isOperational: false,
+      });
+    }
+
+    try {
+      return (await response.json()) as VertexGenerateContentResponse;
+    } catch (error) {
+      logger.error({ err: error, model: this.vertex.model }, "Vertex AI returned an invalid response envelope");
+      throw new ApiError(502, "Vertex AI returned an invalid response.", {
+        code: "AI_PROVIDER_MALFORMED",
+        isOperational: false,
+      });
+    }
+  }
+
   protected override async chat(messages: ChatMessage[], maxTokensOverride?: number): Promise<string> {
     const systemText = messages
       .filter((message) => message.role === "system")
@@ -140,59 +242,77 @@ export class VertexAIAdapter extends OpenAICompatibleAdapter {
     const location = encodeURIComponent(this.vertex.location);
     const project = encodeURIComponent(this.vertex.project);
     const model = encodeURIComponent(this.vertex.model);
-    const host = this.vertex.location === "global" ? "aiplatform.googleapis.com" : `${this.vertex.location}-aiplatform.googleapis.com`;
+    const host =
+      this.vertex.location === "global"
+        ? "aiplatform.googleapis.com"
+        : `${this.vertex.location}-aiplatform.googleapis.com`;
     const url = `https://${host}/v1/projects/${project}/locations/${location}/publishers/google/models/${model}:generateContent`;
 
-    let response: Response;
-    try {
-      response = await fetch(url, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
+    const requestedMaxTokens = maxTokensOverride ?? this.vertex.maxTokens;
+    // Today the only bounded override comes from the interactive dietitian chat
+    // path (FREE/PREMIUM reply budgets). Keep analysis/generation workloads on
+    // the model's default reasoning level until the dedicated AI router lands.
+    const interactiveChat = maxTokensOverride !== undefined;
+
+    const first = await this.generateContent(
+      url,
+      token,
+      systemText,
+      contents,
+      requestedMaxTokens,
+      interactiveChat,
+    );
+    const firstFinishReason = first.candidates?.[0]?.finishReason;
+    const firstContent = this.extractText(first);
+
+    if (firstFinishReason === "MAX_TOKENS") {
+      const retryMaxTokens = Math.min(Math.max(requestedMaxTokens * 2, 1024), 4096);
+      logger.warn(
+        {
+          model: this.vertex.model,
+          maxOutputTokens: requestedMaxTokens,
+          retryMaxOutputTokens: retryMaxTokens,
+          ...this.safeResponseMetadata(first),
         },
-        body: JSON.stringify({
-          ...(systemText ? { systemInstruction: { parts: [{ text: systemText }] } } : {}),
-          contents,
-          generationConfig: {
-            maxOutputTokens: maxTokensOverride ?? this.vertex.maxTokens,
-            temperature: this.vertex.temperature,
-            responseMimeType: "application/json",
-          },
-        }),
-        signal: AbortSignal.timeout(env.AI_REQUEST_TIMEOUT_MS),
-      });
-    } catch (error) {
-      logger.error({ err: error, model: this.vertex.model }, "Vertex AI request failed");
-      throw new ApiError(502, "Vertex AI could not be reached.", {
-        code: "AI_PROVIDER_UNREACHABLE",
-        isOperational: false,
-      });
-    }
-
-    if (!response.ok) {
-      const detail = await response.text().catch(() => "");
-      logger.error(
-        { status: response.status, detail, model: this.vertex.model },
-        "Vertex AI returned an error",
+        "Vertex AI exhausted the output budget; retrying once",
       );
-      throw new ApiError(502, "Vertex AI returned an error.", {
-        code: "AI_PROVIDER_ERROR",
+
+      const retry = await this.generateContent(
+        url,
+        token,
+        systemText,
+        contents,
+        retryMaxTokens,
+        interactiveChat,
+      );
+      const retryFinishReason = retry.candidates?.[0]?.finishReason;
+      const retryContent = this.extractText(retry);
+
+      if (retryContent && retryFinishReason !== "MAX_TOKENS") {
+        return retryContent;
+      }
+
+      logger.error(
+        { model: this.vertex.model, ...this.safeResponseMetadata(retry) },
+        "Vertex AI retry did not produce a complete response",
+      );
+      throw new ApiError(502, "Vertex AI returned an incomplete response.", {
+        code: "AI_PROVIDER_INCOMPLETE",
         isOperational: false,
       });
     }
 
-    const body = (await response.json()) as VertexGenerateContentResponse;
-    const content = body.candidates?.[0]?.content?.parts
-      ?.map((part) => part.text ?? "")
-      .join("")
-      .trim();
-    if (!content) {
+    if (!firstContent) {
+      logger.error(
+        { model: this.vertex.model, ...this.safeResponseMetadata(first) },
+        "Vertex AI returned no usable content",
+      );
       throw new ApiError(502, "Vertex AI returned an empty response.", {
         code: "AI_PROVIDER_EMPTY",
         isOperational: false,
       });
     }
-    return content;
+
+    return firstContent;
   }
 }
