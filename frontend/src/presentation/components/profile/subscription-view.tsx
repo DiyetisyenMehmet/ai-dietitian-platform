@@ -236,7 +236,7 @@ export function SubscriptionView() {
         <div>
           <h3 className="text-base font-semibold">Planları karşılaştır</h3>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Android uygulamasında güncel fiyat ve dönem bilgisi doğrudan Google Play'den alınır.
+            Android uygulamasında güncel fiyat ve dönem bilgisi doğrudan Google Play&apos;den alınır.
           </p>
         </div>
 
