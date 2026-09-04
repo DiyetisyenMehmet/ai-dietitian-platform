@@ -5,12 +5,16 @@ import { ENTITLEMENT_REQUIRED_CODE } from "../payments/constants";
 import { resolveEffectiveSubscriptionTier } from "../payments/subscription-state";
 import { aiUsageRepository } from "./ai-usage.repository";
 import {
+  FREE_CHAT_INTRO_DAILY_LIMIT,
+  FREE_CHAT_INTRO_DAYS,
   FREE_LIFETIME_TRIAL,
   QUOTA_EXCEEDED_CODE,
   QUOTA_MATRIX,
   type FeatureQuota,
 } from "./constants";
 import type { FeatureQuotaStatus, RecordUsageInput, TrialUsage, WindowUsage } from "./types";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Start of the current UTC day. */
 function startOfUtcDay(now: Date): Date {
@@ -36,6 +40,28 @@ function startOfNextUtcMonth(now: Date): Date {
 function buildWindow(used: number, limit: number | null, resetsAt: Date): WindowUsage {
   const remaining = limit === null ? null : Math.max(0, limit - used);
   return { used, limit, remaining, resetsAt };
+}
+
+/**
+ * Applies the FREE AI Coach onboarding allowance without changing other feature
+ * quotas. The intro window is the first 7 x 24 hours from account creation.
+ */
+async function resolveFeatureQuota(
+  userId: string,
+  tier: SubscriptionTier,
+  feature: AiUsageFeature,
+  now: Date,
+): Promise<FeatureQuota> {
+  const base = QUOTA_MATRIX[tier][feature];
+  if (tier !== "FREE" || feature !== "DIETITIAN_CHAT") return base;
+
+  const createdAt = await aiUsageRepository.getUserCreatedAt(userId);
+  if (!createdAt) return base;
+
+  const introEndsAt = createdAt.getTime() + FREE_CHAT_INTRO_DAYS * DAY_MS;
+  if (now.getTime() >= introEndsAt) return base;
+
+  return { ...base, perDay: FREE_CHAT_INTRO_DAILY_LIMIT };
 }
 
 /**
@@ -65,8 +91,8 @@ export const aiUsageService = {
     tier?: SubscriptionTier,
   ): Promise<FeatureQuotaStatus> {
     const effectiveTier = tier ?? (await this.resolveTier(userId));
-    const limits: FeatureQuota = QUOTA_MATRIX[effectiveTier][feature];
     const now = new Date();
+    const limits = await resolveFeatureQuota(userId, effectiveTier, feature, now);
 
     const dayStart = startOfUtcDay(now);
     const monthStart = startOfUtcMonth(now);
@@ -81,19 +107,20 @@ export const aiUsageService = {
       (day.limit !== null && day.used >= day.limit) ||
       (month.limit !== null && month.used >= month.limit);
 
-    // FREE-tier LIFETIME trial (V1 cost protection): a total, non-resetting cap
-    // on successful calls per feature. Paid tiers have no trial and rely solely
-    // on the rolling day/month windows above.
+    // Some FREE features retain a lifetime trial cap. AI Coach intentionally
+    // does not: its access recurs under the day/month windows above.
     let trial: TrialUsage | undefined;
     if (effectiveTier === "FREE") {
       const limit = FREE_LIFETIME_TRIAL[feature];
-      const used = await aiUsageRepository.countTotal(userId, feature);
-      trial = {
-        limit,
-        used,
-        remaining: Math.max(0, limit - used),
-        exhausted: used >= limit,
-      };
+      if (limit !== undefined) {
+        const used = await aiUsageRepository.countTotal(userId, feature);
+        trial = {
+          limit,
+          used,
+          remaining: Math.max(0, limit - used),
+          exhausted: used >= limit,
+        };
+      }
     }
 
     const exceeded = windowExceeded || (trial?.exhausted ?? false);
@@ -112,10 +139,8 @@ export const aiUsageService = {
   ): Promise<FeatureQuotaStatus> {
     const status = await this.getStatus(userId, feature, tier);
 
-    // FREE lifetime trial exhausted → this is a PAYWALL, not a transient limit.
-    // Checked FIRST (and before any expensive AI provider call) so the client
-    // receives a stable SUBSCRIPTION_REQUIRED (403) upgrade prompt rather than a
-    // "try again later" message. Paid tiers never carry a `trial`.
+    // Feature-specific FREE lifetime trial exhausted → this is a PAYWALL, not a
+    // transient limit. AI Coach no longer carries a lifetime trial.
     if (status.trial?.exhausted) {
       throw new ApiError(
         403,

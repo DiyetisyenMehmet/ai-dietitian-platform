@@ -38,7 +38,8 @@ export const aiUsageRepository = {
 
   /**
    * Counts a user's TOTAL (lifetime) usage events for a feature, with no time
-   * window. Used to enforce the FREE-tier lifetime trial cap. Owner-scoped.
+   * window. Used only by features that still have a FREE lifetime trial cap.
+   * Owner-scoped.
    *
    * @param userId - Owner id.
    * @param feature - Feature to count.
@@ -47,5 +48,14 @@ export const aiUsageRepository = {
     return prisma.aiUsageEvent.count({
       where: { userId, feature },
     });
+  },
+
+  /** Returns the account creation instant used for the FREE chat intro window. */
+  async getUserCreatedAt(userId: string): Promise<Date | null> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { createdAt: true },
+    });
+    return user?.createdAt ?? null;
   },
 };

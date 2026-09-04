@@ -21,45 +21,48 @@ export interface FeatureQuota {
 export type QuotaMatrix = Record<SubscriptionTier, Record<AiUsageFeature, FeatureQuota>>;
 
 /**
- * The quota matrix. FREE is deliberately tight (cost protection for
- * unmonetized accounts); paid tiers scale up. NUTRITION_PLAN and
- * BLOOD_TEST_ANALYSIS quotas are declared so those features can adopt the
- * shared capability later without a schema or contract change — this sprint
- * only enforces DIETITIAN_CHAT.
+ * The quota matrix. FREE is deliberately conservative for unmonetized accounts;
+ * paid tiers scale up without exposing unrealistically large abuse ceilings.
+ * NUTRITION_PLAN and BLOOD_TEST_ANALYSIS keep their existing limits in this
+ * change; the product decision here applies only to DIETITIAN_CHAT.
  */
 export const QUOTA_MATRIX: QuotaMatrix = {
   FREE: {
-    DIETITIAN_CHAT: { perDay: 20, perMonth: 200 },
+    DIETITIAN_CHAT: { perDay: 5, perMonth: 100 },
     BLOOD_TEST_ANALYSIS: { perDay: 3, perMonth: 10 },
     NUTRITION_PLAN: { perDay: 3, perMonth: 15 },
   },
   PREMIUM: {
-    DIETITIAN_CHAT: { perDay: 100, perMonth: 2000 },
+    DIETITIAN_CHAT: { perDay: 20, perMonth: 400 },
     BLOOD_TEST_ANALYSIS: { perDay: 15, perMonth: 100 },
     NUTRITION_PLAN: { perDay: 15, perMonth: 100 },
   },
   PREMIUM_PLUS: {
-    DIETITIAN_CHAT: { perDay: 500, perMonth: 10000 },
+    DIETITIAN_CHAT: { perDay: 50, perMonth: 1000 },
     BLOOD_TEST_ANALYSIS: { perDay: 60, perMonth: 600 },
     NUTRITION_PLAN: { perDay: 60, perMonth: 600 },
   },
 };
 
+/** FREE AI Coach onboarding window: first 7 x 24 hours after account creation. */
+export const FREE_CHAT_INTRO_DAYS = 7;
+
+/** Daily AI Coach allowance during the FREE onboarding window. */
+export const FREE_CHAT_INTRO_DAILY_LIMIT = 10;
+
 /** Machine-readable error code surfaced when a quota is exhausted. */
 export const QUOTA_EXCEEDED_CODE = "AI_QUOTA_EXCEEDED";
 
 /**
- * FREE-tier LIFETIME trial allowances (V1 cost protection).
+ * Feature-specific FREE-tier lifetime trial allowances.
  *
- * Unlike the daily/monthly {@link QUOTA_MATRIX} windows, these are TOTAL,
- * non-resetting caps on the number of *successful* AI invocations a FREE user
- * may ever make per feature. Once exhausted, the user must upgrade to a paid
- * tier to continue. Paid tiers are NOT subject to a lifetime trial — they use
- * the rolling quota windows above. Counted against append-only `AiUsageEvent`
- * rows (one per successful call), so no schema change is required.
+ * DIETITIAN_CHAT intentionally has NO lifetime cap: FREE users keep a small,
+ * recurring AI Coach allowance (10/day during the first 7 days, then 5/day,
+ * always subject to the 100/month cap). Blood-test analysis and nutrition-plan
+ * generation retain their existing lifetime trial rules until those product
+ * policies are reviewed in their dedicated work.
  */
-export const FREE_LIFETIME_TRIAL: Record<AiUsageFeature, number> = {
-  DIETITIAN_CHAT: 5,
+export const FREE_LIFETIME_TRIAL: Partial<Record<AiUsageFeature, number>> = {
   BLOOD_TEST_ANALYSIS: 1,
   NUTRITION_PLAN: 1,
 };
