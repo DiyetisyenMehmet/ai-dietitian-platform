@@ -27,8 +27,6 @@ function emptyProfile(): HealthProfile {
     dietaryPreference: "OMNIVORE",
     healthConditions: [],
     allergies: [],
-    // Calorie targets must come from a real generated nutrition plan. Keeping
-    // this at zero is safer than presenting a fabricated universal target.
     dailyCalorieGoal: 0,
     dailyWaterGoalMl: 0,
     memberSince: "",
@@ -36,10 +34,6 @@ function emptyProfile(): HealthProfile {
 }
 
 let profile: HealthProfile = emptyProfile();
-
-// Achievements are not yet backed by an authoritative backend endpoint. Showing
-// pre-earned demo badges would be misleading, so V1 exposes none until real
-// persisted achievement data is implemented.
 const achievements: Achievement[] = [];
 const listeners = new Set<() => void>();
 
@@ -58,18 +52,22 @@ function getSnapshot() {
 }
 
 export const healthProfileStore = {
-  /** Patches the cache from authoritative backend/user data. */
   update(patch: Partial<HealthProfile>) {
     profile = { ...profile, ...patch };
     emit();
   },
-  /** Syncs the current weight (called by the weight store on new entries). */
+  /** Sets the immutable journey baseline from the oldest persisted measurement. */
+  setStartWeight(weightKg: number) {
+    if (weightKg <= 0 || profile.startWeightKg === weightKg) return;
+    profile = { ...profile, startWeightKg: weightKg };
+    emit();
+  },
+  /** Syncs only the current weight; the starting weight is deliberately untouched. */
   setCurrentWeight(weightKg: number) {
     if (profile.currentWeightKg === weightKg) return;
     profile = { ...profile, currentWeightKg: weightKg };
     emit();
   },
-  /** Clears all user-specific cached values (e.g. after account/session switch). */
   reset() {
     profile = emptyProfile();
     emit();
@@ -79,12 +77,10 @@ export const healthProfileStore = {
   },
 };
 
-/** Subscribe to the shared health profile. */
 export function useHealthProfile(): HealthProfile {
   return React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
-/** Returns persisted achievements when that backend source exists; empty for V1. */
 export function useAchievements(): Achievement[] {
   return achievements;
 }
