@@ -11,6 +11,7 @@ import { Card, CardContent } from "@/presentation/components/ui/card";
 import { EmptyState } from "@/presentation/components/feedback/empty-state";
 import { healthIcon } from "@/presentation/components/health/health-icon";
 import { getBiomarkerEducation } from "@/presentation/components/health/blood-biomarker-education";
+import { getBiomarkerDeepEducation } from "@/presentation/components/health/blood-biomarker-deep-education";
 import {
   useBloodTests,
   bloodTestStore,
@@ -84,23 +85,47 @@ function referenceText(value: BloodTestNormalizedValue): string {
   return "Referans aralığı değerlendirilemedi";
 }
 
+function resultPositionText(value: BloodTestNormalizedValue): string {
+  switch (value.status) {
+    case "NORMAL":
+      return "Sonucunuz bu laboratuvarın referans aralığındadır.";
+    case "LOW":
+      return "Sonucunuz bu laboratuvarın referans aralığının altındadır.";
+    case "HIGH":
+      return "Sonucunuz bu laboratuvarın referans aralığının üzerindedir.";
+    case "CRITICALLY_LOW":
+      return "Sonucunuz bu laboratuvarın referans aralığının belirgin biçimde altındadır.";
+    case "CRITICALLY_HIGH":
+      return "Sonucunuz bu laboratuvarın referans aralığının belirgin biçimde üzerindedir.";
+    case "UNKNOWN":
+      return "Bu değer için güvenilir bir referans aralığı bulunmadığından sonuç sınıflandırılmadı.";
+  }
+}
+
 function resultInterpretation(value: BloodTestNormalizedValue): string {
   const result = `${value.rawValue}${value.unit ? ` ${value.unit}` : ""}`;
   const reference = referenceText(value);
   switch (value.status) {
     case "NORMAL":
-      return `${result} sonucu, bu raporda kullanılan ${reference} referans aralığının içindedir. Bu ifade yalnızca bu ölçümün laboratuvar aralığı içindeki konumunu anlatır; tek başına bir hastalığı dışlamaz veya bir organ/sistemin tamamen sağlıklı olduğunu kanıtlamaz.`;
+      return `${result} sonucu, bu rapordaki ${reference} referans aralığındadır.`;
     case "LOW":
-      return `${result} sonucu, bu raporda kullanılan ${reference} referans aralığının altındadır. Sonucun anlamı ilgili diğer laboratuvar değerleri ve kişisel sağlık bağlamıyla birlikte değerlendirilmelidir.`;
+      return `${result} sonucu, bu rapordaki ${reference} referans aralığının altındadır.`;
     case "HIGH":
-      return `${result} sonucu, bu raporda kullanılan ${reference} referans aralığının üzerindedir. Sonucun anlamı ilgili diğer laboratuvar değerleri ve kişisel sağlık bağlamıyla birlikte değerlendirilmelidir.`;
+      return `${result} sonucu, bu rapordaki ${reference} referans aralığının üzerindedir.`;
     case "CRITICALLY_LOW":
-      return `${result} sonucu, bu rapordaki ${reference} referansının belirgin biçimde altındadır. Bu bulgu beslenme açısından açıklanabilir ancak zamanında profesyonel tıbbi değerlendirme de uygundur.`;
+      return `${result} sonucu, bu rapordaki ${reference} referans aralığının belirgin biçimde altındadır. Gecikmeden bir sağlık profesyoneliyle değerlendirilmesi uygundur.`;
     case "CRITICALLY_HIGH":
-      return `${result} sonucu, bu rapordaki ${reference} referansının belirgin biçimde üzerindedir. Bu bulgu beslenme açısından açıklanabilir ancak zamanında profesyonel tıbbi değerlendirme de uygundur.`;
+      return `${result} sonucu, bu rapordaki ${reference} referans aralığının belirgin biçimde üzerindedir. Gecikmeden bir sağlık profesyoneliyle değerlendirilmesi uygundur.`;
     case "UNKNOWN":
       return `${result} ölçülmüş olsa da güvenilir bir referans aralığı bulunamadığı için Diewish bu değeri normal, düşük veya yüksek olarak sınıflandırmaz.`;
   }
+}
+
+function compactExplanation(value: BloodTestNormalizedValue): string {
+  const education = getBiomarkerEducation(value);
+  return education
+    ? `${education.whatItMeasures} ${resultPositionText(value)}`
+    : resultPositionText(value);
 }
 
 function valueStatusClass(status: BloodTestValueStatus): string {
@@ -146,46 +171,123 @@ function ResultBadges({ test }: { test: BloodTestSummaryView }) {
 function PremiumValueEducation({
   value,
   explanation,
+  allValues,
 }: {
   value: BloodTestNormalizedValue;
   explanation?: string;
+  allValues: BloodTestNormalizedValue[];
 }) {
   const education = getBiomarkerEducation(value);
+  const deep = getBiomarkerDeepEducation(value);
   const isFlagged =
     value.status === "LOW" ||
     value.status === "HIGH" ||
     value.status === "CRITICALLY_LOW" ||
     value.status === "CRITICALLY_HIGH";
+  const relatedValues = deep
+    ? deep.relatedCodes
+        .map((code) => allValues.find((candidate) => candidate.biomarkerCode === code))
+        .filter((candidate): candidate is BloodTestNormalizedValue => Boolean(candidate))
+        .slice(0, 6)
+    : [];
 
   return (
-    <details className="group/value mt-3 rounded-lg border bg-muted/20" open={isFlagged}>
+    <details className="group/value mt-3 rounded-lg border bg-muted/20">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-xs font-semibold [&::-webkit-details-marker]:hidden">
-        <span>Bu parametreyi açıkla</span>
+        <span>Daha detaylı incele</span>
         <ChevronDown
           className="size-3.5 shrink-0 text-muted-foreground transition-transform group-open/value:rotate-180"
           aria-hidden="true"
         />
       </summary>
-      <div className="space-y-3 border-t px-3 py-3 text-xs leading-relaxed">
+      <div className="space-y-4 border-t px-3 py-3 text-xs leading-relaxed">
+        {deep && (
+          <div>
+            <p className="font-semibold text-foreground">{deep.subject} nedir?</p>
+            <p className="mt-1 text-muted-foreground">{deep.whatItIs}</p>
+          </div>
+        )}
+
         {education && (
+          <div>
+            <p className="font-semibold text-foreground">Bu test neyi ölçer?</p>
+            <p className="mt-1 text-muted-foreground">{education.whatItMeasures}</p>
+          </div>
+        )}
+
+        {deep ? (
+          <div>
+            <p className="font-semibold text-foreground">Vücutta ne işe yarar?</p>
+            <p className="mt-1 text-muted-foreground">{deep.bodyRole}</p>
+          </div>
+        ) : education ? (
+          <div>
+            <p className="font-semibold text-foreground">Vücutta ne işe yarar?</p>
+            <p className="mt-1 text-muted-foreground">{education.whyItMatters}</p>
+          </div>
+        ) : null}
+
+        <div className="rounded-lg bg-primary/5 p-2.5">
+          <p className="font-semibold text-primary">Sizin sonucunuz</p>
+          <p className="mt-1 text-muted-foreground">{resultInterpretation(value)}</p>
+        </div>
+
+        {deep && (
           <>
-            <div>
-              <p className="font-semibold text-foreground">Bu test nedir?</p>
-              <p className="mt-1 text-muted-foreground">{education.whatItMeasures}</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-lg border bg-background p-2.5">
+                <p className="font-semibold text-foreground">Düşük olduğunda ne anlama gelebilir?</p>
+                <p className="mt-1 text-muted-foreground">{deep.lowMeaning}</p>
+              </div>
+              <div className="rounded-lg border bg-background p-2.5">
+                <p className="font-semibold text-foreground">Yüksek olduğunda ne anlama gelebilir?</p>
+                <p className="mt-1 text-muted-foreground">{deep.highMeaning}</p>
+              </div>
             </div>
             <div>
-              <p className="font-semibold text-foreground">Vücutta ne işe yarar?</p>
-              <p className="mt-1 text-muted-foreground">{education.whyItMatters}</p>
+              <p className="font-semibold text-foreground">Neden önemli olabilir?</p>
+              <p className="mt-1 text-muted-foreground">{deep.whyOutOfRangeMatters}</p>
             </div>
           </>
         )}
-        <div className="rounded-lg bg-primary/5 p-2.5">
-          <p className="font-semibold text-primary">Sizin sonucunuz ne anlama geliyor?</p>
-          <p className="mt-1 text-muted-foreground">{resultInterpretation(value)}</p>
-        </div>
-        {explanation && value.status !== "NORMAL" && (
+
+        {relatedValues.length > 0 && (
           <div>
-            <p className="font-semibold text-foreground">AI değerlendirmesi</p>
+            <p className="font-semibold text-foreground">Bu raporda birlikte bakılabilecek değerler</p>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              {relatedValues.map((related) => {
+                const relatedEducation = getBiomarkerEducation(related);
+                return (
+                  <div
+                    key={related.biomarkerCode}
+                    className="flex items-start justify-between gap-2 rounded-lg bg-muted/35 px-2.5 py-2"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-foreground">
+                        {relatedEducation?.title || related.biomarkerName || related.biomarkerCode}
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-muted-foreground">
+                        {related.rawValue}{related.unit ? ` ${related.unit}` : ""}
+                      </p>
+                    </div>
+                    <span
+                      className={cn(
+                        "inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium",
+                        valueStatusClass(related.status),
+                      )}
+                    >
+                      {STATUS_LABELS[related.status]}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {explanation && isFlagged && (
+          <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-2.5">
+            <p className="font-semibold text-foreground">Kişisel AI değerlendirmesi</p>
             <p className="mt-1 text-muted-foreground">{explanation}</p>
           </div>
         )}
@@ -228,10 +330,10 @@ function AnalysisDetails({
               <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary">
                 Premium detay
               </span>
-              <p className="text-xs font-semibold">Laboratuvar terimleri anlaşılır Türkçe ile açıklanır</p>
+              <p className="text-xs font-semibold">Önce kısa sonuç, isterseniz ayrıntılı tıbbi açıklama</p>
             </div>
             <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-              Her parametrede ne ölçüldüğünü, vücuttaki görevini, sizin sonucunuzu ve raporun kendi referansını birlikte görebilirsiniz.
+              Kartlar hızlı okunacak şekilde kısa tutulur. “Daha detaylı incele” alanında terimin anlamı, vücuttaki görevi, düşük/yüksek durumları ve bu rapordaki ilişkili değerler açıklanır.
             </p>
           </div>
         )}
@@ -275,41 +377,26 @@ function AnalysisDetails({
                       </span>
                     </div>
 
-                    {premiumDetails ? (
-                      <div className="mt-2.5 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                        <div className="rounded-lg bg-muted/35 px-2.5 py-2">
-                          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                            Sizin sonucunuz
-                          </p>
-                          <p className="mt-0.5 text-sm font-bold text-foreground">
-                            {value.rawValue}{value.unit ? ` ${value.unit}` : ""}
-                          </p>
-                        </div>
-                        <div className="rounded-lg bg-muted/35 px-2.5 py-2">
-                          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                            Bu rapordaki referans
-                          </p>
-                          <p className="mt-0.5 text-sm font-semibold text-foreground">
-                            {referenceText(value)}
-                          </p>
-                        </div>
-                      </div>
-                    ) : (
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Sonuç:{" "}
-                        <span className="font-medium text-foreground">
-                          {value.rawValue}{value.unit ? ` ${value.unit}` : ""}
-                        </span>
-                        <span aria-hidden="true"> • </span>
-                        Referans: {referenceText(value)}
-                      </p>
-                    )}
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Sonuç:{" "}
+                      <span className="font-medium text-foreground">
+                        {value.rawValue}{value.unit ? ` ${value.unit}` : ""}
+                      </span>
+                      <span aria-hidden="true"> • </span>
+                      Referans: {referenceText(value)}
+                    </p>
 
                     {premiumDetails ? (
-                      <PremiumValueEducation
-                        value={value}
-                        explanation={explanation?.explanation}
-                      />
+                      <>
+                        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                          {compactExplanation(value)}
+                        </p>
+                        <PremiumValueEducation
+                          value={value}
+                          explanation={explanation?.explanation}
+                          allValues={test.normalizedValues}
+                        />
+                      </>
                     ) : (
                       explanation?.explanation && (
                         <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
@@ -592,7 +679,7 @@ export function BloodTestsView() {
       </section>
 
       <p className="px-3 text-center text-[11px] leading-relaxed text-muted-foreground">
-        Bu değerlendirme beslenme desteği içindir; tıbbi tanı veya tedavinin yerine geçmez.
+        Laboratuvar değerleri tek başına tanı koydurmaz; gerektiğinde diğer sonuçlar, belirtiler ve sağlık profesyoneli değerlendirmesiyle birlikte ele alınır. Diewish tıbbi tanı veya tedavinin yerine geçmez.
       </p>
     </div>
   );
