@@ -10,12 +10,14 @@ import { Button } from "@/presentation/components/ui/button";
 import { Card, CardContent } from "@/presentation/components/ui/card";
 import { EmptyState } from "@/presentation/components/feedback/empty-state";
 import { healthIcon } from "@/presentation/components/health/health-icon";
+import { getBiomarkerEducation } from "@/presentation/components/health/blood-biomarker-education";
 import {
   useBloodTests,
   bloodTestStore,
   type BloodTestSummaryView,
 } from "@/application/health/blood-test-store";
 import { journeyStore } from "@/application/health/journey-store";
+import { useSubscription } from "@/application/payments/subscription-store";
 import { ApiError } from "@/infrastructure/api/http-client";
 import type {
   BloodTestNormalizedValue,
@@ -122,7 +124,62 @@ function ResultBadges({ test }: { test: BloodTestSummaryView }) {
   );
 }
 
-function AnalysisDetails({ test }: { test: BloodTestSummaryView }) {
+function PremiumValueEducation({
+  value,
+  explanation,
+}: {
+  value: BloodTestNormalizedValue;
+  explanation?: string;
+}) {
+  const education = getBiomarkerEducation(value);
+  if (!education && !explanation) return null;
+
+  const isFlagged =
+    value.status === "LOW" ||
+    value.status === "HIGH" ||
+    value.status === "CRITICALLY_LOW" ||
+    value.status === "CRITICALLY_HIGH";
+
+  return (
+    <details className="group/value mt-3 rounded-lg border bg-muted/20" open={isFlagged}>
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-xs font-semibold [&::-webkit-details-marker]:hidden">
+        <span>Bu parametreyi açıkla</span>
+        <ChevronDown
+          className="size-3.5 shrink-0 text-muted-foreground transition-transform group-open/value:rotate-180"
+          aria-hidden="true"
+        />
+      </summary>
+      <div className="space-y-3 border-t px-3 py-3 text-xs leading-relaxed">
+        {education && (
+          <>
+            <div>
+              <p className="font-semibold text-foreground">Bu test nedir?</p>
+              <p className="mt-1 text-muted-foreground">{education.whatItMeasures}</p>
+            </div>
+            <div>
+              <p className="font-semibold text-foreground">Neden bakılır, ne işe yarar?</p>
+              <p className="mt-1 text-muted-foreground">{education.whyItMatters}</p>
+            </div>
+          </>
+        )}
+        {explanation && (
+          <div className="rounded-lg bg-primary/5 p-2.5">
+            <p className="font-semibold text-primary">Sizin sonucunuzun açıklaması</p>
+            <p className="mt-1 text-muted-foreground">{explanation}</p>
+          </div>
+        )}
+      </div>
+    </details>
+  );
+}
+
+function AnalysisDetails({
+  test,
+  premiumDetails,
+}: {
+  test: BloodTestSummaryView;
+  premiumDetails: boolean;
+}) {
   const hasDetails =
     test.normalizedValues.length > 0 ||
     test.nutritionImplications.length > 0 ||
@@ -144,6 +201,20 @@ function AnalysisDetails({ test }: { test: BloodTestSummaryView }) {
       </summary>
 
       <div className="space-y-5 border-t px-4 py-4">
+        {premiumDetails && test.normalizedValues.length > 0 && (
+          <div className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-2.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary">
+                Premium detay
+              </span>
+              <p className="text-xs font-semibold">Laboratuvar terimleri anlaşılır Türkçe ile açıklanır</p>
+            </div>
+            <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+              Her parametrede ne ölçüldüğünü, neden bakıldığını, sizin sonucunuzu ve raporun kendi referansını birlikte görebilirsiniz.
+            </p>
+          </div>
+        )}
+
         {test.normalizedValues.length > 0 && (
           <section className="space-y-2.5">
             <div>
@@ -155,20 +226,23 @@ function AnalysisDetails({ test }: { test: BloodTestSummaryView }) {
             <ul className="space-y-2">
               {test.normalizedValues.map((value, index) => {
                 const explanation = explanationByCode.get(value.biomarkerCode);
-                const displayName = explanation?.biomarkerName || value.biomarkerName || value.biomarkerCode;
+                const education = getBiomarkerEducation(value);
+                const fallbackName =
+                  explanation?.biomarkerName || value.biomarkerName || value.biomarkerCode;
+                const displayName = education?.title || fallbackName;
                 return (
                   <li
                     key={`${value.biomarkerCode}-${index}`}
                     className="rounded-xl border bg-background p-3"
                   >
                     <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <p className="text-sm font-semibold">{displayName}</p>
-                        <p className="mt-0.5 text-xs text-muted-foreground">
-                          Sonuç: <span className="font-medium text-foreground">{value.rawValue}{value.unit ? ` ${value.unit}` : ""}</span>
-                          <span aria-hidden="true"> • </span>
-                          Referans: {referenceText(value)}
-                        </p>
+                        {premiumDetails && education && (
+                          <p className="mt-0.5 text-[11px] font-medium text-primary/80">
+                            {education.category}
+                          </p>
+                        )}
                       </div>
                       <span
                         className={cn(
@@ -179,10 +253,48 @@ function AnalysisDetails({ test }: { test: BloodTestSummaryView }) {
                         {STATUS_LABELS[value.status]}
                       </span>
                     </div>
-                    {explanation?.explanation && (
-                      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                        {explanation.explanation}
+
+                    {premiumDetails ? (
+                      <div className="mt-2.5 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <div className="rounded-lg bg-muted/35 px-2.5 py-2">
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            Sizin sonucunuz
+                          </p>
+                          <p className="mt-0.5 text-sm font-bold text-foreground">
+                            {value.rawValue}{value.unit ? ` ${value.unit}` : ""}
+                          </p>
+                        </div>
+                        <div className="rounded-lg bg-muted/35 px-2.5 py-2">
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            Bu rapordaki referans
+                          </p>
+                          <p className="mt-0.5 text-sm font-semibold text-foreground">
+                            {referenceText(value)}
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Sonuç:{" "}
+                        <span className="font-medium text-foreground">
+                          {value.rawValue}{value.unit ? ` ${value.unit}` : ""}
+                        </span>
+                        <span aria-hidden="true"> • </span>
+                        Referans: {referenceText(value)}
                       </p>
+                    )}
+
+                    {premiumDetails ? (
+                      <PremiumValueEducation
+                        value={value}
+                        explanation={explanation?.explanation}
+                      />
+                    ) : (
+                      explanation?.explanation && (
+                        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                          {explanation.explanation}
+                        </p>
+                      )
                     )}
                   </li>
                 );
@@ -281,11 +393,14 @@ function AnalysisDetails({ test }: { test: BloodTestSummaryView }) {
 /** Blood-test management: real upload, validation, analysis lifecycle and history. */
 export function BloodTestsView() {
   const tests = useBloodTests();
+  const { subscription } = useSubscription();
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = React.useState(false);
   const [removingId, setRemovingId] = React.useState<string | null>(null);
 
   const latest = tests[0];
+  const premiumDetails =
+    subscription.tier === "PREMIUM" || subscription.tier === "PREMIUM_PLUS";
 
   // The backend/Neon is the source of truth. Reload persisted analysis history
   // whenever this page mounts so a browser refresh never loses completed/failed
@@ -425,7 +540,9 @@ export function BloodTestsView() {
                       {test.summary}
                     </p>
 
-                    {test.status === "analyzed" && <AnalysisDetails test={test} />}
+                    {test.status === "analyzed" && (
+                      <AnalysisDetails test={test} premiumDetails={premiumDetails} />
+                    )}
 
                     <div className="flex items-end justify-between gap-2 pt-1">
                       <ResultBadges test={test} />
