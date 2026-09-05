@@ -19,8 +19,8 @@ export interface CreatedConversationTurn {
 }
 
 /**
- * Data-access layer for AI Dietitian Chat. All reads are owner-scoped by
- * `userId` so a user can never access another user's conversation.
+ * Data-access layer for AI Dietitian Chat. All reads and conversation mutations
+ * are owner-scoped by `userId` so a user can never access another user's thread.
  */
 export const aiChatRepository = {
   /** Creates a new (empty) conversation for a user. */
@@ -78,6 +78,21 @@ export const aiChatRepository = {
     return prisma.chatConversation.findMany({
       where: { userId },
       orderBy: { updatedAt: "desc" },
+    });
+  },
+
+  /** Renames one conversation after proving ownership. */
+  async renameConversation(
+    id: string,
+    userId: string,
+    title: string,
+  ): Promise<ChatConversation | null> {
+    const existing = await prisma.chatConversation.findFirst({ where: { id, userId } });
+    if (!existing) return null;
+
+    return prisma.chatConversation.update({
+      where: { id },
+      data: { title },
     });
   },
 

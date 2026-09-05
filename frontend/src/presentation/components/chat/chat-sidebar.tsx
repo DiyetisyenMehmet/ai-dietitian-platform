@@ -1,10 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { MessageSquare, MoreVertical, Plus, Trash2, X } from "lucide-react";
+import { MessageSquare, MoreVertical, Pencil, Plus, Trash2, X } from "lucide-react";
 
 import { cn } from "@/shared/lib/utils";
 import { Button } from "@/presentation/components/ui/button";
+import { Input } from "@/presentation/components/ui/input";
 import {
   Modal,
   ModalContent,
@@ -25,6 +26,10 @@ interface ChatSidebarProps {
   onClose: () => void;
 }
 
+type ConversationTarget = { id: string; title: string };
+
+const TITLE_MAX_LENGTH = 80;
+
 function relativeDay(ts: number): string {
   const days = Math.floor((Date.now() - ts) / (1000 * 60 * 60 * 24));
   if (days <= 0) return "Bugün";
@@ -32,14 +37,36 @@ function relativeDay(ts: number): string {
   return `${days} gün önce`;
 }
 
-/** Conversation list: New Chat + persisted conversation history. */
+/** Conversation list: New Chat + persisted conversation history and safe actions. */
 export function ChatSidebar({ open, onClose }: ChatSidebarProps) {
   const { conversations, activeId, isResponding } = useChatState();
-  const [pendingDelete, setPendingDelete] = React.useState<{ id: string; title: string } | null>(
-    null,
-  );
+  const [actionTarget, setActionTarget] = React.useState<ConversationTarget | null>(null);
+  const [pendingDelete, setPendingDelete] = React.useState<ConversationTarget | null>(null);
+  const [renameTarget, setRenameTarget] = React.useState<ConversationTarget | null>(null);
+  const [renameValue, setRenameValue] = React.useState("");
   const [isDeleting, setIsDeleting] = React.useState(false);
+  const [isRenaming, setIsRenaming] = React.useState(false);
   const ordered = [...conversations].sort((a, b) => b.updatedAt - a.updatedAt);
+
+  const openRename = React.useCallback((target: ConversationTarget) => {
+    setActionTarget(null);
+    setRenameTarget(target);
+    setRenameValue(target.title);
+  }, []);
+
+  const confirmRename = React.useCallback(async () => {
+    if (!renameTarget || isRenaming) return;
+    const trimmed = renameValue.trim();
+    if (!trimmed || trimmed.length > TITLE_MAX_LENGTH) return;
+
+    setIsRenaming(true);
+    const renamed = await chatStore.renameConversation(renameTarget.id, trimmed);
+    setIsRenaming(false);
+    if (renamed) {
+      setRenameTarget(null);
+      setRenameValue("");
+    }
+  }, [isRenaming, renameTarget, renameValue]);
 
   const confirmDelete = React.useCallback(async () => {
     if (!pendingDelete || isDeleting) return;
@@ -103,8 +130,8 @@ export function ChatSidebar({ open, onClose }: ChatSidebarProps) {
                   type="button"
                   aria-label={`${conv.title} sohbet seçenekleri`}
                   title="Sohbet seçenekleri"
-                  disabled={isResponding || isDeleting}
-                  onClick={() => setPendingDelete({ id: conv.id, title: conv.title })}
+                  disabled={isResponding || isDeleting || isRenaming}
+                  onClick={() => setActionTarget({ id: conv.id, title: conv.title })}
                   className="mr-1 flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-background/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40 lg:opacity-0 lg:group-hover:opacity-100 lg:focus-visible:opacity-100"
                 >
                   <MoreVertical className="size-4" aria-hidden="true" />
@@ -161,6 +188,97 @@ export function ChatSidebar({ open, onClose }: ChatSidebarProps) {
           {panel}
         </div>
       </div>
+
+      <Modal open={Boolean(actionTarget)} onOpenChange={(nextOpen) => !nextOpen && setActionTarget(null)}>
+        <ModalContent>
+          <ModalHeader>
+            <ModalTitle>Sohbet seçenekleri</ModalTitle>
+            <ModalDescription className="truncate">{actionTarget?.title}</ModalDescription>
+          </ModalHeader>
+          <div className="grid gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="justify-start"
+              onClick={() => actionTarget && openRename(actionTarget)}
+            >
+              <Pencil aria-hidden="true" />
+              Yeniden adlandır
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="justify-start text-destructive hover:text-destructive"
+              onClick={() => {
+                if (!actionTarget) return;
+                setPendingDelete(actionTarget);
+                setActionTarget(null);
+              }}
+            >
+              <Trash2 aria-hidden="true" />
+              Sohbeti sil
+            </Button>
+          </div>
+        </ModalContent>
+      </Modal>
+
+      <Modal
+        open={Boolean(renameTarget)}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen && !isRenaming) {
+            setRenameTarget(null);
+            setRenameValue("");
+          }
+        }}
+      >
+        <ModalContent>
+          <ModalHeader>
+            <ModalTitle>Sohbeti yeniden adlandır</ModalTitle>
+            <ModalDescription>Kolay bulabileceğin kısa ve açıklayıcı bir ad kullan.</ModalDescription>
+          </ModalHeader>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              void confirmRename();
+            }}
+            className="space-y-4"
+          >
+            <div className="space-y-2">
+              <Input
+                autoFocus
+                value={renameValue}
+                maxLength={TITLE_MAX_LENGTH}
+                aria-label="Sohbet adı"
+                onChange={(event) => setRenameValue(event.target.value)}
+                disabled={isRenaming}
+              />
+              <p className="text-right text-xs text-muted-foreground">
+                {renameValue.length}/{TITLE_MAX_LENGTH}
+              </p>
+            </div>
+            <ModalFooter>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isRenaming}
+                onClick={() => {
+                  setRenameTarget(null);
+                  setRenameValue("");
+                }}
+              >
+                Vazgeç
+              </Button>
+              <Button
+                type="submit"
+                isLoading={isRenaming}
+                disabled={!renameValue.trim() || renameValue.trim().length > TITLE_MAX_LENGTH}
+              >
+                Kaydet
+              </Button>
+            </ModalFooter>
+          </form>
+        </ModalContent>
+      </Modal>
 
       <Modal
         open={Boolean(pendingDelete)}

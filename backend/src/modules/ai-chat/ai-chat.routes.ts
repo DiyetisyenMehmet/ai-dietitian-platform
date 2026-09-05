@@ -4,13 +4,17 @@ import { authenticate } from "../../middleware/authenticate";
 import { requireConsent } from "../../middleware/require-consent";
 import { validate } from "../../middleware/validate";
 import { aiChatController } from "./ai-chat.controller";
-import { conversationIdParamSchema, sendMessageSchema } from "./dto/ai-chat.schemas";
+import {
+  conversationIdParamSchema,
+  renameConversationSchema,
+  sendMessageSchema,
+} from "./dto/ai-chat.schemas";
 
 /**
  * AI Dietitian Chat router (mounted at /api/ai-chat). Every route requires a
  * valid access token; the service scopes all access by owner. Sending a new
  * message processes health/nutrition context through the AI provider and thus
- * requires current mandatory consent. Existing conversation read/delete access
+ * requires current mandatory consent. Existing conversation read/manage access
  * stays available after consent withdrawal.
  */
 export const aiChatRouter = Router();
@@ -76,6 +80,23 @@ aiChatRouter.get("/conversations", authenticate, aiChatController.listConversati
  *       200: { description: The conversation and its ordered messages. }
  *       401: { description: Missing or invalid access token. }
  *       404: { description: Conversation not found. }
+ *   patch:
+ *     tags: [AiChat]
+ *     summary: Rename a conversation
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [title]
+ *             properties:
+ *               title: { type: string, maxLength: 80 }
+ *     responses:
+ *       200: { description: Renamed conversation. }
+ *       401: { description: Missing or invalid access token. }
+ *       404: { description: Conversation not found. }
  *   delete:
  *     tags: [AiChat]
  *     summary: Delete a conversation
@@ -95,6 +116,13 @@ aiChatRouter.get(
   authenticate,
   validate({ params: conversationIdParamSchema }),
   aiChatController.getConversation,
+);
+
+aiChatRouter.patch(
+  "/conversations/:id",
+  authenticate,
+  validate({ params: conversationIdParamSchema, body: renameConversationSchema }),
+  aiChatController.renameConversation,
 );
 
 aiChatRouter.delete(

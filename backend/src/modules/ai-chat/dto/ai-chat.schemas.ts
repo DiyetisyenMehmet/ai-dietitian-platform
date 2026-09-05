@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { MAX_MESSAGE_LENGTH } from "../constants";
+import { MAX_MESSAGE_LENGTH, TITLE_MAX_LENGTH } from "../constants";
 
 /**
  * Validation schemas for the AI Dietitian Chat endpoints (Sprint 14, C2).
@@ -19,6 +19,17 @@ export const sendMessageSchema = z.object({
 });
 
 export type SendMessageInput = z.infer<typeof sendMessageSchema>;
+
+/** Body for renaming a persisted conversation. */
+export const renameConversationSchema = z.object({
+  title: z
+    .string()
+    .trim()
+    .min(1, "Title must not be empty.")
+    .max(TITLE_MAX_LENGTH, `Title must be at most ${TITLE_MAX_LENGTH} characters.`),
+});
+
+export type RenameConversationInput = z.infer<typeof renameConversationSchema>;
 
 /** Path param carrying a conversation id. */
 export const conversationIdParamSchema = z.object({

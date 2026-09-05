@@ -4,7 +4,11 @@ import { ApiError } from "../../utils/api-error";
 import { sendCreated, sendNoContent, sendSuccess } from "../../utils/api-response";
 import { asyncHandler } from "../../utils/async-handler";
 import { aiChatService } from "./ai-chat.service";
-import type { ConversationIdParam, SendMessageInput } from "./dto/ai-chat.schemas";
+import type {
+  ConversationIdParam,
+  RenameConversationInput,
+  SendMessageInput,
+} from "./dto/ai-chat.schemas";
 
 /** Resolves the authenticated user id or throws 401. */
 function requireUserId(req: Request): string {
@@ -40,6 +44,15 @@ export const aiChatController = {
     const userId = requireUserId(req);
     const { id } = req.params as ConversationIdParam;
     const conversation = await aiChatService.getConversation(userId, id);
+    sendSuccess(res, { conversation });
+  }),
+
+  /** Renames one conversation owned by the authenticated user. */
+  renameConversation: asyncHandler(async (req: Request, res: Response) => {
+    const userId = requireUserId(req);
+    const { id } = req.params as ConversationIdParam;
+    const { title } = req.body as RenameConversationInput;
+    const conversation = await aiChatService.renameConversation(userId, id, title);
     sendSuccess(res, { conversation });
   }),
 

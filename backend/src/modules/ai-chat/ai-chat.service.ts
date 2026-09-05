@@ -139,7 +139,7 @@ export const aiChatService = {
           conversation.id,
           message,
           assistantData,
-          conversation.title ?? deriveTitle(message),
+          conversation.title ? undefined : deriveTitle(message),
         );
       } else {
         const created = await aiChatRepository.createConversationWithTurn(
@@ -178,6 +178,12 @@ export const aiChatService = {
 
   async getConversation(userId: string, id: string): Promise<ConversationWithMessages> {
     const conversation = await aiChatRepository.findConversationWithMessages(id, userId);
+    if (!conversation) throw ApiError.notFound("Conversation not found.");
+    return conversation;
+  },
+
+  async renameConversation(userId: string, id: string, title: string): Promise<ChatConversation> {
+    const conversation = await aiChatRepository.renameConversation(id, userId, title);
     if (!conversation) throw ApiError.notFound("Conversation not found.");
     return conversation;
   },

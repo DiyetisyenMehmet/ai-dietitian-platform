@@ -48,6 +48,10 @@ interface GetConversationResponse {
   conversation: ApiConversationDetail;
 }
 
+interface RenameConversationResponse {
+  conversation: ApiConversationSummary;
+}
+
 interface SendMessageResponse {
   conversationId: string;
   message: ApiChatMessage;
@@ -369,6 +373,41 @@ export const chatStore = {
           : message,
       ),
     }));
+  },
+
+  async renameConversation(id: string, title: string): Promise<boolean> {
+    const trimmed = title.trim();
+    if (!trimmed || trimmed.length > 80 || state.isResponding || isDraftConversationId(id)) {
+      return false;
+    }
+    if (!state.conversations.some((conversation) => conversation.id === id)) return false;
+
+    const generation = sessionGeneration;
+    try {
+      const result = await apiRequest<RenameConversationResponse>({
+        path: `/ai-chat/conversations/${encodeURIComponent(id)}`,
+        method: "PATCH",
+        auth: true,
+        body: JSON.stringify({ title: trimmed }),
+      });
+      if (generation !== sessionGeneration) return false;
+
+      updateConversation(id, (conversation) => ({
+        ...conversation,
+        title: result.conversation.title?.trim() || trimmed,
+      }));
+      setState({ error: null });
+      return true;
+    } catch (error) {
+      if (generation !== sessionGeneration) return false;
+      setState({
+        error:
+          error instanceof ApiError && error.status === 401
+            ? "Oturum yenilenemedi. Lütfen yeniden giriş yap."
+            : "Sohbet adı değiştirilemedi. Lütfen tekrar dene.",
+      });
+      return false;
+    }
   },
 
   async deleteConversation(id: string): Promise<boolean> {
