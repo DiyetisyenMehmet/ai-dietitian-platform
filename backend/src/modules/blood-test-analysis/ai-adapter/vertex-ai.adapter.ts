@@ -1,6 +1,8 @@
 import { env } from "../../../config/env";
 import { logger } from "../../../lib/logger";
 import { ApiError } from "../../../utils/api-error";
+import { ANALYSIS_SYSTEM_PROMPT, EXTRACTION_SYSTEM_PROMPT } from "../constants";
+import { DOCUMENT_VALIDATION_SYSTEM_PROMPT } from "../validation/document-validation.constants";
 import {
   OpenAICompatibleAdapter,
   type ChatContentPart,
@@ -47,12 +49,115 @@ interface VertexPart {
   inlineData?: { mimeType: string; data: string };
 }
 
+type VertexResponseSchema = Readonly<Record<string, unknown>>;
+
 const CHAT_RESPONSE_SCHEMA = {
   type: "OBJECT",
   properties: {
     reply: { type: "STRING" },
   },
   required: ["reply"],
+} as const;
+
+const DOCUMENT_VALIDATION_RESPONSE_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    classification: { type: "STRING", enum: ["VALID", "INVALID"] },
+    confidence: { type: "NUMBER" },
+    hospital: { type: "STRING", nullable: true },
+    reportDate: { type: "STRING", nullable: true },
+    patient: {
+      type: "OBJECT",
+      nullable: true,
+      properties: {
+        name: { type: "STRING", nullable: true },
+        gender: { type: "STRING", nullable: true },
+        birthDateOrAge: { type: "STRING", nullable: true },
+      },
+      required: ["name", "gender", "birthDateOrAge"],
+    },
+    barcode: { type: "STRING", nullable: true },
+    hasLabTable: { type: "BOOLEAN" },
+    parameterCount: { type: "INTEGER" },
+    detectedParameters: { type: "ARRAY", items: { type: "STRING" } },
+    reason: { type: "STRING" },
+  },
+  required: [
+    "classification",
+    "confidence",
+    "hospital",
+    "reportDate",
+    "patient",
+    "barcode",
+    "hasLabTable",
+    "parameterCount",
+    "detectedParameters",
+    "reason",
+  ],
+} as const;
+
+const EXTRACTION_RESPONSE_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    values: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          name: { type: "STRING" },
+          rawValue: { type: "STRING" },
+          unit: { type: "STRING" },
+        },
+        required: ["name", "rawValue", "unit"],
+      },
+    },
+  },
+  required: ["values"],
+} as const;
+
+const BLOOD_ANALYSIS_RESPONSE_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    explanations: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          biomarkerCode: { type: "STRING" },
+          biomarkerName: { type: "STRING" },
+          status: {
+            type: "STRING",
+            enum: ["NORMAL", "LOW", "HIGH", "CRITICALLY_LOW", "CRITICALLY_HIGH", "UNKNOWN"],
+          },
+          explanation: { type: "STRING" },
+        },
+        required: ["biomarkerCode", "biomarkerName", "status", "explanation"],
+      },
+    },
+    nutritionImplications: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          biomarkerCode: { type: "STRING" },
+          biomarkerName: { type: "STRING" },
+          implication: { type: "STRING" },
+          suggestedFoods: { type: "ARRAY", items: { type: "STRING" } },
+          foodsToLimit: { type: "ARRAY", items: { type: "STRING" } },
+        },
+        required: [
+          "biomarkerCode",
+          "biomarkerName",
+          "implication",
+          "suggestedFoods",
+          "foodsToLimit",
+        ],
+      },
+    },
+    overallRecommendations: { type: "ARRAY", items: { type: "STRING" } },
+    summary: { type: "STRING" },
+  },
+  required: ["explanations", "nutritionImplications", "overallRecommendations", "summary"],
 } as const;
 
 const TRANSIENT_HTTP_STATUSES = new Set([429, 500, 502, 503, 504]);
@@ -156,6 +261,18 @@ export class VertexAIAdapter extends OpenAICompatibleAdapter {
     return /^gemini-3(?:[.-]|$)/i.test(this.vertex.model);
   }
 
+  private responseSchemaFor(messages: ChatMessage[]): VertexResponseSchema | undefined {
+    for (const message of messages) {
+      if (message.role !== "system" || typeof message.content !== "string") continue;
+      if (message.content === DOCUMENT_VALIDATION_SYSTEM_PROMPT) {
+        return DOCUMENT_VALIDATION_RESPONSE_SCHEMA;
+      }
+      if (message.content === EXTRACTION_SYSTEM_PROMPT) return EXTRACTION_RESPONSE_SCHEMA;
+      if (message.content === ANALYSIS_SYSTEM_PROMPT) return BLOOD_ANALYSIS_RESPONSE_SCHEMA;
+    }
+    return undefined;
+  }
+
   private safeResponseMetadata(body: VertexGenerateContentResponse) {
     const candidate = body.candidates?.[0];
     return {
@@ -188,8 +305,10 @@ export class VertexAIAdapter extends OpenAICompatibleAdapter {
     contents: Array<{ role: string; parts: VertexPart[] }>,
     maxOutputTokens: number,
     interactiveChat: boolean,
+    responseSchema?: VertexResponseSchema,
   ): Promise<VertexGenerateContentResponse> {
     const isGemini3 = this.isGemini3Model();
+    const effectiveResponseSchema = responseSchema ?? (interactiveChat ? CHAT_RESPONSE_SCHEMA : undefined);
 
     for (let attempt = 1; attempt <= PROVIDER_REQUEST_ATTEMPTS; attempt += 1) {
       let response: Response;
@@ -206,11 +325,12 @@ export class VertexAIAdapter extends OpenAICompatibleAdapter {
             generationConfig: {
               maxOutputTokens,
               responseMimeType: "application/json",
-              ...(interactiveChat ? { responseSchema: CHAT_RESPONSE_SCHEMA } : {}),
-              // Gemini 3.x manages sampling internally. LOW thinking keeps the
-              // interactive coach responsive while retaining light reasoning.
+              ...(effectiveResponseSchema ? { responseSchema: effectiveResponseSchema } : {}),
+              // Gemini 3.x manages sampling internally. LOW thinking keeps
+              // bounded structured responses reliable without removing the
+              // deterministic medical safety/reference-range layer.
               ...(isGemini3
-                ? interactiveChat
+                ? interactiveChat || responseSchema
                   ? { thinkingConfig: { thinkingLevel: "LOW" } }
                   : {}
                 : { temperature: this.vertex.temperature }),
@@ -293,6 +413,17 @@ export class VertexAIAdapter extends OpenAICompatibleAdapter {
     });
   }
 
+  private throwBlockedStructuredResponse(body: VertexGenerateContentResponse): never {
+    logger.warn(
+      { model: this.vertex.model, ...this.safeResponseMetadata(body) },
+      "Vertex AI blocked a structured blood-test response",
+    );
+    throw new ApiError(502, "Vertex AI blocked the structured response.", {
+      code: "AI_PROVIDER_BLOCKED",
+      isOperational: false,
+    });
+  }
+
   protected override async chat(messages: ChatMessage[], maxTokensOverride?: number): Promise<string> {
     const systemText = messages
       .filter((message) => message.role === "system")
@@ -320,13 +451,12 @@ export class VertexAIAdapter extends OpenAICompatibleAdapter {
         : `${this.vertex.location}-aiplatform.googleapis.com`;
     const url = `https://${host}/v1/projects/${project}/locations/${location}/publishers/google/models/${model}:generateContent`;
 
+    const responseSchema = this.responseSchemaFor(messages);
     const requestedMaxTokens = maxTokensOverride ?? this.vertex.maxTokens;
-    // Today the only bounded override comes from the interactive dietitian chat
-    // path. Gemini 3 thinking tokens share the output budget, so a 500-token
-    // provider ceiling can exhaust itself before a complete JSON reply exists.
-    // Keep the product-level concise/thorough prompt distinction, but give the
-    // provider enough headroom to finish the structured response reliably.
-    const interactiveChat = maxTokensOverride !== undefined;
+    // A bounded override belongs to the interactive coach. Blood-test requests
+    // are identified by their domain system prompt and keep their own structured
+    // output contract even if a future caller adds a token override.
+    const interactiveChat = maxTokensOverride !== undefined && !responseSchema;
     const providerMaxTokens = interactiveChat
       ? Math.max(requestedMaxTokens, CHAT_MIN_OUTPUT_TOKENS)
       : requestedMaxTokens;
@@ -338,11 +468,13 @@ export class VertexAIAdapter extends OpenAICompatibleAdapter {
       contents,
       providerMaxTokens,
       interactiveChat,
+      responseSchema,
     );
     const firstFinishReason = first.candidates?.[0]?.finishReason;
     const firstContent = this.extractText(first);
 
     if (firstFinishReason && BLOCKED_FINISH_REASONS.has(firstFinishReason)) {
+      if (responseSchema) this.throwBlockedStructuredResponse(first);
       logger.warn(
         { model: this.vertex.model, ...this.safeResponseMetadata(first) },
         "Vertex AI blocked an interactive response",
@@ -371,11 +503,13 @@ export class VertexAIAdapter extends OpenAICompatibleAdapter {
         contents,
         retryMaxTokens,
         interactiveChat,
+        responseSchema,
       );
       const retryFinishReason = retry.candidates?.[0]?.finishReason;
       const retryContent = this.extractText(retry);
 
       if (retryFinishReason && BLOCKED_FINISH_REASONS.has(retryFinishReason)) {
+        if (responseSchema) this.throwBlockedStructuredResponse(retry);
         logger.warn(
           { model: this.vertex.model, ...this.safeResponseMetadata(retry) },
           "Vertex AI blocked an interactive response after retry",
