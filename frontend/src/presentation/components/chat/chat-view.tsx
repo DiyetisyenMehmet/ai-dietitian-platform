@@ -101,7 +101,11 @@ export function ChatView() {
 
           {showScrollButton && <ScrollToBottomButton onClick={() => scrollToBottom("smooth")} />}
 
-          <ChatInput onSend={(text) => chatStore.sendMessage(text)} disabled={isResponding || isLoading} />
+          <ChatInput
+            onSend={(text) => chatStore.sendMessage(text)}
+            disabled={isResponding || isLoading}
+            showSuggestions={!isEmpty}
+          />
         </div>
       </div>
     </div>
