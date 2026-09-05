@@ -35,6 +35,29 @@ function parseNumeric(raw: string): number | null {
 }
 
 /**
+ * `A1c` is an ambiguous HPLC component label. Some laboratory exports print a
+ * separate mass-concentration row such as `A1c 0.5 g/dL` alongside the standard
+ * `%Hb A1c (NGSP)` result. Treating the mass row as canonical HbA1c makes the UI
+ * show two different measurements under the same clinical label. We therefore
+ * refuse only this clearly incompatible mass-concentration form while still
+ * allowing ordinary HbA1c percentages and IFCC mmol/mol reporting.
+ */
+function isAmbiguousA1cMassMeasurement(name: string, unit: string | null): boolean {
+  const normalizedName = name
+    .toLocaleLowerCase("tr-TR")
+    .replace(/[()[\]:.,;]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (normalizedName !== "a1c" || !unit) return false;
+
+  const normalizedUnit = unit
+    .toLocaleLowerCase("tr-TR")
+    .replace(/\s+/g, "")
+    .replace(/[µμ]/g, "u");
+  return /^(?:g|mg|ug|ng|pg)\/(?:dl|l)$/i.test(normalizedUnit);
+}
+
+/**
  * Parses the laboratory's own printed reference range. The report range has
  * priority over Diewish's generic database fallback because it is tied to the
  * exact laboratory/method used for the uploaded result.
@@ -159,10 +182,14 @@ export const normalizationService = {
     const results: NormalizedBloodTestValue[] = [];
 
     for (const item of extracted) {
-      const code = matchBiomarkerCode(item.name);
+      const extractedUnit = item.unit?.trim() || null;
+      const matchedCode = matchBiomarkerCode(item.name);
+      const code =
+        matchedCode === "HBA1C" && isAmbiguousA1cMassMeasurement(item.name, extractedUnit)
+          ? null
+          : matchedCode;
       const definition = code ? getBiomarkerDefinition(code) : undefined;
       const databaseRange = code ? (ranges.get(code) ?? null) : null;
-      const extractedUnit = item.unit?.trim() || null;
       const documentRange = parseDocumentReferenceRange(item.referenceRange, extractedUnit);
       const referenceRange = documentRange ?? (databaseRange ? toSnapshot(databaseRange) : null);
 
