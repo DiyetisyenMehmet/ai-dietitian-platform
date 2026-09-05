@@ -88,27 +88,60 @@ async function hydrate(): Promise<void> {
 
   hydrationPromise = (async () => {
     try {
-      const [subscription, planResult, paymentResult] = await Promise.all([
-        paymentsClient.getSubscription(),
+      // Entitlement is security/product critical and must not be coupled to
+      // auxiliary billing-history requests. Previously Promise.all meant a
+      // transient plans/payments failure downgraded the in-memory subscription
+      // to FREE, hiding paid-only product features even when the authoritative
+      // subscription endpoint had returned PREMIUM/PREMIUM_PLUS correctly.
+      const subscription = await paymentsClient.getSubscription();
+      if (generation !== sessionGeneration) return;
+
+      // Publish the authoritative entitlement immediately. Plans and payment
+      // history are non-critical decoration for billing screens and may fail
+      // independently without changing the user's tier.
+      state = {
+        ...state,
+        subscription,
+        loading: true,
+        error: null,
+      };
+      emit();
+
+      const [planResult, paymentResult] = await Promise.allSettled([
         paymentsClient.listPlans(),
         paymentsClient.listPayments(),
       ]);
       if (generation !== sessionGeneration) return;
+
+      const auxiliaryErrors: unknown[] = [];
+      const plans =
+        planResult.status === "fulfilled"
+          ? planResult.value.plans
+          : (auxiliaryErrors.push(planResult.reason), state.plans);
+      const payments =
+        paymentResult.status === "fulfilled"
+          ? paymentResult.value.payments
+          : (auxiliaryErrors.push(paymentResult.reason), state.payments);
+
       state = {
         subscription,
-        plans: planResult.plans,
-        payments: paymentResult.payments,
+        plans,
+        payments,
         loading: false,
-        error: null,
+        error:
+          auxiliaryErrors.length > 0
+            ? "Bazı ödeme ayrıntıları şu anda alınamadı; abonelik durumun güncel."
+            : null,
       };
       hydrated = true;
       emit();
     } catch (error) {
       if (generation !== sessionGeneration) return;
+      // Do not overwrite a previously resolved paid entitlement with a synthetic
+      // FREE value on a transient refresh error. A fresh session still starts at
+      // FREE until the authoritative endpoint resolves, so this never fails open.
       state = {
         ...state,
-        subscription: emptySubscription(),
-        payments: [],
         loading: false,
         error: errorMessage(error),
       };
