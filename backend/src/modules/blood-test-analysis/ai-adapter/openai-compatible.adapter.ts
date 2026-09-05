@@ -56,6 +56,9 @@ interface ChatCompletionResponse {
   choices?: Array<{ message?: { content?: string | null } }>;
 }
 
+/** Detailed blood-test JSON needs a larger bounded budget than chat replies. */
+const BLOOD_ANALYSIS_OUTPUT_TOKENS = 6144;
+
 /**
  * An {@link IAIAdapter} backed by any OpenAI-compatible chat/completions API
  * (OpenAI, Mistral, Together, Groq, …). It uses JSON-object response formatting
@@ -226,8 +229,9 @@ export class OpenAICompatibleAdapter implements IAIAdapter {
     mimeType: string,
   ): Promise<ExtractedBloodTestValues> {
     const schemaHint =
-      'Return JSON of the form {"values":[{"name":"string","rawValue":"string","unit":"string"}]}. ' +
-      "Include every biomarker printed on the report. If a unit is absent, use an empty string.";
+      'Return JSON of the form {"values":[{"name":"string","rawValue":"string","unit":"string","referenceRange":"string"}]}. ' +
+      "Include every biomarker printed on the report. Copy its printed reference range exactly. " +
+      "If a unit or reference range is absent, use an empty string.";
 
     const messages: ChatMessage[] = [{ role: "system", content: EXTRACTION_SYSTEM_PROMPT }];
 
@@ -258,6 +262,7 @@ export class OpenAICompatibleAdapter implements IAIAdapter {
             name: String(v.name),
             rawValue: String(v.rawValue ?? ""),
             unit: v.unit ? String(v.unit) : undefined,
+            referenceRange: v.referenceRange ? String(v.referenceRange) : undefined,
           }))
       : [];
 
@@ -266,16 +271,13 @@ export class OpenAICompatibleAdapter implements IAIAdapter {
 
   /**
    * Removes any forbidden medical term from a generated string, replacing it
-   * with a neutral phrasing. This is a defensive guard on top of the system
-   * prompt so Diewish never surfaces treatment/diagnosis language.
+   * with a neutral Turkish phrase. This is a defensive guard on top of the
+   * system prompt so a provider cannot leak instruction-like medical language.
    */
   private sanitizeText(text: string): string {
     let out = text;
     for (const term of FORBIDDEN_AI_TERMS) {
-      out = out.replace(
-        new RegExp(`\\b${term}\\w*\\b`, "gi"),
-        "[consult a healthcare professional]",
-      );
+      out = out.replace(new RegExp(`\\b${term}\\w*\\b`, "gi"), "uzman değerlendirmesi");
     }
     return out;
   }
@@ -289,11 +291,14 @@ export class OpenAICompatibleAdapter implements IAIAdapter {
       "Return JSON with this exact shape:",
       "{",
       '  "explanations": [{"biomarkerCode":"string","biomarkerName":"string","status":"string","explanation":"string"}],',
-      '  "nutritionImplications": [{"biomarkerCode":"string","biomarkerName":"string","implication":"string","suggestedFoods":["string"],"foodsToLimit":["string"]}],',
+      '  "nutritionImplications": [{"biomarkerCode":"string","biomarkerName":"string","implication":"string","possibleNutritionFactors":["string"],"suggestedFoods":["string"],"foodsToLimit":["string"],"mealIdeas":["string"]}],',
       '  "overallRecommendations": ["string"],',
       '  "summary": "string"',
       "}",
-      "Provide nutritionImplications only for values whose status is not NORMAL.",
+      "Every user-facing string must be Turkish (tr-TR).",
+      "Provide nutritionImplications for LOW/HIGH/CRITICALLY_LOW/CRITICALLY_HIGH values. For UNKNOWN values, explain only that the reference status could not be evaluated and do not infer a deficiency or excess.",
+      "Never call an UNKNOWN value normal and never infer an unmeasured vitamin/mineral deficiency.",
+      "Do not put a generic medical disclaimer in summary; the application renders it separately.",
     ].join("\n");
 
     const payload = {
@@ -333,7 +338,7 @@ export class OpenAICompatibleAdapter implements IAIAdapter {
       },
     ];
 
-    const raw = await this.chat(messages);
+    const raw = await this.chat(messages, BLOOD_ANALYSIS_OUTPUT_TOKENS);
     const parsed = this.parseJson<Partial<BloodTestAnalysisResult>>(raw);
 
     const explanations: BiomarkerExplanation[] = Array.isArray(parsed.explanations)
@@ -352,8 +357,18 @@ export class OpenAICompatibleAdapter implements IAIAdapter {
           biomarkerCode: String(n.biomarkerCode ?? ""),
           biomarkerName: String(n.biomarkerName ?? ""),
           implication: this.sanitizeText(String(n.implication ?? "")),
-          suggestedFoods: Array.isArray(n.suggestedFoods) ? n.suggestedFoods.map(String) : [],
-          foodsToLimit: Array.isArray(n.foodsToLimit) ? n.foodsToLimit.map(String) : [],
+          possibleNutritionFactors: Array.isArray(n.possibleNutritionFactors)
+            ? n.possibleNutritionFactors.map((item) => this.sanitizeText(String(item)))
+            : [],
+          suggestedFoods: Array.isArray(n.suggestedFoods)
+            ? n.suggestedFoods.map((item) => this.sanitizeText(String(item)))
+            : [],
+          foodsToLimit: Array.isArray(n.foodsToLimit)
+            ? n.foodsToLimit.map((item) => this.sanitizeText(String(item)))
+            : [],
+          mealIdeas: Array.isArray(n.mealIdeas)
+            ? n.mealIdeas.map((item) => this.sanitizeText(String(item)))
+            : [],
         }))
       : [];
 
@@ -361,8 +376,7 @@ export class OpenAICompatibleAdapter implements IAIAdapter {
       ? parsed.overallRecommendations.map((r) => this.sanitizeText(String(r)))
       : [];
 
-    const summaryBase = this.sanitizeText(String(parsed.summary ?? ""));
-    const summary = `${summaryBase}\n\n${DISCLAIMER}`.trim();
+    const summary = this.sanitizeText(String(parsed.summary ?? "")).trim();
 
     return { explanations, nutritionImplications, overallRecommendations, summary };
   }
