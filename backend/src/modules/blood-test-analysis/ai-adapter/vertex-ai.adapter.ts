@@ -107,8 +107,9 @@ const EXTRACTION_RESPONSE_SCHEMA = {
           name: { type: "STRING" },
           rawValue: { type: "STRING" },
           unit: { type: "STRING" },
+          referenceRange: { type: "STRING" },
         },
-        required: ["name", "rawValue", "unit"],
+        required: ["name", "rawValue", "unit", "referenceRange"],
       },
     },
   },
@@ -142,15 +143,19 @@ const BLOOD_ANALYSIS_RESPONSE_SCHEMA = {
           biomarkerCode: { type: "STRING" },
           biomarkerName: { type: "STRING" },
           implication: { type: "STRING" },
+          possibleNutritionFactors: { type: "ARRAY", items: { type: "STRING" } },
           suggestedFoods: { type: "ARRAY", items: { type: "STRING" } },
           foodsToLimit: { type: "ARRAY", items: { type: "STRING" } },
+          mealIdeas: { type: "ARRAY", items: { type: "STRING" } },
         },
         required: [
           "biomarkerCode",
           "biomarkerName",
           "implication",
+          "possibleNutritionFactors",
           "suggestedFoods",
           "foodsToLimit",
+          "mealIdeas",
         ],
       },
     },
@@ -172,6 +177,7 @@ const BLOCKED_FINISH_REASONS = new Set([
 const PROVIDER_REQUEST_ATTEMPTS = 2;
 const CHAT_MIN_OUTPUT_TOKENS = 2048;
 const CHAT_RETRY_MAX_OUTPUT_TOKENS = 4096;
+const STRUCTURED_RETRY_MAX_OUTPUT_TOKENS = 8192;
 
 /**
  * Vertex AI implementation of Diewish's existing provider-agnostic adapter.
@@ -485,7 +491,10 @@ export class VertexAIAdapter extends OpenAICompatibleAdapter {
     if (firstFinishReason === "MAX_TOKENS") {
       const retryMaxTokens = interactiveChat
         ? CHAT_RETRY_MAX_OUTPUT_TOKENS
-        : Math.min(Math.max(providerMaxTokens * 2, 1024), 4096);
+        : Math.min(
+            Math.max(providerMaxTokens * 2, providerMaxTokens),
+            STRUCTURED_RETRY_MAX_OUTPUT_TOKENS,
+          );
       logger.warn(
         {
           model: this.vertex.model,
