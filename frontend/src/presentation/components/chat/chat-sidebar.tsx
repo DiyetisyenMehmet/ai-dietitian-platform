@@ -1,11 +1,23 @@
 "use client";
 
 import * as React from "react";
-import { Plus, MessageSquare, X } from "lucide-react";
+import { MessageSquare, MoreVertical, Plus, Trash2, X } from "lucide-react";
 
 import { cn } from "@/shared/lib/utils";
 import { Button } from "@/presentation/components/ui/button";
-import { useChatState, chatStore } from "@/application/chat/chat-store";
+import {
+  Modal,
+  ModalContent,
+  ModalDescription,
+  ModalFooter,
+  ModalHeader,
+  ModalTitle,
+} from "@/presentation/components/ui/modal";
+import {
+  chatStore,
+  isDraftConversationId,
+  useChatState,
+} from "@/application/chat/chat-store";
 
 interface ChatSidebarProps {
   /** Mobile drawer open state (ignored on desktop where it is always visible). */
@@ -20,10 +32,22 @@ function relativeDay(ts: number): string {
   return `${days} gün önce`;
 }
 
-/** Conversation list: New Chat + previous conversations (placeholder history). */
+/** Conversation list: New Chat + persisted conversation history. */
 export function ChatSidebar({ open, onClose }: ChatSidebarProps) {
-  const { conversations, activeId } = useChatState();
+  const { conversations, activeId, isResponding } = useChatState();
+  const [pendingDelete, setPendingDelete] = React.useState<{ id: string; title: string } | null>(
+    null,
+  );
+  const [isDeleting, setIsDeleting] = React.useState(false);
   const ordered = [...conversations].sort((a, b) => b.updatedAt - a.updatedAt);
+
+  const confirmDelete = React.useCallback(async () => {
+    if (!pendingDelete || isDeleting) return;
+    setIsDeleting(true);
+    const deleted = await chatStore.deleteConversation(pendingDelete.id);
+    setIsDeleting(false);
+    if (deleted) setPendingDelete(null);
+  }, [isDeleting, pendingDelete]);
 
   const panel = (
     <div className="flex h-full w-full flex-col gap-3 p-3">
@@ -45,30 +69,48 @@ export function ChatSidebar({ open, onClose }: ChatSidebarProps) {
       <nav className="flex-1 space-y-1 overflow-y-auto">
         {ordered.map((conv) => {
           const active = conv.id === activeId;
+          const persisted = !isDraftConversationId(conv.id);
           return (
-            <button
+            <div
               key={conv.id}
-              type="button"
-              onClick={() => {
-                chatStore.selectConversation(conv.id);
-                onClose();
-              }}
               className={cn(
-                "flex w-full items-start gap-2.5 rounded-xl px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "group flex items-center rounded-xl transition-colors",
                 active ? "bg-accent text-accent-foreground" : "hover:bg-accent/50",
               )}
             >
-              <MessageSquare
-                className="mt-0.5 size-4 shrink-0 text-muted-foreground"
-                aria-hidden="true"
-              />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium">{conv.title}</span>
-                <span className="block text-xs text-muted-foreground">
-                  {conv.messages.length > 0 ? relativeDay(conv.updatedAt) : "Boş"}
+              <button
+                type="button"
+                onClick={() => {
+                  chatStore.selectConversation(conv.id);
+                  onClose();
+                }}
+                className="flex min-w-0 flex-1 items-start gap-2.5 rounded-xl px-3 py-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <MessageSquare
+                  className="mt-0.5 size-4 shrink-0 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium">{conv.title}</span>
+                  <span className="block text-xs text-muted-foreground">
+                    {conv.messages.length > 0 ? relativeDay(conv.updatedAt) : "Boş"}
+                  </span>
                 </span>
-              </span>
-            </button>
+              </button>
+
+              {persisted && (
+                <button
+                  type="button"
+                  aria-label={`${conv.title} sohbet seçenekleri`}
+                  title="Sohbet seçenekleri"
+                  disabled={isResponding || isDeleting}
+                  onClick={() => setPendingDelete({ id: conv.id, title: conv.title })}
+                  className="mr-1 flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-background/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40 lg:opacity-0 lg:group-hover:opacity-100 lg:focus-visible:opacity-100"
+                >
+                  <MoreVertical className="size-4" aria-hidden="true" />
+                </button>
+              )}
+            </div>
           );
         })}
       </nav>
@@ -119,6 +161,42 @@ export function ChatSidebar({ open, onClose }: ChatSidebarProps) {
           {panel}
         </div>
       </div>
+
+      <Modal
+        open={Boolean(pendingDelete)}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen && !isDeleting) setPendingDelete(null);
+        }}
+      >
+        <ModalContent>
+          <ModalHeader>
+            <ModalTitle>Sohbet silinsin mi?</ModalTitle>
+            <ModalDescription>
+              {pendingDelete ? `“${pendingDelete.title}”` : "Bu sohbet"} ve içindeki tüm mesajlar
+              kalıcı olarak silinecek. Bu işlem geri alınamaz.
+            </ModalDescription>
+          </ModalHeader>
+          <ModalFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isDeleting}
+              onClick={() => setPendingDelete(null)}
+            >
+              Vazgeç
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              isLoading={isDeleting}
+              onClick={() => void confirmDelete()}
+            >
+              {!isDeleting && <Trash2 aria-hidden="true" />}
+              Sohbeti Sil
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
     </>
   );
 }

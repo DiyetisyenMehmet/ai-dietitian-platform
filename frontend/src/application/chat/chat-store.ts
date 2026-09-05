@@ -10,6 +10,10 @@ let uid = 0;
 const nextId = (prefix: string) => `${prefix}-${Date.now()}-${uid++}`;
 const DRAFT_PREFIX = "draft-";
 
+export function isDraftConversationId(id: string): boolean {
+  return id.startsWith(DRAFT_PREFIX);
+}
+
 interface ChatState {
   conversations: Conversation[];
   activeId: string;
@@ -168,6 +172,32 @@ function updateConversation(id: string, mutator: (conv: Conversation) => Convers
   });
 }
 
+function removeConversationLocally(id: string) {
+  loadedConversationIds.delete(id);
+  const remaining = state.conversations.filter((conversation) => conversation.id !== id);
+
+  if (remaining.length === 0) {
+    const draft = createEmptyConversation();
+    setState({ conversations: [draft], activeId: draft.id, error: null });
+    return;
+  }
+
+  if (state.activeId === id) {
+    const existingDraft = remaining.find(
+      (conversation) => isDraftConversationId(conversation.id) && conversation.messages.length === 0,
+    );
+    const draft = existingDraft ?? createEmptyConversation();
+    setState({
+      conversations: existingDraft ? remaining : [draft, ...remaining],
+      activeId: draft.id,
+      error: null,
+    });
+    return;
+  }
+
+  setState({ conversations: remaining, error: null });
+}
+
 async function fetchConversation(id: string): Promise<Conversation> {
   const result = await apiRequest<GetConversationResponse>({
     path: `/ai-chat/conversations/${encodeURIComponent(id)}`,
@@ -240,7 +270,7 @@ export const chatStore = {
     const active = state.conversations.find((conversation) => conversation.id === targetId);
     if (!active) return;
 
-    const isDraft = targetId.startsWith(DRAFT_PREFIX);
+    const isDraft = isDraftConversationId(targetId);
     const userMessage: ChatMessage = {
       id: nextId("user"),
       role: "user",
@@ -341,9 +371,44 @@ export const chatStore = {
     }));
   },
 
+  async deleteConversation(id: string): Promise<boolean> {
+    if (state.isResponding || isDraftConversationId(id)) return false;
+    if (!state.conversations.some((conversation) => conversation.id === id)) return false;
+
+    const generation = sessionGeneration;
+    try {
+      await apiRequest<void>({
+        path: `/ai-chat/conversations/${encodeURIComponent(id)}`,
+        method: "DELETE",
+        auth: true,
+      });
+      if (generation !== sessionGeneration) return false;
+
+      removeConversationLocally(id);
+      return true;
+    } catch (error) {
+      if (generation !== sessionGeneration) return false;
+
+      // A stale local row may already have been removed on another device. In
+      // that case the desired end state is already true, so reconcile locally.
+      if (error instanceof ApiError && error.status === 404) {
+        removeConversationLocally(id);
+        return true;
+      }
+
+      setState({
+        error:
+          error instanceof ApiError && error.status === 401
+            ? "Oturum yenilenemedi. Lütfen yeniden giriş yap."
+            : "Sohbet silinemedi. Lütfen tekrar dene.",
+      });
+      return false;
+    }
+  },
+
   newChat() {
     const active = state.conversations.find((conversation) => conversation.id === state.activeId);
-    if (active && active.id.startsWith(DRAFT_PREFIX) && active.messages.length === 0) return;
+    if (active && isDraftConversationId(active.id) && active.messages.length === 0) return;
 
     const draft = createEmptyConversation();
     setState({
@@ -359,7 +424,7 @@ export const chatStore = {
     if (!conversation) return;
 
     setState({ activeId: id, error: null });
-    if (id.startsWith(DRAFT_PREFIX) || loadedConversationIds.has(id)) return;
+    if (isDraftConversationId(id) || loadedConversationIds.has(id)) return;
 
     const generation = sessionGeneration;
     setState({ isLoading: true });
