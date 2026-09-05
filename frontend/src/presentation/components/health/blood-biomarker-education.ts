@@ -300,6 +300,71 @@ const EDUCATION: Record<string, BiomarkerEducation> = {
   },
 };
 
+/**
+ * Premium explanatory layer: tells the user what the measured cell/substance or
+ * index actually does in the body. These are deliberately short, stable and
+ * non-diagnostic. For calculated/index values, the text explicitly says the
+ * value itself is an index rather than pretending it has a biological function.
+ */
+const BODY_ROLE: Record<string, string> = {
+  WBC: "Lökositler vücudu mikroorganizmalara ve yabancı yapılara karşı savunan bağışıklık hücreleridir.",
+  RBC: "Eritrositlerin temel görevi hemoglobin aracılığıyla akciğerlerden dokulara oksijen taşımak ve karbondioksitin taşınmasına katkı sağlamaktır.",
+  HGB: "Hemoglobin eritrositlerin içindeki oksijen bağlayan proteindir; oksijenin akciğerlerden dokulara taşınmasının ana taşıyıcılarından biridir.",
+  HCT: "Hematokrit bir madde değildir; kan hacminin ne kadarının eritrositlerden oluştuğunu ifade eden orandır.",
+  MCV: "MCV bir hücre veya madde değil, eritrositlerin ortalama büyüklüğünü gösteren indekstir. Eritrositler oksijen taşır.",
+  MCH: "MCH bir indekstir; tek bir eritrositte ortalama ne kadar hemoglobin bulunduğunu anlatır. Hemoglobin oksijen taşır.",
+  MCHC: "MCHC bir indekstir; eritrosit içindeki hemoglobinin ortalama yoğunluğunu gösterir. Hemoglobin oksijen taşınmasında görev yapar.",
+  RDW_CV: "RDW-CV'nin kendisi bir hücre veya hormon değildir; eritrosit boyutlarının birbirinden ne kadar farklı olduğunu gösteren indekstir. Eritrositlerin temel görevi oksijen taşımaktır.",
+  RDW_SD: "RDW-SD'nin kendisi bir hücre veya hormon değildir; eritrosit boyut değişkenliğini fL cinsinden ölçen indekstir. Eritrositlerin temel görevi oksijen taşımaktır.",
+  PLT: "Trombositler damar hasarı olduğunda birbirine tutunarak kanamanın durdurulmasına ve pıhtı tıkacının oluşmasına katkı sağlar.",
+  MPV: "MPV bir trombosit sayısı değil, trombositlerin ortalama hacmini gösteren indekstir; trombositler pıhtılaşma ve kanamanın durdurulmasında görev alır.",
+  PDW: "PDW bir hücre değildir; trombosit boyutlarının ne kadar değişken olduğunu gösteren indekstir. Trombositlerin temel görevi kanamanın durdurulmasına katkı sağlamaktır.",
+  P_LCR: "P-LCR bir hücre değildir; büyük hacimli trombositlerin toplam trombositler içindeki oranını gösterir. Trombositler pıhtılaşma sürecine katılır.",
+  NEUT_ABS: "Nötrofiller doğuştan bağışıklığın önemli hücrelerindendir; özellikle mikroorganizmaları tanıyıp etkisizleştirmeye ve fagosite etmeye katkı sağlar.",
+  NEUT_PCT: "NEUT% bir hücre değil, nötrofillerin lökositler içindeki payıdır. Nötrofiller doğuştan bağışıklık savunmasında görev alır.",
+  LYMPH_ABS: "Lenfositler bağışıklık hafızası, antikor yanıtı ve hücresel bağışıklık gibi görevleri üstlenen B, T ve NK hücre gruplarını kapsar.",
+  LYMPH_PCT: "LYMPH% bir hücre değil, lenfositlerin lökositler içindeki payıdır. Lenfositler özgül bağışıklık yanıtının önemli parçalarıdır.",
+  MONO_ABS: "Monositler mikroorganizmaların ve hücresel artıkların temizlenmesine katkı sağlayan bağışıklık hücreleridir; dokularda makrofaj benzeri hücrelere dönüşebilirler.",
+  MONO_PCT: "MONO% bir hücre değil, monositlerin lökositler içindeki payıdır. Monositler yabancı maddelerin ve hücresel artıkların temizlenmesine katkı sağlar.",
+  EOS_ABS: "Eozinofiller özellikle parazitlere karşı savunma ile alerjik ve bazı inflamatuvar yanıtlarda görev alan bağışıklık hücreleridir.",
+  EOS_PCT: "EO% bir hücre değil, eozinofillerin lökositler içindeki payıdır. Eozinofiller parazit savunması ile alerjik/inflamatuvar yanıtlara katılır.",
+  BASO_ABS: "Bazofiller alerjik ve inflamatuvar yanıtlarda histamin gibi mediyatörlerin salınmasına katkı sağlayan nadir beyaz kan hücreleridir.",
+  BASO_PCT: "BASO% bir hücre değil, bazofillerin lökositler içindeki payıdır. Bazofiller alerjik ve inflamatuvar yanıtlara katılır.",
+  NLR: "NLR'nin kendisinin vücutta bir görevi yoktur; nötrofil sayısının lenfosit sayısına bölünmesiyle elde edilen türetilmiş bir orandır.",
+  HBA1C: "HbA1c, glukozun hemoglobine bağlanmasıyla oluşur ve eritrositlerin yaşam süresi boyunca kan şekeri maruziyetini yansıtan bir göstergedir.",
+  TIBC: "TDBK/TIBC'nin kendisi bir taşıyıcı değildir; başta transferrin olmak üzere kandaki demir taşıyan proteinlerin ne kadar demir bağlayabildiğini yansıtır. Transferrin demirin kanda taşınmasına yardım eder.",
+  IRON: "Demir; hemoglobinin yapısında bulunur, oksijen taşınması ve birçok enzimin çalışması için gereklidir.",
+  FERRITIN: "Ferritin hücrelerde demiri depolayan proteindir; kandaki ferritin düzeyi demir depoları hakkında dolaylı bilgi verir.",
+  GLUCOSE: "Glukoz hücrelerin temel enerji kaynaklarından biridir; özellikle beyin ve çalışan kas dokusu enerji için glukozdan yararlanır.",
+  INSULIN: "İnsülin pankreastan salgılanan hormondur; glukozun hücrelere alınmasını ve enerji metabolizmasının düzenlenmesini sağlar.",
+  VITAMIN_D: "D vitamini kalsiyum-fosfor dengesinin ve kemik mineralizasyonunun düzenlenmesine katkı sağlar; bağışıklık dahil başka hücresel süreçlerde de rol oynar.",
+  VITAMIN_B12: "B12 vitamini DNA sentezi, sinir sistemi işlevleri ve normal kan hücresi üretimi için gereklidir.",
+  FOLATE: "Folat DNA sentezi ve hücre bölünmesi için gereklidir; hızlı yenilenen dokular ve kan hücresi üretiminde önem taşır.",
+  CREATININE: "Kreatinin kas metabolizması sırasında oluşan atık üründür ve büyük ölçüde böbrekler yoluyla süzülerek atılır.",
+  EGFR: "eGFR'nin kendisi bir madde değildir; böbreklerin kanı süzme hızını tahmin eden hesaplanmış göstergedir.",
+  BUN: "Üre azotu proteinlerin parçalanması sonucu oluşan atıkların dolaşımdaki bir göstergesidir ve böbrekler yoluyla uzaklaştırılır.",
+  TSH: "TSH hipofiz bezinden salgılanır ve tiroid bezini T4/T3 hormonlarını üretmesi için uyarır.",
+  FT3: "T3 tiroid hormonlarından biridir; enerji kullanımı ve metabolik hız dahil birçok hücresel sürecin düzenlenmesine katkı sağlar.",
+  FT4: "T4 tiroid bezinin ürettiği başlıca hormonlardan biridir ve dokularda T3'e dönüşerek metabolik süreçlerin düzenlenmesine katkı sağlar.",
+  TOTAL_CHOLESTEROL: "Kolesterol hücre zarlarının, safra asitlerinin ve bazı hormonların yapımında kullanılan bir lipittir; total kolesterol farklı taşıyıcı parçacıklardaki kolesterolün toplamını yansıtır.",
+  LDL: "LDL parçacıkları kolesterolü karaciğerden ve dolaşımdan çeşitli dokulara taşır.",
+  HDL: "HDL parçacıkları kolesterolün dokulardan karaciğere geri taşınmasına katkı sağlar.",
+  TRIGLYCERIDES: "Trigliseridler vücudun başlıca enerji depolama biçimlerinden biridir; gerektiğinde yağ dokusundan enerji için kullanılabilir.",
+  ALT: "ALT hücrelerde aminoasit metabolizmasına katılan bir enzimdir ve özellikle karaciğer hücrelerinde yoğun bulunur.",
+  AST: "AST aminoasit metabolizmasına katılan bir enzimdir; karaciğerin yanı sıra kas ve başka dokularda da bulunur.",
+  ALP: "ALP fosfat gruplarının işlenmesine katılan enzim grubudur; safra yolları ve kemik dokusu önemli kaynaklarındandır.",
+  ALBUMIN: "Albümin kanda sıvı dengesinin korunmasına ve hormon, yağ asidi, ilaç gibi birçok maddenin taşınmasına katkı sağlayan başlıca plazma proteinidir.",
+};
+
+function withBodyRole(code: string): BiomarkerEducation | null {
+  const education = EDUCATION[code];
+  if (!education) return null;
+  const role = BODY_ROLE[code];
+  return role
+    ? { ...education, whyItMatters: `${role} ${education.whyItMatters}` }
+    : education;
+}
+
 const RAW_NAME_ALIASES: Record<string, string> = {
   "rdw-cv": "RDW_CV",
   "rdw cv": "RDW_CV",
@@ -336,7 +401,7 @@ export function getBiomarkerEducation(
   value: BloodTestNormalizedValue,
 ): BiomarkerEducation | null {
   const code = value.biomarkerCode?.toUpperCase();
-  if (code && EDUCATION[code]) return EDUCATION[code];
+  if (code && EDUCATION[code]) return withBodyRole(code);
 
   const rawName = normalizeName(value.biomarkerName || value.biomarkerCode || "");
   if (rawName === "pct" && value.unit.trim() === "%") {
@@ -344,10 +409,10 @@ export function getBiomarkerEducation(
       title: "Plateletkrit (PCT)",
       category: "Hemogram • Trombosit indeksleri",
       whatItMeasures: "Trombositlerin toplam kan hacmi içinde kapladığı yaklaşık hacim oranını gösterir.",
-      whyItMatters: "Trombosit sayısı ve ortalama trombosit hacmiyle ilişkili türetilmiş bir indekstir. PLT ve MPV ile birlikte değerlendirilir; tek başına tanısal değildir.",
+      whyItMatters: "PCT'nin kendisi bir hücre değildir; trombositlerin toplam kan hacmi içindeki payını gösteren türetilmiş bir indekstir. Trombositler kanamanın durdurulması ve pıhtı oluşumunda görev alır. PCT; PLT ve MPV ile birlikte değerlendirilir ve tek başına tanısal değildir.",
     };
   }
 
   const aliasCode = RAW_NAME_ALIASES[rawName];
-  return aliasCode ? EDUCATION[aliasCode] ?? null : null;
+  return aliasCode ? withBodyRole(aliasCode) : null;
 }
