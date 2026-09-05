@@ -14,7 +14,10 @@ const OCR_QUALITY_TARGET_PARAMS = 8;
 /** OCR quality (0–100) at/above which the first pass is accepted as-is. */
 const OCR_QUALITY_ACCEPT_THRESHOLD = 85;
 /** Detects a printed reference range such as "10-20", "10 - 20", "3.5–5.1". */
-const REFERENCE_RANGE_REGEX = /\d[\d.,]*\s*[-–]\s*\d[\d.,]*/;
+const REFERENCE_RANGE_REGEX = /\d[\d.,]*\s*[-–—]\s*\d[\d.,]*/;
+/** Also accepts one-sided laboratory ranges such as "<100" or "> 40". */
+const REFERENCE_RANGE_VALUE_REGEX =
+  /(?:[<>≤≥]\s*\d[\d.,]*|\d[\d.,]*\s*[-–—]\s*\d[\d.,]*)/;
 
 /**
  * Estimates OCR quality on a 0–100 scale from data that OCR already produced.
@@ -49,7 +52,7 @@ function computeOcrQualityScore(values: ExtractedBloodTestValue[], rawText: stri
 /**
  * Parses raw laboratory-report text into structured biomarker values using a
  * line-oriented heuristic. Each line is expected to contain a label, a numeric
- * value (optionally prefixed with `<`/`>`), and an optional unit.
+ * value, an optional unit and, when printed on the same line, a reference range.
  *
  * @param text - Raw text recovered from a report.
  * @returns The best-effort structured values (may be empty).
@@ -69,6 +72,8 @@ function parseLabText(text: string): ExtractedBloodTestValue[] {
     const name = match[1].trim().replace(/\s{2,}/g, " ");
     const value = match[2].replace(/\s+/g, "");
     const unit = match[3]?.trim();
+    const remainder = line.slice(match[0].length).trim();
+    const referenceRange = remainder.match(REFERENCE_RANGE_VALUE_REGEX)?.[0]?.trim();
 
     // Skip obvious non-biomarker lines (dates, ids, page numbers).
     if (/\d{2}[./-]\d{2}[./-]\d{2,4}/.test(line)) continue;
@@ -78,7 +83,12 @@ function parseLabText(text: string): ExtractedBloodTestValue[] {
     if (seen.has(key)) continue;
     seen.add(key);
 
-    values.push({ name, rawValue: value, unit: unit && unit.length > 0 ? unit : undefined });
+    values.push({
+      name,
+      rawValue: value,
+      unit: unit && unit.length > 0 ? unit : undefined,
+      referenceRange: referenceRange && referenceRange.length > 0 ? referenceRange : undefined,
+    });
   }
 
   return values;
