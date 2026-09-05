@@ -27,7 +27,12 @@ import { normalizationService } from "./normalization/normalization.service";
 import { referenceRangesService } from "./reference-ranges/reference-ranges.service";
 import { nutritionAdaptationService } from "../ai-coach/nutrition-adaptation.service";
 import { aiUsageService } from "../ai-usage/ai-usage.service";
-import type { AnalysisContext, ExtractionResult, NormalizedBloodTestValue } from "./types";
+import type {
+  AnalysisContext,
+  BiomarkerExplanation,
+  ExtractionResult,
+  NormalizedBloodTestValue,
+} from "./types";
 
 /**
  * Multi-layered guard that confirms an uploaded document is a genuine
@@ -135,6 +140,124 @@ async function buildContext(userId: string): Promise<AnalysisContext> {
     healthConditions: profile.healthConditions,
     allergies: profile.allergies,
   };
+}
+
+function formattedResult(value: NormalizedBloodTestValue): string {
+  return `${value.rawValue}${value.unit ? ` ${value.unit}` : ""}`;
+}
+
+function formattedReference(value: NormalizedBloodTestValue): string | null {
+  const range = value.referenceRange;
+  if (!range) return null;
+  const unit = range.unit ? ` ${range.unit}` : "";
+  if (range.minValue !== null && range.maxValue !== null) {
+    return `${range.minValue}–${range.maxValue}${unit}`;
+  }
+  if (range.minValue !== null) return `≥ ${range.minValue}${unit}`;
+  if (range.maxValue !== null) return `≤ ${range.maxValue}${unit}`;
+  return null;
+}
+
+/**
+ * Provider output is probabilistic even when a structured schema is used. The
+ * model may legally return an `explanations` array that covers only a subset of
+ * the values. Persisting that partial array made ordinary rows such as EOS_PCT,
+ * RDW-SD or MONO_PCT appear as bare numbers in the client.
+ *
+ * This deterministic fallback contains no diagnosis and invents no laboratory
+ * facts: it only restates the authoritative normalized result/status/reference
+ * already computed by Diewish.
+ */
+function fallbackExplanation(value: NormalizedBloodTestValue): string {
+  const result = formattedResult(value);
+  const reference = formattedReference(value);
+
+  if (value.status === "UNKNOWN" || !reference) {
+    return `${value.biomarkerName} sonucunuz ${result}. Güvenilir bir referans aralığı bulunamadığı için bu ölçüm normal, düşük veya yüksek olarak sınıflandırılmadı.`;
+  }
+
+  if (value.status === "NORMAL") {
+    return `${value.biomarkerName} sonucunuz ${result}; bu raporda kullanılan ${reference} referans aralığının içindedir. Bu sınıflandırma yalnızca bu ölçümün laboratuvar aralığındaki konumunu gösterir.`;
+  }
+
+  if (value.status === "LOW" || value.status === "CRITICALLY_LOW") {
+    return `${value.biomarkerName} sonucunuz ${result}; bu raporda kullanılan ${reference} referans aralığının altındadır. Sonuç, ilgili diğer ölçümler ve kişisel sağlık bağlamıyla birlikte değerlendirilmelidir.`;
+  }
+
+  return `${value.biomarkerName} sonucunuz ${result}; bu raporda kullanılan ${reference} referans aralığının üzerindedir. Sonuç, ilgili diğer ölçümler ve kişisel sağlık bağlamıyla birlikte değerlendirilmelidir.`;
+}
+
+/**
+ * Reconciles probabilistic AI explanations against deterministic laboratory
+ * truth before persistence.
+ *
+ * - Only biomarker codes actually present in normalized input are accepted.
+ * - Model-provided name/status are ignored; authoritative normalized values win.
+ * - Duplicate model entries collapse to one per biomarker code.
+ * - Every distinct normalized biomarker code receives an explanation, using a
+ *   deterministic safe fallback when the provider omitted it.
+ *
+ * Duplicate normalized codes are intentionally collapsed here because the
+ * current explanation contract is keyed by biomarkerCode. Extraction-level
+ * duplicate rows are cleaned independently upstream.
+ */
+function reconcileExplanations(
+  normalized: NormalizedBloodTestValue[],
+  generated: BiomarkerExplanation[],
+): BiomarkerExplanation[] {
+  const authoritative = new Map<string, NormalizedBloodTestValue>();
+  for (const value of normalized) {
+    if (!authoritative.has(value.biomarkerCode)) {
+      authoritative.set(value.biomarkerCode, value);
+    }
+  }
+
+  const accepted = new Map<string, BiomarkerExplanation>();
+  let rejectedCount = 0;
+  for (const explanation of generated) {
+    const value = authoritative.get(explanation.biomarkerCode);
+    const text = explanation.explanation?.trim();
+    if (!value || !text || accepted.has(value.biomarkerCode)) {
+      rejectedCount += 1;
+      continue;
+    }
+    accepted.set(value.biomarkerCode, {
+      biomarkerCode: value.biomarkerCode,
+      biomarkerName: value.biomarkerName,
+      status: value.status,
+      explanation: text,
+    });
+  }
+
+  const reconciled = Array.from(authoritative.values()).map((value) => {
+    return (
+      accepted.get(value.biomarkerCode) ?? {
+        biomarkerCode: value.biomarkerCode,
+        biomarkerName: value.biomarkerName,
+        status: value.status,
+        explanation: fallbackExplanation(value),
+      }
+    );
+  });
+
+  const missingCount = reconciled.length - accepted.size;
+  const duplicateNormalizedCount = normalized.length - authoritative.size;
+  if (missingCount > 0 || rejectedCount > 0 || duplicateNormalizedCount > 0) {
+    logger.warn(
+      {
+        normalizedCount: normalized.length,
+        distinctBiomarkerCount: authoritative.size,
+        providerExplanationCount: generated.length,
+        acceptedProviderExplanationCount: accepted.size,
+        deterministicFallbackCount: missingCount,
+        rejectedProviderExplanationCount: rejectedCount,
+        duplicateNormalizedCount,
+      },
+      "Blood-test AI explanations reconciled against normalized values",
+    );
+  }
+
+  return reconciled;
 }
 
 /**
@@ -256,6 +379,7 @@ export const bloodTestAnalysisService = {
       // 5. AI explanations + nutrition implications.
       const adapter = getAIAdapter();
       const aiResult = await adapter.analyzeBloodTestValues(normalized, context);
+      const explanations = reconcileExplanations(normalized, aiResult.explanations);
 
       // 5a. Advisory-only quality notice. When the upload scored LOW, prepend a
       // non-blocking warning to the recommendations so the user is informed that
@@ -274,7 +398,7 @@ export const bloodTestAnalysisService = {
         normalizedValues: normalized,
         abnormalValues: abnormal,
         abnormalCount: abnormal.length,
-        aiExplanations: aiResult.explanations,
+        aiExplanations: explanations,
         nutritionImplications: aiResult.nutritionImplications,
         overallRecommendations,
         summary: aiResult.summary,
