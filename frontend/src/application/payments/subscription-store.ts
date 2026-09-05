@@ -96,13 +96,15 @@ async function hydrate(): Promise<void> {
       const subscription = await paymentsClient.getSubscription();
       if (generation !== sessionGeneration) return;
 
-      // Publish the authoritative entitlement immediately. Plans and payment
-      // history are non-critical decoration for billing screens and may fail
-      // independently without changing the user's tier.
+      // Publish the authoritative entitlement immediately and mark entitlement
+      // loading complete. Plans and payment history are non-critical billing
+      // decoration; they may still be loading or fail independently, but they
+      // must never keep paid product features hidden after the source-of-truth
+      // subscription endpoint has resolved.
       state = {
         ...state,
         subscription,
-        loading: true,
+        loading: false,
         error: null,
       };
       emit();
