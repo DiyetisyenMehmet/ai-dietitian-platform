@@ -6,6 +6,7 @@ import { validate } from "../../middleware/validate";
 import { aiChatController } from "./ai-chat.controller";
 import {
   conversationIdParamSchema,
+  pinConversationSchema,
   renameConversationSchema,
   sendMessageSchema,
 } from "./dto/ai-chat.schemas";
@@ -123,6 +124,34 @@ aiChatRouter.patch(
   authenticate,
   validate({ params: conversationIdParamSchema, body: renameConversationSchema }),
   aiChatController.renameConversation,
+);
+
+/**
+ * @openapi
+ * /api/ai-chat/conversations/{id}/pin:
+ *   patch:
+ *     tags: [AiChat]
+ *     summary: Pin or unpin a conversation
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [pinned]
+ *             properties:
+ *               pinned: { type: boolean }
+ *     responses:
+ *       200: { description: Updated conversation pin state. }
+ *       401: { description: Missing or invalid access token. }
+ *       404: { description: Conversation not found. }
+ */
+aiChatRouter.patch(
+  "/conversations/:id/pin",
+  authenticate,
+  validate({ params: conversationIdParamSchema, body: pinConversationSchema }),
+  aiChatController.setConversationPinned,
 );
 
 aiChatRouter.delete(

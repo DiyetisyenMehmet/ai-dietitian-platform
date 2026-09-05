@@ -96,6 +96,21 @@ export const aiChatRepository = {
     });
   },
 
+  /** Sets or clears a persistent pin, owner-scoped at mutation time. */
+  async setConversationPinned(
+    id: string,
+    userId: string,
+    pinned: boolean,
+  ): Promise<ChatConversation | null> {
+    const result = await prisma.chatConversation.updateMany({
+      where: { id, userId },
+      data: { pinnedAt: pinned ? new Date() : null },
+    });
+    if (result.count === 0) return null;
+
+    return prisma.chatConversation.findFirst({ where: { id, userId } });
+  },
+
   /**
    * Returns the most recent messages of a conversation in chronological order
    * (oldest first), capped at `limit`.

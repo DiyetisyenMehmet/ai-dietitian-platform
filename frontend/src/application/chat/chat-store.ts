@@ -25,6 +25,7 @@ interface ChatState {
 interface ApiConversationSummary {
   id: string;
   title: string | null;
+  pinnedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -48,7 +49,7 @@ interface GetConversationResponse {
   conversation: ApiConversationDetail;
 }
 
-interface RenameConversationResponse {
+interface UpdateConversationResponse {
   conversation: ApiConversationSummary;
 }
 
@@ -63,6 +64,7 @@ function createEmptyConversation(): Conversation {
     title: "Yeni sohbet",
     messages: [],
     updatedAt: Date.now(),
+    pinnedAt: null,
   };
 }
 
@@ -82,6 +84,12 @@ function toEpoch(value: string): number {
   return Number.isFinite(parsed) ? parsed : Date.now();
 }
 
+function toOptionalEpoch(value: string | null): number | null {
+  if (!value) return null;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function mapMessage(message: ApiChatMessage): ChatMessage {
   return {
     id: message.id,
@@ -97,6 +105,7 @@ function mapSummary(conversation: ApiConversationSummary): Conversation {
     title: conversation.title?.trim() || "Sohbet",
     messages: [],
     updatedAt: toEpoch(conversation.updatedAt),
+    pinnedAt: toOptionalEpoch(conversation.pinnedAt),
   };
 }
 
@@ -137,8 +146,6 @@ function friendlyError(error: unknown): string {
     if (error.status === 429) {
       return "AI Koç kullanım limitine ulaştın. Bir süre sonra tekrar deneyebilir veya planını inceleyebilirsin.";
     }
-    // Never expose provider names, environment variables, secret configuration,
-    // stack details or upstream messages to an end user.
     if (error.status === 0 || error.status >= 500) {
       return "AI Koç şu anda kullanılamıyor. Lütfen daha sonra tekrar dene.";
     }
@@ -355,8 +362,6 @@ export const chatStore = {
               : item,
           ),
         }));
-        // The failed assistant bubble already communicates this request's error.
-        // Avoid duplicating the same message in the global chat warning banner.
         setState({ error: null });
       } finally {
         if (generation === sessionGeneration) setState({ isResponding: false });
@@ -384,7 +389,7 @@ export const chatStore = {
 
     const generation = sessionGeneration;
     try {
-      const result = await apiRequest<RenameConversationResponse>({
+      const result = await apiRequest<UpdateConversationResponse>({
         path: `/ai-chat/conversations/${encodeURIComponent(id)}`,
         method: "PATCH",
         auth: true,
@@ -395,6 +400,8 @@ export const chatStore = {
       updateConversation(id, (conversation) => ({
         ...conversation,
         title: result.conversation.title?.trim() || trimmed,
+        updatedAt: toEpoch(result.conversation.updatedAt),
+        pinnedAt: toOptionalEpoch(result.conversation.pinnedAt),
       }));
       setState({ error: null });
       return true;
@@ -405,6 +412,39 @@ export const chatStore = {
           error instanceof ApiError && error.status === 401
             ? "Oturum yenilenemedi. Lütfen yeniden giriş yap."
             : "Sohbet adı değiştirilemedi. Lütfen tekrar dene.",
+      });
+      return false;
+    }
+  },
+
+  async setConversationPinned(id: string, pinned: boolean): Promise<boolean> {
+    if (state.isResponding || isDraftConversationId(id)) return false;
+    if (!state.conversations.some((conversation) => conversation.id === id)) return false;
+
+    const generation = sessionGeneration;
+    try {
+      const result = await apiRequest<UpdateConversationResponse>({
+        path: `/ai-chat/conversations/${encodeURIComponent(id)}/pin`,
+        method: "PATCH",
+        auth: true,
+        body: JSON.stringify({ pinned }),
+      });
+      if (generation !== sessionGeneration) return false;
+
+      updateConversation(id, (conversation) => ({
+        ...conversation,
+        updatedAt: toEpoch(result.conversation.updatedAt),
+        pinnedAt: toOptionalEpoch(result.conversation.pinnedAt),
+      }));
+      setState({ error: null });
+      return true;
+    } catch (error) {
+      if (generation !== sessionGeneration) return false;
+      setState({
+        error:
+          error instanceof ApiError && error.status === 401
+            ? "Oturum yenilenemedi. Lütfen yeniden giriş yap."
+            : "Sohbet sabitleme işlemi tamamlanamadı. Lütfen tekrar dene.",
       });
       return false;
     }
@@ -428,8 +468,6 @@ export const chatStore = {
     } catch (error) {
       if (generation !== sessionGeneration) return false;
 
-      // A stale local row may already have been removed on another device. In
-      // that case the desired end state is already true, so reconcile locally.
       if (error instanceof ApiError && error.status === 404) {
         removeConversationLocally(id);
         return true;

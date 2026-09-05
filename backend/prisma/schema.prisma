@@ -303,8 +303,8 @@ model BloodTestUpload {
   testDate         DateTime?       @db.Date
   /// Small, non-sensitive extensible context. Never extracted medical values.
   metadata         Json?
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
 
   /// One-to-one AI analysis produced by the Sprint 12 analysis engine.
   analysis BloodTestAnalysis?
@@ -580,10 +580,14 @@ model ChatConversation {
 
   /// Short human-readable label derived from the first user message.
   title String?
+  /// Non-null while the user has pinned this conversation. Timestamp gives a
+  /// stable order among pinned conversations and survives across devices.
+  pinnedAt DateTime?
 
   messages ChatMessage[]
 
   @@index([userId])
+  @@index([userId, pinnedAt])
   @@map("chat_conversations")
 }
 

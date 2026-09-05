@@ -1,8 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { MessageSquare, MoreVertical, Pencil, Plus, Trash2, X } from "lucide-react";
+import { MessageSquare, MoreVertical, Pencil, Pin, PinOff, Plus, Trash2, X } from "lucide-react";
 
+import type { Conversation } from "@/domain/chat/types";
 import { cn } from "@/shared/lib/utils";
 import { Button } from "@/presentation/components/ui/button";
 import { Input } from "@/presentation/components/ui/input";
@@ -21,12 +22,11 @@ import {
 } from "@/application/chat/chat-store";
 
 interface ChatSidebarProps {
-  /** Mobile drawer open state (ignored on desktop where it is always visible). */
   open: boolean;
   onClose: () => void;
 }
 
-type ConversationTarget = { id: string; title: string };
+type ConversationTarget = { id: string; title: string; pinnedAt: number | null };
 
 const TITLE_MAX_LENGTH = 80;
 
@@ -37,7 +37,11 @@ function relativeDay(ts: number): string {
   return `${days} gün önce`;
 }
 
-/** Conversation list: New Chat + persisted conversation history and safe actions. */
+function sortByRecency(a: Conversation, b: Conversation): number {
+  return b.updatedAt - a.updatedAt;
+}
+
+/** Conversation list with persistent rename, pin and safe delete controls. */
 export function ChatSidebar({ open, onClose }: ChatSidebarProps) {
   const { conversations, activeId, isResponding } = useChatState();
   const [actionTarget, setActionTarget] = React.useState<ConversationTarget | null>(null);
@@ -46,7 +50,14 @@ export function ChatSidebar({ open, onClose }: ChatSidebarProps) {
   const [renameValue, setRenameValue] = React.useState("");
   const [isDeleting, setIsDeleting] = React.useState(false);
   const [isRenaming, setIsRenaming] = React.useState(false);
-  const ordered = [...conversations].sort((a, b) => b.updatedAt - a.updatedAt);
+  const [isPinning, setIsPinning] = React.useState(false);
+
+  const pinned = conversations
+    .filter((conversation) => conversation.pinnedAt !== null)
+    .sort((a, b) => (b.pinnedAt ?? 0) - (a.pinnedAt ?? 0));
+  const regular = conversations
+    .filter((conversation) => conversation.pinnedAt === null)
+    .sort(sortByRecency);
 
   const openRename = React.useCallback((target: ConversationTarget) => {
     setActionTarget(null);
@@ -68,6 +79,17 @@ export function ChatSidebar({ open, onClose }: ChatSidebarProps) {
     }
   }, [isRenaming, renameTarget, renameValue]);
 
+  const togglePin = React.useCallback(async () => {
+    if (!actionTarget || isPinning) return;
+    setIsPinning(true);
+    const updated = await chatStore.setConversationPinned(
+      actionTarget.id,
+      actionTarget.pinnedAt === null,
+    );
+    setIsPinning(false);
+    if (updated) setActionTarget(null);
+  }, [actionTarget, isPinning]);
+
   const confirmDelete = React.useCallback(async () => {
     if (!pendingDelete || isDeleting) return;
     setIsDeleting(true);
@@ -75,6 +97,59 @@ export function ChatSidebar({ open, onClose }: ChatSidebarProps) {
     setIsDeleting(false);
     if (deleted) setPendingDelete(null);
   }, [isDeleting, pendingDelete]);
+
+  const renderConversation = (conv: Conversation) => {
+    const active = conv.id === activeId;
+    const persisted = !isDraftConversationId(conv.id);
+    const target: ConversationTarget = { id: conv.id, title: conv.title, pinnedAt: conv.pinnedAt };
+
+    return (
+      <div
+        key={conv.id}
+        className={cn(
+          "group flex items-center rounded-xl transition-colors",
+          active ? "bg-accent text-accent-foreground" : "hover:bg-accent/50",
+        )}
+      >
+        <button
+          type="button"
+          onClick={() => {
+            chatStore.selectConversation(conv.id);
+            onClose();
+          }}
+          className="flex min-w-0 flex-1 items-start gap-2.5 rounded-xl px-3 py-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {conv.pinnedAt !== null ? (
+            <Pin className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
+          ) : (
+            <MessageSquare
+              className="mt-0.5 size-4 shrink-0 text-muted-foreground"
+              aria-hidden="true"
+            />
+          )}
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-medium">{conv.title}</span>
+            <span className="block text-xs text-muted-foreground">
+              {conv.messages.length > 0 ? relativeDay(conv.updatedAt) : "Boş"}
+            </span>
+          </span>
+        </button>
+
+        {persisted && (
+          <button
+            type="button"
+            aria-label={`${conv.title} sohbet seçenekleri`}
+            title="Sohbet seçenekleri"
+            disabled={isResponding || isDeleting || isRenaming || isPinning}
+            onClick={() => setActionTarget(target)}
+            className="mr-1 flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-background/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40 lg:opacity-0 lg:group-hover:opacity-100 lg:focus-visible:opacity-100"
+          >
+            <MoreVertical className="size-4" aria-hidden="true" />
+          </button>
+        )}
+      </div>
+    );
+  };
 
   const panel = (
     <div className="flex h-full w-full flex-col gap-3 p-3">
@@ -89,69 +164,32 @@ export function ChatSidebar({ open, onClose }: ChatSidebarProps) {
         Yeni Sohbet
       </Button>
 
-      <p className="px-2 pt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Önceki Sohbetler
-      </p>
+      <nav className="flex-1 space-y-4 overflow-y-auto">
+        {pinned.length > 0 && (
+          <section>
+            <p className="px-2 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Sabitlenenler
+            </p>
+            <div className="space-y-1">{pinned.map(renderConversation)}</div>
+          </section>
+        )}
 
-      <nav className="flex-1 space-y-1 overflow-y-auto">
-        {ordered.map((conv) => {
-          const active = conv.id === activeId;
-          const persisted = !isDraftConversationId(conv.id);
-          return (
-            <div
-              key={conv.id}
-              className={cn(
-                "group flex items-center rounded-xl transition-colors",
-                active ? "bg-accent text-accent-foreground" : "hover:bg-accent/50",
-              )}
-            >
-              <button
-                type="button"
-                onClick={() => {
-                  chatStore.selectConversation(conv.id);
-                  onClose();
-                }}
-                className="flex min-w-0 flex-1 items-start gap-2.5 rounded-xl px-3 py-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <MessageSquare
-                  className="mt-0.5 size-4 shrink-0 text-muted-foreground"
-                  aria-hidden="true"
-                />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium">{conv.title}</span>
-                  <span className="block text-xs text-muted-foreground">
-                    {conv.messages.length > 0 ? relativeDay(conv.updatedAt) : "Boş"}
-                  </span>
-                </span>
-              </button>
-
-              {persisted && (
-                <button
-                  type="button"
-                  aria-label={`${conv.title} sohbet seçenekleri`}
-                  title="Sohbet seçenekleri"
-                  disabled={isResponding || isDeleting || isRenaming}
-                  onClick={() => setActionTarget({ id: conv.id, title: conv.title })}
-                  className="mr-1 flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-background/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40 lg:opacity-0 lg:group-hover:opacity-100 lg:focus-visible:opacity-100"
-                >
-                  <MoreVertical className="size-4" aria-hidden="true" />
-                </button>
-              )}
-            </div>
-          );
-        })}
+        <section>
+          <p className="px-2 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Önceki Sohbetler
+          </p>
+          <div className="space-y-1">{regular.map(renderConversation)}</div>
+        </section>
       </nav>
     </div>
   );
 
   return (
     <>
-      {/* Desktop: static column */}
       <aside className="hidden w-72 shrink-0 border-r border-border bg-card/40 lg:block">
         {panel}
       </aside>
 
-      {/* Mobile/tablet: slide-over drawer */}
       <div
         className={cn(
           "fixed inset-0 z-50 lg:hidden",
@@ -189,7 +227,7 @@ export function ChatSidebar({ open, onClose }: ChatSidebarProps) {
         </div>
       </div>
 
-      <Modal open={Boolean(actionTarget)} onOpenChange={(nextOpen) => !nextOpen && setActionTarget(null)}>
+      <Modal open={Boolean(actionTarget)} onOpenChange={(nextOpen) => !nextOpen && !isPinning && setActionTarget(null)}>
         <ModalContent>
           <ModalHeader>
             <ModalTitle>Sohbet seçenekleri</ModalTitle>
@@ -200,6 +238,22 @@ export function ChatSidebar({ open, onClose }: ChatSidebarProps) {
               type="button"
               variant="outline"
               className="justify-start"
+              isLoading={isPinning}
+              onClick={() => void togglePin()}
+            >
+              {!isPinning &&
+                (actionTarget?.pinnedAt !== null ? (
+                  <PinOff aria-hidden="true" />
+                ) : (
+                  <Pin aria-hidden="true" />
+                ))}
+              {actionTarget?.pinnedAt !== null ? "Sabitlemeyi kaldır" : "Sabitle"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="justify-start"
+              disabled={isPinning}
               onClick={() => actionTarget && openRename(actionTarget)}
             >
               <Pencil aria-hidden="true" />
@@ -209,6 +263,7 @@ export function ChatSidebar({ open, onClose }: ChatSidebarProps) {
               type="button"
               variant="outline"
               className="justify-start text-destructive hover:text-destructive"
+              disabled={isPinning}
               onClick={() => {
                 if (!actionTarget) return;
                 setPendingDelete(actionTarget);

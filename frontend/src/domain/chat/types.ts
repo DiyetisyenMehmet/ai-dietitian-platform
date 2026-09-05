@@ -25,8 +25,10 @@ export interface Conversation {
   id: string;
   title: string;
   messages: ChatMessage[];
-  /** Epoch milliseconds of the last update, used for ordering. */
+  /** Epoch milliseconds of the last update, used for recency ordering. */
   updatedAt: number;
+  /** Epoch milliseconds when pinned; null means the conversation is not pinned. */
+  pinnedAt: number | null;
 }
 
 /** A tappable prompt suggestion shown on the welcome screen. */

@@ -31,6 +31,13 @@ export const renameConversationSchema = z.object({
 
 export type RenameConversationInput = z.infer<typeof renameConversationSchema>;
 
+/** Body for pinning or unpinning a persisted conversation. */
+export const pinConversationSchema = z.object({
+  pinned: z.boolean(),
+});
+
+export type PinConversationInput = z.infer<typeof pinConversationSchema>;
+
 /** Path param carrying a conversation id. */
 export const conversationIdParamSchema = z.object({
   id: z.string().uuid("A valid conversation id is required."),

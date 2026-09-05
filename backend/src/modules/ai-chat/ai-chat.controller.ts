@@ -6,6 +6,7 @@ import { asyncHandler } from "../../utils/async-handler";
 import { aiChatService } from "./ai-chat.service";
 import type {
   ConversationIdParam,
+  PinConversationInput,
   RenameConversationInput,
   SendMessageInput,
 } from "./dto/ai-chat.schemas";
@@ -53,6 +54,15 @@ export const aiChatController = {
     const { id } = req.params as ConversationIdParam;
     const { title } = req.body as RenameConversationInput;
     const conversation = await aiChatService.renameConversation(userId, id, title);
+    sendSuccess(res, { conversation });
+  }),
+
+  /** Pins or unpins one conversation owned by the authenticated user. */
+  setConversationPinned: asyncHandler(async (req: Request, res: Response) => {
+    const userId = requireUserId(req);
+    const { id } = req.params as ConversationIdParam;
+    const { pinned } = req.body as PinConversationInput;
+    const conversation = await aiChatService.setConversationPinned(userId, id, pinned);
     sendSuccess(res, { conversation });
   }),
 

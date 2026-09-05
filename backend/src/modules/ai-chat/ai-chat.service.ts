@@ -188,6 +188,16 @@ export const aiChatService = {
     return conversation;
   },
 
+  async setConversationPinned(
+    userId: string,
+    id: string,
+    pinned: boolean,
+  ): Promise<ChatConversation> {
+    const conversation = await aiChatRepository.setConversationPinned(id, userId, pinned);
+    if (!conversation) throw ApiError.notFound("Conversation not found.");
+    return conversation;
+  },
+
   async deleteConversation(userId: string, id: string): Promise<void> {
     const deleted = await aiChatRepository.deleteConversation(id, userId);
     if (!deleted) throw ApiError.notFound("Conversation not found.");
