@@ -28,6 +28,8 @@ export interface ExtractedBloodTestValue {
   rawValue: string;
   /** Unit string as printed on the report, if any. */
   unit?: string;
+  /** Reference range exactly as printed on the report, if present. */
+  referenceRange?: string;
 }
 
 /** The full output of an extraction pass. */
@@ -50,6 +52,7 @@ export interface ReferenceRangeSnapshot {
   maxValue: number | null;
   optimalMin: number | null;
   optimalMax: number | null;
+  /** `LAB_REPORT` means the range came directly from the uploaded document. */
   source: string;
 }
 
@@ -63,13 +66,13 @@ export interface NormalizedBloodTestValue {
   rawValue: string;
   /** Parsed numeric value in the reference-range unit (post-conversion). */
   numericValue: number | null;
-  /** Canonical unit the numericValue is expressed in. */
+  /** Canonical/reference unit the numericValue is expressed in. */
   unit: string;
   /** Unit as printed on the source document. */
   extractedUnit: string | null;
   /** Multiplicative factor applied to convert extractedUnit → unit (1 if none). */
   conversionFactor: number;
-  /** The reference range applied, or null when no match was found. */
+  /** The reference range applied, or null when no safe match was found. */
   referenceRange: ReferenceRangeSnapshot | null;
   /** Computed status relative to the reference range. */
   status: BloodTestValueStatus;
@@ -106,18 +109,22 @@ export interface NutritionImplication {
   biomarkerName: string;
   /** Nutritional relevance of the value. Never medical treatment. */
   implication: string;
+  /** Plausible nutrition-related contributors, always phrased as possibilities. */
+  possibleNutritionFactors?: string[];
   /** Foods/nutrients that may support healthier values. */
   suggestedFoods: string[];
   /** Foods/nutrients worth moderating. */
   foodsToLimit: string[];
+  /** Concrete meal combinations aligned with the user's diet/allergies. */
+  mealIdeas?: string[];
 }
 
 /** The structured analysis returned by the AI adapter. */
 export interface BloodTestAnalysisResult {
   explanations: BiomarkerExplanation[];
   nutritionImplications: NutritionImplication[];
-  /** Ordered, prioritized list of nutrition recommendations. */
+  /** Ordered, prioritized list of nutrition and meal-planning recommendations. */
   overallRecommendations: string[];
-  /** 2–3 sentence plain-language summary. */
+  /** Concise Turkish plain-language summary. UI owns the safety disclaimer. */
   summary: string;
 }
