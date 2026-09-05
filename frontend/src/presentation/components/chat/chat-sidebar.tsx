@@ -1,9 +1,25 @@
 "use client";
 
 import * as React from "react";
-import { MessageSquare, MoreVertical, Pencil, Pin, PinOff, Plus, Trash2, X } from "lucide-react";
+import {
+  Copy,
+  MessageSquare,
+  MoreVertical,
+  Pencil,
+  Pin,
+  PinOff,
+  Plus,
+  Share2,
+  Trash2,
+  X,
+} from "lucide-react";
+import { toast } from "sonner";
 
 import type { Conversation } from "@/domain/chat/types";
+import {
+  formatConversationForShare,
+  loadConversationForShare,
+} from "@/application/chat/conversation-share";
 import { cn } from "@/shared/lib/utils";
 import { Button } from "@/presentation/components/ui/button";
 import { Input } from "@/presentation/components/ui/input";
@@ -41,16 +57,42 @@ function sortByRecency(a: Conversation, b: Conversation): number {
   return b.updatedAt - a.updatedAt;
 }
 
-/** Conversation list with persistent rename, pin and safe delete controls. */
+async function copyTranscript(text: string): Promise<void> {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = document.execCommand("copy");
+  document.body.removeChild(textarea);
+  if (!copied) throw new Error("Clipboard copy failed");
+}
+
+/** Conversation list with persistent rename, pin, share and safe delete controls. */
 export function ChatSidebar({ open, onClose }: ChatSidebarProps) {
   const { conversations, activeId, isResponding } = useChatState();
   const [actionTarget, setActionTarget] = React.useState<ConversationTarget | null>(null);
   const [pendingDelete, setPendingDelete] = React.useState<ConversationTarget | null>(null);
   const [renameTarget, setRenameTarget] = React.useState<ConversationTarget | null>(null);
   const [renameValue, setRenameValue] = React.useState("");
+  const [shareConversation, setShareConversation] = React.useState<Conversation | null>(null);
+  const [nativeShareAvailable, setNativeShareAvailable] = React.useState(false);
   const [isDeleting, setIsDeleting] = React.useState(false);
   const [isRenaming, setIsRenaming] = React.useState(false);
   const [isPinning, setIsPinning] = React.useState(false);
+  const [isPreparingShare, setIsPreparingShare] = React.useState(false);
+  const [isSharing, setIsSharing] = React.useState(false);
+
+  React.useEffect(() => {
+    setNativeShareAvailable(typeof navigator !== "undefined" && typeof navigator.share === "function");
+  }, []);
 
   const pinned = conversations
     .filter((conversation) => conversation.pinnedAt !== null)
@@ -89,6 +131,47 @@ export function ChatSidebar({ open, onClose }: ChatSidebarProps) {
     setIsPinning(false);
     if (updated) setActionTarget(null);
   }, [actionTarget, isPinning]);
+
+  const prepareShare = React.useCallback(async () => {
+    if (!actionTarget || isPreparingShare) return;
+    const target = actionTarget;
+    setIsPreparingShare(true);
+    try {
+      const conversation = await loadConversationForShare(target.id);
+      setActionTarget(null);
+      setShareConversation(conversation);
+    } catch {
+      toast.error("Sohbet paylaşım için yüklenemedi. Lütfen tekrar dene.");
+    } finally {
+      setIsPreparingShare(false);
+    }
+  }, [actionTarget, isPreparingShare]);
+
+  const executeShare = React.useCallback(async () => {
+    if (!shareConversation || isSharing) return;
+    const text = formatConversationForShare(shareConversation);
+    setIsSharing(true);
+
+    try {
+      if (nativeShareAvailable && typeof navigator.share === "function") {
+        await navigator.share({
+          title: `Diewish — ${shareConversation.title}`,
+          text,
+        });
+        setShareConversation(null);
+        return;
+      }
+
+      await copyTranscript(text);
+      toast.success("Sohbet panoya kopyalandı.");
+      setShareConversation(null);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      toast.error("Sohbet paylaşılamadı. Lütfen tekrar dene.");
+    } finally {
+      setIsSharing(false);
+    }
+  }, [isSharing, nativeShareAvailable, shareConversation]);
 
   const confirmDelete = React.useCallback(async () => {
     if (!pendingDelete || isDeleting) return;
@@ -140,7 +223,9 @@ export function ChatSidebar({ open, onClose }: ChatSidebarProps) {
             type="button"
             aria-label={`${conv.title} sohbet seçenekleri`}
             title="Sohbet seçenekleri"
-            disabled={isResponding || isDeleting || isRenaming || isPinning}
+            disabled={
+              isResponding || isDeleting || isRenaming || isPinning || isPreparingShare || isSharing
+            }
             onClick={() => setActionTarget(target)}
             className="mr-1 flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-background/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40 lg:opacity-0 lg:group-hover:opacity-100 lg:focus-visible:opacity-100"
           >
@@ -227,7 +312,12 @@ export function ChatSidebar({ open, onClose }: ChatSidebarProps) {
         </div>
       </div>
 
-      <Modal open={Boolean(actionTarget)} onOpenChange={(nextOpen) => !nextOpen && !isPinning && setActionTarget(null)}>
+      <Modal
+        open={Boolean(actionTarget)}
+        onOpenChange={(nextOpen) =>
+          !nextOpen && !isPinning && !isPreparingShare && setActionTarget(null)
+        }
+      >
         <ModalContent>
           <ModalHeader>
             <ModalTitle>Sohbet seçenekleri</ModalTitle>
@@ -239,6 +329,7 @@ export function ChatSidebar({ open, onClose }: ChatSidebarProps) {
               variant="outline"
               className="justify-start"
               isLoading={isPinning}
+              disabled={isPreparingShare}
               onClick={() => void togglePin()}
             >
               {!isPinning &&
@@ -253,7 +344,7 @@ export function ChatSidebar({ open, onClose }: ChatSidebarProps) {
               type="button"
               variant="outline"
               className="justify-start"
-              disabled={isPinning}
+              disabled={isPinning || isPreparingShare}
               onClick={() => actionTarget && openRename(actionTarget)}
             >
               <Pencil aria-hidden="true" />
@@ -262,8 +353,19 @@ export function ChatSidebar({ open, onClose }: ChatSidebarProps) {
             <Button
               type="button"
               variant="outline"
-              className="justify-start text-destructive hover:text-destructive"
+              className="justify-start"
+              isLoading={isPreparingShare}
               disabled={isPinning}
+              onClick={() => void prepareShare()}
+            >
+              {!isPreparingShare && <Share2 aria-hidden="true" />}
+              Sohbeti paylaş
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="justify-start text-destructive hover:text-destructive"
+              disabled={isPinning || isPreparingShare}
               onClick={() => {
                 if (!actionTarget) return;
                 setPendingDelete(actionTarget);
@@ -274,6 +376,42 @@ export function ChatSidebar({ open, onClose }: ChatSidebarProps) {
               Sohbeti sil
             </Button>
           </div>
+        </ModalContent>
+      </Modal>
+
+      <Modal
+        open={Boolean(shareConversation)}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen && !isSharing) setShareConversation(null);
+        }}
+      >
+        <ModalContent>
+          <ModalHeader>
+            <ModalTitle>Sohbeti paylaş</ModalTitle>
+            <ModalDescription>
+              {shareConversation
+                ? `“${shareConversation.title}” sohbetindeki ${shareConversation.messages.length} mesaj paylaşılacak.`
+                : "Sohbet paylaşılacak."}
+            </ModalDescription>
+          </ModalHeader>
+          <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2.5 text-xs leading-relaxed text-amber-800 dark:text-amber-200">
+            Sohbet sağlık veya beslenme bilgileri içerebilir. Paylaşacağın uygulamayı ve kişiyi kontrol et.
+          </div>
+          <ModalFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isSharing}
+              onClick={() => setShareConversation(null)}
+            >
+              Vazgeç
+            </Button>
+            <Button type="button" isLoading={isSharing} onClick={() => void executeShare()}>
+              {!isSharing &&
+                (nativeShareAvailable ? <Share2 aria-hidden="true" /> : <Copy aria-hidden="true" />)}
+              {nativeShareAvailable ? "Paylaş" : "Panoya kopyala"}
+            </Button>
+          </ModalFooter>
         </ModalContent>
       </Modal>
 
