@@ -2,7 +2,13 @@
 
 import * as React from "react";
 
-import { bloodTestClient, type BloodTestAnalysis } from "@/infrastructure/tracking/blood-test-client";
+import {
+  bloodTestClient,
+  type BloodTestAnalysis,
+  type BloodTestExplanation,
+  type BloodTestNormalizedValue,
+  type BloodTestNutritionImplication,
+} from "@/infrastructure/tracking/blood-test-client";
 
 export type BloodTestUiStatus = "analyzing" | "analyzed" | "failed";
 
@@ -13,12 +19,20 @@ export interface BloodTestSummaryView {
   title: string;
   summary: string;
   flaggedCount: number;
+  unknownCount: number;
   status: BloodTestUiStatus;
+  normalizedValues: BloodTestNormalizedValue[];
+  explanations: BloodTestExplanation[];
+  nutritionImplications: BloodTestNutritionImplication[];
+  recommendations: string[];
   fileName?: string;
 }
 
 let uid = 0;
 const nextId = () => `bt-local-${Date.now()}-${uid++}`;
+
+const LEGACY_BLOOD_DISCLAIMER_START =
+  "Diewish provides educational and nutrition-focused information only.";
 
 function today(): string {
   return new Date().toISOString().slice(0, 10);
@@ -32,6 +46,21 @@ function failureSummary(message?: string | null): string {
   return value;
 }
 
+/**
+ * Older persisted analyses embedded the long English legal boilerplate directly
+ * in `summary`. New analyses no longer do that, but stripping the exact legacy
+ * suffix here keeps history readable without mutating stored health records.
+ */
+function displaySummary(summary?: string | null): string {
+  const value = summary?.trim() ?? "";
+  const disclaimerIndex = value.indexOf(LEGACY_BLOOD_DISCLAIMER_START);
+  return (disclaimerIndex >= 0 ? value.slice(0, disclaimerIndex) : value).trim();
+}
+
+function asArray<T>(value: T[] | undefined): T[] {
+  return Array.isArray(value) ? value : [];
+}
+
 function toSummary(
   analysis: BloodTestAnalysis,
   options?: { fileName?: string; title?: string },
@@ -43,6 +72,13 @@ function toSummary(
         ? "failed"
         : "analyzing";
 
+  const normalizedValues = asArray(analysis.normalizedValues);
+  const explanations = asArray(analysis.aiExplanations);
+  const nutritionImplications = asArray(analysis.nutritionImplications);
+  const recommendations = asArray(analysis.overallRecommendations).map(String);
+  const unknownCount = normalizedValues.filter((value) => value.status === "UNKNOWN").length;
+  const cleanSummary = displaySummary(analysis.summary);
+
   return {
     id: analysis.id,
     uploadId: analysis.bloodTestId,
@@ -51,9 +87,14 @@ function toSummary(
     summary:
       status === "failed"
         ? failureSummary(analysis.errorMessage)
-        : analysis.summary ?? (status === "analyzed" ? "Analiz tamamlandı." : "Analiz ediliyor…"),
+        : cleanSummary || (status === "analyzed" ? "Analiz tamamlandı." : "Analiz ediliyor…"),
     flaggedCount: analysis.abnormalCount ?? 0,
+    unknownCount,
     status,
+    normalizedValues,
+    explanations,
+    nutritionImplications,
+    recommendations,
     ...(options?.fileName ? { fileName: options.fileName } : {}),
   };
 }
@@ -108,7 +149,12 @@ export const bloodTestStore = {
       title: file.name.replace(/\.[^.]+$/, "") || "Kan Tahlili",
       summary: "Dosya doğrulanıyor ve analiz ediliyor…",
       flaggedCount: 0,
+      unknownCount: 0,
       status: "analyzing",
+      normalizedValues: [],
+      explanations: [],
+      nutritionImplications: [],
+      recommendations: [],
       fileName: file.name,
     };
     tests = [temporary, ...tests];

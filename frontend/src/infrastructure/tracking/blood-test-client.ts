@@ -4,6 +4,51 @@ import { BLOOD_TEST_ENDPOINTS } from "@/infrastructure/auth/endpoints";
 /** Lifecycle status of an AI blood-test analysis run (backend enum). */
 export type BloodTestAnalysisStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
 
+export type BloodTestValueStatus =
+  | "NORMAL"
+  | "LOW"
+  | "HIGH"
+  | "CRITICALLY_LOW"
+  | "CRITICALLY_HIGH"
+  | "UNKNOWN";
+
+export interface BloodTestReferenceRange {
+  unit: string;
+  minValue: number | null;
+  maxValue: number | null;
+  optimalMin?: number | null;
+  optimalMax?: number | null;
+  source: string;
+}
+
+export interface BloodTestNormalizedValue {
+  biomarkerCode: string;
+  biomarkerName: string;
+  rawValue: string;
+  numericValue: number | null;
+  unit: string;
+  extractedUnit?: string | null;
+  referenceRange: BloodTestReferenceRange | null;
+  status: BloodTestValueStatus;
+}
+
+export interface BloodTestExplanation {
+  biomarkerCode: string;
+  biomarkerName: string;
+  status: BloodTestValueStatus;
+  explanation: string;
+}
+
+export interface BloodTestNutritionImplication {
+  biomarkerCode: string;
+  biomarkerName: string;
+  implication: string;
+  possibleNutritionFactors?: string[];
+  suggestedFoods: string[];
+  foodsToLimit: string[];
+  mealIdeas?: string[];
+}
+
 export interface BloodTestUpload {
   id: string;
   status: "UPLOADED" | "ANALYZING" | "ANALYZED" | "FAILED";
@@ -13,12 +58,17 @@ export interface BloodTestUpload {
   createdAt: string;
 }
 
+/** Public analysis contract returned by the backend's owner-scoped endpoints. */
 export interface BloodTestAnalysis {
   id: string;
   bloodTestId: string;
   status: BloodTestAnalysisStatus;
   summary: string | null;
   abnormalCount: number;
+  normalizedValues?: BloodTestNormalizedValue[];
+  aiExplanations?: BloodTestExplanation[];
+  nutritionImplications?: BloodTestNutritionImplication[];
+  overallRecommendations?: string[];
   errorMessage?: string | null;
   createdAt: string;
   updatedAt?: string;
