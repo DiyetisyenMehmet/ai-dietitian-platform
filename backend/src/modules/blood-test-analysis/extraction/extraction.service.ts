@@ -20,6 +20,8 @@ const REFERENCE_RANGE_REGEX = /\d[\d.,]*\s*[-–—]\s*\d[\d.,]*/;
 /** Also accepts one-sided laboratory ranges such as "<100" or "> 40". */
 const REFERENCE_RANGE_VALUE_REGEX =
   /(?:[<>≤≥]\s*\d[\d.,]*|\d[\d.,]*\s*[-–—]\s*\d[\d.,]*)/;
+/** Structural PDF labels that can look like a laboratory row to a generic regex. */
+const DOCUMENT_METADATA_LABEL_REGEX = /^(?:sayfa|page)$/iu;
 
 /**
  * A text-layer PDF is accepted locally only when it yielded enough structured
@@ -65,6 +67,67 @@ function computeOcrQualityScore(values: ExtractedBloodTestValue[], rawText: stri
   return Math.round(Math.max(0, Math.min(100, score)));
 }
 
+function comparableNumber(raw: string): number | null {
+  const cleaned = raw.replace(/[<>≤≥\s]/g, "").replace(",", ".");
+  const value = Number.parseFloat(cleaned);
+  return Number.isFinite(value) ? value : null;
+}
+
+function comparableUnit(unit: string | undefined): string {
+  return (unit ?? "")
+    .toLocaleLowerCase("tr-TR")
+    .replace(/\s+/g, "")
+    .replace(/[µμ]/g, "u");
+}
+
+function extractionRichness(value: ExtractedBloodTestValue): number {
+  return (value.referenceRange?.trim() ? 2 : 0) + (value.unit?.trim() ? 1 : 0);
+}
+
+/**
+ * Removes equivalent duplicate rows without collapsing genuinely different
+ * measurements. e-Nabız exports can repeat the same analyte under both a long
+ * name and an abbreviation (for example HGB and Hb). We only merge rows when
+ * they resolve to the same canonical biomarker AND carry the same numeric value
+ * with compatible units. Different values/units remain separate for later
+ * normalization instead of being guessed away.
+ */
+function dedupeEquivalentCanonicalValues(
+  values: ExtractedBloodTestValue[],
+): ExtractedBloodTestValue[] {
+  const result: ExtractedBloodTestValue[] = [];
+
+  for (const value of values) {
+    const code = matchBiomarkerCode(value.name);
+    const numeric = comparableNumber(value.rawValue);
+    if (!code || numeric === null) {
+      result.push(value);
+      continue;
+    }
+
+    const unit = comparableUnit(value.unit);
+    const duplicateIndex = result.findIndex((candidate) => {
+      if (matchBiomarkerCode(candidate.name) !== code) return false;
+      const candidateNumeric = comparableNumber(candidate.rawValue);
+      if (candidateNumeric === null || Math.abs(candidateNumeric - numeric) > 1e-9) return false;
+      const candidateUnit = comparableUnit(candidate.unit);
+      return !unit || !candidateUnit || unit === candidateUnit;
+    });
+
+    if (duplicateIndex === -1) {
+      result.push(value);
+      continue;
+    }
+
+    const existing = result[duplicateIndex];
+    if (extractionRichness(value) > extractionRichness(existing)) {
+      result[duplicateIndex] = value;
+    }
+  }
+
+  return result;
+}
+
 /**
  * Parses raw laboratory-report text into structured biomarker values using a
  * line-oriented heuristic. Each line is expected to contain a label, a numeric
@@ -104,6 +167,7 @@ function parseLabText(text: string): ExtractedBloodTestValue[] {
     if (name.length < 2) continue;
 
     const key = name.toLocaleLowerCase("tr-TR");
+    if (DOCUMENT_METADATA_LABEL_REGEX.test(key)) continue;
     if (seen.has(key)) continue;
     seen.add(key);
 
@@ -115,7 +179,7 @@ function parseLabText(text: string): ExtractedBloodTestValue[] {
     });
   }
 
-  return values;
+  return dedupeEquivalentCanonicalValues(values);
 }
 
 function localPdfExtractionIsStrong(values: ExtractedBloodTestValue[]): boolean {
@@ -175,7 +239,7 @@ function mergeTextExtractions(
     });
   }
 
-  return Array.from(merged.values());
+  return dedupeEquivalentCanonicalValues(Array.from(merged.values()));
 }
 
 /**
