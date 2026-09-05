@@ -51,7 +51,7 @@ function StatusBadge({ test }: { test: BloodTestSummaryView }) {
     );
   }
   return (
-    <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+    <span className="inline-flex rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
       Analiz tamamlandı
     </span>
   );
@@ -82,6 +82,25 @@ function referenceText(value: BloodTestNormalizedValue): string {
   if (range.minValue != null) return `≥ ${range.minValue}${unit}`;
   if (range.maxValue != null) return `≤ ${range.maxValue}${unit}`;
   return "Referans aralığı değerlendirilemedi";
+}
+
+function resultInterpretation(value: BloodTestNormalizedValue): string {
+  const result = `${value.rawValue}${value.unit ? ` ${value.unit}` : ""}`;
+  const reference = referenceText(value);
+  switch (value.status) {
+    case "NORMAL":
+      return `${result} sonucu, bu raporda kullanılan ${reference} referans aralığının içindedir. Bu ifade yalnızca bu ölçümün laboratuvar aralığı içindeki konumunu anlatır; tek başına bir hastalığı dışlamaz veya bir organ/sistemin tamamen sağlıklı olduğunu kanıtlamaz.`;
+    case "LOW":
+      return `${result} sonucu, bu raporda kullanılan ${reference} referans aralığının altındadır. Sonucun anlamı ilgili diğer laboratuvar değerleri ve kişisel sağlık bağlamıyla birlikte değerlendirilmelidir.`;
+    case "HIGH":
+      return `${result} sonucu, bu raporda kullanılan ${reference} referans aralığının üzerindedir. Sonucun anlamı ilgili diğer laboratuvar değerleri ve kişisel sağlık bağlamıyla birlikte değerlendirilmelidir.`;
+    case "CRITICALLY_LOW":
+      return `${result} sonucu, bu rapordaki ${reference} referansının belirgin biçimde altındadır. Bu bulgu beslenme açısından açıklanabilir ancak zamanında profesyonel tıbbi değerlendirme de uygundur.`;
+    case "CRITICALLY_HIGH":
+      return `${result} sonucu, bu rapordaki ${reference} referansının belirgin biçimde üzerindedir. Bu bulgu beslenme açısından açıklanabilir ancak zamanında profesyonel tıbbi değerlendirme de uygundur.`;
+    case "UNKNOWN":
+      return `${result} ölçülmüş olsa da güvenilir bir referans aralığı bulunamadığı için Diewish bu değeri normal, düşük veya yüksek olarak sınıflandırmaz.`;
+  }
 }
 
 function valueStatusClass(status: BloodTestValueStatus): string {
@@ -132,8 +151,6 @@ function PremiumValueEducation({
   explanation?: string;
 }) {
   const education = getBiomarkerEducation(value);
-  if (!education && !explanation) return null;
-
   const isFlagged =
     value.status === "LOW" ||
     value.status === "HIGH" ||
@@ -157,14 +174,18 @@ function PremiumValueEducation({
               <p className="mt-1 text-muted-foreground">{education.whatItMeasures}</p>
             </div>
             <div>
-              <p className="font-semibold text-foreground">Neden bakılır, ne işe yarar?</p>
+              <p className="font-semibold text-foreground">Vücutta ne işe yarar?</p>
               <p className="mt-1 text-muted-foreground">{education.whyItMatters}</p>
             </div>
           </>
         )}
-        {explanation && (
-          <div className="rounded-lg bg-primary/5 p-2.5">
-            <p className="font-semibold text-primary">Sizin sonucunuzun açıklaması</p>
+        <div className="rounded-lg bg-primary/5 p-2.5">
+          <p className="font-semibold text-primary">Sizin sonucunuz ne anlama geliyor?</p>
+          <p className="mt-1 text-muted-foreground">{resultInterpretation(value)}</p>
+        </div>
+        {explanation && value.status !== "NORMAL" && (
+          <div>
+            <p className="font-semibold text-foreground">AI değerlendirmesi</p>
             <p className="mt-1 text-muted-foreground">{explanation}</p>
           </div>
         )}
@@ -210,7 +231,7 @@ function AnalysisDetails({
               <p className="text-xs font-semibold">Laboratuvar terimleri anlaşılır Türkçe ile açıklanır</p>
             </div>
             <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-              Her parametrede ne ölçüldüğünü, neden bakıldığını, sizin sonucunuzu ve raporun kendi referansını birlikte görebilirsiniz.
+              Her parametrede ne ölçüldüğünü, vücuttaki görevini, sizin sonucunuzu ve raporun kendi referansını birlikte görebilirsiniz.
             </p>
           </div>
         )}
@@ -393,14 +414,15 @@ function AnalysisDetails({
 /** Blood-test management: real upload, validation, analysis lifecycle and history. */
 export function BloodTestsView() {
   const tests = useBloodTests();
-  const { subscription } = useSubscription();
+  const { subscription, loading: subscriptionLoading } = useSubscription();
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = React.useState(false);
   const [removingId, setRemovingId] = React.useState<string | null>(null);
 
   const latest = tests[0];
   const premiumDetails =
-    subscription.tier === "PREMIUM" || subscription.tier === "PREMIUM_PLUS";
+    !subscriptionLoading &&
+    (subscription.tier === "PREMIUM" || subscription.tier === "PREMIUM_PLUS");
 
   // The backend/Neon is the source of truth. Reload persisted analysis history
   // whenever this page mounts so a browser refresh never loses completed/failed
