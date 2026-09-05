@@ -35,6 +35,68 @@ function parseNumeric(raw: string): number | null {
 }
 
 /**
+ * Parses the laboratory's own printed reference range. The report range has
+ * priority over Diewish's generic database fallback because it is tied to the
+ * exact laboratory/method used for the uploaded result.
+ */
+function parseDocumentReferenceRange(
+  raw: string | undefined,
+  unit: string | null,
+): ReferenceRangeSnapshot | null {
+  if (!raw?.trim() || !unit?.trim()) return null;
+  const text = raw.trim().replace(/\s+/g, " ");
+  const number = "[-+]?\\d+(?:[.,]\\d+)?";
+
+  const interval = text.match(new RegExp(`(${number})\\s*[-–—]\\s*(${number})`));
+  if (interval) {
+    const minValue = parseNumeric(interval[1]);
+    const maxValue = parseNumeric(interval[2]);
+    if (minValue !== null && maxValue !== null) {
+      return {
+        unit,
+        minValue: Math.min(minValue, maxValue),
+        maxValue: Math.max(minValue, maxValue),
+        optimalMin: null,
+        optimalMax: null,
+        source: "LAB_REPORT",
+      };
+    }
+  }
+
+  const upper = text.match(new RegExp(`(?:<=|<|≤)\\s*(${number})`));
+  if (upper) {
+    const maxValue = parseNumeric(upper[1]);
+    if (maxValue !== null) {
+      return {
+        unit,
+        minValue: null,
+        maxValue,
+        optimalMin: null,
+        optimalMax: null,
+        source: "LAB_REPORT",
+      };
+    }
+  }
+
+  const lower = text.match(new RegExp(`(?:>=|>|≥)\\s*(${number})`));
+  if (lower) {
+    const minValue = parseNumeric(lower[1]);
+    if (minValue !== null) {
+      return {
+        unit,
+        minValue,
+        maxValue: null,
+        optimalMin: null,
+        optimalMax: null,
+        source: "LAB_REPORT",
+      };
+    }
+  }
+
+  return null;
+}
+
+/**
  * Computes a value's status relative to a reference range. "Critical" is
  * defined as being at least half a range-width beyond the normal bounds; when
  * only one bound exists, a proportional margin is used.
@@ -59,7 +121,7 @@ function computeStatus(
   return "NORMAL";
 }
 
-/** Builds the persisted snapshot of a reference range. */
+/** Builds the persisted snapshot of a database reference range. */
 function toSnapshot(range: BloodTestReferenceRange): ReferenceRangeSnapshot {
   return {
     unit: range.unit,
@@ -77,15 +139,17 @@ function toSnapshot(range: BloodTestReferenceRange): ReferenceRangeSnapshot {
  */
 export const normalizationService = {
   /**
-   * Normalizes a batch of extracted values against a reference-range lookup.
+   * Normalizes a batch of extracted values against the report's own range first
+   * and then the database fallback.
    *
    * For each value it: matches the label to a canonical code, parses the
-   * numeric value, converts the unit to the reference unit, and computes the
-   * status. Values whose label cannot be matched are still returned with a
-   * `UNKNOWN` status so nothing is silently dropped.
+   * numeric value, selects a safe reference range, converts the unit when a DB
+   * fallback requires it, and computes the status. Values whose label cannot be
+   * matched are still returned with an `UNKNOWN` status so nothing is silently
+   * dropped.
    *
    * @param extracted - Raw values from the extraction pipeline.
-   * @param ranges - Active reference ranges keyed by canonical code.
+   * @param ranges - Active fallback reference ranges keyed by canonical code.
    * @returns The normalized values.
    */
   normalize(
@@ -97,11 +161,14 @@ export const normalizationService = {
     for (const item of extracted) {
       const code = matchBiomarkerCode(item.name);
       const definition = code ? getBiomarkerDefinition(code) : undefined;
-      const range = code ? (ranges.get(code) ?? null) : null;
+      const databaseRange = code ? (ranges.get(code) ?? null) : null;
+      const extractedUnit = item.unit?.trim() || null;
+      const documentRange = parseDocumentReferenceRange(item.referenceRange, extractedUnit);
+      const referenceRange = documentRange ?? (databaseRange ? toSnapshot(databaseRange) : null);
 
       const parsed = parseNumeric(item.rawValue);
-      const extractedUnit = item.unit ?? null;
-      const targetUnit = range?.unit ?? definition?.canonicalUnit ?? extractedUnit ?? "";
+      const targetUnit =
+        referenceRange?.unit ?? definition?.canonicalUnit ?? extractedUnit ?? "";
 
       let numericValue = parsed;
       let conversionFactor = 1;
@@ -114,8 +181,12 @@ export const normalizationService = {
       }
 
       let status: BloodTestValueStatus = "UNKNOWN";
-      if (numericValue !== null && range) {
-        status = computeStatus(numericValue, range.minValue, range.maxValue);
+      if (numericValue !== null && referenceRange) {
+        status = computeStatus(
+          numericValue,
+          referenceRange.minValue,
+          referenceRange.maxValue,
+        );
       }
 
       results.push({
@@ -126,7 +197,7 @@ export const normalizationService = {
         unit: targetUnit,
         extractedUnit,
         conversionFactor,
-        referenceRange: range ? toSnapshot(range) : null,
+        referenceRange,
         status,
       });
     }
