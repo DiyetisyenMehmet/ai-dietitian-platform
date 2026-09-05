@@ -12,7 +12,7 @@ import { isUserPremium } from "../ai-coach/premium";
 import { smartQuestionEngine } from "../ai-coach/smart-question.engine";
 import { trackingRepository } from "../tracking/tracking.repository";
 import { aiChatRepository, type ConversationWithMessages } from "./ai-chat.repository";
-import { CHAT_HISTORY_LIMIT, TITLE_MAX_LENGTH } from "./constants";
+import { CHAT_HISTORY_LIMIT, DISCLAIMER, TITLE_MAX_LENGTH } from "./constants";
 import { buildMinimizedContext, redactPii } from "./phi/phi-minimizer";
 import type { ChatHistoryTurn } from "./types";
 
@@ -30,6 +30,19 @@ function deriveTitle(message: string): string {
   return collapsed.length > TITLE_MAX_LENGTH
     ? `${collapsed.slice(0, TITLE_MAX_LENGTH - 1)}…`
     : collapsed;
+}
+
+/**
+ * The shared adapter appends a fixed English disclaimer for blood-test and
+ * nutrition-plan safety. AI Coach has its own context-aware safety behavior, so
+ * do not surface that unrelated English boilerplate at the end of every chat
+ * reply. Keep any warning generated as part of the actual answer intact.
+ */
+function stripFixedChatDisclaimer(reply: string): string {
+  const trimmed = reply.trim();
+  return trimmed.endsWith(DISCLAIMER)
+    ? trimmed.slice(0, -DISCLAIMER.length).trimEnd()
+    : trimmed;
 }
 
 /**
@@ -101,7 +114,7 @@ export const aiChatService = {
         premium,
       });
 
-      let reply = output.reply;
+      let reply = stripFixedChatDisclaimer(output.reply);
       try {
         const decline = await smartQuestionEngine.detectProgressDecline(userId);
         if (decline.declined) {
