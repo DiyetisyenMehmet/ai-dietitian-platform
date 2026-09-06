@@ -15,6 +15,8 @@ interface NutritionPlanState {
   hydrated: boolean;
   loading: boolean;
   generating: boolean;
+  /** Exact duration currently being generated; null for non-generation work. */
+  generatingDuration: NutritionPlanDuration | null;
 }
 
 const EMPTY_STATE: NutritionPlanState = {
@@ -23,6 +25,7 @@ const EMPTY_STATE: NutritionPlanState = {
   hydrated: false,
   loading: false,
   generating: false,
+  generatingDuration: null,
 };
 
 let state: NutritionPlanState = { ...EMPTY_STATE };
@@ -79,7 +82,7 @@ export const nutritionPlanStore = {
 
   async generate(duration: NutritionPlanDuration): Promise<NutritionPlanRecord> {
     if (state.generating) throw new Error("Nutrition plan generation is already in progress.");
-    patch({ generating: true });
+    patch({ generating: true, generatingDuration: duration });
     try {
       const { plan } = await nutritionPlanClient.generate(duration);
       const plans = mergePlan(
@@ -88,17 +91,25 @@ export const nutritionPlanStore = {
         ),
         plan,
       );
-      emit({ ...state, plans, activePlan: chooseActive(plans), hydrated: true, generating: false });
+      emit({
+        ...state,
+        plans,
+        activePlan: chooseActive(plans),
+        hydrated: true,
+        generating: false,
+        generatingDuration: null,
+      });
       return plan;
     } catch (error) {
-      patch({ generating: false });
+      patch({ generating: false, generatingDuration: null });
       throw error;
     }
   },
 
   async regenerate(planId: string): Promise<NutritionPlanRecord> {
     if (state.generating) throw new Error("Nutrition plan generation is already in progress.");
-    patch({ generating: true });
+    const source = state.plans.find((item) => item.id === planId) ?? state.activePlan;
+    patch({ generating: true, generatingDuration: source?.duration ?? null });
     try {
       const { plan } = await nutritionPlanClient.regenerate(planId);
       const plans = mergePlan(
@@ -107,10 +118,17 @@ export const nutritionPlanStore = {
         ),
         plan,
       );
-      emit({ ...state, plans, activePlan: chooseActive(plans), hydrated: true, generating: false });
+      emit({
+        ...state,
+        plans,
+        activePlan: chooseActive(plans),
+        hydrated: true,
+        generating: false,
+        generatingDuration: null,
+      });
       return plan;
     } catch (error) {
-      patch({ generating: false });
+      patch({ generating: false, generatingDuration: null });
       throw error;
     }
   },

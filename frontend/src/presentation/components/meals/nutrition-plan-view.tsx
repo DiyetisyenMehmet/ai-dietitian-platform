@@ -200,7 +200,13 @@ function DayCard({
   );
 }
 
-function EmptyPlan({ generating }: { generating: boolean }) {
+function EmptyPlan({
+  generating,
+  generatingDuration,
+}: {
+  generating: boolean;
+  generatingDuration: NutritionPlanDuration | null;
+}) {
   const create = async (duration: NutritionPlanDuration) => {
     try {
       await nutritionPlanStore.generate(duration);
@@ -225,21 +231,24 @@ function EmptyPlan({ generating }: { generating: boolean }) {
       </Card>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        {(["THIRTY_DAY", "SIXTY_DAY"] as NutritionPlanDuration[]).map((duration) => (
-          <Card key={duration}>
-            <CardContent className="p-4">
-              <CalendarDays className="size-5 text-primary" aria-hidden="true" />
-              <h3 className="mt-3 font-semibold">{durationLabel(duration)} plan</h3>
-              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                Günlük saat, porsiyon, kalori ve makro çerçevesiyle kişiselleştirilmiş beslenme planı.
-              </p>
-              <Button className="mt-4 w-full" disabled={generating} onClick={() => void create(duration)}>
-                <Sparkles aria-hidden="true" />
-                {generating ? "Hazırlanıyor…" : "Planı oluştur"}
-              </Button>
-            </CardContent>
-          </Card>
-        ))}
+        {(["THIRTY_DAY", "SIXTY_DAY"] as NutritionPlanDuration[]).map((duration) => {
+          const selected = generatingDuration === duration;
+          return (
+            <Card key={duration}>
+              <CardContent className="p-4">
+                <CalendarDays className="size-5 text-primary" aria-hidden="true" />
+                <h3 className="mt-3 font-semibold">{durationLabel(duration)} plan</h3>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  Günlük saat, porsiyon, kalori ve makro çerçevesiyle kişiselleştirilmiş beslenme planı.
+                </p>
+                <Button className="mt-4 w-full" disabled={generating} onClick={() => void create(duration)}>
+                  <Sparkles className={selected ? "animate-pulse" : ""} aria-hidden="true" />
+                  {selected ? "Hazırlanıyor…" : "Planı oluştur"}
+                </Button>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
       <p className="text-xs leading-relaxed text-muted-foreground">
@@ -250,7 +259,7 @@ function EmptyPlan({ generating }: { generating: boolean }) {
 }
 
 export function NutritionPlanView() {
-  const { activePlan, hydrated, loading, generating } = useNutritionPlan();
+  const { activePlan, hydrated, loading, generating, generatingDuration } = useNutritionPlan();
   const [weekIndex, setWeekIndex] = React.useState(0);
 
   React.useEffect(() => {
@@ -269,7 +278,9 @@ export function NutritionPlanView() {
     return <div className="py-16 text-center text-sm text-muted-foreground">Öğün planın yükleniyor…</div>;
   }
 
-  if (!activePlan) return <EmptyPlan generating={generating} />;
+  if (!activePlan) {
+    return <EmptyPlan generating={generating} generatingDuration={generatingDuration} />;
+  }
 
   const content = safeContent(activePlan);
   if (!content) {
