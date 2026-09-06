@@ -28,6 +28,7 @@ import {
   type PlannedMeal,
   type SupportedNutritionPlanDuration,
 } from "@/infrastructure/nutrition/nutrition-plan-client";
+import { NutritionPlanDayShareButton } from "@/presentation/components/meals/nutrition-plan-day-share-button";
 import {
   NutritionPlanKacamak,
   useNutritionPlanDeviations,
@@ -227,6 +228,7 @@ function DayCard({
   onDeleteDeviation(deviationId: string): Promise<void>;
 }) {
   const dayDeviations = deviations.filter((item) => item.dayNumber === dayNumber);
+  const planDayDateLabel = dateLabel(plan, dayNumber);
 
   return (
     <details className="group rounded-2xl border border-border bg-card shadow-sm" open={open}>
@@ -237,7 +239,7 @@ function DayCard({
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-semibold">{dayNumber}. Gün</span>
           <span className="block truncate text-xs capitalize text-muted-foreground">
-            {dateLabel(plan, dayNumber)}
+            {planDayDateLabel}
           </span>
         </span>
         <span className="text-xs font-medium text-muted-foreground">~{number(day.totalCalories)} kcal</span>
@@ -275,6 +277,10 @@ function DayCard({
         </div>
 
         {day.notes?.trim() && <p className="text-xs leading-relaxed text-muted-foreground">{day.notes}</p>}
+
+        <div className="flex justify-end border-t border-border/60 pt-3">
+          <NutritionPlanDayShareButton dayNumber={dayNumber} dateLabel={planDayDateLabel} day={day} />
+        </div>
       </div>
     </details>
   );
