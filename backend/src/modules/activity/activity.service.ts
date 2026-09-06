@@ -1,5 +1,6 @@
 import type { Activity, ActivityType } from "@prisma/client";
 
+import { ApiError } from "../../utils/api-error";
 import { activityRepository } from "./activity.repository";
 
 /**
@@ -15,6 +16,8 @@ export interface CreateActivityInput {
   note?: string;
   loggedAt?: string;
 }
+
+const UNDOABLE_ACTIVITY_COUNT = 3;
 
 /** Parses an optional ISO string into a Date, or undefined. */
 function toDate(iso?: string): Date | undefined {
@@ -78,7 +81,16 @@ export const activityService = {
     return activityRepository.listActivities(userId, since);
   },
 
-  deleteActivity(userId: string, activityId: string): Promise<void> {
+  async deleteActivity(userId: string, activityId: string): Promise<void> {
+    const latestActivityIds = await activityRepository.listLatestActivityIds(
+      userId,
+      UNDOABLE_ACTIVITY_COUNT,
+    );
+
+    if (!latestActivityIds.includes(activityId)) {
+      throw ApiError.conflict("Yalnızca son 3 hareket kaydı geri alınabilir.");
+    }
+
     return activityRepository.deleteActivity(userId, activityId);
   },
 };
