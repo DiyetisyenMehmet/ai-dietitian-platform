@@ -99,12 +99,17 @@ export const WATER_ACTIVITY_BONUS_ML: Record<ActivityLevel, number> = {
 export const MIN_WATER_ML = 1500;
 
 /**
- * Maximum number of unique days generated in a single provider call. Longer
- * horizons are produced in sequential seven-day batches, then assembled into
- * one exact day-by-day plan. This keeps structured responses reliable while
- * avoiding the old weekly-repeat behavior.
+ * Maximum number of unique days requested from the provider in one structured
+ * response. Five days keeps the JSON comfortably below the Vertex output
+ * budget while still keeping call count bounded for 7/14/30-day plans.
  */
-export const MEAL_GENERATION_BATCH_DAYS = 7;
+export const MEAL_GENERATION_BATCH_DAYS = 5;
+
+/**
+ * At most two independent meal-plan batches are generated at once. This reduces
+ * end-to-end latency without creating an unbounded burst against Vertex AI.
+ */
+export const MEAL_GENERATION_CONCURRENCY = 2;
 
 /** The only horizons users can create in the current product. */
 export const SUPPORTED_PLAN_DURATIONS = ["SEVEN_DAY", "FOURTEEN_DAY", "THIRTY_DAY"] as const;
@@ -138,6 +143,12 @@ export const NUTRITION_PLAN_SYSTEM_PROMPT = [
   "4. Explain, in plain language, WHY each recommendation fits the user's profile.",
   "5. Use concrete household or gram portions and practical meal times so the plan can be followed.",
   "6. Produce genuinely distinct day plans within the requested horizon; do not repeat a weekly template unless unavoidable.",
+  "Keep the structured response compact and non-repetitive so it can be generated reliably.",
+  "- Each meal explanation must be at most one short sentence.",
+  "- Each day note must be at most one short sentence.",
+  "- Summary must be at most two short sentences.",
+  "- Return at most 6 concise overall recommendations.",
+  "- Do not repeat the same rationale across meal explanations, recommendations and summary.",
   "Absolute rules you must NEVER break:",
   "- Every user-facing string must be Turkish (tr-TR).",
   "- Never include any listed allergen in any meal, ingredient, or suggestion.",
