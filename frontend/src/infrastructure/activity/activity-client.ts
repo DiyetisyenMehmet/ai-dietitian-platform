@@ -17,8 +17,8 @@ export type ActivityType =
 
 /**
  * A persisted activity log entry, as returned by the backend activity module
- * (Sprint 22). The backend is the single source of truth; the frontend will
- * cache these records when store integration is implemented.
+ * (Sprint 22). The backend is the single source of truth; the frontend caches
+ * today's records for responsive totals and undo interactions.
  */
 export interface Activity {
   id: string;
@@ -44,11 +44,7 @@ export interface LogActivityInput {
   loggedAt?: string;
 }
 
-/**
- * Infrastructure-level activity client (Sprint 22.2A). Authenticated (the HTTP
- * client attaches the access token). Reuses the `/api/activity` endpoints
- * created in Sprint 22.1C. No UI or store logic here.
- */
+/** Authenticated transport for the owner-scoped activity REST API. */
 export const activityClient = {
   /** Lists activity logs, optionally only those logged on/after `since`. */
   listActivities(since?: Date) {
@@ -67,6 +63,15 @@ export const activityClient = {
       method: "POST",
       auth: true,
       body: JSON.stringify(input),
+    });
+  },
+
+  /** Permanently removes one activity belonging to the authenticated user. */
+  deleteActivity(activityId: string) {
+    return apiRequest<void>({
+      path: `${ACTIVITY_ENDPOINTS.base}/${encodeURIComponent(activityId)}`,
+      method: "DELETE",
+      auth: true,
     });
   },
 } as const;

@@ -5,7 +5,7 @@ import { Dumbbell, Footprints, Flame, Timer, Zap } from "lucide-react";
 import { toast } from "sonner";
 
 import { activityStore, useActivity } from "@/application/health/activity-store";
-import type { ActivityType } from "@/infrastructure/activity/activity-client";
+import type { Activity, ActivityType } from "@/infrastructure/activity/activity-client";
 import { Button } from "@/presentation/components/ui/button";
 import { Card, CardContent } from "@/presentation/components/ui/card";
 import { Input } from "@/presentation/components/ui/input";
@@ -67,6 +67,12 @@ function timeLabel(iso: string): string {
   );
 }
 
+function savedActivityDescription(activity: Activity): string {
+  return activity.caloriesBurned != null
+    ? `${activity.durationMinutes} dk · yaklaşık ${Math.round(activity.caloriesBurned)} kcal`
+    : `${activity.durationMinutes} dk`;
+}
+
 export function ActivityView() {
   const { activities, activeMinutes, estimatedCaloriesBurned } = useActivity();
   const [type, setType] = React.useState<ActivityType>("WALKING");
@@ -74,10 +80,41 @@ export function ActivityView() {
   const [name, setName] = React.useState("");
   const [saving, setSaving] = React.useState(false);
   const [quickSaving, setQuickSaving] = React.useState<string | null>(null);
+  const undoingActivityIds = React.useRef(new Set<string>());
 
   React.useEffect(() => {
     void activityStore.hydrateFromBackend();
   }, []);
+
+  const undoActivity = React.useCallback(async (activityId: string) => {
+    if (undoingActivityIds.current.has(activityId)) return;
+    undoingActivityIds.current.add(activityId);
+
+    try {
+      await activityStore.deleteActivity(activityId);
+      toast.success("Hareket geri alındı");
+    } catch {
+      toast.error("Hareket geri alınamadı. Lütfen tekrar dene.");
+    } finally {
+      undoingActivityIds.current.delete(activityId);
+    }
+  }, []);
+
+  const showSavedToast = React.useCallback(
+    (title: string, activity: Activity) => {
+      toast.success(title, {
+        description: savedActivityDescription(activity),
+        duration: 10_000,
+        action: {
+          label: "Geri al",
+          onClick: () => {
+            void undoActivity(activity.id);
+          },
+        },
+      });
+    },
+    [undoActivity],
+  );
 
   const save = React.useCallback(async () => {
     const minutes = Number(duration);
@@ -97,19 +134,14 @@ export function ActivityView() {
         durationMinutes: minutes,
         name: name.trim() || undefined,
       });
-      toast.success("Hareket kaydedildi", {
-        description:
-          activity.caloriesBurned != null
-            ? `${minutes} dk · yaklaşık ${Math.round(activity.caloriesBurned)} kcal`
-            : `${minutes} dk`,
-      });
+      showSavedToast("Hareket kaydedildi", activity);
       setName("");
     } catch {
       toast.error("Hareket kaydedilemedi. Lütfen tekrar dene.");
     } finally {
       setSaving(false);
     }
-  }, [duration, name, type]);
+  }, [duration, name, showSavedToast, type]);
 
   const completeQuickTask = React.useCallback(
     async (task: (typeof QUICK_TASKS)[number]) => {
@@ -122,19 +154,14 @@ export function ActivityView() {
           name: task.title,
           note: "Diewish hızlı hareket görevi",
         });
-        toast.success("Görev tamamlandı", {
-          description:
-            activity.caloriesBurned != null
-              ? `${task.minutes} dk · yaklaşık ${Math.round(activity.caloriesBurned)} kcal`
-              : `${task.minutes} dk`,
-        });
+        showSavedToast("Görev tamamlandı", activity);
       } catch {
         toast.error("Görev kaydedilemedi. Lütfen tekrar dene.");
       } finally {
         setQuickSaving(null);
       }
     },
-    [quickSaving],
+    [quickSaving, showSavedToast],
   );
 
   return (

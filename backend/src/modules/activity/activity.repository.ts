@@ -27,6 +27,17 @@ export const activityRepository = {
     });
   },
 
+  /**
+   * Idempotently removes one activity owned by `userId`. `deleteMany` keeps the
+   * ownership check inside the mutation itself so another user's activity can
+   * never be deleted even if its id is guessed or leaked.
+   */
+  async deleteActivity(userId: string, activityId: string): Promise<void> {
+    await prisma.activity.deleteMany({
+      where: { id: activityId, userId },
+    });
+  },
+
   async findCurrentWeightKg(userId: string): Promise<number | null> {
     const profile = await prisma.userProfile.findUnique({
       where: { userId },

@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 
 import { ApiError } from "../../utils/api-error";
-import { sendCreated, sendSuccess } from "../../utils/api-response";
+import { sendCreated, sendNoContent, sendSuccess } from "../../utils/api-response";
 import { asyncHandler } from "../../utils/async-handler";
 import { activityService } from "./activity.service";
 import type { CreateActivityInput } from "./activity.schemas";
@@ -37,5 +37,11 @@ export const activityController = {
     const userId = requireUserId(req);
     const activities = await activityService.listActivities(userId, parseSince(req));
     sendSuccess(res, { activities });
+  }),
+
+  remove: asyncHandler(async (req: Request, res: Response) => {
+    const userId = requireUserId(req);
+    await activityService.deleteActivity(userId, req.params.id);
+    sendNoContent(res);
   }),
 };

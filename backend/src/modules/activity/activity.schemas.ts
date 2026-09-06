@@ -31,4 +31,9 @@ export const createActivitySchema = z.object({
   loggedAt: optionalLoggedAt,
 });
 
+/** Activity ids are UUIDs in the persisted domain model. */
+export const activityIdParamsSchema = z.object({
+  id: z.string().uuid("id must be a valid UUID."),
+});
+
 export type CreateActivityInput = z.infer<typeof createActivitySchema>;

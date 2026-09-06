@@ -77,4 +77,8 @@ export const activityService = {
   listActivities(userId: string, since?: Date): Promise<Activity[]> {
     return activityRepository.listActivities(userId, since);
   },
+
+  deleteActivity(userId: string, activityId: string): Promise<void> {
+    return activityRepository.deleteActivity(userId, activityId);
+  },
 };

@@ -90,6 +90,16 @@ export const activityStore = {
     return activity;
   },
 
+  /**
+   * Deletes on the server first so an undo never becomes a local-only illusion.
+   * Once confirmed, today's totals are recalculated from the remaining records.
+   */
+  async deleteActivity(activityId: string): Promise<void> {
+    await activityClient.deleteActivity(activityId);
+    const activities = state.activities.filter((item) => item.id !== activityId);
+    setState({ activities, ...summarize(activities) });
+  },
+
   /** Local-only until a real device/manual step source exists. Do not use for scoring. */
   addSteps(amount: number = ACTIVITY_STEP_INCREMENT) {
     setState({ steps: Math.max(0, state.steps + amount) });
