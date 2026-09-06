@@ -20,6 +20,10 @@ interface NutritionPlanState {
   generatingDuration: SupportedNutritionPlanDuration | null;
 }
 
+type SupportedNutritionPlanRecord = NutritionPlanRecord & {
+  duration: SupportedNutritionPlanDuration;
+};
+
 const EMPTY_STATE: NutritionPlanState = {
   activePlan: null,
   plans: [],
@@ -90,12 +94,12 @@ function failGeneration(error: unknown): never {
   throw error;
 }
 
-function requireSupportedSource(planId: string): NutritionPlanRecord {
+function requireSupportedSource(planId: string): SupportedNutritionPlanRecord {
   const source = state.plans.find((item) => item.id === planId) ?? state.activePlan;
   if (!source || !isSupportedNutritionPlanDuration(source.duration)) {
     throw new Error("This nutrition plan duration is no longer supported.");
   }
-  return source;
+  return source as SupportedNutritionPlanRecord;
 }
 
 export const nutritionPlanStore = {
