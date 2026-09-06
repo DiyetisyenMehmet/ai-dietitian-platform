@@ -4,13 +4,16 @@ import { ApiError } from "../../utils/api-error";
 import { sendCreated, sendNoContent, sendSuccess } from "../../utils/api-response";
 import { asyncHandler } from "../../utils/async-handler";
 import { nutritionPlanDeviationService } from "./nutrition-plan-deviation.service";
+import { nutritionPlanRevisionService } from "./nutrition-plan-revision.service";
 import { nutritionPlanService } from "./nutrition-plan.service";
 import type {
   ActivePlanQuery,
   CreateDeviationInput,
+  ExtendPlanInput,
   GeneratePlanInput,
   PlanDeviationParam,
   PlanIdParam,
+  RefreshPlanInput,
 } from "./dto/nutrition-plan.schemas";
 
 /** Resolves the authenticated user id or throws 401. */
@@ -35,11 +38,29 @@ export const nutritionPlanController = {
     sendCreated(res, { plan });
   }),
 
-  /** Regenerates a plan (new version) based on an existing plan's duration. */
+  /** Regenerates the complete plan as a new version. */
   regenerate: asyncHandler(async (req: Request, res: Response) => {
     const userId = requireUserId(req);
     const { id } = req.params as PlanIdParam;
     const plan = await nutritionPlanService.regenerate(userId, id);
+    sendCreated(res, { plan });
+  }),
+
+  /** Regenerates one day or the selected day plus all future days. */
+  refresh: asyncHandler(async (req: Request, res: Response) => {
+    const userId = requireUserId(req);
+    const { id } = req.params as PlanIdParam;
+    const input = req.body as RefreshPlanInput;
+    const plan = await nutritionPlanRevisionService.refresh(userId, id, input);
+    sendCreated(res, { plan });
+  }),
+
+  /** Extends an active plan without replacing its already planned days. */
+  extend: asyncHandler(async (req: Request, res: Response) => {
+    const userId = requireUserId(req);
+    const { id } = req.params as PlanIdParam;
+    const input = req.body as ExtendPlanInput;
+    const plan = await nutritionPlanRevisionService.extend(userId, id, input);
     sendCreated(res, { plan });
   }),
 

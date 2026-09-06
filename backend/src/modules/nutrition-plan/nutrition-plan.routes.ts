@@ -7,28 +7,22 @@ import { nutritionPlanController } from "./nutrition-plan.controller";
 import {
   activePlanQuerySchema,
   createDeviationSchema,
+  extendPlanSchema,
   generatePlanSchema,
   planDeviationParamSchema,
   planIdParamSchema,
+  refreshPlanSchema,
 } from "./dto/nutrition-plan.schemas";
 
 /**
  * Nutrition-plan router (mounted at /api/nutrition-plans). Every route requires
  * a valid access token; the service scopes all access by owner. Generation,
- * regeneration and new adherence writes require current mandatory consent;
- * existing plans and adherence history remain readable/correctable after
- * consent withdrawal.
+ * regeneration/revision and new adherence writes require current mandatory
+ * consent; existing plans and adherence history remain readable/correctable
+ * after consent withdrawal.
  */
 export const nutritionPlanRouter = Router();
 
-/**
- * @openapi
- * /api/nutrition-plans/generate:
- *   post:
- *     tags: [NutritionPlan]
- *     summary: Generate a personalized nutrition plan
- *     security: [{ bearerAuth: [] }]
- */
 nutritionPlanRouter.post(
   "/generate",
   authenticate,
@@ -48,7 +42,7 @@ nutritionPlanRouter.get(
 /** List all owner-scoped plan versions. */
 nutritionPlanRouter.get("/", authenticate, nutritionPlanController.list);
 
-/** Regenerate a supported plan as a new version. */
+/** Regenerate a supported plan as a completely new version. */
 nutritionPlanRouter.post(
   "/:id/regenerate",
   authenticate,
@@ -57,16 +51,24 @@ nutritionPlanRouter.post(
   nutritionPlanController.regenerate,
 );
 
-/**
- * @openapi
- * /api/nutrition-plans/{id}/deviations:
- *   get:
- *     tags: [NutritionPlan]
- *     summary: List the user's Kaçamak/adherence records for a plan
- *   post:
- *     tags: [NutritionPlan]
- *     summary: Record a food, meal or day-level Kaçamak
- */
+/** Paid scoped refresh: one day or the selected day plus all future days. */
+nutritionPlanRouter.post(
+  "/:id/refresh",
+  authenticate,
+  requireConsent,
+  validate({ params: planIdParamSchema, body: refreshPlanSchema }),
+  nutritionPlanController.refresh,
+);
+
+/** Paid extension preserves existing plan days and generates only added days. */
+nutritionPlanRouter.post(
+  "/:id/extend",
+  authenticate,
+  requireConsent,
+  validate({ params: planIdParamSchema, body: extendPlanSchema }),
+  nutritionPlanController.extend,
+);
+
 nutritionPlanRouter.get(
   "/:id/deviations",
   authenticate,

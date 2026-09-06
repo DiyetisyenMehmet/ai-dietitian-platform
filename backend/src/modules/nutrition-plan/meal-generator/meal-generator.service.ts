@@ -74,12 +74,17 @@ function uniqueStrings(values: string[]): string[] {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
 }
 
-function buildBatchSpecs(durationDays: number): BatchSpec[] {
+function buildBatchSpecs(startDayNumber: number, daysToGenerate: number): BatchSpec[] {
   const specs: BatchSpec[] = [];
-  for (let startDayNumber = 1; startDayNumber <= durationDays; startDayNumber += MEAL_GENERATION_BATCH_DAYS) {
+  const finalDayNumber = startDayNumber + daysToGenerate - 1;
+  for (
+    let batchStart = startDayNumber;
+    batchStart <= finalDayNumber;
+    batchStart += MEAL_GENERATION_BATCH_DAYS
+  ) {
     specs.push({
-      startDayNumber,
-      batchDays: Math.min(MEAL_GENERATION_BATCH_DAYS, durationDays - startDayNumber + 1),
+      startDayNumber: batchStart,
+      batchDays: Math.min(MEAL_GENERATION_BATCH_DAYS, finalDayNumber - batchStart + 1),
     });
   }
   return specs;
@@ -188,43 +193,78 @@ async function generateBatch(
   }
 }
 
+async function generateRangeInternal(
+  input: NutritionPlanGenerationInput,
+  startDayNumber: number,
+  daysToGenerate: number,
+  priorDays: DailyPlan[],
+): Promise<MealGenerationResult> {
+  if (
+    !Number.isInteger(startDayNumber) ||
+    !Number.isInteger(daysToGenerate) ||
+    startDayNumber < 1 ||
+    daysToGenerate < 1 ||
+    startDayNumber + daysToGenerate - 1 > input.durationDays
+  ) {
+    throw ApiError.badRequest("The requested nutrition-plan day range is invalid.");
+  }
+
+  const adapter = getAIAdapter();
+  const generated: GeneratedBatch[] = [];
+  const specs = buildBatchSpecs(startDayNumber, daysToGenerate);
+  const seedSignatures = priorDays
+    .slice(-MAX_AVOID_SIGNATURES)
+    .map(daySignature)
+    .filter(Boolean);
+
+  for (let offset = 0; offset < specs.length; offset += MEAL_GENERATION_CONCURRENCY) {
+    const wave = specs.slice(offset, offset + MEAL_GENERATION_CONCURRENCY);
+    const avoidMealSignatures = [...seedSignatures, ...recentSignatures(generated)].slice(
+      -MAX_AVOID_SIGNATURES,
+    );
+    const results = await Promise.all(
+      wave.map((spec) => generateBatch(input, spec, avoidMealSignatures)),
+    );
+    generated.push(...results);
+  }
+
+  generated.sort((a, b) => a.startDayNumber - b.startDayNumber);
+  const days = generated.flatMap((batch) => batch.output.cycle);
+  const recommendations = generated.flatMap((batch) => batch.output.recommendations);
+  const explanations: PlanExplanations | null = generated[0]?.output.explanations ?? null;
+  const summary = generated.find((batch) => batch.output.summary.trim())?.output.summary ?? "";
+
+  if (days.length !== daysToGenerate || !explanations) {
+    throw new ApiError(502, "The nutrition-plan provider returned an incomplete plan.", {
+      code: "NUTRITION_PLAN_INCOMPLETE",
+      isOperational: false,
+    });
+  }
+
+  return {
+    output: {
+      cycle: days,
+      explanations,
+      recommendations: uniqueStrings(recommendations).slice(0, 6),
+      summary,
+    },
+    aiProvider: adapter.info.provider,
+    aiModel: adapter.info.model,
+  };
+}
+
 export const mealGeneratorService = {
-  async generate(input: NutritionPlanGenerationInput): Promise<MealGenerationResult> {
-    const adapter = getAIAdapter();
-    const generated: GeneratedBatch[] = [];
-    const specs = buildBatchSpecs(input.durationDays);
+  generate(input: NutritionPlanGenerationInput): Promise<MealGenerationResult> {
+    return generateRangeInternal(input, 1, input.durationDays, []);
+  },
 
-    for (let offset = 0; offset < specs.length; offset += MEAL_GENERATION_CONCURRENCY) {
-      const wave = specs.slice(offset, offset + MEAL_GENERATION_CONCURRENCY);
-      const avoidMealSignatures = recentSignatures(generated);
-      const results = await Promise.all(
-        wave.map((spec) => generateBatch(input, spec, avoidMealSignatures)),
-      );
-      generated.push(...results);
-    }
-
-    generated.sort((a, b) => a.startDayNumber - b.startDayNumber);
-    const days = generated.flatMap((batch) => batch.output.cycle);
-    const recommendations = generated.flatMap((batch) => batch.output.recommendations);
-    const explanations: PlanExplanations | null = generated[0]?.output.explanations ?? null;
-    const summary = generated.find((batch) => batch.output.summary.trim())?.output.summary ?? "";
-
-    if (days.length !== input.durationDays || !explanations) {
-      throw new ApiError(502, "The nutrition-plan provider returned an incomplete plan.", {
-        code: "NUTRITION_PLAN_INCOMPLETE",
-        isOperational: false,
-      });
-    }
-
-    return {
-      output: {
-        cycle: days,
-        explanations,
-        recommendations: uniqueStrings(recommendations).slice(0, 6),
-        summary,
-      },
-      aiProvider: adapter.info.provider,
-      aiModel: adapter.info.model,
-    };
+  /** Generates only the requested contiguous range while preserving full-horizon context. */
+  generateRange(
+    input: NutritionPlanGenerationInput,
+    startDayNumber: number,
+    daysToGenerate: number,
+    priorDays: DailyPlan[] = [],
+  ): Promise<MealGenerationResult> {
+    return generateRangeInternal(input, startDayNumber, daysToGenerate, priorDays);
   },
 };

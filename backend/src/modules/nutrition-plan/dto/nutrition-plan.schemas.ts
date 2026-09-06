@@ -31,6 +31,23 @@ export const generatePlanSchema = z.object({
 });
 export type GeneratePlanInput = z.infer<typeof generatePlanSchema>;
 
+/** Paid scoped refresh: one selected day, or the selected day and all future days. */
+export const refreshPlanSchema = z
+  .object({
+    mode: z.enum(["DAY", "FROM_DAY"]),
+    dayNumber: z.number().int().min(1).max(30),
+  })
+  .strict();
+export type RefreshPlanInput = z.infer<typeof refreshPlanSchema>;
+
+/** Paid extension keeps existing days and generates only the added horizon. */
+export const extendPlanSchema = z
+  .object({
+    duration: z.enum(PLAN_DURATIONS),
+  })
+  .strict();
+export type ExtendPlanInput = z.infer<typeof extendPlanSchema>;
+
 /** Route param: a nutrition-plan id (UUID). */
 export const planIdParamSchema = z.object({
   id: z.string().uuid("A valid nutrition plan id is required"),

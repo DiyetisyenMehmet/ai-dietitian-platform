@@ -91,6 +91,8 @@ export interface DailyPlan {
 export interface CalendarDay {
   dayNumber: number;
   cycleIndex: number;
+  /** Additional calendar days introduced by user-requested plan pauses/shifts. */
+  dateOffsetDays?: number;
 }
 
 /**
