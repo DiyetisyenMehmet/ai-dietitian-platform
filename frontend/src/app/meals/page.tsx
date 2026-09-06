@@ -6,13 +6,17 @@ import { CalendarDays, ChevronRight, Plus, ScanLine } from "lucide-react";
 
 import { nutritionPlanStore, useNutritionPlan } from "@/application/health/nutrition-plan-store";
 import { useMeals, computeTotals } from "@/application/meals/meals-store";
+import type { NutritionPlanDuration } from "@/infrastructure/nutrition/nutrition-plan-client";
 import { AppShell } from "@/presentation/components/layout/app-shell";
 import { Button } from "@/presentation/components/ui/button";
 import { NutritionSummary } from "@/presentation/components/meals/nutrition-summary";
 import { MealCard } from "@/presentation/components/meals/meal-card";
 
-function durationLabel(duration: "THIRTY_DAY" | "SIXTY_DAY"): string {
-  return duration === "THIRTY_DAY" ? "30 günlük" : "60 günlük";
+function durationLabel(duration: NutritionPlanDuration): string {
+  if (duration === "SEVEN_DAY") return "7 günlük";
+  if (duration === "FOURTEEN_DAY") return "14 günlük";
+  if (duration === "THIRTY_DAY") return "30 günlük";
+  return "60 günlük eski";
 }
 
 export default function MealsPage() {
