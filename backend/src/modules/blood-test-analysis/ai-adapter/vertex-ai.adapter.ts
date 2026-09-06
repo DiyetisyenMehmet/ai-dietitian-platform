@@ -1,6 +1,7 @@
 import { env } from "../../../config/env";
 import { logger } from "../../../lib/logger";
 import { ApiError } from "../../../utils/api-error";
+import { NUTRITION_PLAN_SYSTEM_PROMPT } from "../../nutrition-plan/constants";
 import { ANALYSIS_SYSTEM_PROMPT, EXTRACTION_SYSTEM_PROMPT } from "../constants";
 import { DOCUMENT_VALIDATION_SYSTEM_PROMPT } from "../validation/document-validation.constants";
 import {
@@ -165,6 +166,85 @@ const BLOOD_ANALYSIS_RESPONSE_SCHEMA = {
   required: ["explanations", "nutritionImplications", "overallRecommendations", "summary"],
 } as const;
 
+const NUTRITION_PLAN_RESPONSE_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    cycle: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          dayLabel: { type: "STRING" },
+          meals: {
+            type: "ARRAY",
+            items: {
+              type: "OBJECT",
+              properties: {
+                name: { type: "STRING" },
+                time: { type: "STRING" },
+                foods: {
+                  type: "ARRAY",
+                  items: {
+                    type: "OBJECT",
+                    properties: {
+                      name: { type: "STRING" },
+                      portion: { type: "STRING" },
+                      calories: { type: "NUMBER" },
+                    },
+                    required: ["name", "portion", "calories"],
+                  },
+                },
+                calories: { type: "NUMBER" },
+                proteinGrams: { type: "NUMBER" },
+                carbsGrams: { type: "NUMBER" },
+                fatGrams: { type: "NUMBER" },
+                explanation: { type: "STRING" },
+              },
+              required: [
+                "name",
+                "time",
+                "foods",
+                "calories",
+                "proteinGrams",
+                "carbsGrams",
+                "fatGrams",
+                "explanation",
+              ],
+            },
+          },
+          totalCalories: { type: "NUMBER" },
+          totalProteinGrams: { type: "NUMBER" },
+          totalCarbsGrams: { type: "NUMBER" },
+          totalFatGrams: { type: "NUMBER" },
+          notes: { type: "STRING", nullable: true },
+        },
+        required: [
+          "dayLabel",
+          "meals",
+          "totalCalories",
+          "totalProteinGrams",
+          "totalCarbsGrams",
+          "totalFatGrams",
+        ],
+      },
+    },
+    explanations: {
+      type: "OBJECT",
+      properties: {
+        calories: { type: "STRING" },
+        macros: { type: "STRING" },
+        water: { type: "STRING" },
+        mealTiming: { type: "STRING" },
+        overall: { type: "STRING" },
+      },
+      required: ["calories", "macros", "water", "mealTiming", "overall"],
+    },
+    recommendations: { type: "ARRAY", items: { type: "STRING" } },
+    summary: { type: "STRING" },
+  },
+  required: ["cycle", "explanations", "recommendations", "summary"],
+} as const;
+
 const TRANSIENT_HTTP_STATUSES = new Set([429, 500, 502, 503, 504]);
 const BLOCKED_FINISH_REASONS = new Set([
   "SAFETY",
@@ -177,6 +257,7 @@ const BLOCKED_FINISH_REASONS = new Set([
 const PROVIDER_REQUEST_ATTEMPTS = 2;
 const CHAT_MIN_OUTPUT_TOKENS = 2048;
 const CHAT_RETRY_MAX_OUTPUT_TOKENS = 4096;
+const NUTRITION_PLAN_MIN_OUTPUT_TOKENS = 8192;
 const STRUCTURED_RETRY_MAX_OUTPUT_TOKENS = 8192;
 
 /**
@@ -275,6 +356,7 @@ export class VertexAIAdapter extends OpenAICompatibleAdapter {
       }
       if (message.content === EXTRACTION_SYSTEM_PROMPT) return EXTRACTION_RESPONSE_SCHEMA;
       if (message.content === ANALYSIS_SYSTEM_PROMPT) return BLOOD_ANALYSIS_RESPONSE_SCHEMA;
+      if (message.content === NUTRITION_PLAN_SYSTEM_PROMPT) return NUTRITION_PLAN_RESPONSE_SCHEMA;
     }
     return undefined;
   }
@@ -422,7 +504,7 @@ export class VertexAIAdapter extends OpenAICompatibleAdapter {
   private throwBlockedStructuredResponse(body: VertexGenerateContentResponse): never {
     logger.warn(
       { model: this.vertex.model, ...this.safeResponseMetadata(body) },
-      "Vertex AI blocked a structured blood-test response",
+      "Vertex AI blocked a structured response",
     );
     throw new ApiError(502, "Vertex AI blocked the structured response.", {
       code: "AI_PROVIDER_BLOCKED",
@@ -459,13 +541,15 @@ export class VertexAIAdapter extends OpenAICompatibleAdapter {
 
     const responseSchema = this.responseSchemaFor(messages);
     const requestedMaxTokens = maxTokensOverride ?? this.vertex.maxTokens;
-    // A bounded override belongs to the interactive coach. Blood-test requests
-    // are identified by their domain system prompt and keep their own structured
-    // output contract even if a future caller adds a token override.
+    // Interactive chat stays bounded. Structured nutrition plans receive a
+    // larger first-pass budget because one response contains a full weekly cycle.
     const interactiveChat = maxTokensOverride !== undefined && !responseSchema;
-    const providerMaxTokens = interactiveChat
-      ? Math.max(requestedMaxTokens, CHAT_MIN_OUTPUT_TOKENS)
-      : requestedMaxTokens;
+    const nutritionPlanRequest = responseSchema === NUTRITION_PLAN_RESPONSE_SCHEMA;
+    const providerMaxTokens = nutritionPlanRequest
+      ? Math.max(requestedMaxTokens, NUTRITION_PLAN_MIN_OUTPUT_TOKENS)
+      : interactiveChat
+        ? Math.max(requestedMaxTokens, CHAT_MIN_OUTPUT_TOKENS)
+        : requestedMaxTokens;
 
     const first = await this.generateContent(
       url,
