@@ -90,6 +90,14 @@ function failGeneration(error: unknown): never {
   throw error;
 }
 
+function requireSupportedSource(planId: string): NutritionPlanRecord {
+  const source = state.plans.find((item) => item.id === planId) ?? state.activePlan;
+  if (!source || !isSupportedNutritionPlanDuration(source.duration)) {
+    throw new Error("This nutrition plan duration is no longer supported.");
+  }
+  return source;
+}
+
 export const nutritionPlanStore = {
   async hydrateFromBackend(): Promise<NutritionPlanRecord | null> {
     patch({ loading: true });
@@ -117,10 +125,7 @@ export const nutritionPlanStore = {
 
   async regenerate(planId: string): Promise<NutritionPlanRecord> {
     if (state.generating) throw new Error("Nutrition plan generation is already in progress.");
-    const source = state.plans.find((item) => item.id === planId) ?? state.activePlan;
-    if (!source || !isSupportedNutritionPlanDuration(source.duration)) {
-      throw new Error("This nutrition plan duration is no longer supported.");
-    }
+    const source = requireSupportedSource(planId);
     patch({ generating: true, generatingDuration: source.duration });
     try {
       const { plan } = await nutritionPlanClient.regenerate(planId);
@@ -132,10 +137,7 @@ export const nutritionPlanStore = {
 
   async refresh(planId: string, input: RefreshNutritionPlanInput): Promise<NutritionPlanRecord> {
     if (state.generating) throw new Error("Nutrition plan generation is already in progress.");
-    const source = state.plans.find((item) => item.id === planId) ?? state.activePlan;
-    if (!source || !isSupportedNutritionPlanDuration(source.duration)) {
-      throw new Error("This nutrition plan duration is no longer supported.");
-    }
+    const source = requireSupportedSource(planId);
     patch({ generating: true, generatingDuration: source.duration });
     try {
       const { plan } = await nutritionPlanClient.refresh(planId, input);
@@ -150,9 +152,22 @@ export const nutritionPlanStore = {
     duration: SupportedNutritionPlanDuration,
   ): Promise<NutritionPlanRecord> {
     if (state.generating) throw new Error("Nutrition plan generation is already in progress.");
+    requireSupportedSource(planId);
     patch({ generating: true, generatingDuration: duration });
     try {
       const { plan } = await nutritionPlanClient.extend(planId, duration);
+      return completeGeneration(plan);
+    } catch (error) {
+      return failGeneration(error);
+    }
+  },
+
+  async shiftToday(planId: string, dayNumber: number): Promise<NutritionPlanRecord> {
+    if (state.generating) throw new Error("Nutrition plan generation is already in progress.");
+    const source = requireSupportedSource(planId);
+    patch({ generating: true, generatingDuration: source.duration });
+    try {
+      const { plan } = await nutritionPlanClient.shiftToday(planId, dayNumber);
       return completeGeneration(plan);
     } catch (error) {
       return failGeneration(error);

@@ -61,6 +61,7 @@ export interface DailyPlan {
 export interface CalendarDay {
   dayNumber: number;
   cycleIndex: number;
+  /** Number of calendar days this plan day has been postponed. */
   dateOffsetDays?: number;
 }
 
@@ -193,6 +194,15 @@ export const nutritionPlanClient = {
       method: "POST",
       auth: true,
       body: JSON.stringify({ duration }),
+    });
+  },
+
+  shiftToday(planId: string, dayNumber: number) {
+    return apiRequest<{ plan: NutritionPlanRecord }>({
+      path: `/nutrition-plans/${encodeURIComponent(planId)}/shift-day`,
+      method: "POST",
+      auth: true,
+      body: JSON.stringify({ dayNumber, localDate: localDateYmd() }),
     });
   },
 

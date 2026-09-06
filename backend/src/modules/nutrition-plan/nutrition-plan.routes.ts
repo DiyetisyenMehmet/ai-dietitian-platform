@@ -12,6 +12,7 @@ import {
   planDeviationParamSchema,
   planIdParamSchema,
   refreshPlanSchema,
+  shiftPlanDaySchema,
 } from "./dto/nutrition-plan.schemas";
 
 /**
@@ -31,7 +32,6 @@ nutritionPlanRouter.post(
   nutritionPlanController.generate,
 );
 
-/** Get the active plan for a supported duration. */
 nutritionPlanRouter.get(
   "/active",
   authenticate,
@@ -39,10 +39,8 @@ nutritionPlanRouter.get(
   nutritionPlanController.getActive,
 );
 
-/** List all owner-scoped plan versions. */
 nutritionPlanRouter.get("/", authenticate, nutritionPlanController.list);
 
-/** Regenerate a supported plan as a completely new version. */
 nutritionPlanRouter.post(
   "/:id/regenerate",
   authenticate,
@@ -51,7 +49,6 @@ nutritionPlanRouter.post(
   nutritionPlanController.regenerate,
 );
 
-/** Paid scoped refresh: one day or the selected day plus all future days. */
 nutritionPlanRouter.post(
   "/:id/refresh",
   authenticate,
@@ -60,13 +57,21 @@ nutritionPlanRouter.post(
   nutritionPlanController.refresh,
 );
 
-/** Paid extension preserves existing plan days and generates only added days. */
 nutritionPlanRouter.post(
   "/:id/extend",
   authenticate,
   requireConsent,
   validate({ params: planIdParamSchema, body: extendPlanSchema }),
   nutritionPlanController.extend,
+);
+
+/** Paid non-AI calendar continuity operation: move today's plan day to tomorrow. */
+nutritionPlanRouter.post(
+  "/:id/shift-day",
+  authenticate,
+  requireConsent,
+  validate({ params: planIdParamSchema, body: shiftPlanDaySchema }),
+  nutritionPlanController.shiftDay,
 );
 
 nutritionPlanRouter.get(
@@ -84,7 +89,6 @@ nutritionPlanRouter.post(
   nutritionPlanController.createDeviation,
 );
 
-/** Delete/correct a single owner-scoped Kaçamak record. */
 nutritionPlanRouter.delete(
   "/:id/deviations/:deviationId",
   authenticate,
@@ -92,7 +96,6 @@ nutritionPlanRouter.delete(
   nutritionPlanController.deleteDeviation,
 );
 
-/** Soft-delete one owner-scoped plan; deletion never requires paid entitlement or current consent. */
 nutritionPlanRouter.delete(
   "/:id",
   authenticate,

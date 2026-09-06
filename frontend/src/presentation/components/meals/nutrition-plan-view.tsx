@@ -53,6 +53,12 @@ const MEAL_NAME_TR: Record<string, string> = {
   supper: "Gece öğünü",
 };
 
+interface PlanPosition {
+  focusDayNumber: number;
+  exactToday: boolean;
+  completed: boolean;
+}
+
 function durationLabel(duration: NutritionPlanDuration): string {
   if (duration === "SEVEN_DAY") return "7 günlük";
   if (duration === "FOURTEEN_DAY") return "14 günlük";
@@ -94,17 +100,35 @@ function planStartLocalDate(plan: NutritionPlanRecord): Date {
   return created;
 }
 
-function currentDayNumber(plan: NutritionPlanRecord, durationDays: number): number {
-  const start = planStartLocalDate(plan);
-  const diff = Math.floor((startOfLocalDay(new Date()) - startOfLocalDay(start)) / 86_400_000) + 1;
-  return Math.min(durationDays, Math.max(1, diff));
+function calendarOffset(plan: NutritionPlanRecord, dayNumber: number): number {
+  const content = safeContent(plan);
+  const mapping = content?.calendar?.find((item) => item.dayNumber === dayNumber);
+  return Math.max(0, Math.trunc(mapping?.dateOffsetDays ?? 0));
 }
 
 function dateForPlanDay(plan: NutritionPlanRecord, dayNumber: number): Date {
   const date = planStartLocalDate(plan);
   date.setHours(12, 0, 0, 0);
-  date.setDate(date.getDate() + dayNumber - 1);
+  date.setDate(date.getDate() + dayNumber - 1 + calendarOffset(plan, dayNumber));
   return date;
+}
+
+function planPosition(plan: NutritionPlanRecord, durationDays: number): PlanPosition {
+  const today = startOfLocalDay(new Date());
+  let lastDate = 0;
+
+  for (let dayNumber = 1; dayNumber <= durationDays; dayNumber += 1) {
+    const date = startOfLocalDay(dateForPlanDay(plan, dayNumber));
+    lastDate = date;
+    if (date === today) return { focusDayNumber: dayNumber, exactToday: true, completed: false };
+    if (date > today) return { focusDayNumber: dayNumber, exactToday: false, completed: false };
+  }
+
+  return {
+    focusDayNumber: durationDays,
+    exactToday: false,
+    completed: today > lastDate,
+  };
 }
 
 function dateLabel(plan: NutritionPlanRecord, dayNumber: number): string {
@@ -123,6 +147,9 @@ function planError(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.code === "SUBSCRIPTION_REQUIRED") {
       return "Bu plan yönetimi özelliği Premium ve Premium Plus kullanıcıları içindir.";
+    }
+    if (error.code === "NUTRITION_PLAN_DAY_STALE") {
+      return "Plan günü değişmiş. Güncel plan yeniden yüklendikten sonra tekrar deneyebilirsin.";
     }
     if (error.code === "NUTRITION_PLAN_INCOMPLETE") {
       return "Planın tüm günleri güvenilir şekilde oluşturulamadı. Lütfen tekrar dene.";
@@ -211,29 +238,47 @@ function DayCard({
   dayNumber,
   day,
   open,
-  today,
+  canLogKacamak,
+  canRefresh,
+  canShift,
   generating,
   deviations,
   deviationsLoading,
   onCreateDeviation,
   onDeleteDeviation,
   onRefreshDay,
+  onShiftDay,
 }: {
   plan: NutritionPlanRecord;
   dayNumber: number;
   day: DailyPlan;
   open: boolean;
-  today: number;
+  canLogKacamak: boolean;
+  canRefresh: boolean;
+  canShift: boolean;
   generating: boolean;
   deviations: NutritionPlanDeviationRecord[];
   deviationsLoading: boolean;
   onCreateDeviation(input: CreateNutritionPlanDeviationInput): Promise<NutritionPlanDeviationRecord>;
   onDeleteDeviation(deviationId: string): Promise<void>;
   onRefreshDay(dayNumber: number): Promise<void>;
+  onShiftDay(dayNumber: number): Promise<void>;
 }) {
+  const [confirmShift, setConfirmShift] = React.useState(false);
+  const [shifting, setShifting] = React.useState(false);
   const dayDeviations = deviations.filter((item) => item.dayNumber === dayNumber);
   const planDayDateLabel = dateLabel(plan, dayNumber);
-  const canRefresh = dayNumber >= today;
+
+  const shift = async () => {
+    if (shifting || generating) return;
+    setShifting(true);
+    try {
+      await onShiftDay(dayNumber);
+      setConfirmShift(false);
+    } finally {
+      setShifting(false);
+    }
+  };
 
   return (
     <details className="group rounded-2xl border border-border bg-card shadow-sm" open={open}>
@@ -258,7 +303,7 @@ function DayCard({
             meal={meal}
             deviations={dayDeviations}
             deviationsLoading={deviationsLoading}
-            canLogKacamak={dayNumber <= today}
+            canLogKacamak={canLogKacamak}
             onCreateDeviation={onCreateDeviation}
             onDeleteDeviation={onDeleteDeviation}
           />
@@ -281,15 +326,36 @@ function DayCard({
 
         {day.notes?.trim() && <p className="text-xs leading-relaxed text-muted-foreground">{day.notes}</p>}
 
+        {confirmShift && canShift && (
+          <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
+            <p className="text-sm font-semibold">Bugünü yarına taşı</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              Bugünkü öğünlerin yarına taşınacak. Sonraki plan günlerin de bir gün ileri kayacak. Geçmiş günlerin değişmeyecek.
+            </p>
+            <div className="mt-3 flex flex-wrap justify-end gap-2">
+              <Button variant="ghost" size="sm" disabled={shifting} onClick={() => setConfirmShift(false)}>Vazgeç</Button>
+              <Button size="sm" isLoading={shifting} onClick={() => void shift()}>Yarına taşı</Button>
+            </div>
+            <p className="mt-2 text-[11px] text-muted-foreground">Bu özellik Premium ve Premium Plus kullanıcıları içindir.</p>
+          </div>
+        )}
+
         <div className="flex flex-wrap justify-end gap-2 border-t border-border/60 pt-3">
-          {canRefresh && (
+          {canShift && (
             <Button
               type="button"
               variant="outline"
               size="sm"
-              disabled={generating}
-              onClick={() => void onRefreshDay(dayNumber)}
+              disabled={generating || shifting}
+              aria-expanded={confirmShift}
+              onClick={() => setConfirmShift((value) => !value)}
             >
+              <CalendarDays aria-hidden="true" />
+              Bugünü yarına taşı
+            </Button>
+          )}
+          {canRefresh && (
+            <Button type="button" variant="outline" size="sm" disabled={generating} onClick={() => void onRefreshDay(dayNumber)}>
               <RefreshCw aria-hidden="true" />
               Bu günü yenile
             </Button>
@@ -365,13 +431,7 @@ function DurationOptions({
   );
 }
 
-function EmptyPlan({
-  generating,
-  generatingDuration,
-}: {
-  generating: boolean;
-  generatingDuration: SupportedNutritionPlanDuration | null;
-}) {
+function EmptyPlan({ generating, generatingDuration }: { generating: boolean; generatingDuration: SupportedNutritionPlanDuration | null }) {
   return (
     <div className="space-y-5">
       <Card className="overflow-hidden border-primary/20 bg-gradient-to-br from-primary/10 via-background to-background">
@@ -385,9 +445,7 @@ function EmptyPlan({
           </p>
         </CardContent>
       </Card>
-
       <DurationOptions generating={generating} generatingDuration={generatingDuration} />
-
       <p className="text-xs leading-relaxed text-muted-foreground">
         Plan yalnızca gıda temellidir. Diewish bu özellikte takviye, vitamin/mineral ürünü, bitkisel kür veya doz önermez.
       </p>
@@ -402,12 +460,8 @@ export function NutritionPlanView() {
   const [showRefreshOptions, setShowRefreshOptions] = React.useState(false);
   const [confirmDelete, setConfirmDelete] = React.useState(false);
   const [deletingPlan, setDeletingPlan] = React.useState(false);
-  const {
-    deviations,
-    loading: deviationsLoading,
-    createDeviation,
-    deleteDeviation,
-  } = useNutritionPlanDeviations(activePlan?.id ?? null);
+  const { deviations, loading: deviationsLoading, createDeviation, deleteDeviation } =
+    useNutritionPlanDeviations(activePlan?.id ?? null);
 
   React.useEffect(() => {
     if (!hydrated && !loading) void nutritionPlanStore.hydrateFromBackend();
@@ -417,8 +471,8 @@ export function NutritionPlanView() {
     if (!activePlan) return;
     const content = safeContent(activePlan);
     const durationDays = content?.durationDays || DURATION_DAYS[activePlan.duration];
-    const today = currentDayNumber(activePlan, durationDays);
-    setWeekIndex(Math.floor((today - 1) / 7));
+    const position = planPosition(activePlan, durationDays);
+    setWeekIndex(Math.floor((position.focusDayNumber - 1) / 7));
     setShowDurationOptions(false);
     setShowRefreshOptions(false);
     setConfirmDelete(false);
@@ -444,13 +498,21 @@ export function NutritionPlanView() {
   }
 
   const durationDays = content.durationDays || DURATION_DAYS[activePlan.duration];
-  const today = currentDayNumber(activePlan, durationDays);
-  const currentWeek = Math.floor((today - 1) / 7);
+  const position = planPosition(activePlan, durationDays);
+  const focusDay = position.focusDayNumber;
+  const currentWeek = Math.floor((focusDay - 1) / 7);
   const totalWeeks = Math.ceil(durationDays / 7);
   const safeWeekIndex = Math.min(totalWeeks - 1, Math.max(0, weekIndex));
   const weekStart = safeWeekIndex * 7 + 1;
   const weekEnd = Math.min(durationDays, weekStart + 6);
   const visibleDays = Array.from({ length: weekEnd - weekStart + 1 }, (_, index) => weekStart + index);
+  const todayTimestamp = startOfLocalDay(new Date());
+
+  const statusLine = position.completed
+    ? "Plan tamamlandı"
+    : position.exactToday
+      ? `bugün ${focusDay}. gün`
+      : `bugün ara gün · sıradaki ${focusDay}. gün ${dateLabel(activePlan, focusDay)}`;
 
   const regenerateAll = async () => {
     try {
@@ -461,10 +523,10 @@ export function NutritionPlanView() {
     }
   };
 
-  const refreshFromToday = async () => {
+  const refreshFromFocus = async () => {
     try {
-      await nutritionPlanStore.refresh(activePlan.id, { mode: "FROM_DAY", dayNumber: today });
-      toast.success(`${today}. günden sonraki planın yenilendi`);
+      await nutritionPlanStore.refresh(activePlan.id, { mode: "FROM_DAY", dayNumber: focusDay });
+      toast.success(`${focusDay}. günden sonraki planın yenilendi`);
     } catch (error) {
       toast.error(planError(error));
     }
@@ -476,6 +538,16 @@ export function NutritionPlanView() {
       toast.success(`${dayNumber}. gün yenilendi`);
     } catch (error) {
       toast.error(planError(error));
+    }
+  };
+
+  const shiftDay = async (dayNumber: number) => {
+    try {
+      await nutritionPlanStore.shiftToday(activePlan.id, dayNumber);
+      toast.success("Bugünkü plan yarına taşındı. Sonraki günler de bir gün ileri kaydırıldı.");
+    } catch (error) {
+      toast.error(planError(error));
+      throw error;
     }
   };
 
@@ -501,12 +573,12 @@ export function NutritionPlanView() {
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-primary">Öğün Planım</p>
               <h2 className="mt-1 text-xl font-bold">{durationLabel(activePlan.duration)} kişisel plan</h2>
-              <p className="mt-1 text-xs text-muted-foreground">Sürüm {activePlan.version} · bugün {today}. gün</p>
+              <p className="mt-1 text-xs text-muted-foreground">Sürüm {activePlan.version} · {statusLine}</p>
             </div>
             <Button
               variant="ghost"
               size="sm"
-              disabled={generating || deletingPlan}
+              disabled={generating || deletingPlan || position.completed}
               aria-expanded={showRefreshOptions}
               onClick={() => setShowRefreshOptions((value) => !value)}
             >
@@ -515,22 +587,22 @@ export function NutritionPlanView() {
             </Button>
           </div>
 
-          {showRefreshOptions && (
+          {showRefreshOptions && !position.completed && (
             <div className="mt-4 rounded-2xl border border-amber-500/25 bg-background/80 p-4">
-              <p className="text-sm font-semibold">Şu anda planının {today}. günündesin.</p>
+              <p className="text-sm font-semibold">
+                {position.exactToday ? `Şu anda planının ${focusDay}. günündesin.` : `Bugün ara gün. Sıradaki plan günün ${focusDay}. gün.`}
+              </p>
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                Bütün planı yeniden oluşturmak mevcut plan devamlılığını değiştirebilir. Geçmiş günleri korumak için bugünden sonrasını yenilemen önerilir.
+                Bütün planı yeniden oluşturmak mevcut plan devamlılığını değiştirebilir. Geçmiş günleri korumak için sıradaki günden sonrasını yenilemen önerilir.
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
-                <Button size="sm" disabled={generating} onClick={() => void refreshFromToday()}>
-                  Bugünden sonrasını yenile
+                <Button size="sm" disabled={generating} onClick={() => void refreshFromFocus()}>
+                  {position.exactToday ? "Bugünden sonrasını yenile" : "Sıradaki günden sonrasını yenile"}
                 </Button>
                 <Button variant="outline" size="sm" disabled={generating} onClick={() => void regenerateAll()}>
                   Bütün planı yenile
                 </Button>
-                <Button variant="ghost" size="sm" disabled={generating} onClick={() => setShowRefreshOptions(false)}>
-                  Vazgeç
-                </Button>
+                <Button variant="ghost" size="sm" disabled={generating} onClick={() => setShowRefreshOptions(false)}>Vazgeç</Button>
               </div>
               <p className="mt-2 text-[11px] text-muted-foreground">Kontrollü yenileme Premium ve Premium Plus özelliğidir.</p>
             </div>
@@ -597,20 +669,25 @@ export function NutritionPlanView() {
           {visibleDays.map((dayNumber) => {
             const day = dayPlan(content, dayNumber);
             if (!day) return null;
+            const planDate = startOfLocalDay(dateForPlanDay(activePlan, dayNumber));
+            const isToday = planDate === todayTimestamp;
             return (
               <DayCard
                 key={dayNumber}
                 plan={activePlan}
                 dayNumber={dayNumber}
                 day={day}
-                open={dayNumber === today}
-                today={today}
+                open={dayNumber === focusDay}
+                canLogKacamak={planDate <= todayTimestamp}
+                canRefresh={planDate >= todayTimestamp && !position.completed}
+                canShift={isToday && !position.completed}
                 generating={generating}
                 deviations={deviations}
                 deviationsLoading={deviationsLoading}
                 onCreateDeviation={createDeviation}
                 onDeleteDeviation={deleteDeviation}
                 onRefreshDay={refreshDay}
+                onShiftDay={shiftDay}
               />
             );
           })}
@@ -628,9 +705,7 @@ export function NutritionPlanView() {
         <details className="rounded-2xl border border-border bg-card p-4">
           <summary className="cursor-pointer select-none text-sm font-semibold">Genel beslenme notları</summary>
           <ol className="mt-3 space-y-2 pl-5 text-sm leading-relaxed text-muted-foreground">
-            {activePlan.recommendations.map((item, index) => (
-              <li key={`${item}-${index}`} className="list-decimal">{item}</li>
-            ))}
+            {activePlan.recommendations.map((item, index) => <li key={`${item}-${index}`} className="list-decimal">{item}</li>)}
           </ol>
         </details>
       )}
@@ -689,11 +764,7 @@ export function NutritionPlanView() {
             <p className="mb-3 text-xs leading-relaxed text-muted-foreground">
               Daha uzun plan seçersen mevcut günlerin bozulmadan korunur ve yalnızca yeni günler eklenir. Yeni plan başarıyla hazırlanana kadar mevcut plan ekranda kalır.
             </p>
-            <DurationOptions
-              generating={generating}
-              generatingDuration={generatingDuration}
-              currentPlan={activePlan}
-            />
+            <DurationOptions generating={generating} generatingDuration={generatingDuration} currentPlan={activePlan} />
           </div>
         )}
       </section>

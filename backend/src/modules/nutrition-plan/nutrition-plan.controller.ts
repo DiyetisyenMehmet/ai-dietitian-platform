@@ -14,6 +14,7 @@ import type {
   PlanDeviationParam,
   PlanIdParam,
   RefreshPlanInput,
+  ShiftPlanDayInput,
 } from "./dto/nutrition-plan.schemas";
 
 /** Resolves the authenticated user id or throws 401. */
@@ -30,7 +31,6 @@ function requireUserId(req: Request): string {
  * the full plan is returned on completion.
  */
 export const nutritionPlanController = {
-  /** Generates a new nutrition plan for the authenticated user. */
   generate: asyncHandler(async (req: Request, res: Response) => {
     const userId = requireUserId(req);
     const { duration, startDate } = req.body as GeneratePlanInput;
@@ -38,7 +38,6 @@ export const nutritionPlanController = {
     sendCreated(res, { plan });
   }),
 
-  /** Regenerates the complete plan as a new version. */
   regenerate: asyncHandler(async (req: Request, res: Response) => {
     const userId = requireUserId(req);
     const { id } = req.params as PlanIdParam;
@@ -46,7 +45,6 @@ export const nutritionPlanController = {
     sendCreated(res, { plan });
   }),
 
-  /** Regenerates one day or the selected day plus all future days. */
   refresh: asyncHandler(async (req: Request, res: Response) => {
     const userId = requireUserId(req);
     const { id } = req.params as PlanIdParam;
@@ -55,7 +53,6 @@ export const nutritionPlanController = {
     sendCreated(res, { plan });
   }),
 
-  /** Extends an active plan without replacing its already planned days. */
   extend: asyncHandler(async (req: Request, res: Response) => {
     const userId = requireUserId(req);
     const { id } = req.params as PlanIdParam;
@@ -64,14 +61,20 @@ export const nutritionPlanController = {
     sendCreated(res, { plan });
   }),
 
-  /** Lists all of the authenticated user's plans (all versions). */
+  shiftDay: asyncHandler(async (req: Request, res: Response) => {
+    const userId = requireUserId(req);
+    const { id } = req.params as PlanIdParam;
+    const input = req.body as ShiftPlanDayInput;
+    const plan = await nutritionPlanRevisionService.shiftDay(userId, id, input);
+    sendCreated(res, { plan });
+  }),
+
   list: asyncHandler(async (req: Request, res: Response) => {
     const userId = requireUserId(req);
     const plans = await nutritionPlanService.list(userId);
     sendSuccess(res, { plans });
   }),
 
-  /** Returns the active plan for a given duration. */
   getActive: asyncHandler(async (req: Request, res: Response) => {
     const userId = requireUserId(req);
     const { duration } = req.query as unknown as ActivePlanQuery;
@@ -79,7 +82,6 @@ export const nutritionPlanController = {
     sendSuccess(res, { plan });
   }),
 
-  /** Returns a specific plan by id. */
   getById: asyncHandler(async (req: Request, res: Response) => {
     const userId = requireUserId(req);
     const { id } = req.params as PlanIdParam;
@@ -87,7 +89,6 @@ export const nutritionPlanController = {
     sendSuccess(res, { plan });
   }),
 
-  /** Soft-deletes one owner-scoped plan without destroying its audit/history row. */
   deletePlan: asyncHandler(async (req: Request, res: Response) => {
     const userId = requireUserId(req);
     const { id } = req.params as PlanIdParam;
@@ -95,7 +96,6 @@ export const nutritionPlanController = {
     sendNoContent(res);
   }),
 
-  /** Lists owner-scoped adherence/Kaçamak records for a plan. */
   listDeviations: asyncHandler(async (req: Request, res: Response) => {
     const userId = requireUserId(req);
     const { id } = req.params as PlanIdParam;
@@ -103,7 +103,6 @@ export const nutritionPlanController = {
     sendSuccess(res, { deviations });
   }),
 
-  /** Records a paid user's food/meal/day-level Kaçamak without mutating the plan. */
   createDeviation: asyncHandler(async (req: Request, res: Response) => {
     const userId = requireUserId(req);
     const { id } = req.params as PlanIdParam;
@@ -112,7 +111,6 @@ export const nutritionPlanController = {
     sendCreated(res, { deviation });
   }),
 
-  /** Removes an owner-scoped Kaçamak record so users can correct their own history. */
   deleteDeviation: asyncHandler(async (req: Request, res: Response) => {
     const userId = requireUserId(req);
     const { id, deviationId } = req.params as PlanDeviationParam;

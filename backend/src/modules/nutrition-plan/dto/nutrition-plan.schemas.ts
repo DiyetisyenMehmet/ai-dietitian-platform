@@ -48,6 +48,15 @@ export const extendPlanSchema = z
   .strict();
 export type ExtendPlanInput = z.infer<typeof extendPlanSchema>;
 
+/** Paid day shift; localDate prevents stale/double shifts from changing the wrong day. */
+export const shiftPlanDaySchema = z
+  .object({
+    dayNumber: z.number().int().min(1).max(30),
+    localDate: planStartDateSchema,
+  })
+  .strict();
+export type ShiftPlanDayInput = z.infer<typeof shiftPlanDaySchema>;
+
 /** Route param: a nutrition-plan id (UUID). */
 export const planIdParamSchema = z.object({
   id: z.string().uuid("A valid nutrition plan id is required"),

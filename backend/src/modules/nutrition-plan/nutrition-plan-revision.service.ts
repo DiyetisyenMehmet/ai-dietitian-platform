@@ -7,7 +7,11 @@ import { aiUsageService } from "../ai-usage/ai-usage.service";
 import { bloodTestAnalysisRepository } from "../blood-test-analysis/blood-test-analysis.repository";
 import { ENTITLEMENT_REQUIRED_CODE } from "../payments/constants";
 import { DURATION_DAYS, isSupportedPlanDuration } from "./constants";
-import type { ExtendPlanInput, RefreshPlanInput } from "./dto/nutrition-plan.schemas";
+import type {
+  ExtendPlanInput,
+  RefreshPlanInput,
+  ShiftPlanDayInput,
+} from "./dto/nutrition-plan.schemas";
 import { mealGeneratorService } from "./meal-generator/meal-generator.service";
 import { nutritionPlanRepository } from "./nutrition-plan.repository";
 import type {
@@ -45,7 +49,7 @@ async function requirePaidTier(userId: string): Promise<"PREMIUM" | "PREMIUM_PLU
   if (tier === "FREE") {
     throw new ApiError(
       403,
-      "Plan uzatma ve kontrollü yenileme Premium ve Premium Plus planlarında kullanılabilir.",
+      "Plan uzatma, kontrollü yenileme ve gün taşıma Premium ve Premium Plus planlarında kullanılabilir.",
       {
         code: ENTITLEMENT_REQUIRED_CODE,
         details: {
@@ -158,6 +162,14 @@ function extendCalendar(content: NutritionPlanContent, targetDays: number): Cale
   ];
 }
 
+function shiftedCalendar(content: NutritionPlanContent, dayNumber: number): CalendarDay[] {
+  return normalizedCalendar(content).map((item) => {
+    if (item.dayNumber < dayNumber) return item;
+    const dateOffsetDays = (item.dateOffsetDays ?? 0) + 1;
+    return { ...item, dateOffsetDays };
+  });
+}
+
 function withReplacedRange(
   source: DailyPlan[],
   startDayNumber: number,
@@ -168,6 +180,15 @@ function withReplacedRange(
     next[startDayNumber - 1 + index] = day;
   });
   return next;
+}
+
+function planDayYmd(plan: NutritionPlan, content: NutritionPlanContent, dayNumber: number): string {
+  const calendar = normalizedCalendar(content);
+  const mapping = calendar.find((item) => item.dayNumber === dayNumber);
+  if (!mapping) throw ApiError.badRequest("The selected plan day is unavailable.");
+  const date = new Date(plan.startDate);
+  date.setUTCDate(date.getUTCDate() + dayNumber - 1 + (mapping.dateOffsetDays ?? 0));
+  return date.toISOString().slice(0, 10);
 }
 
 async function requireSupportedSource(
@@ -325,5 +346,38 @@ export const nutritionPlanRevisionService = {
       if (error instanceof ApiError) throw error;
       throw ApiError.internal("Nutrition plan extension failed.");
     }
+  },
+
+  /** Moves today's selected plan day and every later day one calendar day forward without an AI call. */
+  async shiftDay(userId: string, planId: string, input: ShiftPlanDayInput): Promise<NutritionPlan> {
+    const source = await requireSupportedSource(userId, planId);
+    await requirePaidTier(userId);
+    const content = contentFromPlan(source);
+    if (input.dayNumber > content.durationDays) {
+      throw ApiError.badRequest("The selected plan day is outside this plan's duration.");
+    }
+
+    const expectedDate = planDayYmd(source, content, input.dayNumber);
+    if (expectedDate !== input.localDate) {
+      throw new ApiError(409, "The selected plan day is no longer scheduled for today.", {
+        code: "NUTRITION_PLAN_DAY_STALE",
+      });
+    }
+
+    const shiftedContent: NutritionPlanContent = {
+      ...content,
+      calendar: shiftedCalendar(content, input.dayNumber),
+    };
+
+    return nutritionPlanRepository.createRevisionVersion({
+      userId,
+      source,
+      duration: source.duration,
+      content: shiftedContent,
+      aiProvider: source.aiProvider,
+      aiModel: source.aiModel,
+      processingTimeMs: 0,
+      deviationCopyPolicy: { mode: "ALL" },
+    });
   },
 };
