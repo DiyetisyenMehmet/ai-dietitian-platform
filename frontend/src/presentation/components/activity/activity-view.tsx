@@ -56,6 +56,8 @@ const QUICK_TASKS: Array<{
   },
 ];
 
+const UNDOABLE_ACTIVITY_COUNT = 3;
+
 function activityLabel(type: ActivityType, name: string | null): string {
   if (name?.trim()) return name;
   return ACTIVITY_OPTIONS.find((option) => option.value === type)?.label ?? "Hareket";
@@ -286,9 +288,16 @@ export function ActivityView() {
       </Card>
 
       <section className="space-y-3" aria-labelledby="activity-history-heading">
-        <h2 id="activity-history-heading" className="text-base font-semibold">
-          Bugünkü kayıtlar
-        </h2>
+        <div>
+          <h2 id="activity-history-heading" className="text-base font-semibold">
+            Bugünkü kayıtlar
+          </h2>
+          {activities.length > 0 && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Son 3 kaydı gerektiğinde geri alabilirsin.
+            </p>
+          )}
+        </div>
         {activities.length === 0 ? (
           <Card>
             <CardContent className="p-5 text-center text-sm text-muted-foreground">
@@ -297,7 +306,8 @@ export function ActivityView() {
           </Card>
         ) : (
           <div className="space-y-2">
-            {activities.slice(0, 12).map((activity) => {
+            {activities.slice(0, 12).map((activity, index) => {
+              const canUndo = index < UNDOABLE_ACTIVITY_COUNT;
               const undoing = undoingActivityId === activity.id;
               return (
                 <Card key={activity.id}>
@@ -319,19 +329,21 @@ export function ActivityView() {
                           ~{Math.round(activity.caloriesBurned)} kcal
                         </span>
                       )}
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 px-2 text-xs text-muted-foreground"
-                        disabled={undoingActivityId !== null}
-                        isLoading={undoing}
-                        aria-label={`${activityLabel(activity.type, activity.name)} kaydını geri al`}
-                        onClick={() => void undoActivity(activity.id)}
-                      >
-                        {!undoing && <Undo2 aria-hidden="true" />}
-                        {undoing ? "Geri alınıyor" : "Geri al"}
-                      </Button>
+                      {canUndo && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 px-2 text-xs text-muted-foreground"
+                          disabled={undoingActivityId !== null}
+                          isLoading={undoing}
+                          aria-label={`${activityLabel(activity.type, activity.name)} kaydını geri al`}
+                          onClick={() => void undoActivity(activity.id)}
+                        >
+                          {!undoing && <Undo2 aria-hidden="true" />}
+                          {undoing ? "Geri alınıyor" : "Geri al"}
+                        </Button>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
