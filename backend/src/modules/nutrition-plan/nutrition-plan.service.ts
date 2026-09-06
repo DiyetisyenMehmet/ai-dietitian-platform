@@ -5,6 +5,7 @@ import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/api-error";
 import { bloodTestAnalysisRepository } from "../blood-test-analysis/blood-test-analysis.repository";
 import { aiUsageService } from "../ai-usage/ai-usage.service";
+import { ENTITLEMENT_REQUIRED_CODE } from "../payments/constants";
 import { calculateCalories } from "./calculations/calorie-calculator";
 import { calculateMacros } from "./calculations/macro-calculator";
 import { calculateMealTiming } from "./calculations/meal-timing";
@@ -94,7 +95,24 @@ export const nutritionPlanService = {
   async generate(userId: string, duration: PlanDuration): Promise<NutritionPlan> {
     const startedAt = Date.now();
     try {
-      await aiUsageService.assertWithinQuota(userId, "NUTRITION_PLAN");
+      const tier = await aiUsageService.resolveTier(userId);
+      if (tier === "FREE" && duration !== "SEVEN_DAY") {
+        throw new ApiError(
+          403,
+          "Ücretsiz planda yalnızca tek seferlik 7 günlük başlangıç planı kullanılabilir.",
+          {
+            code: ENTITLEMENT_REQUIRED_CODE,
+            details: {
+              feature: "NUTRITION_PLAN",
+              tier,
+              reason: "FREE_DURATION_RESTRICTED",
+              allowedDuration: "SEVEN_DAY",
+            },
+          },
+        );
+      }
+
+      await aiUsageService.assertWithinQuota(userId, "NUTRITION_PLAN", tier);
 
       const profile = await buildProfile(userId);
       const { analysisId, implications } = await loadBloodTestImplications(userId);
