@@ -42,6 +42,7 @@ model User {
   bloodTestUploads  BloodTestUpload[]
   bloodTestAnalyses BloodTestAnalysis[]
   nutritionPlans    NutritionPlan[]
+  nutritionPlanDeviations NutritionPlanDeviation[]
   chatConversations ChatConversation[]
   aiUsageEvents     AiUsageEvent[]
   subscriptions     Subscription[]
@@ -298,10 +299,25 @@ enum NutritionPlanStatus {
   FAILED
 }
 
+enum NutritionPlanDeviationScope {
+  FOOD
+  MEAL
+  DAY
+}
+
+enum NutritionPlanDeviationType {
+  SKIPPED
+  REPLACED
+  EXTRA
+  PORTION_CHANGED
+}
+
 model NutritionPlan {
   id        String   @id @default(uuid())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  startDate DateTime @default(dbgenerated("CURRENT_DATE")) @db.Date
+  deletedAt DateTime?
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -327,10 +343,39 @@ model NutritionPlan {
   aiModel          String?
   processingTimeMs Int?
   errorMessage     String?
+  deviations       NutritionPlanDeviation[]
 
   @@index([userId])
   @@index([userId, duration, isActive])
+  @@index([userId, deletedAt])
   @@map("nutrition_plans")
+}
+
+model NutritionPlanDeviation {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planId String
+  plan   NutritionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  dayNumber Int
+  mealIndex Int?
+  foodIndex Int?
+  scope     NutritionPlanDeviationScope
+  type      NutritionPlanDeviationType
+
+  plannedItemName String?
+  actualItemName  String?
+  plannedPortion  String?
+  actualPortion   String?
+  note            String?
+
+  @@index([userId, createdAt])
+  @@index([planId, dayNumber])
+  @@map("nutrition_plan_deviations")
 }
 
 enum SubscriptionTier {
