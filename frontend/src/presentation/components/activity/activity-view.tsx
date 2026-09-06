@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Dumbbell, Footprints, Flame, Timer, Zap } from "lucide-react";
+import { Dumbbell, Footprints, Flame, Timer, Undo2, Zap } from "lucide-react";
 import { toast } from "sonner";
 
 import { activityStore, useActivity } from "@/application/health/activity-store";
@@ -80,41 +80,34 @@ export function ActivityView() {
   const [name, setName] = React.useState("");
   const [saving, setSaving] = React.useState(false);
   const [quickSaving, setQuickSaving] = React.useState<string | null>(null);
-  const undoingActivityIds = React.useRef(new Set<string>());
+  const [undoingActivityId, setUndoingActivityId] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     void activityStore.hydrateFromBackend();
   }, []);
 
-  const undoActivity = React.useCallback(async (activityId: string) => {
-    if (undoingActivityIds.current.has(activityId)) return;
-    undoingActivityIds.current.add(activityId);
+  const undoActivity = React.useCallback(
+    async (activityId: string) => {
+      if (undoingActivityId !== null) return;
+      setUndoingActivityId(activityId);
 
-    try {
-      await activityStore.deleteActivity(activityId);
-      toast.success("Hareket geri alındı");
-    } catch {
-      toast.error("Hareket geri alınamadı. Lütfen tekrar dene.");
-    } finally {
-      undoingActivityIds.current.delete(activityId);
-    }
-  }, []);
-
-  const showSavedToast = React.useCallback(
-    (title: string, activity: Activity) => {
-      toast.success(title, {
-        description: savedActivityDescription(activity),
-        duration: 10_000,
-        action: {
-          label: "Geri al",
-          onClick: () => {
-            void undoActivity(activity.id);
-          },
-        },
-      });
+      try {
+        await activityStore.deleteActivity(activityId);
+        toast.success("Hareket geri alındı");
+      } catch {
+        toast.error("Hareket geri alınamadı. Lütfen tekrar dene.");
+      } finally {
+        setUndoingActivityId(null);
+      }
     },
-    [undoActivity],
+    [undoingActivityId],
   );
+
+  const showSavedToast = React.useCallback((title: string, activity: Activity) => {
+    toast.success(title, {
+      description: savedActivityDescription(activity),
+    });
+  }, []);
 
   const save = React.useCallback(async () => {
     const minutes = Number(duration);
@@ -207,7 +200,7 @@ export function ActivityView() {
             Hızlı hareket görevleri
           </h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            Yaptığın göreve dokun; hareket hesabına anında kaydedilsin.
+            Yaptıysan göreve dokun; hareket hesabına anında kaydedilir.
           </p>
         </div>
         <div className="grid gap-3 sm:grid-cols-3">
@@ -304,28 +297,46 @@ export function ActivityView() {
           </Card>
         ) : (
           <div className="space-y-2">
-            {activities.slice(0, 12).map((activity) => (
-              <Card key={activity.id}>
-                <CardContent className="flex items-center gap-3 p-4">
-                  <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                    <Footprints className="size-4" aria-hidden="true" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold">
-                      {activityLabel(activity.type, activity.name)}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {activity.durationMinutes} dk · {timeLabel(activity.loggedAt)}
-                    </p>
-                  </div>
-                  {activity.caloriesBurned != null && (
-                    <span className="text-xs font-medium tabular-nums text-muted-foreground">
-                      ~{Math.round(activity.caloriesBurned)} kcal
+            {activities.slice(0, 12).map((activity) => {
+              const undoing = undoingActivityId === activity.id;
+              return (
+                <Card key={activity.id}>
+                  <CardContent className="flex items-center gap-3 p-4">
+                    <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                      <Footprints className="size-4" aria-hidden="true" />
                     </span>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold">
+                        {activityLabel(activity.type, activity.name)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {activity.durationMinutes} dk · {timeLabel(activity.loggedAt)}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      {activity.caloriesBurned != null && (
+                        <span className="hidden text-xs font-medium tabular-nums text-muted-foreground sm:inline">
+                          ~{Math.round(activity.caloriesBurned)} kcal
+                        </span>
+                      )}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 px-2 text-xs text-muted-foreground"
+                        disabled={undoingActivityId !== null}
+                        isLoading={undoing}
+                        aria-label={`${activityLabel(activity.type, activity.name)} kaydını geri al`}
+                        onClick={() => void undoActivity(activity.id)}
+                      >
+                        {!undoing && <Undo2 aria-hidden="true" />}
+                        {undoing ? "Geri alınıyor" : "Geri al"}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         )}
       </section>
