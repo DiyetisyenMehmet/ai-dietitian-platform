@@ -73,15 +73,27 @@ function startOfLocalDay(date: Date): number {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
 }
 
-function currentDayNumber(plan: NutritionPlanRecord, durationDays: number): number {
+function planStartLocalDate(plan: NutritionPlanRecord): Date {
+  const dateOnly = plan.startDate?.slice(0, 10);
+  if (dateOnly && /^\d{4}-\d{2}-\d{2}$/.test(dateOnly)) {
+    const [year, month, day] = dateOnly.split("-").map(Number);
+    const local = new Date(year, month - 1, day, 12, 0, 0, 0);
+    if (!Number.isNaN(local.getTime())) return local;
+  }
+
   const created = new Date(plan.createdAt);
-  if (Number.isNaN(created.getTime())) return 1;
-  const diff = Math.floor((startOfLocalDay(new Date()) - startOfLocalDay(created)) / 86_400_000) + 1;
+  if (Number.isNaN(created.getTime())) return new Date();
+  return created;
+}
+
+function currentDayNumber(plan: NutritionPlanRecord, durationDays: number): number {
+  const start = planStartLocalDate(plan);
+  const diff = Math.floor((startOfLocalDay(new Date()) - startOfLocalDay(start)) / 86_400_000) + 1;
   return Math.min(durationDays, Math.max(1, diff));
 }
 
 function dateForPlanDay(plan: NutritionPlanRecord, dayNumber: number): Date {
-  const date = new Date(plan.createdAt);
+  const date = planStartLocalDate(plan);
   date.setHours(12, 0, 0, 0);
   date.setDate(date.getDate() + dayNumber - 1);
   return date;
