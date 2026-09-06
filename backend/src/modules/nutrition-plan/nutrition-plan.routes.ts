@@ -6,15 +6,18 @@ import { validate } from "../../middleware/validate";
 import { nutritionPlanController } from "./nutrition-plan.controller";
 import {
   activePlanQuerySchema,
+  createDeviationSchema,
   generatePlanSchema,
+  planDeviationParamSchema,
   planIdParamSchema,
 } from "./dto/nutrition-plan.schemas";
 
 /**
  * Nutrition-plan router (mounted at /api/nutrition-plans). Every route requires
- * a valid access token; the service scopes all access by owner. Generation and
- * regeneration process health/profile context and therefore require current
- * mandatory consent; existing plans remain readable after consent withdrawal.
+ * a valid access token; the service scopes all access by owner. Generation,
+ * regeneration and new adherence writes require current mandatory consent;
+ * existing plans and adherence history remain readable/correctable after
+ * consent withdrawal.
  */
 export const nutritionPlanRouter = Router();
 
@@ -25,20 +28,6 @@ export const nutritionPlanRouter = Router();
  *     tags: [NutritionPlan]
  *     summary: Generate a personalized nutrition plan
  *     security: [{ bearerAuth: [] }]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [duration]
- *             properties:
- *               duration: { type: string, enum: [SEVEN_DAY, FOURTEEN_DAY, THIRTY_DAY] }
- *     responses:
- *       201: { description: The generated plan. }
- *       400: { description: Onboarding profile is incomplete or duration is unsupported. }
- *       401: { description: Missing or invalid access token. }
- *       403: { description: Current mandatory consent is missing. }
  */
 nutritionPlanRouter.post(
   "/generate",
@@ -48,23 +37,7 @@ nutritionPlanRouter.post(
   nutritionPlanController.generate,
 );
 
-/**
- * @openapi
- * /api/nutrition-plans/active:
- *   get:
- *     tags: [NutritionPlan]
- *     summary: Get the active plan for a duration
- *     security: [{ bearerAuth: [] }]
- *     parameters:
- *       - in: query
- *         name: duration
- *         required: true
- *         schema: { type: string, enum: [SEVEN_DAY, FOURTEEN_DAY, THIRTY_DAY] }
- *     responses:
- *       200: { description: The active plan. }
- *       401: { description: Missing or invalid access token. }
- *       404: { description: No active plan for this duration. }
- */
+/** Get the active plan for a supported duration. */
 nutritionPlanRouter.get(
   "/active",
   authenticate,
@@ -72,38 +45,10 @@ nutritionPlanRouter.get(
   nutritionPlanController.getActive,
 );
 
-/**
- * @openapi
- * /api/nutrition-plans:
- *   get:
- *     tags: [NutritionPlan]
- *     summary: List the authenticated user's plans (all versions)
- *     security: [{ bearerAuth: [] }]
- *     responses:
- *       200: { description: The user's plans, newest first. }
- *       401: { description: Missing or invalid access token. }
- */
+/** List all owner-scoped plan versions. */
 nutritionPlanRouter.get("/", authenticate, nutritionPlanController.list);
 
-/**
- * @openapi
- * /api/nutrition-plans/{id}/regenerate:
- *   post:
- *     tags: [NutritionPlan]
- *     summary: Regenerate a supported plan (creates a new version)
- *     security: [{ bearerAuth: [] }]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string, format: uuid }
- *     responses:
- *       201: { description: The newly generated plan version. }
- *       400: { description: Legacy 60-day plan can no longer be regenerated. }
- *       401: { description: Missing or invalid access token. }
- *       403: { description: Current mandatory consent is missing. }
- *       404: { description: Source plan not found. }
- */
+/** Regenerate a supported plan as a new version. */
 nutritionPlanRouter.post(
   "/:id/regenerate",
   authenticate,
@@ -114,21 +59,38 @@ nutritionPlanRouter.post(
 
 /**
  * @openapi
- * /api/nutrition-plans/{id}:
+ * /api/nutrition-plans/{id}/deviations:
  *   get:
  *     tags: [NutritionPlan]
- *     summary: Get a specific plan by id
- *     security: [{ bearerAuth: [] }]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string, format: uuid }
- *     responses:
- *       200: { description: The plan. }
- *       401: { description: Missing or invalid access token. }
- *       404: { description: Plan not found. }
+ *     summary: List the user's Kaçamak/adherence records for a plan
+ *   post:
+ *     tags: [NutritionPlan]
+ *     summary: Record a food, meal or day-level Kaçamak
  */
+nutritionPlanRouter.get(
+  "/:id/deviations",
+  authenticate,
+  validate({ params: planIdParamSchema }),
+  nutritionPlanController.listDeviations,
+);
+
+nutritionPlanRouter.post(
+  "/:id/deviations",
+  authenticate,
+  requireConsent,
+  validate({ params: planIdParamSchema, body: createDeviationSchema }),
+  nutritionPlanController.createDeviation,
+);
+
+/** Delete/correct a single owner-scoped Kaçamak record. */
+nutritionPlanRouter.delete(
+  "/:id/deviations/:deviationId",
+  authenticate,
+  validate({ params: planDeviationParamSchema }),
+  nutritionPlanController.deleteDeviation,
+);
+
+/** Returns a specific plan by id. Keep this catch-all route last. */
 nutritionPlanRouter.get(
   "/:id",
   authenticate,
