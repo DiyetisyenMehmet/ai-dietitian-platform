@@ -179,6 +179,14 @@ export const nutritionPlanClient = {
     });
   },
 
+  deletePlan(planId: string) {
+    return apiRequest<void>({
+      path: `/nutrition-plans/${encodeURIComponent(planId)}`,
+      method: "DELETE",
+      auth: true,
+    });
+  },
+
   listDeviations(planId: string) {
     return apiRequest<{ deviations: NutritionPlanDeviationRecord[] }>({
       path: `/nutrition-plans/${encodeURIComponent(planId)}/deviations`,

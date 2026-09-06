@@ -110,4 +110,13 @@ export const nutritionPlanRepository = {
       orderBy: { version: "desc" },
     });
   },
+
+  /** Soft-deletes one owner-scoped plan while preserving audit/history relations. */
+  async softDeleteByIdForUser(id: string, userId: string): Promise<boolean> {
+    const result = await prisma.nutritionPlan.updateMany({
+      where: { id, userId, deletedAt: null },
+      data: { deletedAt: new Date(), isActive: false },
+    });
+    return result.count > 0;
+  },
 };

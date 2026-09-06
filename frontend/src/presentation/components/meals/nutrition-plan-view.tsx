@@ -10,6 +10,7 @@ import {
   RefreshCw,
   Sparkles,
   Target,
+  Trash2,
   Utensils,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -364,6 +365,8 @@ export function NutritionPlanView() {
   const { activePlan, hydrated, loading, generating, generatingDuration } = useNutritionPlan();
   const [weekIndex, setWeekIndex] = React.useState(0);
   const [showDurationOptions, setShowDurationOptions] = React.useState(false);
+  const [confirmDelete, setConfirmDelete] = React.useState(false);
+  const [deletingPlan, setDeletingPlan] = React.useState(false);
   const {
     deviations,
     loading: deviationsLoading,
@@ -382,6 +385,7 @@ export function NutritionPlanView() {
     const today = currentDayNumber(activePlan, durationDays);
     setWeekIndex(Math.floor((today - 1) / 7));
     setShowDurationOptions(false);
+    setConfirmDelete(false);
   }, [activePlan]);
 
   if (!hydrated || loading) {
@@ -422,6 +426,20 @@ export function NutritionPlanView() {
     }
   };
 
+  const removePlan = async () => {
+    if (deletingPlan || generating) return;
+    setDeletingPlan(true);
+    try {
+      await nutritionPlanStore.remove(activePlan.id);
+      toast.success("Öğün planı silindi");
+    } catch {
+      toast.error("Öğün planı silinemedi. Lütfen tekrar dene.");
+    } finally {
+      setDeletingPlan(false);
+      setConfirmDelete(false);
+    }
+  };
+
   return (
     <div className="space-y-5">
       <Card className="overflow-hidden border-primary/20 bg-gradient-to-br from-primary/10 via-background to-background">
@@ -432,7 +450,7 @@ export function NutritionPlanView() {
               <h2 className="mt-1 text-xl font-bold">{durationLabel(activePlan.duration)} kişisel plan</h2>
               <p className="mt-1 text-xs text-muted-foreground">Sürüm {activePlan.version} · bugün {today}. gün</p>
             </div>
-            <Button variant="ghost" size="sm" disabled={generating} onClick={() => void regenerate()}>
+            <Button variant="ghost" size="sm" disabled={generating || deletingPlan} onClick={() => void regenerate()}>
               <RefreshCw className={regeneratingCurrent ? "animate-spin" : ""} aria-hidden="true" />
               {regeneratingCurrent ? "Hazırlanıyor" : "Yenile"}
             </Button>
@@ -538,23 +556,67 @@ export function NutritionPlanView() {
       )}
 
       <section className="rounded-2xl border border-border bg-card p-4">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h3 className="text-sm font-semibold">Planı değiştir</h3>
-            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              Farklı bir plan süresi seçmek istediğinde seçenekleri buradan açabilirsin.
-            </p>
-          </div>
+        <div>
+          <h3 className="text-sm font-semibold">Plan yönetimi</h3>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            Plan süresini değiştirebilir veya artık kullanmadığın planı kaldırabilirsin.
+          </p>
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-2">
           <Button
             variant="outline"
             size="sm"
-            disabled={generating}
+            disabled={generating || deletingPlan}
             aria-expanded={showDurationOptions}
-            onClick={() => setShowDurationOptions((value) => !value)}
+            onClick={() => {
+              setShowDurationOptions((value) => !value);
+              setConfirmDelete(false);
+            }}
           >
-            {showDurationOptions ? "Kapat" : "Seçenekler"}
+            {showDurationOptions ? "Seçenekleri kapat" : "Planı değiştir"}
+          </Button>
+          <Button
+            variant="destructive"
+            size="sm"
+            disabled={generating || deletingPlan}
+            aria-expanded={confirmDelete}
+            onClick={() => {
+              setConfirmDelete((value) => !value);
+              setShowDurationOptions(false);
+            }}
+          >
+            <Trash2 aria-hidden="true" />
+            Planı sil
           </Button>
         </div>
+
+        {confirmDelete && (
+          <div className="mt-4 rounded-2xl border border-destructive/30 bg-destructive/5 p-4">
+            <p className="text-sm font-semibold">Bu planı silmek istediğine emin misin?</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              Plan uygulamadaki aktif planlarından kaldırılır. Bu işlem yeni bir plan oluşturmaz ve Kaçamak geçmişini geriye dönük değiştirmez.
+            </p>
+            <div className="mt-3 flex flex-wrap justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={deletingPlan}
+                onClick={() => setConfirmDelete(false)}
+              >
+                Vazgeç
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                isLoading={deletingPlan}
+                onClick={() => void removePlan()}
+              >
+                Planı sil
+              </Button>
+            </div>
+          </div>
+        )}
 
         {showDurationOptions && (
           <div className="mt-4 border-t border-border/70 pt-4">

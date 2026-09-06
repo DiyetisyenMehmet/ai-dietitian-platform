@@ -138,6 +138,18 @@ export const nutritionPlanStore = {
     }
   },
 
+  async remove(planId: string): Promise<void> {
+    if (state.generating) throw new Error("Nutrition plan generation is already in progress.");
+    await nutritionPlanClient.deletePlan(planId);
+    const plans = state.plans.filter((item) => item.id !== planId);
+    emit({
+      ...state,
+      plans,
+      activePlan: chooseActive(plans),
+      hydrated: true,
+    });
+  },
+
   reset(): void {
     emit({ ...EMPTY_STATE });
   },

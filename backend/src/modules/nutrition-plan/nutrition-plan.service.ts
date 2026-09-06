@@ -233,6 +233,18 @@ export const nutritionPlanService = {
     return plan;
   },
 
+  async remove(userId: string, planId: string): Promise<void> {
+    const existing = await nutritionPlanRepository.findByIdForUser(planId, userId);
+    if (!existing || existing.deletedAt) {
+      throw ApiError.notFound("Nutrition plan not found.");
+    }
+
+    const deleted = await nutritionPlanRepository.softDeleteByIdForUser(planId, userId);
+    if (!deleted) {
+      throw ApiError.notFound("Nutrition plan not found.");
+    }
+  },
+
   list(userId: string): Promise<NutritionPlan[]> {
     return nutritionPlanRepository.listByUser(userId);
   },

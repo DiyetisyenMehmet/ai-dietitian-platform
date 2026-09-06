@@ -66,6 +66,14 @@ export const nutritionPlanController = {
     sendSuccess(res, { plan });
   }),
 
+  /** Soft-deletes one owner-scoped plan without destroying its audit/history row. */
+  deletePlan: asyncHandler(async (req: Request, res: Response) => {
+    const userId = requireUserId(req);
+    const { id } = req.params as PlanIdParam;
+    await nutritionPlanService.remove(userId, id);
+    sendNoContent(res);
+  }),
+
   /** Lists owner-scoped adherence/Kaçamak records for a plan. */
   listDeviations: asyncHandler(async (req: Request, res: Response) => {
     const userId = requireUserId(req);

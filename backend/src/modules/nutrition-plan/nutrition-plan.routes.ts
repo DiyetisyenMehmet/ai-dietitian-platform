@@ -90,6 +90,14 @@ nutritionPlanRouter.delete(
   nutritionPlanController.deleteDeviation,
 );
 
+/** Soft-delete one owner-scoped plan; deletion never requires paid entitlement or current consent. */
+nutritionPlanRouter.delete(
+  "/:id",
+  authenticate,
+  validate({ params: planIdParamSchema }),
+  nutritionPlanController.deletePlan,
+);
+
 /** Returns a specific plan by id. Keep this catch-all route last. */
 nutritionPlanRouter.get(
   "/:id",
