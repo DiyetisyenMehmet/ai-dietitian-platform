@@ -229,13 +229,16 @@ function DurationOptions({
     }
   };
 
+  const durations = currentDuration
+    ? SUPPORTED_NUTRITION_PLAN_DURATIONS.filter((duration) => duration !== currentDuration)
+    : SUPPORTED_NUTRITION_PLAN_DURATIONS;
+
   return (
     <div className="grid gap-3 sm:grid-cols-3">
-      {SUPPORTED_NUTRITION_PLAN_DURATIONS.map((duration) => {
+      {durations.map((duration) => {
         const selected = generatingDuration === duration;
-        const current = currentDuration === duration;
         return (
-          <Card key={duration} className={current ? "border-primary/40 bg-primary/5" : undefined}>
+          <Card key={duration}>
             <CardContent className="p-4">
               <CalendarDays className="size-5 text-primary" aria-hidden="true" />
               <h3 className="mt-3 font-semibold">{durationLabel(duration)} plan</h3>
@@ -244,12 +247,11 @@ function DurationOptions({
               </p>
               <Button
                 className="mt-4 w-full"
-                variant={current ? "secondary" : "default"}
-                disabled={generating || current}
+                disabled={generating}
                 onClick={() => void create(duration)}
               >
                 <Sparkles className={selected ? "animate-pulse" : ""} aria-hidden="true" />
-                {selected ? "Hazırlanıyor…" : current ? "Aktif plan" : "Planı oluştur"}
+                {selected ? "Hazırlanıyor…" : "Planı oluştur"}
               </Button>
             </CardContent>
           </Card>
@@ -292,6 +294,7 @@ function EmptyPlan({
 export function NutritionPlanView() {
   const { activePlan, hydrated, loading, generating, generatingDuration } = useNutritionPlan();
   const [weekIndex, setWeekIndex] = React.useState(0);
+  const [showDurationOptions, setShowDurationOptions] = React.useState(false);
 
   React.useEffect(() => {
     if (!hydrated && !loading) void nutritionPlanStore.hydrateFromBackend();
@@ -303,6 +306,7 @@ export function NutritionPlanView() {
     const durationDays = content?.durationDays || DURATION_DAYS[activePlan.duration];
     const today = currentDayNumber(activePlan, durationDays);
     setWeekIndex(Math.floor((today - 1) / 7));
+    setShowDurationOptions(false);
   }, [activePlan]);
 
   if (!hydrated || loading) {
@@ -390,52 +394,33 @@ export function NutritionPlanView() {
         </CardContent>
       </Card>
 
-      <section className="space-y-2">
-        <div>
-          <h3 className="text-sm font-semibold">Plan süresi</h3>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Farklı bir süre seçersen mevcut planın geçmişte korunur ve seçtiğin süre için yeni plan hazırlanır.
-          </p>
-        </div>
-        <DurationOptions
-          generating={generating}
-          generatingDuration={generatingDuration}
-          currentDuration={activePlan.duration}
-        />
-      </section>
-
-      {activePlan.summary?.trim() && (
-        <Card>
-          <CardContent className="p-4">
-            <h3 className="text-sm font-semibold">Planın özeti</h3>
-            <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-muted-foreground">{activePlan.summary}</p>
-          </CardContent>
-        </Card>
-      )}
-
       <section className="space-y-3" aria-labelledby="plan-days-heading">
         <div className="flex items-end justify-between gap-3">
           <div>
             <h3 id="plan-days-heading" className="text-base font-semibold">Plan günleri</h3>
             <p className="mt-1 text-xs text-muted-foreground">Bir günü açarak saat, porsiyon ve öğün ayrıntılarını görebilirsin.</p>
           </div>
-          <Button variant="outline" size="sm" onClick={() => setWeekIndex(currentWeek)} disabled={safeWeekIndex === currentWeek}>
-            Bugün
-          </Button>
+          {safeWeekIndex !== currentWeek && (
+            <Button variant="outline" size="sm" onClick={() => setWeekIndex(currentWeek)}>
+              Bugün
+            </Button>
+          )}
         </div>
 
-        <div className="flex items-center justify-between rounded-xl border border-border px-2 py-2">
-          <Button variant="ghost" size="icon" aria-label="Önceki hafta" disabled={safeWeekIndex === 0} onClick={() => setWeekIndex((value) => Math.max(0, value - 1))}>
-            <ChevronLeft aria-hidden="true" />
-          </Button>
-          <div className="text-center">
-            <p className="text-sm font-semibold">{safeWeekIndex + 1}. Hafta</p>
-            <p className="text-[11px] text-muted-foreground">{weekStart}–{weekEnd}. günler</p>
+        {totalWeeks > 1 && (
+          <div className="flex items-center justify-between rounded-xl border border-border px-2 py-2">
+            <Button variant="ghost" size="icon" aria-label="Önceki hafta" disabled={safeWeekIndex === 0} onClick={() => setWeekIndex((value) => Math.max(0, value - 1))}>
+              <ChevronLeft aria-hidden="true" />
+            </Button>
+            <div className="text-center">
+              <p className="text-sm font-semibold">{safeWeekIndex + 1}. Hafta</p>
+              <p className="text-[11px] text-muted-foreground">{weekStart}–{weekEnd}. günler</p>
+            </div>
+            <Button variant="ghost" size="icon" aria-label="Sonraki hafta" disabled={safeWeekIndex >= totalWeeks - 1} onClick={() => setWeekIndex((value) => Math.min(totalWeeks - 1, value + 1))}>
+              <ChevronRight aria-hidden="true" />
+            </Button>
           </div>
-          <Button variant="ghost" size="icon" aria-label="Sonraki hafta" disabled={safeWeekIndex >= totalWeeks - 1} onClick={() => setWeekIndex((value) => Math.min(totalWeeks - 1, value + 1))}>
-            <ChevronRight aria-hidden="true" />
-          </Button>
-        </div>
+        )}
 
         <div className="space-y-2">
           {visibleDays.map((dayNumber) => {
@@ -445,6 +430,13 @@ export function NutritionPlanView() {
           })}
         </div>
       </section>
+
+      {activePlan.summary?.trim() && (
+        <details className="rounded-2xl border border-border bg-card p-4">
+          <summary className="cursor-pointer select-none text-sm font-semibold">Planın özeti</summary>
+          <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-muted-foreground">{activePlan.summary}</p>
+        </details>
+      )}
 
       {Array.isArray(activePlan.recommendations) && activePlan.recommendations.length > 0 && (
         <details className="rounded-2xl border border-border bg-card p-4">
@@ -456,6 +448,39 @@ export function NutritionPlanView() {
           </ol>
         </details>
       )}
+
+      <section className="rounded-2xl border border-border bg-card p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold">Planı değiştir</h3>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              Farklı bir plan süresi seçmek istediğinde seçenekleri buradan açabilirsin.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={generating}
+            aria-expanded={showDurationOptions}
+            onClick={() => setShowDurationOptions((value) => !value)}
+          >
+            {showDurationOptions ? "Kapat" : "Seçenekler"}
+          </Button>
+        </div>
+
+        {showDurationOptions && (
+          <div className="mt-4 border-t border-border/70 pt-4">
+            <p className="mb-3 text-xs leading-relaxed text-muted-foreground">
+              Yeni plan başarıyla hazırlanana kadar mevcut planın ekranda kalır. Mevcut plan geçmişte korunur.
+            </p>
+            <DurationOptions
+              generating={generating}
+              generatingDuration={generatingDuration}
+              currentDuration={activePlan.duration}
+            />
+          </div>
+        )}
+      </section>
 
       <p className="text-xs leading-relaxed text-muted-foreground">
         Öğün içerikleri yaklaşık besin değerleriyle hazırlanır. Plan yalnızca gıda temellidir; takviye, ilaç veya doz önerisi içermez.
