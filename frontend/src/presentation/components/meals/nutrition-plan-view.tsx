@@ -18,13 +18,19 @@ import { nutritionPlanStore, useNutritionPlan } from "@/application/health/nutri
 import { ApiError } from "@/infrastructure/api/http-client";
 import {
   SUPPORTED_NUTRITION_PLAN_DURATIONS,
+  type CreateNutritionPlanDeviationInput,
   type DailyPlan,
   type NutritionPlanContent,
+  type NutritionPlanDeviationRecord,
   type NutritionPlanDuration,
   type NutritionPlanRecord,
   type PlannedMeal,
   type SupportedNutritionPlanDuration,
 } from "@/infrastructure/nutrition/nutrition-plan-client";
+import {
+  NutritionPlanKacamak,
+  useNutritionPlanDeviations,
+} from "@/presentation/components/meals/nutrition-plan-kacamak";
 import { Button } from "@/presentation/components/ui/button";
 import { Card, CardContent } from "@/presentation/components/ui/card";
 
@@ -126,7 +132,25 @@ function planError(error: unknown): string {
   return "Öğün planı oluşturulamadı. Lütfen tekrar dene.";
 }
 
-function MealBlock({ meal }: { meal: PlannedMeal }) {
+function MealBlock({
+  dayNumber,
+  mealIndex,
+  meal,
+  deviations,
+  deviationsLoading,
+  canLogKacamak,
+  onCreateDeviation,
+  onDeleteDeviation,
+}: {
+  dayNumber: number;
+  mealIndex: number;
+  meal: PlannedMeal;
+  deviations: NutritionPlanDeviationRecord[];
+  deviationsLoading: boolean;
+  canLogKacamak: boolean;
+  onCreateDeviation(input: CreateNutritionPlanDeviationInput): Promise<NutritionPlanDeviationRecord>;
+  onDeleteDeviation(deviationId: string): Promise<void>;
+}) {
   return (
     <div className="rounded-2xl border border-border/70 bg-background p-4">
       <div className="flex items-start justify-between gap-3">
@@ -165,6 +189,17 @@ function MealBlock({ meal }: { meal: PlannedMeal }) {
           <p className="mt-2 leading-relaxed text-muted-foreground">{meal.explanation}</p>
         </details>
       )}
+
+      <NutritionPlanKacamak
+        dayNumber={dayNumber}
+        mealIndex={mealIndex}
+        meal={meal}
+        deviations={deviations}
+        deviationsLoading={deviationsLoading}
+        disabled={!canLogKacamak}
+        onCreate={onCreateDeviation}
+        onDelete={onDeleteDeviation}
+      />
     </div>
   );
 }
@@ -174,12 +209,24 @@ function DayCard({
   dayNumber,
   day,
   open,
+  today,
+  deviations,
+  deviationsLoading,
+  onCreateDeviation,
+  onDeleteDeviation,
 }: {
   plan: NutritionPlanRecord;
   dayNumber: number;
   day: DailyPlan;
   open: boolean;
+  today: number;
+  deviations: NutritionPlanDeviationRecord[];
+  deviationsLoading: boolean;
+  onCreateDeviation(input: CreateNutritionPlanDeviationInput): Promise<NutritionPlanDeviationRecord>;
+  onDeleteDeviation(deviationId: string): Promise<void>;
 }) {
+  const dayDeviations = deviations.filter((item) => item.dayNumber === dayNumber);
+
   return (
     <details className="group rounded-2xl border border-border bg-card shadow-sm" open={open}>
       <summary className="flex cursor-pointer list-none items-center gap-3 p-4 [&::-webkit-details-marker]:hidden">
@@ -198,7 +245,17 @@ function DayCard({
 
       <div className="space-y-3 border-t border-border/70 p-4">
         {day.meals.map((meal, index) => (
-          <MealBlock key={`${meal.name}-${meal.time}-${index}`} meal={meal} />
+          <MealBlock
+            key={`${meal.name}-${meal.time}-${index}`}
+            dayNumber={dayNumber}
+            mealIndex={index}
+            meal={meal}
+            deviations={dayDeviations}
+            deviationsLoading={deviationsLoading}
+            canLogKacamak={dayNumber <= today}
+            onCreateDeviation={onCreateDeviation}
+            onDeleteDeviation={onDeleteDeviation}
+          />
         ))}
 
         <div className="grid grid-cols-3 gap-2 rounded-xl bg-muted/50 p-3 text-center">
@@ -307,6 +364,12 @@ export function NutritionPlanView() {
   const { activePlan, hydrated, loading, generating, generatingDuration } = useNutritionPlan();
   const [weekIndex, setWeekIndex] = React.useState(0);
   const [showDurationOptions, setShowDurationOptions] = React.useState(false);
+  const {
+    deviations,
+    loading: deviationsLoading,
+    createDeviation,
+    deleteDeviation,
+  } = useNutritionPlanDeviations(activePlan?.id ?? null);
 
   React.useEffect(() => {
     if (!hydrated && !loading) void nutritionPlanStore.hydrateFromBackend();
@@ -410,7 +473,7 @@ export function NutritionPlanView() {
         <div className="flex items-end justify-between gap-3">
           <div>
             <h3 id="plan-days-heading" className="text-base font-semibold">Plan günleri</h3>
-            <p className="mt-1 text-xs text-muted-foreground">Bir günü açarak saat, porsiyon ve öğün ayrıntılarını görebilirsin.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Bir günü açarak saat, porsiyon, öğün ve Kaçamak ayrıntılarını yönetebilirsin.</p>
           </div>
           {safeWeekIndex !== currentWeek && (
             <Button variant="outline" size="sm" onClick={() => setWeekIndex(currentWeek)}>
@@ -438,7 +501,20 @@ export function NutritionPlanView() {
           {visibleDays.map((dayNumber) => {
             const day = dayPlan(content, dayNumber);
             if (!day) return null;
-            return <DayCard key={dayNumber} plan={activePlan} dayNumber={dayNumber} day={day} open={dayNumber === today} />;
+            return (
+              <DayCard
+                key={dayNumber}
+                plan={activePlan}
+                dayNumber={dayNumber}
+                day={day}
+                open={dayNumber === today}
+                today={today}
+                deviations={deviations}
+                deviationsLoading={deviationsLoading}
+                onCreateDeviation={createDeviation}
+                onDeleteDeviation={deleteDeviation}
+              />
+            );
           })}
         </div>
       </section>
