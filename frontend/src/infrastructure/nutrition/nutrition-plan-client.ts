@@ -1,7 +1,21 @@
 import { apiRequest } from "@/infrastructure/api/http-client";
 
-export type NutritionPlanDuration = "THIRTY_DAY" | "SIXTY_DAY";
+export const SUPPORTED_NUTRITION_PLAN_DURATIONS = [
+  "SEVEN_DAY",
+  "FOURTEEN_DAY",
+  "THIRTY_DAY",
+] as const;
+
+export type SupportedNutritionPlanDuration = (typeof SUPPORTED_NUTRITION_PLAN_DURATIONS)[number];
+/** SIXTY_DAY is retained only so historical API rows can still be read safely. */
+export type NutritionPlanDuration = SupportedNutritionPlanDuration | "SIXTY_DAY";
 export type NutritionPlanStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
+
+export function isSupportedNutritionPlanDuration(
+  value: NutritionPlanDuration,
+): value is SupportedNutritionPlanDuration {
+  return (SUPPORTED_NUTRITION_PLAN_DURATIONS as readonly string[]).includes(value);
+}
 
 export interface MealSlot {
   name: string;
@@ -61,7 +75,6 @@ export interface PlanExplanations {
   overall: string;
 }
 
-/** Full persisted nutrition-plan contract returned by the backend. */
 export interface NutritionPlanRecord {
   id: string;
   createdAt: string;
@@ -89,10 +102,8 @@ export interface NutritionPlanRecord {
   processingTimeMs: number | null;
 }
 
-/** Backwards-compatible alias for dashboard consumers. */
 export type NutritionPlanSummary = NutritionPlanRecord;
 
-/** Authenticated client for persisted personalized nutrition plans. */
 export const nutritionPlanClient = {
   list() {
     return apiRequest<{ plans: NutritionPlanRecord[] }>({
@@ -102,7 +113,7 @@ export const nutritionPlanClient = {
     });
   },
 
-  generate(duration: NutritionPlanDuration) {
+  generate(duration: SupportedNutritionPlanDuration) {
     return apiRequest<{ plan: NutritionPlanRecord }>({
       path: "/nutrition-plans/generate",
       method: "POST",

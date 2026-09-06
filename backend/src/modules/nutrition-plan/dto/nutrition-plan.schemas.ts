@@ -1,13 +1,15 @@
 import { z } from "zod";
 
+import { SUPPORTED_PLAN_DURATIONS } from "../constants";
+
 /**
  * Zod DTO schemas for the nutrition-plan endpoints. Single source of truth for
  * request validation; the `validate` middleware parses requests against these
  * and the service/controller consume the inferred types.
  */
 
-/** Supported plan durations (mirrors the Prisma `NutritionPlanDuration` enum). */
-export const PLAN_DURATIONS = ["THIRTY_DAY", "SIXTY_DAY"] as const;
+/** Supported user-selectable plan durations. SIXTY_DAY is legacy read-only. */
+export const PLAN_DURATIONS = SUPPORTED_PLAN_DURATIONS;
 
 /** Body for generating a new plan. */
 export const generatePlanSchema = z.object({
@@ -21,7 +23,7 @@ export const planIdParamSchema = z.object({
 });
 export type PlanIdParam = z.infer<typeof planIdParamSchema>;
 
-/** Query for fetching the active plan of a given duration. */
+/** Query for fetching the active plan of a given supported duration. */
 export const activePlanQuerySchema = z.object({
   duration: z.enum(PLAN_DURATIONS),
 });

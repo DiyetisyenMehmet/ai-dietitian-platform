@@ -3,20 +3,20 @@
 import * as React from "react";
 
 import {
+  isSupportedNutritionPlanDuration,
   nutritionPlanClient,
-  type NutritionPlanDuration,
   type NutritionPlanRecord,
+  type SupportedNutritionPlanDuration,
 } from "@/infrastructure/nutrition/nutrition-plan-client";
 
 interface NutritionPlanState {
-  /** Most recently updated active, completed plan across supported durations. */
+  /** Most recently updated active, completed supported plan. */
   activePlan: NutritionPlanRecord | null;
   plans: NutritionPlanRecord[];
   hydrated: boolean;
   loading: boolean;
   generating: boolean;
-  /** Exact duration currently being generated; null for non-generation work. */
-  generatingDuration: NutritionPlanDuration | null;
+  generatingDuration: SupportedNutritionPlanDuration | null;
 }
 
 const EMPTY_STATE: NutritionPlanState = {
@@ -52,7 +52,12 @@ function getSnapshot(): NutritionPlanState {
 function chooseActive(plans: NutritionPlanRecord[]): NutritionPlanRecord | null {
   return (
     plans
-      .filter((plan) => plan.isActive && plan.status === "COMPLETED")
+      .filter(
+        (plan) =>
+          plan.isActive &&
+          plan.status === "COMPLETED" &&
+          isSupportedNutritionPlanDuration(plan.duration),
+      )
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0] ?? null
   );
 }
@@ -64,7 +69,6 @@ function mergePlan(plans: NutritionPlanRecord[], plan: NutritionPlanRecord): Nut
 }
 
 export const nutritionPlanStore = {
-  /** Hydrates persisted plans; backend remains the source of truth. */
   async hydrateFromBackend(): Promise<NutritionPlanRecord | null> {
     patch({ loading: true });
     try {
@@ -73,14 +77,12 @@ export const nutritionPlanStore = {
       emit({ ...state, plans, activePlan, hydrated: true, loading: false });
       return activePlan;
     } catch {
-      // Fail closed: stale/cross-account calorie and macro targets are more
-      // dangerous than an explicit unavailable state.
       emit({ ...EMPTY_STATE, hydrated: true });
       return null;
     }
   },
 
-  async generate(duration: NutritionPlanDuration): Promise<NutritionPlanRecord> {
+  async generate(duration: SupportedNutritionPlanDuration): Promise<NutritionPlanRecord> {
     if (state.generating) throw new Error("Nutrition plan generation is already in progress.");
     patch({ generating: true, generatingDuration: duration });
     try {
@@ -109,7 +111,10 @@ export const nutritionPlanStore = {
   async regenerate(planId: string): Promise<NutritionPlanRecord> {
     if (state.generating) throw new Error("Nutrition plan generation is already in progress.");
     const source = state.plans.find((item) => item.id === planId) ?? state.activePlan;
-    patch({ generating: true, generatingDuration: source?.duration ?? null });
+    if (!source || !isSupportedNutritionPlanDuration(source.duration)) {
+      throw new Error("This nutrition plan duration is no longer supported.");
+    }
+    patch({ generating: true, generatingDuration: source.duration });
     try {
       const { plan } = await nutritionPlanClient.regenerate(planId);
       const plans = mergePlan(

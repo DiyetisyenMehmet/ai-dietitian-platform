@@ -16,17 +16,21 @@ import { toast } from "sonner";
 
 import { nutritionPlanStore, useNutritionPlan } from "@/application/health/nutrition-plan-store";
 import { ApiError } from "@/infrastructure/api/http-client";
-import type {
-  DailyPlan,
-  NutritionPlanContent,
-  NutritionPlanDuration,
-  NutritionPlanRecord,
-  PlannedMeal,
+import {
+  SUPPORTED_NUTRITION_PLAN_DURATIONS,
+  type DailyPlan,
+  type NutritionPlanContent,
+  type NutritionPlanDuration,
+  type NutritionPlanRecord,
+  type PlannedMeal,
+  type SupportedNutritionPlanDuration,
 } from "@/infrastructure/nutrition/nutrition-plan-client";
 import { Button } from "@/presentation/components/ui/button";
 import { Card, CardContent } from "@/presentation/components/ui/card";
 
 const DURATION_DAYS: Record<NutritionPlanDuration, number> = {
+  SEVEN_DAY: 7,
+  FOURTEEN_DAY: 14,
   THIRTY_DAY: 30,
   SIXTY_DAY: 60,
 };
@@ -42,7 +46,10 @@ const MEAL_NAME_TR: Record<string, string> = {
 };
 
 function durationLabel(duration: NutritionPlanDuration): string {
-  return duration === "THIRTY_DAY" ? "30 günlük" : "60 günlük";
+  if (duration === "SEVEN_DAY") return "7 günlük";
+  if (duration === "FOURTEEN_DAY") return "14 günlük";
+  if (duration === "THIRTY_DAY") return "30 günlük";
+  return "60 günlük eski";
 }
 
 function mealName(name: string): string {
@@ -96,6 +103,9 @@ function planError(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.code === "SUBSCRIPTION_REQUIRED") {
       return "Yeni öğün planı oluşturma hakkın için uygun abonelik gerekiyor.";
+    }
+    if (error.code === "NUTRITION_PLAN_INCOMPLETE") {
+      return "Planın tüm günleri güvenilir şekilde oluşturulamadı. Lütfen tekrar dene.";
     }
     if (error.status === 429) {
       return "Öğün planı oluşturma limitine ulaştın. Daha sonra tekrar deneyebilirsin.";
@@ -200,22 +210,62 @@ function DayCard({
   );
 }
 
-function EmptyPlan({
+function DurationOptions({
   generating,
   generatingDuration,
+  currentDuration,
 }: {
   generating: boolean;
-  generatingDuration: NutritionPlanDuration | null;
+  generatingDuration: SupportedNutritionPlanDuration | null;
+  currentDuration?: NutritionPlanDuration;
 }) {
-  const create = async (duration: NutritionPlanDuration) => {
+  const create = async (duration: SupportedNutritionPlanDuration) => {
+    if (duration === currentDuration) return;
     try {
       await nutritionPlanStore.generate(duration);
-      toast.success("Kişisel öğün planın hazırlandı");
+      toast.success(`${durationLabel(duration)} kişisel öğün planın hazırlandı`);
     } catch (error) {
       toast.error(planError(error));
     }
   };
 
+  return (
+    <div className="grid gap-3 sm:grid-cols-3">
+      {SUPPORTED_NUTRITION_PLAN_DURATIONS.map((duration) => {
+        const selected = generatingDuration === duration;
+        const current = currentDuration === duration;
+        return (
+          <Card key={duration} className={current ? "border-primary/40 bg-primary/5" : undefined}>
+            <CardContent className="p-4">
+              <CalendarDays className="size-5 text-primary" aria-hidden="true" />
+              <h3 className="mt-3 font-semibold">{durationLabel(duration)} plan</h3>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                Seçilen süre kadar gerçek plan günü; saat, porsiyon, kalori ve makro çerçevesiyle hazırlanır.
+              </p>
+              <Button
+                className="mt-4 w-full"
+                variant={current ? "secondary" : "default"}
+                disabled={generating || current}
+                onClick={() => void create(duration)}
+              >
+                <Sparkles className={selected ? "animate-pulse" : ""} aria-hidden="true" />
+                {selected ? "Hazırlanıyor…" : current ? "Aktif plan" : "Planı oluştur"}
+              </Button>
+            </CardContent>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
+function EmptyPlan({
+  generating,
+  generatingDuration,
+}: {
+  generating: boolean;
+  generatingDuration: SupportedNutritionPlanDuration | null;
+}) {
   return (
     <div className="space-y-5">
       <Card className="overflow-hidden border-primary/20 bg-gradient-to-br from-primary/10 via-background to-background">
@@ -225,31 +275,12 @@ function EmptyPlan({
           </span>
           <h2 className="mt-4 text-xl font-bold">Kişisel öğün planını oluştur</h2>
           <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-            Diewish; profilindeki hedefleri, beslenme tercihini ve alerjilerini dikkate alır. Kalori ve makro hedefleri hesaplama motorundan gelir; öğünler porsiyon ve saatleriyle hazırlanır.
+            Diewish; profilindeki hedefleri, beslenme tercihini ve alerjilerini dikkate alır. Kalori ve makro hedefleri hesaplama motorundan gelir; seçtiğin 7, 14 veya 30 günün her biri ayrı plan günü olarak hazırlanır.
           </p>
         </CardContent>
       </Card>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        {(["THIRTY_DAY", "SIXTY_DAY"] as NutritionPlanDuration[]).map((duration) => {
-          const selected = generatingDuration === duration;
-          return (
-            <Card key={duration}>
-              <CardContent className="p-4">
-                <CalendarDays className="size-5 text-primary" aria-hidden="true" />
-                <h3 className="mt-3 font-semibold">{durationLabel(duration)} plan</h3>
-                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                  Günlük saat, porsiyon, kalori ve makro çerçevesiyle kişiselleştirilmiş beslenme planı.
-                </p>
-                <Button className="mt-4 w-full" disabled={generating} onClick={() => void create(duration)}>
-                  <Sparkles className={selected ? "animate-pulse" : ""} aria-hidden="true" />
-                  {selected ? "Hazırlanıyor…" : "Planı oluştur"}
-                </Button>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
+      <DurationOptions generating={generating} generatingDuration={generatingDuration} />
 
       <p className="text-xs leading-relaxed text-muted-foreground">
         Plan yalnızca gıda temellidir. Diewish bu özellikte takviye, vitamin/mineral ürünü, bitkisel kür veya doz önermez.
@@ -301,6 +332,7 @@ export function NutritionPlanView() {
   const weekStart = safeWeekIndex * 7 + 1;
   const weekEnd = Math.min(durationDays, weekStart + 6);
   const visibleDays = Array.from({ length: weekEnd - weekStart + 1 }, (_, index) => weekStart + index);
+  const regeneratingCurrent = generating && generatingDuration === activePlan.duration;
 
   const regenerate = async () => {
     try {
@@ -322,8 +354,8 @@ export function NutritionPlanView() {
               <p className="mt-1 text-xs text-muted-foreground">Sürüm {activePlan.version} · bugün {today}. gün</p>
             </div>
             <Button variant="ghost" size="sm" disabled={generating} onClick={() => void regenerate()}>
-              <RefreshCw className={generating ? "animate-spin" : ""} aria-hidden="true" />
-              {generating ? "Hazırlanıyor" : "Yenile"}
+              <RefreshCw className={regeneratingCurrent ? "animate-spin" : ""} aria-hidden="true" />
+              {regeneratingCurrent ? "Hazırlanıyor" : "Yenile"}
             </Button>
           </div>
 
@@ -345,8 +377,8 @@ export function NutritionPlanView() {
             </div>
             <div className="rounded-xl bg-background/80 p-3">
               <Sparkles className="size-4 text-primary" aria-hidden="true" />
-              <p className="mt-2 text-lg font-bold">{content.cycleLengthDays}</p>
-              <p className="text-[11px] text-muted-foreground">farklı gün döngüsü</p>
+              <p className="mt-2 text-lg font-bold">{content.durationDays}</p>
+              <p className="text-[11px] text-muted-foreground">planlanan gün</p>
             </div>
           </div>
 
@@ -357,6 +389,20 @@ export function NutritionPlanView() {
           </div>
         </CardContent>
       </Card>
+
+      <section className="space-y-2">
+        <div>
+          <h3 className="text-sm font-semibold">Plan süresi</h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Farklı bir süre seçersen mevcut planın geçmişte korunur ve seçtiğin süre için yeni plan hazırlanır.
+          </p>
+        </div>
+        <DurationOptions
+          generating={generating}
+          generatingDuration={generatingDuration}
+          currentDuration={activePlan.duration}
+        />
+      </section>
 
       {activePlan.summary?.trim() && (
         <Card>

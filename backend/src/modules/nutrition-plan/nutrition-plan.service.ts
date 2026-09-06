@@ -1,4 +1,4 @@
-import type { NutritionPlan, NutritionPlanDuration } from "@prisma/client";
+import type { NutritionPlan } from "@prisma/client";
 
 import { logger } from "../../lib/logger";
 import { prisma } from "../../lib/prisma";
@@ -9,7 +9,7 @@ import { calculateCalories } from "./calculations/calorie-calculator";
 import { calculateMacros } from "./calculations/macro-calculator";
 import { calculateMealTiming } from "./calculations/meal-timing";
 import { calculateWater } from "./calculations/water-calculator";
-import { DURATION_DAYS, MEAL_CYCLE_LENGTH_DAYS } from "./constants";
+import { DURATION_DAYS, isSupportedPlanDuration } from "./constants";
 import { mealGeneratorService } from "./meal-generator/meal-generator.service";
 import { nutritionPlanRepository } from "./nutrition-plan.repository";
 import type {
@@ -18,26 +18,20 @@ import type {
   CalculationGender,
   NutritionPlanContent,
   NutritionProfile,
+  PlanDuration,
 } from "./types";
 
-/** Derives an age in whole years from a date of birth. */
 function ageFromDob(dob: Date): number {
   const diff = Date.now() - dob.getTime();
   return Math.floor(diff / (365.25 * 24 * 60 * 60 * 1000));
 }
 
-/** Maps the Prisma `Gender` enum onto the calculation gender. */
 function toCalculationGender(gender: string): CalculationGender {
   if (gender === "MALE") return "MALE";
   if (gender === "FEMALE") return "FEMALE";
   return "NEUTRAL";
 }
 
-/**
- * Builds the normalized nutrition profile from the mandatory onboarding profile
- * (Sprint 9). Throws 400 when onboarding is incomplete, since a personalized
- * plan cannot be produced without it.
- */
 async function buildProfile(userId: string): Promise<NutritionProfile> {
   const profile = await prisma.userProfile.findUnique({ where: { userId } });
   if (!profile) {
@@ -59,11 +53,6 @@ async function buildProfile(userId: string): Promise<NutritionProfile> {
   };
 }
 
-/**
- * Loads the nutrition implications from the user's latest COMPLETED blood-test
- * analysis (Sprint 12), if one exists. Returns the implications plus the source
- * analysis id so the plan can be linked back to it.
- */
 async function loadBloodTestImplications(userId: string): Promise<{
   analysisId: string | null;
   implications: BloodTestImplicationInput[];
@@ -92,54 +81,30 @@ async function loadBloodTestImplications(userId: string): Promise<{
   return { analysisId: latest.id, implications };
 }
 
-/**
- * Maps a rotation cycle across a full plan duration. Day N (1-based) uses cycle
- * index (N-1) mod cycleLength, giving repeating weekly variety without asking
- * the AI for a unique plan per calendar day.
- */
-function buildCalendar(durationDays: number, cycleLength: number): CalendarDay[] {
-  if (cycleLength <= 0) return [];
-  const calendar: CalendarDay[] = [];
-  for (let day = 1; day <= durationDays; day += 1) {
-    calendar.push({ dayNumber: day, cycleIndex: (day - 1) % cycleLength });
-  }
-  return calendar;
+/** Newly generated plans map every calendar day to its own unique generated day. */
+function buildCalendar(durationDays: number): CalendarDay[] {
+  return Array.from({ length: durationDays }, (_, index) => ({
+    dayNumber: index + 1,
+    cycleIndex: index,
+  }));
 }
 
-/**
- * Orchestrates Diewish's Personalized Nutrition Plan Engine: load profile →
- * load latest blood analysis (optional) → deterministic calculations → AI meal
- * generation (allergen-guarded) → assemble → persist a new versioned plan.
- */
 export const nutritionPlanService = {
-  /**
-   * Generates and persists a new nutrition plan for the authenticated user.
-   *
-   * @param userId - Authenticated owner id.
-   * @param duration - Plan horizon (30- or 60-day).
-   * @returns The persisted, active plan record (a new version).
-   * @throws {ApiError} 400 when the onboarding profile is missing.
-   */
-  async generate(userId: string, duration: NutritionPlanDuration): Promise<NutritionPlan> {
+  /** Generates exactly 7, 14, or 30 unique plan days according to the selected horizon. */
+  async generate(userId: string, duration: PlanDuration): Promise<NutritionPlan> {
     const startedAt = Date.now();
     try {
-      // Subscription gating + AI cost protection (V1): enforce the caller's
-      // quota / FREE lifetime trial BEFORE the (expensive) AI meal generation.
-      // FREE trial exhausted → 403 SUBSCRIPTION_REQUIRED; paid window exhausted
-      // → 429. In both cases no AI provider call is made. `regenerate` routes
-      // through here, so it is covered too. userId is the authenticated owner.
       await aiUsageService.assertWithinQuota(userId, "NUTRITION_PLAN");
 
       const profile = await buildProfile(userId);
       const { analysisId, implications } = await loadBloodTestImplications(userId);
 
-      // 1. Deterministic calculations.
       const calories = calculateCalories(profile);
       const macros = calculateMacros(profile, calories.dailyCalories, calories.goal);
       const water = calculateWater(profile);
       const mealTiming = calculateMealTiming(calories.goal);
+      const durationDays = DURATION_DAYS[duration];
 
-      // 2. AI meal generation (allergen-guarded).
       const generation = await mealGeneratorService.generate({
         goal: calories.goal,
         dailyCalories: calories.dailyCalories,
@@ -152,20 +117,24 @@ export const nutritionPlanService = {
         allergies: profile.allergies,
         healthConditions: profile.healthConditions,
         bloodTestImplications: implications,
-        cycleLengthDays: MEAL_CYCLE_LENGTH_DAYS,
+        durationDays,
       });
 
-      // 3. Assemble the day-by-day content by mapping the cycle across the term.
-      const durationDays = DURATION_DAYS[duration];
       const cycle = generation.output.cycle;
+      if (cycle.length !== durationDays) {
+        throw new ApiError(502, "The nutrition-plan provider returned an incomplete plan.", {
+          code: "NUTRITION_PLAN_INCOMPLETE",
+          isOperational: false,
+        });
+      }
+
       const content: NutritionPlanContent = {
         durationDays,
         cycleLengthDays: cycle.length,
         cycle,
-        calendar: buildCalendar(durationDays, cycle.length),
+        calendar: buildCalendar(durationDays),
       };
 
-      // 4. Persist as a new immutable version (previous active plan retained).
       const plan = await nutritionPlanRepository.createVersioned({
         userId,
         duration,
@@ -183,10 +152,6 @@ export const nutritionPlanService = {
         processingTimeMs: Date.now() - startedAt,
       });
 
-      // 5. Record a chargeable AI usage event only after a successful, persisted
-      // generation. This consumes one FREE lifetime trial / paid-window unit.
-      // A failed provider call throws above and never reaches here, so it does
-      // not consume the caller's trial.
       await aiUsageService.record({
         userId,
         feature: "NUTRITION_PLAN",
@@ -202,29 +167,19 @@ export const nutritionPlanService = {
     }
   },
 
-  /**
-   * Regenerates a plan based on an existing plan's duration, creating a new
-   * version without discarding the original.
-   *
-   * @param userId - Authenticated owner id.
-   * @param planId - The plan to base the regeneration's duration on.
-   * @returns The newly generated, active plan.
-   * @throws {ApiError} 404 when the source plan is not found/owned.
-   */
   async regenerate(userId: string, planId: string): Promise<NutritionPlan> {
     const existing = await nutritionPlanRepository.findByIdForUser(planId, userId);
     if (!existing) {
       throw ApiError.notFound("Nutrition plan not found.");
     }
+    if (!isSupportedPlanDuration(existing.duration)) {
+      throw ApiError.badRequest(
+        "This legacy 60-day plan can no longer be regenerated. Create a 7, 14, or 30-day plan instead.",
+      );
+    }
     return this.generate(userId, existing.duration);
   },
 
-  /**
-   * Returns a plan by id, or 404 when not found / not owned.
-   *
-   * @param userId - Authenticated owner id.
-   * @param planId - The plan id.
-   */
   async getById(userId: string, planId: string): Promise<NutritionPlan> {
     const plan = await nutritionPlanRepository.findByIdForUser(planId, userId);
     if (!plan) {
@@ -233,13 +188,7 @@ export const nutritionPlanService = {
     return plan;
   },
 
-  /**
-   * Returns the active plan for a duration, or 404 when none exists yet.
-   *
-   * @param userId - Authenticated owner id.
-   * @param duration - Plan horizon.
-   */
-  async getActive(userId: string, duration: NutritionPlanDuration): Promise<NutritionPlan> {
+  async getActive(userId: string, duration: PlanDuration): Promise<NutritionPlan> {
     const plan = await nutritionPlanRepository.findActive(userId, duration);
     if (!plan) {
       throw ApiError.notFound("No active nutrition plan found for this duration.");
@@ -247,11 +196,6 @@ export const nutritionPlanService = {
     return plan;
   },
 
-  /**
-   * Lists all of the authenticated user's plans (all versions, newest first).
-   *
-   * @param userId - Authenticated owner id.
-   */
   list(userId: string): Promise<NutritionPlan[]> {
     return nutritionPlanRepository.listByUser(userId);
   },

@@ -9,7 +9,7 @@
  */
 
 import { DISCLAIMER, FORBIDDEN_AI_TERMS } from "../blood-test-analysis/constants";
-import type { ActivityLevel, WeightGoal } from "./types";
+import type { ActivityLevel, PlanDuration, WeightGoal } from "./types";
 
 export { DISCLAIMER, FORBIDDEN_AI_TERMS };
 
@@ -99,17 +99,27 @@ export const WATER_ACTIVITY_BONUS_ML: Record<ActivityLevel, number> = {
 export const MIN_WATER_ML = 1500;
 
 /**
- * Length (in days) of the generated meal rotation cycle. A weekly cycle is
- * mapped across the full 30/60-day duration to keep AI cost and payload size
- * bounded while still giving the user variety.
+ * Maximum number of unique days generated in a single provider call. Longer
+ * horizons are produced in sequential seven-day batches, then assembled into
+ * one exact day-by-day plan. This keeps structured responses reliable while
+ * avoiding the old weekly-repeat behavior.
  */
-export const MEAL_CYCLE_LENGTH_DAYS = 7;
+export const MEAL_GENERATION_BATCH_DAYS = 7;
 
-/** Number of calendar days per plan duration. */
-export const DURATION_DAYS: Record<"THIRTY_DAY" | "SIXTY_DAY", number> = {
+/** The only horizons users can create in the current product. */
+export const SUPPORTED_PLAN_DURATIONS = ["SEVEN_DAY", "FOURTEEN_DAY", "THIRTY_DAY"] as const;
+
+/** Number of calendar days for each supported plan duration. */
+export const DURATION_DAYS: Record<PlanDuration, number> = {
+  SEVEN_DAY: 7,
+  FOURTEEN_DAY: 14,
   THIRTY_DAY: 30,
-  SIXTY_DAY: 60,
 };
+
+/** Runtime guard used when reading historical rows that may still be SIXTY_DAY. */
+export function isSupportedPlanDuration(value: string): value is PlanDuration {
+  return (SUPPORTED_PLAN_DURATIONS as readonly string[]).includes(value);
+}
 
 /**
  * System prompt for the AI nutrition-plan generator. Hard-constrains the model
@@ -127,6 +137,7 @@ export const NUTRITION_PLAN_SYSTEM_PROMPT = [
   "3. Favor ordinary foods that support the nutrition implications; moderate foods to limit.",
   "4. Explain, in plain language, WHY each recommendation fits the user's profile.",
   "5. Use concrete household or gram portions and practical meal times so the plan can be followed.",
+  "6. Produce genuinely distinct day plans within the requested horizon; do not repeat a weekly template unless unavoidable.",
   "Absolute rules you must NEVER break:",
   "- Every user-facing string must be Turkish (tr-TR).",
   "- Never include any listed allergen in any meal, ingredient, or suggestion.",

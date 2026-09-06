@@ -33,10 +33,10 @@ export const nutritionPlanRouter = Router();
  *             type: object
  *             required: [duration]
  *             properties:
- *               duration: { type: string, enum: [THIRTY_DAY, SIXTY_DAY] }
+ *               duration: { type: string, enum: [SEVEN_DAY, FOURTEEN_DAY, THIRTY_DAY] }
  *     responses:
  *       201: { description: The generated plan. }
- *       400: { description: Onboarding profile is incomplete. }
+ *       400: { description: Onboarding profile is incomplete or duration is unsupported. }
  *       401: { description: Missing or invalid access token. }
  *       403: { description: Current mandatory consent is missing. }
  */
@@ -59,7 +59,7 @@ nutritionPlanRouter.post(
  *       - in: query
  *         name: duration
  *         required: true
- *         schema: { type: string, enum: [THIRTY_DAY, SIXTY_DAY] }
+ *         schema: { type: string, enum: [SEVEN_DAY, FOURTEEN_DAY, THIRTY_DAY] }
  *     responses:
  *       200: { description: The active plan. }
  *       401: { description: Missing or invalid access token. }
@@ -90,7 +90,7 @@ nutritionPlanRouter.get("/", authenticate, nutritionPlanController.list);
  * /api/nutrition-plans/{id}/regenerate:
  *   post:
  *     tags: [NutritionPlan]
- *     summary: Regenerate a plan (creates a new version)
+ *     summary: Regenerate a supported plan (creates a new version)
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: path
@@ -99,6 +99,7 @@ nutritionPlanRouter.get("/", authenticate, nutritionPlanController.list);
  *         schema: { type: string, format: uuid }
  *     responses:
  *       201: { description: The newly generated plan version. }
+ *       400: { description: Legacy 60-day plan can no longer be regenerated. }
  *       401: { description: Missing or invalid access token. }
  *       403: { description: Current mandatory consent is missing. }
  *       404: { description: Source plan not found. }

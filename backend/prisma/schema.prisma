@@ -1,9 +1,4 @@
 // Prisma schema — AI Dietitian Platform (backend foundation).
-//
-// This is the initial, default setup only. No business/domain models are
-// defined here yet; domain models are introduced in later sprints. Keeping
-// this baseline lets us wire up the client, connection and migration flow
-// without committing to any schema decisions prematurely.
 
 generator client {
   provider = "prisma-client-js"
@@ -14,11 +9,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/// Infrastructure baseline table (NOT a business/domain model).
-///
-/// It exists solely so the initial migration and generated client are
-/// meaningful, and so the readiness probe can exercise a real table round-trip.
-/// Domain models are introduced in later sprints.
 model HealthCheck {
   id        String   @id @default(uuid())
   createdAt DateTime @default(now())
@@ -26,40 +16,22 @@ model HealthCheck {
   @@map("health_checks")
 }
 
-// ---------------------------------------------------------------------------
-// Auth domain (Sprint 8)
-// ---------------------------------------------------------------------------
-
-/// Application-level roles. Coarse-grained authorization for V1; finer
-/// permissions can be layered later without breaking this contract.
 enum UserRole {
   USER
   ADMIN
 }
 
-/// A registered account. Only authentication-relevant fields live here; the
-/// richer nutrition profile (onboarding: age, height, allergies, etc.) is a
-/// separate domain model introduced in a later sprint. `onboardingCompleted`
-/// is kept here so the mandatory-onboarding gate can be enforced cheaply on
-/// every authenticated request without a join.
 model User {
   id                  String           @id @default(uuid())
   email               String           @unique
-  /// bcrypt hash — the plaintext password is never stored.
   passwordHash        String
   fullName            String?
   role                UserRole         @default(USER)
   isActive            Boolean          @default(true)
   emailVerifiedAt     DateTime?
   onboardingCompleted Boolean          @default(false)
-  /// Subscription tier driving AI usage quotas (Sprint 14, C5). Defaults to
-  /// FREE; the payments sprint (Sprint 15) owns transitions between tiers. Kept
-  /// here so quota checks resolve the tier cheaply without a join.
   subscriptionTier    SubscriptionTier @default(FREE)
   lastLoginAt         DateTime?
-  /// Set when the user requests account deletion. The account enters a grace
-  /// period during which the request can be canceled; after it elapses the
-  /// account is eligible for permanent deletion. `null` means no pending request.
   deletionRequestedAt DateTime?
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
@@ -76,7 +48,6 @@ model User {
   payments          Payment[]
   consents          ConsentRecord[]
 
-  // Sprint 19 — AI Health Coach Intelligence
   weightLogs              WeightLog[]
   mealLogs                MealLog[]
   waterLogs               WaterLog[]
@@ -86,20 +57,11 @@ model User {
   weeklyReviews           WeeklyReview[]
   monthlyReviews          MonthlyReview[]
   notifications           Notification[]
-
-  // Sprint 22 — Activity tracking
-  activities Activity[]
+  activities              Activity[]
 
   @@map("users")
 }
 
-// ---------------------------------------------------------------------------
-// Onboarding / nutrition profile domain (Sprint 9)
-// ---------------------------------------------------------------------------
-
-/// Biological sex / gender used for calorie & macro baselines. `PREFER_NOT_TO_SAY`
-/// is offered for user comfort; downstream calculations fall back to a neutral
-/// baseline when it is selected.
 enum Gender {
   MALE
   FEMALE
@@ -107,8 +69,6 @@ enum Gender {
   PREFER_NOT_TO_SAY
 }
 
-/// Physical activity level — maps to a standard activity multiplier used later
-/// when estimating energy expenditure.
 enum ActivityLevel {
   SEDENTARY
   LIGHT
@@ -117,7 +77,6 @@ enum ActivityLevel {
   VERY_ACTIVE
 }
 
-/// High-level dietary pattern guiding meal/plan generation in later sprints.
 enum DietaryPreference {
   OMNIVORE
   VEGETARIAN
@@ -130,11 +89,6 @@ enum DietaryPreference {
   OTHER
 }
 
-/// The mandatory onboarding profile captured on first login/registration.
-///
-/// One-to-one with `User`. Age is intentionally NOT stored — it is derived from
-/// `dateOfBirth` on read so it never drifts. `healthConditions` and `allergies`
-/// are free-form string lists (presets + custom entries) kept simple for V1.
 model UserProfile {
   id                String            @id @default(uuid())
   userId            String            @unique
@@ -155,23 +109,13 @@ model UserProfile {
   @@map("user_profiles")
 }
 
-/// Persisted refresh-token records enabling rotation and reuse detection.
-///
-/// The token handed to the client is a signed JWT; its `jti` maps to `id`
-/// here. We also store a SHA-256 hash of the exact token string for
-/// defense-in-depth (a leaked DB alone cannot reconstruct a usable token).
-/// On refresh the presented token is rotated: the old record is revoked and
-/// `replacedById` points to its successor, so replaying a revoked token is
-/// detectable as reuse and triggers revocation of the whole lineage.
 model RefreshToken {
   id           String    @id @default(uuid())
   userId       String
   user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  /// SHA-256 hash of the issued refresh-token string.
   tokenHash    String    @unique
   expiresAt    DateTime
   revokedAt    DateTime?
-  /// Successor token id after rotation (reuse-detection lineage).
   replacedById String?
   userAgent    String?
   ipAddress    String?
@@ -181,29 +125,16 @@ model RefreshToken {
   @@map("refresh_tokens")
 }
 
-// ---------------------------------------------------------------------------
-// Account lifecycle domain (Sprint 10)
-// ---------------------------------------------------------------------------
-
-/// The purpose of a single-use account token.
 enum AccountTokenType {
   EMAIL_VERIFICATION
   PASSWORD_RESET
 }
 
-/// Single-use, expiring tokens for email verification and password reset.
-///
-/// Only a SHA-256 hash of the opaque token is stored (never the raw token), so
-/// a leaked database cannot be used to forge a valid token. A token is valid
-/// only while `usedAt` is null and `expiresAt` is in the future — enforcing
-/// both one-time usage and expiration. Rows are retained after use as a short
-/// audit trail and can be pruned by a later maintenance job.
 model AccountToken {
   id        String           @id @default(uuid())
   userId    String
   user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   type      AccountTokenType
-  /// SHA-256 hash of the issued opaque token string.
   tokenHash String           @unique
   expiresAt DateTime
   usedAt    DateTime?
@@ -213,7 +144,6 @@ model AccountToken {
   @@map("account_tokens")
 }
 
-/// Security-relevant account actions worth auditing.
 enum AuditAction {
   EMAIL_VERIFICATION_REQUESTED
   EMAIL_VERIFIED
@@ -237,11 +167,6 @@ enum AuditAction {
   CONSENT_WITHDRAWN
 }
 
-/// Append-only audit log for security-related account actions.
-///
-/// `userId` is a plain (non-foreign-key) column on purpose: audit records must
-/// survive permanent account deletion, so no cascade relation is declared.
-/// `metadata` carries small, non-sensitive contextual details (never secrets).
 model AuditLog {
   id        String      @id @default(uuid())
   userId    String?
@@ -256,16 +181,6 @@ model AuditLog {
   @@map("audit_logs")
 }
 
-// ---------------------------------------------------------------------------
-// Blood test upload domain (Sprint 11)
-// ---------------------------------------------------------------------------
-
-/// Lifecycle status of an uploaded blood-test file.
-///
-/// This sprint only ever sets `UPLOADED`. The remaining values exist so the
-/// AI-analysis sprint can advance a record through processing without a schema
-/// migration or breaking changes — the upload infrastructure is intentionally
-/// forward-compatible with a downstream consumer.
 enum BloodTestStatus {
   UPLOADED
   ANALYZING
@@ -273,40 +188,23 @@ enum BloodTestStatus {
   FAILED
 }
 
-/// A single uploaded blood-test document (PDF lab report or image).
-///
-/// The binary is never stored in the database — it lives in the configured
-/// storage backend and is referenced here by `storageProvider` + `storageKey`,
-/// so the provider can change without touching this contract. Only metadata and
-/// integrity fields are persisted. `checksumSha256` lets a later stage verify
-/// the fetched bytes match what was uploaded. `metadata` is a small, extensible
-/// JSON bag for optional user-supplied context (e.g. lab name); it never holds
-/// extracted medical values.
 model BloodTestUpload {
   id               String          @id @default(uuid())
   userId           String
   user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   status           BloodTestStatus @default(UPLOADED)
-  /// Storage backend identifier (e.g. "local", "s3") that owns `storageKey`.
   storageProvider  String
-  /// Opaque key/path locating the object within the storage backend.
   storageKey       String
-  /// Original client-provided filename (sanitized), for display/download.
   originalFilename String
   mimeType         String
   fileSizeBytes    Int
-  /// SHA-256 hex digest of the stored bytes (integrity verification).
   checksumSha256   String
-  /// Optional user-provided label for the upload.
   label            String?
-  /// Optional date the blood test was taken (not the upload time).
   testDate         DateTime?       @db.Date
-  /// Small, non-sensitive extensible context. Never extracted medical values.
   metadata         Json?
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
 
-  /// One-to-one AI analysis produced by the Sprint 12 analysis engine.
   analysis BloodTestAnalysis?
 
   @@index([userId])
@@ -314,11 +212,6 @@ model BloodTestUpload {
   @@map("blood_test_uploads")
 }
 
-// ---------------------------------------------------------------------------
-// AI blood-test analysis domain (Sprint 12)
-// ---------------------------------------------------------------------------
-
-/// Lifecycle status of an AI blood-test analysis run.
 enum BloodTestAnalysisStatus {
   PENDING
   PROCESSING
@@ -326,22 +219,11 @@ enum BloodTestAnalysisStatus {
   FAILED
 }
 
-/// The structured result of running Diewish's AI Blood Test Analysis Engine
-/// over an uploaded blood-test document.
-///
-/// The engine extracts laboratory values (text → OCR → vision), normalizes and
-/// compares them against reference ranges, then asks a provider-agnostic AI
-/// adapter for plain-language explanations and *nutrition-focused* implications.
-/// This is explicitly NOT a medical-diagnosis record: all AI output is
-/// educational/nutritional and carries a disclaimer. The structured JSON fields
-/// are intentionally reusable by downstream features (nutrition plan generator,
-/// dietitian chat, progress tracking, future health reports).
 model BloodTestAnalysis {
   id        String   @id @default(uuid())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  /// The uploaded blood-test document this analysis was produced from.
   bloodTestId String          @unique
   bloodTest   BloodTestUpload @relation(fields: [bloodTestId], references: [id], onDelete: Cascade)
 
@@ -349,96 +231,66 @@ model BloodTestAnalysis {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   status           BloodTestAnalysisStatus @default(PENDING)
-  /// Which extraction path produced the values: "TEXT", "OCR" or "VISION".
   extractionMethod String?
-
-  /// Raw text recovered from the document (for auditing/re-processing).
   rawExtractedText String? @db.Text
-  /// NormalizedBloodTestValue[] — the full normalized value set.
   normalizedValues Json
-  /// Subset of normalizedValues whose status != NORMAL.
   abnormalValues   Json
   abnormalCount    Int     @default(0)
-
-  /// Per-biomarker plain-language explanations.
   aiExplanations         Json
-  /// Nutrition-focused implications per abnormal value.
   nutritionImplications  Json
-  /// Ordered list of nutrition recommendations.
   overallRecommendations Json
-
-  /// 2–3 sentence plain-language summary (with disclaimer).
-  summary String? @db.Text
-
-  aiProvider       String?
-  aiModel          String?
-  processingTimeMs Int?
-
-  errorMessage String?
+  summary                String? @db.Text
+  aiProvider             String?
+  aiModel                String?
+  processingTimeMs       Int?
+  errorMessage           String?
 
   @@index([userId])
   @@index([bloodTestId])
   @@map("blood_test_analyses")
 }
 
-/// Gender scope for a reference range.
 enum ReferenceRangeGender {
   MALE
   FEMALE
   ALL
 }
 
-/// A database-driven reference range for a single biomarker.
-///
-/// Ranges are looked up by `biomarkerCode` and filtered by gender/age/country/
-/// laboratory so the analysis engine can pick the most specific applicable
-/// range. Seeded with ~30 common biomarkers using standard (WHO/ADA) values.
 model BloodTestReferenceRange {
   id        String   @id @default(uuid())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
   biomarkerCode   String
   biomarkerName   String
-  /// Turkish display name for i18n.
   biomarkerNameTr String?
   unit            String
-
-  minValue   Float?
-  maxValue   Float?
-  /// Optimal sub-range within the normal range (nullable).
-  optimalMin Float?
-  optimalMax Float?
-
-  gender ReferenceRangeGender @default(ALL)
-  ageMin Int?
-  ageMax Int?
-
-  /// ISO 3166-1 alpha-2 country code; null = universal.
-  country      String?
-  /// Lab-specific range owner; null = generic.
-  laboratoryId String?
-
-  isActive Boolean @default(true)
-  source   String  @default("STANDARD")
-  notes    String?
+  minValue        Float?
+  maxValue        Float?
+  optimalMin      Float?
+  optimalMax      Float?
+  gender          ReferenceRangeGender @default(ALL)
+  ageMin          Int?
+  ageMax          Int?
+  country         String?
+  laboratoryId    String?
+  isActive        Boolean              @default(true)
+  source          String               @default("STANDARD")
+  notes           String?
 
   @@index([biomarkerCode])
   @@index([isActive])
   @@map("blood_test_reference_ranges")
 }
 
-// ---------------------------------------------------------------------------
-// Personalized nutrition plan domain (Sprint 13)
-// ---------------------------------------------------------------------------
-
-/// Plan horizon. Diewish generates 30- and 60-day personalized plans.
+/// Current user-selectable horizons are 7, 14 and 30 days.
+/// SIXTY_DAY remains legacy-only so historical rows can still be read safely.
 enum NutritionPlanDuration {
+  SEVEN_DAY
+  FOURTEEN_DAY
   THIRTY_DAY
   SIXTY_DAY
 }
 
-/// Lifecycle status of a nutrition-plan generation run.
 enum NutritionPlanStatus {
   PENDING
   PROCESSING
@@ -446,20 +298,6 @@ enum NutritionPlanStatus {
   FAILED
 }
 
-/// A generated personalized nutrition plan produced by Diewish's Nutrition Plan
-/// Engine (Sprint 13).
-///
-/// A plan combines the mandatory onboarding profile (Sprint 9) with the optional
-/// latest blood-test analysis (Sprint 12): deterministic calorie/macro/water/
-/// meal-timing calculations plus AI-generated meal content and plain-language
-/// explanations. Plans are IMMUTABLE and VERSIONED — regenerating creates a new
-/// row (version N+1) and only the newest per (user, duration) is `isActive`;
-/// previous plans are retained so history is never lost. The JSON columns are
-/// intentionally reusable by downstream features (dashboard, dietitian chat,
-/// progress tracking, future health reports).
-///
-/// Safety: nothing here is medical diagnosis, treatment, or prescription; all
-/// content is educational/nutritional and carries a disclaimer.
 model NutritionPlan {
   id        String   @id @default(uuid())
   createdAt DateTime @default(now())
@@ -467,18 +305,11 @@ model NutritionPlan {
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  /// Optional soft link to the Sprint 12 blood-test analysis used as input.
-  /// Kept as a plain column (not a FK relation) so the Sprint 12 model is left
-  /// untouched and deleting an analysis never cascades into plan history.
   bloodTestAnalysisId String?
-
   duration NutritionPlanDuration
   version  Int                   @default(1)
   isActive Boolean               @default(true)
   status   NutritionPlanStatus   @default(COMPLETED)
-
-  // --- Deterministic calculation outputs ---
   bmr           Float
   tdee          Float
   dailyCalories Float
@@ -487,20 +318,11 @@ model NutritionPlan {
   fatGrams      Float
   waterMl       Float
   mealsPerDay   Int
-
-  // --- Structured content (reusable JSON) ---
-  /// MealTimingRecommendation — recommended meal slots and times.
   mealTiming      Json
-  /// NutritionPlanContent — the weekly rotation cycle mapped across all days.
   dailyPlans      Json
-  /// PlanExplanations — plain-language rationale per recommendation.
   explanations    Json
-  /// Ordered list of overall nutrition recommendations.
   recommendations Json
-
-  /// 2-3 sentence plain-language summary (with disclaimer).
   summary String? @db.Text
-
   aiProvider       String?
   aiModel          String?
   processingTimeMs Int?
@@ -511,35 +333,18 @@ model NutritionPlan {
   @@map("nutrition_plans")
 }
 
-// ---------------------------------------------------------------------------
-// AI usage quota & subscription tiers domain (Sprint 14, C5)
-// ---------------------------------------------------------------------------
-
-/// Subscription tier used to resolve AI usage quotas. This is intentionally a
-/// lightweight enum owned here (not a full payments/subscription system — that
-/// is Sprint 15). It lets AI quota checks be "subscription-aware" today while
-/// defaulting every account to FREE until payments assign a paid tier.
 enum SubscriptionTier {
   FREE
   PREMIUM
   PREMIUM_PLUS
 }
 
-/// The AI-consuming feature a usage event belongs to. Adding a value here lets
-/// any AI surface adopt the shared quota/cost-protection capability without a
-/// breaking change.
 enum AiUsageFeature {
   DIETITIAN_CHAT
   BLOOD_TEST_ANALYSIS
   NUTRITION_PLAN
 }
 
-/// Append-only record of a single billable AI invocation (Sprint 14, C5).
-///
-/// One row is written per successful external AI call. Counting rows within a
-/// rolling window powers both per-tier quota enforcement (cost-explosion
-/// protection) and an auditable usage trail. No prompt content or PHI is stored
-/// here — only the feature, provider/model, and a coarse token estimate.
 model AiUsageEvent {
   id              String         @id @default(uuid())
   userId          String
@@ -547,8 +352,6 @@ model AiUsageEvent {
   feature         AiUsageFeature
   provider        String
   model           String
-  /// Best-effort estimate of tokens consumed, for cost observability. Optional
-  /// because not every provider returns usage; never used for enforcement math.
   estimatedTokens Int?
   createdAt       DateTime       @default(now())
 
@@ -556,34 +359,19 @@ model AiUsageEvent {
   @@map("ai_usage_events")
 }
 
-// ---------------------------------------------------------------------------
-// AI Dietitian Chat domain (Sprint 14, C2)
-// ---------------------------------------------------------------------------
-
-/// Author of a chat message.
 enum ChatRole {
   USER
   ASSISTANT
 }
 
-/// A single AI Dietitian Chat conversation thread owned by a user.
-///
-/// Conversations group an ordered list of messages so the orchestrator can
-/// supply bounded history back to the model. All access is owner-scoped.
 model ChatConversation {
   id        String   @id @default(uuid())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  /// Short human-readable label derived from the first user message.
   title String?
-  /// Non-null while the user has pinned this conversation. Timestamp gives a
-  /// stable order among pinned conversations and survives across devices.
   pinnedAt DateTime?
-
   messages ChatMessage[]
 
   @@index([userId])
@@ -591,23 +379,13 @@ model ChatConversation {
   @@map("chat_conversations")
 }
 
-/// A single message within a conversation.
-///
-/// User messages store the user's original text (Diewish owns this data);
-/// PHI minimization is applied only to the copy sent to the external AI, never
-/// to what is persisted here. Assistant messages carry provider/model metadata
-/// for observability. All AI replies are nutrition-only and disclaimer-bound.
 model ChatMessage {
   id        String   @id @default(uuid())
   createdAt DateTime @default(now())
-
   conversationId String
   conversation   ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-
   role    ChatRole
   content String   @db.Text
-
-  /// Assistant-only: which provider/model produced the reply (null for user).
   provider String?
   model    String?
 
@@ -615,37 +393,18 @@ model ChatMessage {
   @@map("chat_messages")
 }
 
-// ---------------------------------------------------------------------------
-// Subscription & payments domain (Sprint 15, D1–D3)
-// ---------------------------------------------------------------------------
-
-/// Lifecycle status of a subscription record.
-///
-/// A user may have at most one non-terminal (ACTIVE / PENDING / PAST_DUE)
-/// subscription at a time; CANCELED/EXPIRED rows are retained for history and
-/// audit. Tier entitlements are resolved from the User's `subscriptionTier`,
-/// which this module keeps in sync with the active subscription.
 enum SubscriptionStatus {
-  /// Checkout initiated; awaiting a successful payment/webhook confirmation.
   PENDING
-  /// Paid and currently entitling the user to the tier's features.
   ACTIVE
-  /// Payment failed on renewal; grace handling is a future concern (P4).
   PAST_DUE
-  /// Canceled by the user; may remain entitling until `currentPeriodEnd`.
   CANCELED
-  /// Term elapsed without renewal; no longer entitling.
   EXPIRED
 }
 
-/// Payment processor. Modeled as an enum so the payment layer stays modular and
-/// additional providers (e.g. Stripe — roadmap F9) can be added without a
-/// breaking change to callers.
 enum PaymentProvider {
   IYZICO
 }
 
-/// Lifecycle status of a single payment attempt.
 enum PaymentStatus {
   PENDING
   SUCCEEDED
@@ -653,34 +412,21 @@ enum PaymentStatus {
   REFUNDED
 }
 
-/// A subscription purchased (or being purchased) by a user.
-///
-/// The provider-side identifiers (`providerRef`, `providerSubscriptionRef`) let
-/// the record be reconciled against iyzico without leaking processor internals
-/// into the rest of the app. `cancelAtPeriodEnd` supports "cancel but keep
-/// access until the paid term ends" (App Store 3.1.2 / Play cancellation UX).
 model Subscription {
   id        String   @id @default(uuid())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
   tier     SubscriptionTier
   status   SubscriptionStatus @default(PENDING)
   provider PaymentProvider    @default(IYZICO)
-
-  /// Provider-side conversation/checkout reference used to correlate webhooks.
   providerRef             String?
-  /// Provider-side recurring-subscription reference (if applicable).
   providerSubscriptionRef String?
-
   currentPeriodStart DateTime?
   currentPeriodEnd   DateTime?
   cancelAtPeriodEnd  Boolean   @default(false)
   canceledAt         DateTime?
-
   payments Payment[]
 
   @@index([userId])
@@ -689,35 +435,21 @@ model Subscription {
   @@map("subscriptions")
 }
 
-/// A single payment attempt against a subscription.
-///
-/// `providerPaymentId` and `providerConversationId` are the iyzico correlation
-/// keys. `rawStatus` preserves the processor's own status string for support
-/// and reconciliation; `status` is the normalized lifecycle value the app acts
-/// on. Amounts are stored in minor units (kuruş) to avoid float rounding.
 model Payment {
   id        String   @id @default(uuid())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
   subscriptionId String?
   subscription   Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
-
   provider PaymentProvider @default(IYZICO)
   status   PaymentStatus   @default(PENDING)
-
-  /// Amount in minor currency units (e.g. kuruş for TRY).
   amountMinor Int
   currency    String @default("TRY")
-
   providerPaymentId      String?
   providerConversationId String?
-  /// Processor's own status string, preserved verbatim for reconciliation.
   rawStatus              String?
-  /// Non-sensitive failure reason surfaced to support (never card data).
   failureReason          String?
 
   @@index([userId])
@@ -726,23 +458,13 @@ model Payment {
   @@map("payments")
 }
 
-/// Append-only log of inbound payment-provider webhook events.
-///
-/// `providerEventId` is UNIQUE so replays are idempotent — a duplicate delivery
-/// is detected and short-circuited rather than double-applying a state change
-/// (an unverified/replayed webhook must never grant free premium). The raw
-/// payload is retained for audit and reprocessing.
 model PaymentWebhookEvent {
   id        String   @id @default(uuid())
   createdAt DateTime @default(now())
-
   provider        PaymentProvider @default(IYZICO)
-  /// Provider-unique event identifier used for idempotent processing.
   providerEventId String          @unique
   eventType       String?
-  /// Whether the signature verified against the configured secret.
   signatureValid  Boolean         @default(false)
-  /// Whether business processing completed successfully.
   processedAt     DateTime?
   payload         Json
 
@@ -750,13 +472,6 @@ model PaymentWebhookEvent {
   @@map("payment_webhook_events")
 }
 
-// ---------------------------------------------------------------------------
-// Legal / consent compliance domain (Sprint 15, B1–B4)
-// ---------------------------------------------------------------------------
-
-/// A category of legal document / consent. Health data processing (KVKK m.6)
-/// requires explicit, versioned, withdrawable consent; the store forms (Play
-/// Data Safety, App Store) require accessible Privacy Policy & Terms.
 enum LegalDocumentType {
   PRIVACY_POLICY
   TERMS_OF_SERVICE
@@ -764,28 +479,16 @@ enum LegalDocumentType {
   KVKK_EXPLICIT_CONSENT
 }
 
-/// A single user consent decision for a specific document version.
-///
-/// Consent is VERSIONED (a new document version requires re-consent) and
-/// WITHDRAWABLE (`withdrawnAt`): the latest row per (user, type) is the current
-/// state — `granted && withdrawnAt == null` means active consent. Rows are
-/// append-only for an auditable trail (KVKK accountability). Consent records
-/// survive normal reads but are removed with the account on permanent deletion
-/// (cascade) since they are personal data tied to the subject.
 model ConsentRecord {
   id        String   @id @default(uuid())
   createdAt DateTime @default(now())
-
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
   type            LegalDocumentType
-  /// Version of the document the user acted on (e.g. "2026-07-01").
   documentVersion String
   granted         Boolean
   grantedAt       DateTime?
   withdrawnAt     DateTime?
-
   ipAddress String?
   userAgent String?
 
@@ -793,16 +496,6 @@ model ConsentRecord {
   @@map("consent_records")
 }
 
-// ---------------------------------------------------------------------------
-// Sprint 19 — AI Health Coach Intelligence
-// ---------------------------------------------------------------------------
-// This sprint turns Diewish into a proactive, memory-aware AI health coach. The
-// intelligence layer needs time-series signals (weight over time, meals, water)
-// that earlier sprints only captured as single profile snapshots, so lightweight
-// tracking logs are introduced here as first-class data sources. Everything
-// remains nutrition/coaching only — never medical diagnosis.
-
-/// The kind of meal a log entry represents.
 enum MealType {
   BREAKFAST
   LUNCH
@@ -810,9 +503,6 @@ enum MealType {
   SNACK
 }
 
-/// A single weight measurement over time. Unlike `UserProfile.currentWeightKg`
-/// (a single snapshot), these rows let the coach reason about week-over-week
-/// trends, rapid gain/loss risk and goal progress.
 model WeightLog {
   id        String   @id @default(uuid())
   userId    String
@@ -826,8 +516,6 @@ model WeightLog {
   @@map("weight_logs")
 }
 
-/// A single logged meal with optional nutrition estimates. Powers meal-habit
-/// memory, consistency scoring, and macro/sodium/sugar risk checks.
 model MealLog {
   id        String   @id @default(uuid())
   userId    String
@@ -847,8 +535,6 @@ model MealLog {
   @@map("meal_logs")
 }
 
-/// A single water-intake entry (millilitres). Powers hydration streak checks
-/// and low-water proactive nudges.
 model WaterLog {
   id        String   @id @default(uuid())
   userId    String
@@ -861,8 +547,6 @@ model WaterLog {
   @@map("water_logs")
 }
 
-/// The category of a persisted AI memory. Adding a value lets a new signal be
-/// remembered without a breaking change.
 enum AiMemoryType {
   WEIGHT_TREND
   MEAL_HABITS
@@ -874,30 +558,21 @@ enum AiMemoryType {
   CONVERSATION_SUMMARY
 }
 
-/// Long-term AI memory: durable, structured facts the coach recalls across
-/// conversations so it never repeats identical advice for an unchanged
-/// situation. `content` is a structured JSON payload whose shape depends on
-/// `memoryType`. `embedding` is reserved for future semantic recall. The latest
-/// row per (user, memoryType) is treated as the current memory of record.
 model AiMemory {
   id         String       @id @default(uuid())
   userId     String
   user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   memoryType AiMemoryType
   content    Json
-  /// Optional vector embedding (JSON array) for future semantic retrieval.
   embedding  Json?
   createdAt  DateTime     @default(now())
   updatedAt  DateTime     @updatedAt
-  /// Optional TTL; a memory past this instant is treated as stale.
   expiresAt  DateTime?
 
   @@index([userId, memoryType, updatedAt])
   @@map("ai_memories")
 }
 
-/// A weekly rollup of a user's conversations distilled into a summary plus key
-/// insights, so long histories can be recalled compactly.
 model AiConversationSummary {
   id          String   @id @default(uuid())
   userId      String
@@ -913,7 +588,6 @@ model AiConversationSummary {
   @@map("ai_conversation_summaries")
 }
 
-/// The reason a proactive message was generated.
 enum ProactiveMessageType {
   MISSED_MEAL
   MISSED_WEIGHT
@@ -925,8 +599,6 @@ enum ProactiveMessageType {
   MONTHLY_REVIEW
 }
 
-/// An AI-initiated message surfaced to the user without them asking first.
-/// Generated by the daily proactive job (and ad-hoc by risk/review flows).
 model ProactiveMessage {
   id           String               @id @default(uuid())
   userId       String
@@ -941,14 +613,12 @@ model ProactiveMessage {
   @@map("proactive_messages")
 }
 
-/// The weekly-trend direction the coach reports.
 enum WeightTrend {
   IMPROVING
   STABLE
   DECLINING
 }
 
-/// A generated weekly AI coaching report for one (user, ISO week, year).
 model WeeklyReview {
   id                 String      @id @default(uuid())
   userId             String
@@ -970,7 +640,6 @@ model WeeklyReview {
   @@map("weekly_reviews")
 }
 
-/// A generated monthly coaching summary for one (user, month, year).
 model MonthlyReview {
   id                String   @id @default(uuid())
   userId            String
@@ -991,7 +660,6 @@ model MonthlyReview {
   @@map("monthly_reviews")
 }
 
-/// The channel/category a notification belongs to.
 enum NotificationType {
   PROACTIVE_MESSAGE
   WEEKLY_REVIEW
@@ -1001,10 +669,6 @@ enum NotificationType {
   WATER_REMINDER
 }
 
-/// A scheduled push notification. This sprint prepares the scheduling layer
-/// only; delivery is handled by a pluggable NotificationProvider (a logging
-/// stub today, Firebase/APNs later). `deliveredAt` is set once a provider
-/// reports the notification sent.
 model Notification {
   id           String           @id @default(uuid())
   userId       String
@@ -1022,18 +686,6 @@ model Notification {
   @@map("notifications")
 }
 
-// ---------------------------------------------------------------------------
-// Sprint 22 — Activity data foundation
-// ---------------------------------------------------------------------------
-// Physical-activity logging complements the Sprint 19 tracking signals
-// (weight, meals, water) with movement/exercise data. Like those logs, this is
-// a lightweight time-series source the coach can reason about (activity streaks,
-// inactivity nudges, energy-expenditure context). This sprint introduces the
-// data model only — no API, service, or business logic. Everything remains
-// nutrition/coaching only, never medical diagnosis.
-
-/// The kind of physical activity a log entry represents. Adding a value lets a
-/// new activity type be tracked without a breaking change.
 enum ActivityType {
   WALKING
   RUNNING
@@ -1046,11 +698,6 @@ enum ActivityType {
   OTHER
 }
 
-/// A single logged physical-activity entry over time. Unlike the static
-/// `UserProfile.activityLevel` snapshot, these rows let the coach reason about
-/// actual movement history: activity consistency, inactivity gaps, and a
-/// best-effort energy-expenditure signal. `caloriesBurned` is optional because
-/// not every entry can be reliably estimated; it is never used for medical math.
 model Activity {
   id              String       @id @default(uuid())
   userId          String
