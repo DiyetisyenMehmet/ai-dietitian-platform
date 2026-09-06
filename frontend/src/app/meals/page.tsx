@@ -1,22 +1,33 @@
 "use client";
 
+import * as React from "react";
 import Link from "next/link";
-import { Plus, ScanLine } from "lucide-react";
+import { CalendarDays, ChevronRight, Plus, ScanLine } from "lucide-react";
 
+import { nutritionPlanStore, useNutritionPlan } from "@/application/health/nutrition-plan-store";
+import { useMeals, computeTotals } from "@/application/meals/meals-store";
 import { AppShell } from "@/presentation/components/layout/app-shell";
 import { Button } from "@/presentation/components/ui/button";
 import { NutritionSummary } from "@/presentation/components/meals/nutrition-summary";
 import { MealCard } from "@/presentation/components/meals/meal-card";
-import { useMeals, computeTotals } from "@/application/meals/meals-store";
+
+function durationLabel(duration: "THIRTY_DAY" | "SIXTY_DAY"): string {
+  return duration === "THIRTY_DAY" ? "30 günlük" : "60 günlük";
+}
 
 export default function MealsPage() {
   const meals = useMeals();
   const totals = computeTotals(meals);
   const totalFoods = meals.reduce((sum, meal) => sum + meal.foods.length, 0);
+  const { activePlan, hydrated, loading } = useNutritionPlan();
+
+  React.useEffect(() => {
+    if (!hydrated && !loading) void nutritionPlanStore.hydrateFromBackend();
+  }, [hydrated, loading]);
 
   return (
     <AppShell
-      title="Öğünler"
+      title="Beslenme"
       headerAction={
         <div className="flex items-center">
           <Button asChild size="icon" variant="ghost" aria-label="Besin tara">
@@ -34,6 +45,26 @@ export default function MealsPage() {
     >
       <div className="animate-fade-in space-y-6">
         <NutritionSummary totals={totals} />
+
+        <Link
+          href="/meals/plan"
+          className="flex items-center gap-3 rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 via-background to-background p-4 shadow-card transition-shadow hover:shadow-card-hover"
+        >
+          <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/15 text-primary">
+            <CalendarDays className="size-6" aria-hidden="true" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold">Öğün Planım</span>
+            <span className="block text-xs text-muted-foreground">
+              {activePlan
+                ? `${durationLabel(activePlan.duration)} kişisel plan · ${activePlan.mealsPerDay} öğün/gün`
+                : hydrated
+                  ? "Hedeflerine, tercihlerine ve alerjilerine göre kişisel plan oluştur"
+                  : "Kişisel planın yükleniyor…"}
+            </span>
+          </span>
+          <ChevronRight className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+        </Link>
 
         <Link
           href="/meals/scan"
