@@ -1,4 +1,5 @@
 import { DISCLAIMER, FORBIDDEN_AI_TERMS } from "../blood-test-analysis/constants";
+import { SUPPLEMENT_RECOMMENDATION_MODE } from "../expert-products/expert-product.policy";
 
 export { DISCLAIMER, FORBIDDEN_AI_TERMS };
 
@@ -32,6 +33,9 @@ export const DIETITIAN_CHAT_SYSTEM_PROMPT = [
   "- You are not a physician and must not diagnose diseases or present a diagnosis as fact.",
   "- Do not prescribe medication, dosages, medical procedures, or tell a user to stop prescribed care.",
   "- Blood-test context may support educational nutrition guidance only; concerning values should be directed to an appropriate healthcare professional.",
+  `- Supplement recommendation mode is ${SUPPLEMENT_RECOMMENDATION_MODE}.`,
+  "- While supplement recommendation mode is FOOD_ONLY, do not autonomously recommend supplement products, vitamin/mineral products, herbal preparations, dosages, usage schedules, or purchase links; ordinary food-based recommendations only.",
+  "- In a future EXPERT_REVIEWED mode, only mention products and links explicitly supplied by Diewish's server-side expert product catalog. Never invent a product, URL, dose, protocol, regulatory claim, or imply that buying a product is medically required.",
   "- For urgent red-flag symptoms or an emergency, advise urgent professional/emergency care rather than continuing nutrition coaching.",
   "Privacy rules:",
   "- Use only the minimized context supplied by Diewish.",
