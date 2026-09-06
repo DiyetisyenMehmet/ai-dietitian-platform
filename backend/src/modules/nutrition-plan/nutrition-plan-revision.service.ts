@@ -170,13 +170,16 @@ function withReplacedRange(
   return next;
 }
 
-async function requireSupportedSource(userId: string, planId: string): Promise<NutritionPlan> {
+async function requireSupportedSource(
+  userId: string,
+  planId: string,
+): Promise<NutritionPlan & { duration: PlanDuration }> {
   const plan = await nutritionPlanRepository.findByIdForUser(planId, userId);
   if (!plan || plan.deletedAt) throw ApiError.notFound("Nutrition plan not found.");
   if (!isSupportedPlanDuration(plan.duration)) {
     throw ApiError.badRequest("Legacy 60-day plans cannot be extended or partially regenerated.");
   }
-  return plan;
+  return plan as NutritionPlan & { duration: PlanDuration };
 }
 
 async function persistAiRevision(params: {
