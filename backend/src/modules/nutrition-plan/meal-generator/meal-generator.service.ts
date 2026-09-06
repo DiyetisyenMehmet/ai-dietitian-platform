@@ -1,16 +1,17 @@
 /**
  * AI-backed meal recommendation generator.
  *
- * Longer plans are generated in bounded seven-day batches so 7/14/30-day
- * requests produce the exact number of plan days instead of mapping one weekly
- * cycle repeatedly. Every batch is count-validated and allergen-guarded before
- * the final plan can be persisted.
+ * Long plans are generated in bounded provider batches and assembled into the
+ * exact 7/14/30-day horizon. A small concurrency cap prevents the synchronous
+ * API request from serially waiting on every batch while keeping Vertex load
+ * controlled. Every batch is count-validated and allergen-guarded before the
+ * final plan can be persisted.
  */
 
 import { logger } from "../../../lib/logger";
 import { ApiError } from "../../../utils/api-error";
 import { getAIAdapter } from "../../blood-test-analysis/ai-adapter/ai-adapter.factory";
-import { MEAL_GENERATION_BATCH_DAYS } from "../constants";
+import { MEAL_GENERATION_BATCH_DAYS, MEAL_GENERATION_CONCURRENCY } from "../constants";
 import { findAllergenViolations } from "./allergen-validator";
 import type {
   DailyPlan,
@@ -24,6 +25,16 @@ export interface MealGenerationResult {
   output: NutritionPlanAIOutput;
   aiProvider: string;
   aiModel: string;
+}
+
+interface BatchSpec {
+  startDayNumber: number;
+  batchDays: number;
+}
+
+interface GeneratedBatch {
+  startDayNumber: number;
+  output: NutritionPlanAIOutput;
 }
 
 const MAX_AVOID_SIGNATURES = 28;
@@ -61,6 +72,26 @@ function daySignature(day: DailyPlan): string {
 
 function uniqueStrings(values: string[]): string[] {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+}
+
+function buildBatchSpecs(durationDays: number): BatchSpec[] {
+  const specs: BatchSpec[] = [];
+  for (let startDayNumber = 1; startDayNumber <= durationDays; startDayNumber += MEAL_GENERATION_BATCH_DAYS) {
+    specs.push({
+      startDayNumber,
+      batchDays: Math.min(MEAL_GENERATION_BATCH_DAYS, durationDays - startDayNumber + 1),
+    });
+  }
+  return specs;
+}
+
+function recentSignatures(batches: GeneratedBatch[]): string[] {
+  return [...batches]
+    .sort((a, b) => a.startDayNumber - b.startDayNumber)
+    .flatMap((batch) => batch.output.cycle)
+    .slice(-MAX_AVOID_SIGNATURES)
+    .map(daySignature)
+    .filter(Boolean);
 }
 
 async function generateValidatedBatch(input: NutritionPlanAIInput): Promise<NutritionPlanAIOutput> {
@@ -110,49 +141,73 @@ async function generateValidatedBatch(input: NutritionPlanAIInput): Promise<Nutr
   return { ...output, cycle: relabelDays(output.cycle, input.startDayNumber ?? 1) };
 }
 
+async function generateBatch(
+  input: NutritionPlanGenerationInput,
+  spec: BatchSpec,
+  avoidMealSignatures: string[],
+): Promise<GeneratedBatch> {
+  const startedAt = Date.now();
+  const metadata = {
+    startDayNumber: spec.startDayNumber,
+    batchDays: spec.batchDays,
+    durationDays: input.durationDays,
+  };
+
+  logger.info(metadata, "Nutrition-plan batch generation started");
+
+  try {
+    const output = await generateValidatedBatch({
+      goal: input.goal,
+      dailyCalories: input.dailyCalories,
+      proteinGrams: input.proteinGrams,
+      carbsGrams: input.carbsGrams,
+      fatGrams: input.fatGrams,
+      waterMl: input.waterMl,
+      mealTiming: input.mealTiming,
+      dietaryPreference: input.dietaryPreference,
+      allergies: input.allergies,
+      healthConditions: input.healthConditions,
+      bloodTestImplications: input.bloodTestImplications,
+      cycleLengthDays: spec.batchDays,
+      planDurationDays: input.durationDays,
+      startDayNumber: spec.startDayNumber,
+      avoidMealSignatures,
+    });
+
+    logger.info(
+      { ...metadata, processingTimeMs: Date.now() - startedAt },
+      "Nutrition-plan batch generation completed",
+    );
+    return { startDayNumber: spec.startDayNumber, output };
+  } catch (error) {
+    logger.error(
+      { err: error, ...metadata, processingTimeMs: Date.now() - startedAt },
+      "Nutrition-plan batch generation failed",
+    );
+    throw error;
+  }
+}
+
 export const mealGeneratorService = {
   async generate(input: NutritionPlanGenerationInput): Promise<MealGenerationResult> {
     const adapter = getAIAdapter();
-    const days: DailyPlan[] = [];
-    const recommendations: string[] = [];
-    let explanations: PlanExplanations | null = null;
-    let summary = "";
-    let startDayNumber = 1;
+    const generated: GeneratedBatch[] = [];
+    const specs = buildBatchSpecs(input.durationDays);
 
-    while (startDayNumber <= input.durationDays) {
-      const batchDays = Math.min(
-        MEAL_GENERATION_BATCH_DAYS,
-        input.durationDays - startDayNumber + 1,
+    for (let offset = 0; offset < specs.length; offset += MEAL_GENERATION_CONCURRENCY) {
+      const wave = specs.slice(offset, offset + MEAL_GENERATION_CONCURRENCY);
+      const avoidMealSignatures = recentSignatures(generated);
+      const results = await Promise.all(
+        wave.map((spec) => generateBatch(input, spec, avoidMealSignatures)),
       );
-      const avoidMealSignatures = days
-        .slice(-MAX_AVOID_SIGNATURES)
-        .map(daySignature)
-        .filter(Boolean);
-
-      const batch = await generateValidatedBatch({
-        goal: input.goal,
-        dailyCalories: input.dailyCalories,
-        proteinGrams: input.proteinGrams,
-        carbsGrams: input.carbsGrams,
-        fatGrams: input.fatGrams,
-        waterMl: input.waterMl,
-        mealTiming: input.mealTiming,
-        dietaryPreference: input.dietaryPreference,
-        allergies: input.allergies,
-        healthConditions: input.healthConditions,
-        bloodTestImplications: input.bloodTestImplications,
-        cycleLengthDays: batchDays,
-        planDurationDays: input.durationDays,
-        startDayNumber,
-        avoidMealSignatures,
-      });
-
-      days.push(...batch.cycle);
-      recommendations.push(...batch.recommendations);
-      explanations ??= batch.explanations;
-      summary ||= batch.summary;
-      startDayNumber += batchDays;
+      generated.push(...results);
     }
+
+    generated.sort((a, b) => a.startDayNumber - b.startDayNumber);
+    const days = generated.flatMap((batch) => batch.output.cycle);
+    const recommendations = generated.flatMap((batch) => batch.output.recommendations);
+    const explanations: PlanExplanations | null = generated[0]?.output.explanations ?? null;
+    const summary = generated.find((batch) => batch.output.summary.trim())?.output.summary ?? "";
 
     if (days.length !== input.durationDays || !explanations) {
       throw new ApiError(502, "The nutrition-plan provider returned an incomplete plan.", {
@@ -165,7 +220,7 @@ export const mealGeneratorService = {
       output: {
         cycle: days,
         explanations,
-        recommendations: uniqueStrings(recommendations).slice(0, 12),
+        recommendations: uniqueStrings(recommendations).slice(0, 6),
         summary,
       },
       aiProvider: adapter.info.provider,
