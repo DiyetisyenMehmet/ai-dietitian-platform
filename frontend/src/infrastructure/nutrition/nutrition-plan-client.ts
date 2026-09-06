@@ -12,6 +12,7 @@ export type NutritionPlanDuration = SupportedNutritionPlanDuration | "SIXTY_DAY"
 export type NutritionPlanStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
 export type NutritionPlanDeviationScope = "FOOD" | "MEAL" | "DAY";
 export type NutritionPlanDeviationType = "SKIPPED" | "REPLACED" | "EXTRA" | "PORTION_CHANGED";
+export type NutritionPlanRefreshMode = "DAY" | "FROM_DAY";
 
 export function isSupportedNutritionPlanDuration(
   value: NutritionPlanDuration,
@@ -60,6 +61,7 @@ export interface DailyPlan {
 export interface CalendarDay {
   dayNumber: number;
   cycleIndex: number;
+  dateOffsetDays?: number;
 }
 
 export interface NutritionPlanContent {
@@ -136,6 +138,11 @@ export interface CreateNutritionPlanDeviationInput {
   note?: string;
 }
 
+export interface RefreshNutritionPlanInput {
+  mode: NutritionPlanRefreshMode;
+  dayNumber: number;
+}
+
 export type NutritionPlanSummary = NutritionPlanRecord;
 
 function localDateYmd(date = new Date()): string {
@@ -168,6 +175,24 @@ export const nutritionPlanClient = {
       path: `/nutrition-plans/${encodeURIComponent(planId)}/regenerate`,
       method: "POST",
       auth: true,
+    });
+  },
+
+  refresh(planId: string, input: RefreshNutritionPlanInput) {
+    return apiRequest<{ plan: NutritionPlanRecord }>({
+      path: `/nutrition-plans/${encodeURIComponent(planId)}/refresh`,
+      method: "POST",
+      auth: true,
+      body: JSON.stringify(input),
+    });
+  },
+
+  extend(planId: string, duration: SupportedNutritionPlanDuration) {
+    return apiRequest<{ plan: NutritionPlanRecord }>({
+      path: `/nutrition-plans/${encodeURIComponent(planId)}/extend`,
+      method: "POST",
+      auth: true,
+      body: JSON.stringify({ duration }),
     });
   },
 

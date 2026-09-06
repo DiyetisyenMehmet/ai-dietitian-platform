@@ -6,6 +6,7 @@ import {
   isSupportedNutritionPlanDuration,
   nutritionPlanClient,
   type NutritionPlanRecord,
+  type RefreshNutritionPlanInput,
   type SupportedNutritionPlanDuration,
 } from "@/infrastructure/nutrition/nutrition-plan-client";
 
@@ -62,10 +63,31 @@ function chooseActive(plans: NutritionPlanRecord[]): NutritionPlanRecord | null 
   );
 }
 
-function mergePlan(plans: NutritionPlanRecord[], plan: NutritionPlanRecord): NutritionPlanRecord[] {
-  return [plan, ...plans.filter((item) => item.id !== plan.id)].sort((a, b) =>
-    b.createdAt.localeCompare(a.createdAt),
-  );
+function mergeActivePlan(plans: NutritionPlanRecord[], plan: NutritionPlanRecord): NutritionPlanRecord[] {
+  return [
+    plan,
+    ...plans
+      .filter((item) => item.id !== plan.id)
+      .map((item) => (item.isActive ? { ...item, isActive: false } : item)),
+  ].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+function completeGeneration(plan: NutritionPlanRecord): NutritionPlanRecord {
+  const plans = mergeActivePlan(state.plans, plan);
+  emit({
+    ...state,
+    plans,
+    activePlan: chooseActive(plans),
+    hydrated: true,
+    generating: false,
+    generatingDuration: null,
+  });
+  return plan;
+}
+
+function failGeneration(error: unknown): never {
+  patch({ generating: false, generatingDuration: null });
+  throw error;
 }
 
 export const nutritionPlanStore = {
@@ -87,24 +109,9 @@ export const nutritionPlanStore = {
     patch({ generating: true, generatingDuration: duration });
     try {
       const { plan } = await nutritionPlanClient.generate(duration);
-      const plans = mergePlan(
-        state.plans.map((item) =>
-          item.duration === plan.duration && item.id !== plan.id ? { ...item, isActive: false } : item,
-        ),
-        plan,
-      );
-      emit({
-        ...state,
-        plans,
-        activePlan: chooseActive(plans),
-        hydrated: true,
-        generating: false,
-        generatingDuration: null,
-      });
-      return plan;
+      return completeGeneration(plan);
     } catch (error) {
-      patch({ generating: false, generatingDuration: null });
-      throw error;
+      return failGeneration(error);
     }
   },
 
@@ -117,24 +124,38 @@ export const nutritionPlanStore = {
     patch({ generating: true, generatingDuration: source.duration });
     try {
       const { plan } = await nutritionPlanClient.regenerate(planId);
-      const plans = mergePlan(
-        state.plans.map((item) =>
-          item.duration === plan.duration && item.id !== plan.id ? { ...item, isActive: false } : item,
-        ),
-        plan,
-      );
-      emit({
-        ...state,
-        plans,
-        activePlan: chooseActive(plans),
-        hydrated: true,
-        generating: false,
-        generatingDuration: null,
-      });
-      return plan;
+      return completeGeneration(plan);
     } catch (error) {
-      patch({ generating: false, generatingDuration: null });
-      throw error;
+      return failGeneration(error);
+    }
+  },
+
+  async refresh(planId: string, input: RefreshNutritionPlanInput): Promise<NutritionPlanRecord> {
+    if (state.generating) throw new Error("Nutrition plan generation is already in progress.");
+    const source = state.plans.find((item) => item.id === planId) ?? state.activePlan;
+    if (!source || !isSupportedNutritionPlanDuration(source.duration)) {
+      throw new Error("This nutrition plan duration is no longer supported.");
+    }
+    patch({ generating: true, generatingDuration: source.duration });
+    try {
+      const { plan } = await nutritionPlanClient.refresh(planId, input);
+      return completeGeneration(plan);
+    } catch (error) {
+      return failGeneration(error);
+    }
+  },
+
+  async extend(
+    planId: string,
+    duration: SupportedNutritionPlanDuration,
+  ): Promise<NutritionPlanRecord> {
+    if (state.generating) throw new Error("Nutrition plan generation is already in progress.");
+    patch({ generating: true, generatingDuration: duration });
+    try {
+      const { plan } = await nutritionPlanClient.extend(planId, duration);
+      return completeGeneration(plan);
+    } catch (error) {
+      return failGeneration(error);
     }
   },
 

@@ -122,7 +122,7 @@ function number(value: number): string {
 function planError(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.code === "SUBSCRIPTION_REQUIRED") {
-      return "Yeni öğün planı oluşturma hakkın için uygun abonelik gerekiyor.";
+      return "Bu plan yönetimi özelliği Premium ve Premium Plus kullanıcıları içindir.";
     }
     if (error.code === "NUTRITION_PLAN_INCOMPLETE") {
       return "Planın tüm günleri güvenilir şekilde oluşturulamadı. Lütfen tekrar dene.";
@@ -131,7 +131,7 @@ function planError(error: unknown): string {
       return "Öğün planı oluşturma limitine ulaştın. Daha sonra tekrar deneyebilirsin.";
     }
   }
-  return "Öğün planı oluşturulamadı. Lütfen tekrar dene.";
+  return "Öğün planı işlemi tamamlanamadı. Lütfen tekrar dene.";
 }
 
 function MealBlock({
@@ -212,23 +212,28 @@ function DayCard({
   day,
   open,
   today,
+  generating,
   deviations,
   deviationsLoading,
   onCreateDeviation,
   onDeleteDeviation,
+  onRefreshDay,
 }: {
   plan: NutritionPlanRecord;
   dayNumber: number;
   day: DailyPlan;
   open: boolean;
   today: number;
+  generating: boolean;
   deviations: NutritionPlanDeviationRecord[];
   deviationsLoading: boolean;
   onCreateDeviation(input: CreateNutritionPlanDeviationInput): Promise<NutritionPlanDeviationRecord>;
   onDeleteDeviation(deviationId: string): Promise<void>;
+  onRefreshDay(dayNumber: number): Promise<void>;
 }) {
   const dayDeviations = deviations.filter((item) => item.dayNumber === dayNumber);
   const planDayDateLabel = dateLabel(plan, dayNumber);
+  const canRefresh = dayNumber >= today;
 
   return (
     <details className="group rounded-2xl border border-border bg-card shadow-sm" open={open}>
@@ -238,9 +243,7 @@ function DayCard({
         </span>
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-semibold">{dayNumber}. Gün</span>
-          <span className="block truncate text-xs capitalize text-muted-foreground">
-            {planDayDateLabel}
-          </span>
+          <span className="block truncate text-xs capitalize text-muted-foreground">{planDayDateLabel}</span>
         </span>
         <span className="text-xs font-medium text-muted-foreground">~{number(day.totalCalories)} kcal</span>
         <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" aria-hidden="true" />
@@ -278,9 +281,24 @@ function DayCard({
 
         {day.notes?.trim() && <p className="text-xs leading-relaxed text-muted-foreground">{day.notes}</p>}
 
-        <div className="flex justify-end border-t border-border/60 pt-3">
+        <div className="flex flex-wrap justify-end gap-2 border-t border-border/60 pt-3">
+          {canRefresh && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={generating}
+              onClick={() => void onRefreshDay(dayNumber)}
+            >
+              <RefreshCw aria-hidden="true" />
+              Bu günü yenile
+            </Button>
+          )}
           <NutritionPlanDayShareButton dayNumber={dayNumber} dateLabel={planDayDateLabel} day={day} />
         </div>
+        {!canRefresh && (
+          <p className="text-right text-[11px] text-muted-foreground">Geçmiş günler plan geçmişini korumak için yenilenmez.</p>
+        )}
       </div>
     </details>
   );
@@ -289,45 +307,55 @@ function DayCard({
 function DurationOptions({
   generating,
   generatingDuration,
-  currentDuration,
+  currentPlan,
 }: {
   generating: boolean;
   generatingDuration: SupportedNutritionPlanDuration | null;
-  currentDuration?: NutritionPlanDuration;
+  currentPlan?: NutritionPlanRecord;
 }) {
   const create = async (duration: SupportedNutritionPlanDuration) => {
-    if (duration === currentDuration) return;
+    if (duration === currentPlan?.duration) return;
+    const currentDays = currentPlan ? safeContent(currentPlan)?.durationDays ?? DURATION_DAYS[currentPlan.duration] : 0;
+    const targetDays = DURATION_DAYS[duration];
+    const extending = Boolean(currentPlan && targetDays > currentDays);
+
     try {
-      await nutritionPlanStore.generate(duration);
-      toast.success(`${durationLabel(duration)} kişisel öğün planın hazırlandı`);
+      if (currentPlan && extending) {
+        await nutritionPlanStore.extend(currentPlan.id, duration);
+        toast.success(`Planın mevcut günler korunarak ${targetDays} güne uzatıldı`);
+      } else {
+        await nutritionPlanStore.generate(duration);
+        toast.success(`${durationLabel(duration)} kişisel öğün planın hazırlandı`);
+      }
     } catch (error) {
       toast.error(planError(error));
     }
   };
 
-  const durations = currentDuration
-    ? SUPPORTED_NUTRITION_PLAN_DURATIONS.filter((duration) => duration !== currentDuration)
+  const durations = currentPlan
+    ? SUPPORTED_NUTRITION_PLAN_DURATIONS.filter((duration) => duration !== currentPlan.duration)
     : SUPPORTED_NUTRITION_PLAN_DURATIONS;
+  const currentDays = currentPlan ? safeContent(currentPlan)?.durationDays ?? DURATION_DAYS[currentPlan.duration] : 0;
 
   return (
     <div className="grid gap-3 sm:grid-cols-3">
       {durations.map((duration) => {
         const selected = generatingDuration === duration;
+        const targetDays = DURATION_DAYS[duration];
+        const extending = Boolean(currentPlan && targetDays > currentDays);
         return (
           <Card key={duration}>
             <CardContent className="p-4">
               <CalendarDays className="size-5 text-primary" aria-hidden="true" />
               <h3 className="mt-3 font-semibold">{durationLabel(duration)} plan</h3>
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                Seçilen süre kadar gerçek plan günü; saat, porsiyon, kalori ve makro çerçevesiyle hazırlanır.
+                {extending
+                  ? `Mevcut ${currentDays} gün korunur, yalnızca ${targetDays - currentDays} yeni gün eklenir.`
+                  : "Daha kısa süre seçildiğinde bugünden başlayan yeni bir plan hazırlanır."}
               </p>
-              <Button
-                className="mt-4 w-full"
-                disabled={generating}
-                onClick={() => void create(duration)}
-              >
+              <Button className="mt-4 w-full" disabled={generating} onClick={() => void create(duration)}>
                 <Sparkles className={selected ? "animate-pulse" : ""} aria-hidden="true" />
-                {selected ? "Hazırlanıyor…" : "Planı oluştur"}
+                {selected ? "Hazırlanıyor…" : extending ? `${targetDays} güne uzat` : "Yeni plan oluştur"}
               </Button>
             </CardContent>
           </Card>
@@ -371,6 +399,7 @@ export function NutritionPlanView() {
   const { activePlan, hydrated, loading, generating, generatingDuration } = useNutritionPlan();
   const [weekIndex, setWeekIndex] = React.useState(0);
   const [showDurationOptions, setShowDurationOptions] = React.useState(false);
+  const [showRefreshOptions, setShowRefreshOptions] = React.useState(false);
   const [confirmDelete, setConfirmDelete] = React.useState(false);
   const [deletingPlan, setDeletingPlan] = React.useState(false);
   const {
@@ -391,6 +420,7 @@ export function NutritionPlanView() {
     const today = currentDayNumber(activePlan, durationDays);
     setWeekIndex(Math.floor((today - 1) / 7));
     setShowDurationOptions(false);
+    setShowRefreshOptions(false);
     setConfirmDelete(false);
   }, [activePlan]);
 
@@ -421,12 +451,29 @@ export function NutritionPlanView() {
   const weekStart = safeWeekIndex * 7 + 1;
   const weekEnd = Math.min(durationDays, weekStart + 6);
   const visibleDays = Array.from({ length: weekEnd - weekStart + 1 }, (_, index) => weekStart + index);
-  const regeneratingCurrent = generating && generatingDuration === activePlan.duration;
 
-  const regenerate = async () => {
+  const regenerateAll = async () => {
     try {
       await nutritionPlanStore.regenerate(activePlan.id);
-      toast.success("Öğün planın yenilendi");
+      toast.success("Bütün öğün planın yenilendi");
+    } catch (error) {
+      toast.error(planError(error));
+    }
+  };
+
+  const refreshFromToday = async () => {
+    try {
+      await nutritionPlanStore.refresh(activePlan.id, { mode: "FROM_DAY", dayNumber: today });
+      toast.success(`${today}. günden sonraki planın yenilendi`);
+    } catch (error) {
+      toast.error(planError(error));
+    }
+  };
+
+  const refreshDay = async (dayNumber: number) => {
+    try {
+      await nutritionPlanStore.refresh(activePlan.id, { mode: "DAY", dayNumber });
+      toast.success(`${dayNumber}. gün yenilendi`);
     } catch (error) {
       toast.error(planError(error));
     }
@@ -456,11 +503,38 @@ export function NutritionPlanView() {
               <h2 className="mt-1 text-xl font-bold">{durationLabel(activePlan.duration)} kişisel plan</h2>
               <p className="mt-1 text-xs text-muted-foreground">Sürüm {activePlan.version} · bugün {today}. gün</p>
             </div>
-            <Button variant="ghost" size="sm" disabled={generating || deletingPlan} onClick={() => void regenerate()}>
-              <RefreshCw className={regeneratingCurrent ? "animate-spin" : ""} aria-hidden="true" />
-              {regeneratingCurrent ? "Hazırlanıyor" : "Yenile"}
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={generating || deletingPlan}
+              aria-expanded={showRefreshOptions}
+              onClick={() => setShowRefreshOptions((value) => !value)}
+            >
+              <RefreshCw className={generating ? "animate-spin" : ""} aria-hidden="true" />
+              {generating ? "Hazırlanıyor" : "Yenile"}
             </Button>
           </div>
+
+          {showRefreshOptions && (
+            <div className="mt-4 rounded-2xl border border-amber-500/25 bg-background/80 p-4">
+              <p className="text-sm font-semibold">Şu anda planının {today}. günündesin.</p>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                Bütün planı yeniden oluşturmak mevcut plan devamlılığını değiştirebilir. Geçmiş günleri korumak için bugünden sonrasını yenilemen önerilir.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button size="sm" disabled={generating} onClick={() => void refreshFromToday()}>
+                  Bugünden sonrasını yenile
+                </Button>
+                <Button variant="outline" size="sm" disabled={generating} onClick={() => void regenerateAll()}>
+                  Bütün planı yenile
+                </Button>
+                <Button variant="ghost" size="sm" disabled={generating} onClick={() => setShowRefreshOptions(false)}>
+                  Vazgeç
+                </Button>
+              </div>
+              <p className="mt-2 text-[11px] text-muted-foreground">Kontrollü yenileme Premium ve Premium Plus özelliğidir.</p>
+            </div>
+          )}
 
           <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div className="rounded-xl bg-background/80 p-3">
@@ -500,9 +574,7 @@ export function NutritionPlanView() {
             <p className="mt-1 text-xs text-muted-foreground">Bir günü açarak saat, porsiyon, öğün ve Kaçamak ayrıntılarını yönetebilirsin.</p>
           </div>
           {safeWeekIndex !== currentWeek && (
-            <Button variant="outline" size="sm" onClick={() => setWeekIndex(currentWeek)}>
-              Bugün
-            </Button>
+            <Button variant="outline" size="sm" onClick={() => setWeekIndex(currentWeek)}>Bugün</Button>
           )}
         </div>
 
@@ -533,10 +605,12 @@ export function NutritionPlanView() {
                 day={day}
                 open={dayNumber === today}
                 today={today}
+                generating={generating}
                 deviations={deviations}
                 deviationsLoading={deviationsLoading}
                 onCreateDeviation={createDeviation}
                 onDeleteDeviation={deleteDeviation}
+                onRefreshDay={refreshDay}
               />
             );
           })}
@@ -565,7 +639,7 @@ export function NutritionPlanView() {
         <div>
           <h3 className="text-sm font-semibold">Plan yönetimi</h3>
           <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-            Plan süresini değiştirebilir veya artık kullanmadığın planı kaldırabilirsin.
+            Planını uzatabilir, daha kısa yeni bir plan başlatabilir veya artık kullanmadığın planı kaldırabilirsin.
           </p>
         </div>
 
@@ -604,22 +678,8 @@ export function NutritionPlanView() {
               Plan uygulamadaki aktif planlarından kaldırılır. Bu işlem yeni bir plan oluşturmaz ve Kaçamak geçmişini geriye dönük değiştirmez.
             </p>
             <div className="mt-3 flex flex-wrap justify-end gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={deletingPlan}
-                onClick={() => setConfirmDelete(false)}
-              >
-                Vazgeç
-              </Button>
-              <Button
-                variant="destructive"
-                size="sm"
-                isLoading={deletingPlan}
-                onClick={() => void removePlan()}
-              >
-                Planı sil
-              </Button>
+              <Button variant="outline" size="sm" disabled={deletingPlan} onClick={() => setConfirmDelete(false)}>Vazgeç</Button>
+              <Button variant="destructive" size="sm" isLoading={deletingPlan} onClick={() => void removePlan()}>Planı sil</Button>
             </div>
           </div>
         )}
@@ -627,12 +687,12 @@ export function NutritionPlanView() {
         {showDurationOptions && (
           <div className="mt-4 border-t border-border/70 pt-4">
             <p className="mb-3 text-xs leading-relaxed text-muted-foreground">
-              Yeni plan başarıyla hazırlanana kadar mevcut planın ekranda kalır. Mevcut plan geçmişte korunur.
+              Daha uzun plan seçersen mevcut günlerin bozulmadan korunur ve yalnızca yeni günler eklenir. Yeni plan başarıyla hazırlanana kadar mevcut plan ekranda kalır.
             </p>
             <DurationOptions
               generating={generating}
               generatingDuration={generatingDuration}
-              currentDuration={activePlan.duration}
+              currentPlan={activePlan}
             />
           </div>
         )}
