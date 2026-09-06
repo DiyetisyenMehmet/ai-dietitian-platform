@@ -1,0 +1,3 @@
+nutrition-plan-ui-redeploy-2026-09-06T18:18Z
+source=8a5cde3a82bf2d9db59bff8388caf7a252804627
+reason=force Cloud Run source rebuild after nutrition plan loading-state fix
