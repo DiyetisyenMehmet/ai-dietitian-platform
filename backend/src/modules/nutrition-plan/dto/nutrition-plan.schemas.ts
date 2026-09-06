@@ -11,9 +11,23 @@ import { SUPPORTED_PLAN_DURATIONS } from "../constants";
 /** Supported user-selectable plan durations. SIXTY_DAY is legacy read-only. */
 export const PLAN_DURATIONS = SUPPORTED_PLAN_DURATIONS;
 
-/** Body for generating a new plan. */
+const planStartDateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "startDate must use YYYY-MM-DD")
+  .refine((value) => {
+    const [year, month, day] = value.split("-").map(Number);
+    const parsed = new Date(Date.UTC(year, month - 1, day));
+    return (
+      parsed.getUTCFullYear() === year &&
+      parsed.getUTCMonth() === month - 1 &&
+      parsed.getUTCDate() === day
+    );
+  }, "startDate must be a valid calendar date");
+
+/** Body for generating a new plan. The web/native client sends its local date. */
 export const generatePlanSchema = z.object({
   duration: z.enum(PLAN_DURATIONS),
+  startDate: planStartDateSchema.optional(),
 });
 export type GeneratePlanInput = z.infer<typeof generatePlanSchema>;
 

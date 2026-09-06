@@ -33,6 +33,19 @@ function toCalculationGender(gender: string): CalculationGender {
   return "NEUTRAL";
 }
 
+function dateOnlyFromYmd(value?: string): Date {
+  if (value) {
+    const [year, month, day] = value.split("-").map(Number);
+    return new Date(Date.UTC(year, month - 1, day));
+  }
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+}
+
+function ymdFromDate(value: Date): string {
+  return value.toISOString().slice(0, 10);
+}
+
 async function buildProfile(userId: string): Promise<NutritionProfile> {
   const profile = await prisma.userProfile.findUnique({ where: { userId } });
   if (!profile) {
@@ -92,7 +105,11 @@ function buildCalendar(durationDays: number): CalendarDay[] {
 
 export const nutritionPlanService = {
   /** Generates exactly 7, 14, or 30 unique plan days according to the selected horizon. */
-  async generate(userId: string, duration: PlanDuration): Promise<NutritionPlan> {
+  async generate(
+    userId: string,
+    duration: PlanDuration,
+    startDateYmd?: string,
+  ): Promise<NutritionPlan> {
     const startedAt = Date.now();
     try {
       const tier = await aiUsageService.resolveTier(userId);
@@ -122,6 +139,7 @@ export const nutritionPlanService = {
       const water = calculateWater(profile);
       const mealTiming = calculateMealTiming(calories.goal);
       const durationDays = DURATION_DAYS[duration];
+      const startDate = dateOnlyFromYmd(startDateYmd);
 
       const generation = await mealGeneratorService.generate({
         goal: calories.goal,
@@ -156,6 +174,7 @@ export const nutritionPlanService = {
       const plan = await nutritionPlanRepository.createVersioned({
         userId,
         duration,
+        startDate,
         bloodTestAnalysisId: analysisId,
         calories,
         macros,
@@ -187,7 +206,7 @@ export const nutritionPlanService = {
 
   async regenerate(userId: string, planId: string): Promise<NutritionPlan> {
     const existing = await nutritionPlanRepository.findByIdForUser(planId, userId);
-    if (!existing) {
+    if (!existing || existing.deletedAt) {
       throw ApiError.notFound("Nutrition plan not found.");
     }
     if (!isSupportedPlanDuration(existing.duration)) {
@@ -195,12 +214,12 @@ export const nutritionPlanService = {
         "This legacy 60-day plan can no longer be regenerated. Create a 7, 14, or 30-day plan instead.",
       );
     }
-    return this.generate(userId, existing.duration);
+    return this.generate(userId, existing.duration, ymdFromDate(existing.startDate));
   },
 
   async getById(userId: string, planId: string): Promise<NutritionPlan> {
     const plan = await nutritionPlanRepository.findByIdForUser(planId, userId);
-    if (!plan) {
+    if (!plan || plan.deletedAt) {
       throw ApiError.notFound("Nutrition plan not found.");
     }
     return plan;

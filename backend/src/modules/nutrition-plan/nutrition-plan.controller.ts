@@ -30,8 +30,8 @@ export const nutritionPlanController = {
   /** Generates a new nutrition plan for the authenticated user. */
   generate: asyncHandler(async (req: Request, res: Response) => {
     const userId = requireUserId(req);
-    const { duration } = req.body as GeneratePlanInput;
-    const plan = await nutritionPlanService.generate(userId, duration);
+    const { duration, startDate } = req.body as GeneratePlanInput;
+    const plan = await nutritionPlanService.generate(userId, duration, startDate);
     sendCreated(res, { plan });
   }),
 

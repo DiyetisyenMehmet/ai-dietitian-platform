@@ -10,6 +10,8 @@ export type SupportedNutritionPlanDuration = (typeof SUPPORTED_NUTRITION_PLAN_DU
 /** SIXTY_DAY is retained only so historical API rows can still be read safely. */
 export type NutritionPlanDuration = SupportedNutritionPlanDuration | "SIXTY_DAY";
 export type NutritionPlanStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
+export type NutritionPlanDeviationScope = "FOOD" | "MEAL" | "DAY";
+export type NutritionPlanDeviationType = "SKIPPED" | "REPLACED" | "EXTRA" | "PORTION_CHANGED";
 
 export function isSupportedNutritionPlanDuration(
   value: NutritionPlanDuration,
@@ -79,6 +81,9 @@ export interface NutritionPlanRecord {
   id: string;
   createdAt: string;
   updatedAt: string;
+  /** Date-only value returned by the backend; optional during rolling deploy compatibility. */
+  startDate?: string;
+  deletedAt?: string | null;
   duration: NutritionPlanDuration;
   version: number;
   isActive: boolean;
@@ -102,7 +107,43 @@ export interface NutritionPlanRecord {
   processingTimeMs: number | null;
 }
 
+export interface NutritionPlanDeviationRecord {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  planId: string;
+  userId: string;
+  dayNumber: number;
+  mealIndex: number | null;
+  foodIndex: number | null;
+  scope: NutritionPlanDeviationScope;
+  type: NutritionPlanDeviationType;
+  plannedItemName: string | null;
+  actualItemName: string | null;
+  plannedPortion: string | null;
+  actualPortion: string | null;
+  note: string | null;
+}
+
+export interface CreateNutritionPlanDeviationInput {
+  dayNumber: number;
+  mealIndex?: number;
+  foodIndex?: number;
+  scope: NutritionPlanDeviationScope;
+  type: NutritionPlanDeviationType;
+  actualItemName?: string;
+  actualPortion?: string;
+  note?: string;
+}
+
 export type NutritionPlanSummary = NutritionPlanRecord;
+
+function localDateYmd(date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
 
 export const nutritionPlanClient = {
   list() {
@@ -118,7 +159,7 @@ export const nutritionPlanClient = {
       path: "/nutrition-plans/generate",
       method: "POST",
       auth: true,
-      body: JSON.stringify({ duration }),
+      body: JSON.stringify({ duration, startDate: localDateYmd() }),
     });
   },
 
@@ -134,6 +175,31 @@ export const nutritionPlanClient = {
     return apiRequest<{ plan: NutritionPlanRecord }>({
       path: `/nutrition-plans/${encodeURIComponent(planId)}`,
       method: "GET",
+      auth: true,
+    });
+  },
+
+  listDeviations(planId: string) {
+    return apiRequest<{ deviations: NutritionPlanDeviationRecord[] }>({
+      path: `/nutrition-plans/${encodeURIComponent(planId)}/deviations`,
+      method: "GET",
+      auth: true,
+    });
+  },
+
+  createDeviation(planId: string, input: CreateNutritionPlanDeviationInput) {
+    return apiRequest<{ deviation: NutritionPlanDeviationRecord }>({
+      path: `/nutrition-plans/${encodeURIComponent(planId)}/deviations`,
+      method: "POST",
+      auth: true,
+      body: JSON.stringify(input),
+    });
+  },
+
+  deleteDeviation(planId: string, deviationId: string) {
+    return apiRequest<void>({
+      path: `/nutrition-plans/${encodeURIComponent(planId)}/deviations/${encodeURIComponent(deviationId)}`,
+      method: "DELETE",
       auth: true,
     });
   },

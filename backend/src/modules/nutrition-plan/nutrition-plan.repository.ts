@@ -19,6 +19,7 @@ function toJson(value: unknown): Prisma.InputJsonValue {
 export interface CreatePlanData {
   userId: string;
   duration: NutritionPlanDuration;
+  startDate: Date;
   bloodTestAnalysisId: string | null;
   calories: CalorieCalculation;
   macros: MacroBreakdown;
@@ -40,14 +41,6 @@ export interface CreatePlanData {
  * plan for the same (user, duration) while retaining its row.
  */
 export const nutritionPlanRepository = {
-  /**
-   * Creates a new plan as the next version for its (user, duration), marking it
-   * active and deactivating any previously active plan in the same transaction.
-   * Prior plans are never deleted, so history is preserved.
-   *
-   * @param data - The fully computed plan data.
-   * @returns The persisted, active plan row.
-   */
   async createVersioned(data: CreatePlanData): Promise<NutritionPlan> {
     return prisma.$transaction(async (tx) => {
       const latest = await tx.nutritionPlan.findFirst({
@@ -57,9 +50,13 @@ export const nutritionPlanRepository = {
       });
       const nextVersion = (latest?.version ?? 0) + 1;
 
-      // Retain history: only flip the active flag on prior plans.
       await tx.nutritionPlan.updateMany({
-        where: { userId: data.userId, duration: data.duration, isActive: true },
+        where: {
+          userId: data.userId,
+          duration: data.duration,
+          isActive: true,
+          deletedAt: null,
+        },
         data: { isActive: false },
       });
 
@@ -67,6 +64,7 @@ export const nutritionPlanRepository = {
         data: {
           userId: data.userId,
           duration: data.duration,
+          startDate: data.startDate,
           version: nextVersion,
           isActive: true,
           status: "COMPLETED",
@@ -92,23 +90,23 @@ export const nutritionPlanRepository = {
     });
   },
 
-  /** Fetches a plan by id, scoped to the user. */
+  /** Fetches a plan by id, scoped to the user. Callers decide whether history may include deleted rows. */
   findByIdForUser(id: string, userId: string): Promise<NutritionPlan | null> {
     return prisma.nutritionPlan.findFirst({ where: { id, userId } });
   },
 
-  /** Lists all of a user's plans, newest first. */
+  /** Lists non-deleted plan history newest first. */
   listByUser(userId: string): Promise<NutritionPlan[]> {
     return prisma.nutritionPlan.findMany({
-      where: { userId },
+      where: { userId, deletedAt: null },
       orderBy: [{ createdAt: "desc" }],
     });
   },
 
-  /** Fetches the active plan for a user + duration, if any. */
+  /** Fetches the active non-deleted plan for a user + duration, if any. */
   findActive(userId: string, duration: NutritionPlanDuration): Promise<NutritionPlan | null> {
     return prisma.nutritionPlan.findFirst({
-      where: { userId, duration, isActive: true },
+      where: { userId, duration, isActive: true, deletedAt: null },
       orderBy: { version: "desc" },
     });
   },
