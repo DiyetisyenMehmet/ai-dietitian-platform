@@ -15,6 +15,10 @@ import type {
 } from "./dto/nutrition-plan.schemas";
 import { mealGeneratorService } from "./meal-generator/meal-generator.service";
 import { nutritionPlanAdaptationService } from "./nutrition-plan-adaptation.service";
+import {
+  buildRealLifePlanningContext,
+  findRealLifePlanViolations,
+} from "./nutrition-plan-realism";
 import { nutritionPlanRepository } from "./nutrition-plan.repository";
 import type {
   BloodTestImplicationInput,
@@ -23,6 +27,7 @@ import type {
   NutritionPlanContent,
   NutritionPlanGenerationInput,
   PlanDuration,
+  RealLifePlanningContext,
   WeightGoal,
 } from "./types";
 
@@ -129,6 +134,8 @@ async function generationInputFromPlan(
     usualSleepTime: context.usualSleepTime,
     preferredSnackTime: adaptation.preferredSnackTime,
   });
+  const sourceContent = contentFromPlan(plan);
+  const realLifePlanning = sourceContent.planningContext ?? buildRealLifePlanningContext();
 
   return {
     goal,
@@ -143,6 +150,7 @@ async function generationInputFromPlan(
     healthConditions: context.healthConditions,
     bloodTestImplications: context.bloodTestImplications,
     behaviorInsights: adaptation.behaviorInsights,
+    realLifePlanning,
     durationDays,
   };
 }
@@ -198,6 +206,19 @@ function withReplacedRange(
     next[startDayNumber - 1 + index] = day;
   });
   return next;
+}
+
+function assertRealLifeRevision(
+  cycle: DailyPlan[],
+  context: RealLifePlanningContext | undefined,
+): void {
+  const violations = findRealLifePlanViolations(cycle, 1, [], context);
+  if (violations.length === 0) return;
+
+  throw new ApiError(502, "The revised nutrition plan violates the real-life meal policy.", {
+    code: "NUTRITION_PLAN_REALISM_VALIDATION_FAILED",
+    isOperational: false,
+  });
 }
 
 function planDayYmd(plan: NutritionPlan, content: NutritionPlanContent, dayNumber: number): string {
@@ -278,12 +299,14 @@ export const nutritionPlanRevisionService = {
           isOperational: false,
         });
       }
+      assertRealLifeRevision(cycle, generationInput.realLifePlanning);
 
       const revisedContent: NutritionPlanContent = {
         ...content,
         cycleLengthDays: content.durationDays,
         cycle,
         calendar: normalizedCalendar(content),
+        planningContext: generationInput.realLifePlanning,
       };
 
       return persistAiRevision({
@@ -338,12 +361,14 @@ export const nutritionPlanRevisionService = {
           isOperational: false,
         });
       }
+      assertRealLifeRevision(cycle, generationInput.realLifePlanning);
 
       const extendedContent: NutritionPlanContent = {
         durationDays: targetDays,
         cycleLengthDays: targetDays,
         cycle,
         calendar: extendCalendar(content, targetDays),
+        planningContext: generationInput.realLifePlanning,
       };
 
       return persistAiRevision({
