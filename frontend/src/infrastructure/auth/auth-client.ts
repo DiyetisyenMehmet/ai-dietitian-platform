@@ -2,11 +2,6 @@ import { apiRequest } from "@/infrastructure/api/http-client";
 import type { AuthSession, AuthUser } from "@/domain/auth/types";
 import { AUTH_ENDPOINTS } from "@/infrastructure/auth/endpoints";
 
-/**
- * Infrastructure-level auth client. Translates auth intents into HTTP calls
- * using the shared, endpoint-agnostic http-client. Contains no UI or
- * validation logic. Responses are already envelope-unwrapped by the client.
- */
 export const authClient = {
   login(payload: { email: string; password: string }) {
     return apiRequest<AuthSession>({
@@ -24,25 +19,24 @@ export const authClient = {
     });
   },
 
-  /** Exchanges a refresh token for a new session (token rotation). */
-  refresh(payload: { refreshToken: string }) {
+  /** Rotates the HttpOnly refresh cookie and returns a fresh access session. */
+  refresh() {
     return apiRequest<AuthSession>({
       path: AUTH_ENDPOINTS.refresh,
       method: "POST",
-      body: JSON.stringify(payload),
+      body: JSON.stringify({}),
     });
   },
 
-  /** Revokes the given refresh token server-side. */
-  logout(payload: { refreshToken: string }) {
+  /** Revokes the refresh-cookie session server-side and clears the cookie. */
+  logout() {
     return apiRequest<{ message: string }>({
       path: AUTH_ENDPOINTS.logout,
       method: "POST",
-      body: JSON.stringify(payload),
+      body: JSON.stringify({}),
     });
   },
 
-  /** Fetches the authenticated user's profile using the access token. */
   me() {
     return apiRequest<{ user: AuthUser }>({
       path: AUTH_ENDPOINTS.me,

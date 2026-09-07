@@ -9,15 +9,13 @@ export interface AuthUser {
   role: UserRole;
   isActive: boolean;
   emailVerified: boolean;
-  /** Gate flag: the app stays locked until this is true. */
   onboardingCompleted: boolean;
   createdAt: string;
 }
 
-/** Token pair issued by the backend on register/login/refresh. */
+/** Browser-visible token data. The refresh token is HttpOnly-cookie only. */
 export interface AuthTokens {
   accessToken: string;
-  refreshToken: string;
   tokenType: "Bearer";
   expiresIn: string;
 }

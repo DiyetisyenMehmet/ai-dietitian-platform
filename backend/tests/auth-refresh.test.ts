@@ -42,7 +42,7 @@ test("register, duplicate register, login and wrong password behave deterministi
   const first = await register("auth-basic@example.com");
   assert.equal(first.user.email, "auth-basic@example.com");
   assert.ok(first.tokens.accessToken);
-  assert.ok(first.tokens.refreshToken);
+  assert.ok(first.refreshToken);
 
   await expectApiError(register("auth-basic@example.com"), 409, "already exists");
 
@@ -86,12 +86,22 @@ test("inactive user cannot log in", async () => {
   );
 });
 
+test("refresh DB expiry exactly follows the signed JWT exp claim", async () => {
+  const created = await register("refresh-expiry@example.com");
+  const claims = verifyRefreshToken(created.refreshToken);
+  assert.ok(claims.exp);
+  assert.equal(created.refreshExpiresAt.getTime(), (claims.exp as number) * 1000);
+
+  const row = await prisma.refreshToken.findUniqueOrThrow({ where: { id: claims.jti } });
+  assert.equal(row.expiresAt.getTime(), created.refreshExpiresAt.getTime());
+});
+
 test("normal refresh rotates old token and leaves exactly one active successor", async () => {
   const created = await register("refresh-normal@example.com");
-  const oldClaims = verifyRefreshToken(created.tokens.refreshToken);
+  const oldClaims = verifyRefreshToken(created.refreshToken);
 
-  const rotated = await authService.refresh(created.tokens.refreshToken, context);
-  const newClaims = verifyRefreshToken(rotated.tokens.refreshToken);
+  const rotated = await authService.refresh(created.refreshToken, context);
+  const newClaims = verifyRefreshToken(rotated.refreshToken);
   assert.notEqual(newClaims.jti, oldClaims.jti);
 
   const oldRow = await prisma.refreshToken.findUniqueOrThrow({ where: { id: oldClaims.jti } });
@@ -107,11 +117,11 @@ test("normal refresh rotates old token and leaves exactly one active successor",
 
 test("concurrent refresh requests produce one success and never two successors", async () => {
   const created = await register("refresh-race@example.com");
-  const oldClaims = verifyRefreshToken(created.tokens.refreshToken);
+  const oldClaims = verifyRefreshToken(created.refreshToken);
 
   const results = await Promise.allSettled([
-    authService.refresh(created.tokens.refreshToken, context),
-    authService.refresh(created.tokens.refreshToken, context),
+    authService.refresh(created.refreshToken, context),
+    authService.refresh(created.refreshToken, context),
   ]);
 
   const fulfilled = results.filter((result) => result.status === "fulfilled");
@@ -133,21 +143,16 @@ test("concurrent refresh requests produce one success and never two successors",
 
 test("reusing an older revoked refresh token triggers user-wide session revocation", async () => {
   const created = await register("refresh-reuse@example.com");
-  const oldClaims = verifyRefreshToken(created.tokens.refreshToken);
-  const rotated = await authService.refresh(created.tokens.refreshToken, context);
-  const successorClaims = verifyRefreshToken(rotated.tokens.refreshToken);
+  const oldClaims = verifyRefreshToken(created.refreshToken);
+  const rotated = await authService.refresh(created.refreshToken, context);
+  const successorClaims = verifyRefreshToken(rotated.refreshToken);
 
-  // Move the old revocation outside the very small in-flight concurrency grace.
   await prisma.refreshToken.update({
     where: { id: oldClaims.jti },
     data: { revokedAt: new Date(Date.now() - 10_000) },
   });
 
-  await expectApiError(
-    authService.refresh(created.tokens.refreshToken, context),
-    401,
-    "already been used",
-  );
+  await expectApiError(authService.refresh(created.refreshToken, context), 401, "already been used");
 
   const successor = await prisma.refreshToken.findUniqueOrThrow({
     where: { id: successorClaims.jti },
@@ -157,31 +162,31 @@ test("reusing an older revoked refresh token triggers user-wide session revocati
 
 test("DB-expired refresh token is rejected without creating a successor", async () => {
   const created = await register("refresh-expired@example.com");
-  const claims = verifyRefreshToken(created.tokens.refreshToken);
+  const claims = verifyRefreshToken(created.refreshToken);
   await prisma.refreshToken.update({
     where: { id: claims.jti },
     data: { expiresAt: new Date(Date.now() - 1_000) },
   });
 
-  await expectApiError(authService.refresh(created.tokens.refreshToken, context), 401);
+  await expectApiError(authService.refresh(created.refreshToken, context), 401);
   assert.equal(await prisma.refreshToken.count({ where: { userId: created.user.id } }), 1);
 });
 
 test("refresh hash mismatch is rejected even when the JWT itself is valid", async () => {
   const created = await register("refresh-hash@example.com");
-  const claims = verifyRefreshToken(created.tokens.refreshToken);
+  const claims = verifyRefreshToken(created.refreshToken);
   await prisma.refreshToken.update({
     where: { id: claims.jti },
     data: { tokenHash: hashToken("different-raw-token") },
   });
 
-  await expectApiError(authService.refresh(created.tokens.refreshToken, context), 401);
+  await expectApiError(authService.refresh(created.refreshToken, context), 401);
   assert.equal(await prisma.refreshToken.count({ where: { userId: created.user.id } }), 1);
 });
 
 test("tampered refresh JWT is rejected", async () => {
   const created = await register("refresh-tampered@example.com");
-  const raw = created.tokens.refreshToken;
+  const raw = created.refreshToken;
   const tampered = `${raw.slice(0, -1)}${raw.endsWith("a") ? "b" : "a"}`;
 
   await expectApiError(authService.refresh(tampered, context), 401);
@@ -189,10 +194,10 @@ test("tampered refresh JWT is rejected", async () => {
 
 test("logout is idempotent and revokes the refresh record", async () => {
   const created = await register("logout@example.com");
-  const claims = verifyRefreshToken(created.tokens.refreshToken);
+  const claims = verifyRefreshToken(created.refreshToken);
 
-  await authService.logout(created.tokens.refreshToken);
-  await authService.logout(created.tokens.refreshToken);
+  await authService.logout(created.refreshToken);
+  await authService.logout(created.refreshToken);
 
   const row = await prisma.refreshToken.findUniqueOrThrow({ where: { id: claims.jti } });
   assert.ok(row.revokedAt);

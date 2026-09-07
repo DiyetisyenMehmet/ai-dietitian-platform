@@ -15,7 +15,6 @@ import {
 import { authRepository } from "./auth.repository";
 import type { LoginInput, RegisterInput } from "./auth.schemas";
 
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
 /**
  * A tiny replay grace only prevents a second in-flight request from revoking
  * the legitimate successor created milliseconds earlier. A replay outside this
@@ -42,16 +41,19 @@ export interface PublicUser {
   createdAt: string;
 }
 
+/** Browser-visible auth token data. Refresh tokens are intentionally excluded. */
 export interface AuthTokens {
   accessToken: string;
-  refreshToken: string;
   tokenType: "Bearer";
   expiresIn: string;
 }
 
+/** Internal service result. Controllers keep refresh-token fields out of JSON. */
 export interface AuthResult {
   user: PublicUser;
   tokens: AuthTokens;
+  refreshToken: string;
+  refreshExpiresAt: Date;
 }
 
 interface PreparedRefreshToken {
@@ -76,21 +78,34 @@ function toPublicUser(user: User): PublicUser {
   };
 }
 
+/**
+ * Creates a signed refresh token and derives the DB expiry directly from that
+ * token's verified `exp` claim. This makes JWT_REFRESH_TTL the single canonical
+ * TTL source and prevents JWT-vs-database expiry drift.
+ */
 function prepareRefreshToken(userId: string, context: SessionContext): PreparedRefreshToken {
   const id = crypto.randomUUID();
   const raw = signRefreshToken({ userId, tokenId: id });
+  const claims = verifyRefreshToken(raw);
+  if (!claims.exp) {
+    throw ApiError.internal("Refresh token expiry was not generated.");
+  }
+
   return {
     id,
     raw,
     tokenHash: hashToken(raw),
-    expiresAt: new Date(Date.now() + env.REFRESH_TOKEN_TTL_DAYS * MS_PER_DAY),
+    expiresAt: new Date(claims.exp * 1000),
     userAgent: context.userAgent ?? null,
     ipAddress: context.ipAddress ?? null,
   };
 }
 
 /** Creates and persists a new refresh token for login/register. */
-async function issueRefreshToken(userId: string, context: SessionContext): Promise<string> {
+async function issueRefreshToken(
+  userId: string,
+  context: SessionContext,
+): Promise<PreparedRefreshToken> {
   const prepared = prepareRefreshToken(userId, context);
   await authRepository.createRefreshToken({
     id: prepared.id,
@@ -100,17 +115,21 @@ async function issueRefreshToken(userId: string, context: SessionContext): Promi
     userAgent: prepared.userAgent,
     ipAddress: prepared.ipAddress,
   });
-  return prepared.raw;
+  return prepared;
 }
 
-async function issueTokens(user: User, context: SessionContext): Promise<AuthTokens> {
+async function issueTokens(user: User, context: SessionContext): Promise<AuthResult> {
   const accessToken = signAccessToken({ userId: user.id, email: user.email, role: user.role });
-  const refreshToken = await issueRefreshToken(user.id, context);
+  const refresh = await issueRefreshToken(user.id, context);
   return {
-    accessToken,
-    refreshToken,
-    tokenType: "Bearer",
-    expiresIn: env.JWT_ACCESS_TTL,
+    user: toPublicUser(user),
+    tokens: {
+      accessToken,
+      tokenType: "Bearer",
+      expiresIn: env.JWT_ACCESS_TTL,
+    },
+    refreshToken: refresh.raw,
+    refreshExpiresAt: refresh.expiresAt,
   };
 }
 
@@ -152,9 +171,8 @@ export const authService = {
         fullName: input.fullName,
       });
     } catch (error) {
-      // The pre-read is only an optimization for the common case. PostgreSQL's
-      // unique constraint remains the concurrency-safe source of truth when two
-      // registrations for the same normalized email race each other.
+      // PostgreSQL's unique constraint remains the concurrency-safe source of
+      // truth when two registrations for the same normalized email race.
       if (isUniqueConstraintError(error)) {
         throw ApiError.conflict("An account with this email already exists.");
       }
@@ -162,8 +180,7 @@ export const authService = {
     }
 
     logger.info({ userId: user.id }, "New user registered");
-    const tokens = await issueTokens(user, context);
-    return { user: toPublicUser(user), tokens };
+    return issueTokens(user, context);
   },
 
   /** Authenticates credentials and returns the user with a fresh token pair. */
@@ -187,8 +204,7 @@ export const authService = {
 
     await authRepository.updateLastLogin(user.id);
     logger.info({ userId: user.id }, "User logged in");
-    const tokens = await issueTokens(user, context);
-    return { user: toPublicUser(user), tokens };
+    return issueTokens(user, context);
   },
 
   /**
@@ -243,10 +259,11 @@ export const authService = {
       user: toPublicUser(user),
       tokens: {
         accessToken,
-        refreshToken: successor.raw,
         tokenType: "Bearer",
         expiresIn: env.JWT_ACCESS_TTL,
       },
+      refreshToken: successor.raw,
+      refreshExpiresAt: successor.expiresAt,
     };
   },
 
