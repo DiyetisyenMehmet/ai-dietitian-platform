@@ -11,6 +11,7 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
+    "test": "node --import tsx --test src/modules/nutrition-plan/calculations/meal-timing.test.ts src/modules/nutrition-plan/nutrition-plan-safety.test.ts src/modules/nutrition-plan/meal-generator/nutrition-target-validator.test.ts",
     "type-check": "tsc --noEmit",
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix",
