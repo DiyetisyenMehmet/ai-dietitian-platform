@@ -5,6 +5,7 @@ import * as React from "react";
 import { useNutritionPlan } from "@/application/health/nutrition-plan-store";
 import type { NutritionPlanRecord } from "@/infrastructure/nutrition/nutrition-plan-client";
 import { NutritionPlanReminders, type NutritionReminderEntry } from "@/presentation/components/meals/nutrition-plan-reminders";
+import { NutritionPlanShareButton } from "@/presentation/components/meals/nutrition-plan-share-button";
 import { NutritionPlanView } from "@/presentation/components/meals/nutrition-plan-view";
 
 function startDate(plan: NutritionPlanRecord): Date {
@@ -61,6 +62,24 @@ function reminderEntries(plan: NutritionPlanRecord): NutritionReminderEntry[] {
   return entries;
 }
 
+function shareableDays(plan: NutritionPlanRecord) {
+  const content = plan.dailyPlans;
+  if (!content?.cycle?.length) return [];
+  const formatter = new Intl.DateTimeFormat("tr-TR", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
+
+  return Array.from({ length: content.durationDays }, (_, index) => index + 1).flatMap((dayNumber) => {
+    const mapping = content.calendar?.find((item) => item.dayNumber === dayNumber);
+    const cycleIndex = mapping?.cycleIndex ?? ((dayNumber - 1) % content.cycle.length);
+    const day = content.cycle[cycleIndex];
+    if (!day) return [];
+    return [{ dayNumber, dateLabel: formatter.format(dateForDay(plan, dayNumber)), day }];
+  });
+}
+
 function completed(plan: NutritionPlanRecord): boolean {
   const days = plan.dailyPlans?.durationDays ?? 0;
   if (days <= 0) return true;
@@ -82,9 +101,16 @@ export function NutritionPlanExperience() {
     }
   }, [activePlan]);
 
+  const days = activePlan?.duration === "SIXTY_DAY" ? [] : activePlan ? shareableDays(activePlan) : [];
+
   return (
     <div className="space-y-5">
       <NutritionPlanView />
+      {activePlan && days.length > 0 && (
+        <div className="flex justify-end">
+          <NutritionPlanShareButton durationDays={activePlan.dailyPlans?.durationDays ?? days.length} days={days} />
+        </div>
+      )}
       {activePlan && (
         <NutritionPlanReminders
           entries={reminderEntries(activePlan)}
