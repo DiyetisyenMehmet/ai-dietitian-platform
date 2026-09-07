@@ -13,6 +13,7 @@ import { calculateWater } from "./calculations/water-calculator";
 import { DURATION_DAYS, isSupportedPlanDuration } from "./constants";
 import { mealGeneratorService } from "./meal-generator/meal-generator.service";
 import { nutritionPlanAdaptationService } from "./nutrition-plan-adaptation.service";
+import { buildRealLifePlanningContext } from "./nutrition-plan-realism";
 import { nutritionPlanRepository } from "./nutrition-plan.repository";
 import { assessNutritionPlanSafety } from "./nutrition-plan-safety";
 import type {
@@ -129,6 +130,7 @@ export const nutritionPlanService = {
     userId: string,
     duration: PlanDuration,
     startDateYmd?: string,
+    pantryText?: string,
   ): Promise<NutritionPlan> {
     const startedAt = Date.now();
     try {
@@ -172,6 +174,7 @@ export const nutritionPlanService = {
       });
       const durationDays = DURATION_DAYS[duration];
       const startDate = dateOnlyFromYmd(startDateYmd);
+      const realLifePlanning = buildRealLifePlanningContext(pantryText);
 
       const generation = await mealGeneratorService.generate({
         goal: calories.goal,
@@ -186,6 +189,7 @@ export const nutritionPlanService = {
         healthConditions: profile.healthConditions,
         bloodTestImplications: implications,
         behaviorInsights: adaptation.behaviorInsights,
+        realLifePlanning,
         durationDays,
       });
 
@@ -202,6 +206,7 @@ export const nutritionPlanService = {
         cycleLengthDays: cycle.length,
         cycle,
         calendar: buildCalendar(durationDays),
+        planningContext: realLifePlanning,
       };
 
       const plan = await nutritionPlanRepository.createVersioned({
@@ -247,7 +252,13 @@ export const nutritionPlanService = {
         "This legacy 60-day plan can no longer be regenerated. Create a 7, 14, or 30-day plan instead.",
       );
     }
-    return this.generate(userId, existing.duration, ymdFromDate(existing.startDate));
+    const content = existing.dailyPlans as unknown as NutritionPlanContent;
+    return this.generate(
+      userId,
+      existing.duration,
+      ymdFromDate(existing.startDate),
+      content?.planningContext?.pantryText,
+    );
   },
 
   async getById(userId: string, planId: string): Promise<NutritionPlan> {
