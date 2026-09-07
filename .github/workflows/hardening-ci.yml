@@ -76,6 +76,41 @@ jobs:
           NEXT_PUBLIC_API_BASE_URL: https://example.invalid/api
           NEXT_PUBLIC_SITE_URL: https://example.invalid
 
+  android-native:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Install Android 16 SDK
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.6.0"
+      - name: Build current-SHA debug APK
+        run: gradle --no-daemon -p android :app:assembleDebug
+      - name: Stamp current-SHA APK
+        shell: bash
+        run: |
+          short_sha="${GITHUB_SHA::7}"
+          mkdir -p android/app/build/traceable-apk
+          cp android/app/build/outputs/apk/debug/app-debug.apk "android/app/build/traceable-apk/Diewish-hardening-${short_sha}.apk"
+          sha256sum "android/app/build/traceable-apk/Diewish-hardening-${short_sha}.apk" > "android/app/build/traceable-apk/Diewish-hardening-${short_sha}.sha256"
+      - name: Upload current-SHA debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: diewish-hardening-debug-apk-${{ github.run_number }}
+          path: android/app/build/traceable-apk/
+          if-no-files-found: error
+          retention-days: 14
+
   browser-e2e:
     needs: [backend, frontend]
     runs-on: ubuntu-latest
@@ -119,7 +154,6 @@ jobs:
           cache-dependency-path: |
             backend/package-lock.json
             frontend/package-lock.json
-
       - name: Prepare backend
         working-directory: backend
         run: |
@@ -127,13 +161,11 @@ jobs:
           npx prisma generate
           npx prisma migrate deploy
           npm run build
-
       - name: Start backend
         working-directory: backend
         run: |
           npm start > /tmp/diewish-backend.log 2>&1 &
           echo $! > /tmp/diewish-backend.pid
-
       - name: Wait for backend
         run: |
           for attempt in {1..30}; do
@@ -144,7 +176,6 @@ jobs:
           done
           cat /tmp/diewish-backend.log
           exit 1
-
       - name: Prepare frontend and Chromium
         working-directory: frontend
         run: |
@@ -152,13 +183,11 @@ jobs:
           npm install --no-save --package-lock=false @playwright/test@1.55.0
           npx playwright install --with-deps chromium
           npm run build
-
       - name: Start frontend
         working-directory: frontend
         run: |
           npm start -- -H 127.0.0.1 -p 3000 > /tmp/diewish-frontend.log 2>&1 &
           echo $! > /tmp/diewish-frontend.pid
-
       - name: Wait for frontend
         run: |
           for attempt in {1..45}; do
@@ -169,11 +198,9 @@ jobs:
           done
           cat /tmp/diewish-frontend.log
           exit 1
-
       - name: Run browser onboarding smoke
         working-directory: frontend
         run: npx playwright test e2e/onboarding-flow.spec.js --workers=1 --reporter=line
-
       - name: Print service logs on failure
         if: failure()
         run: |
@@ -181,7 +208,6 @@ jobs:
           cat /tmp/diewish-backend.log || true
           echo "--- frontend ---"
           cat /tmp/diewish-frontend.log || true
-
       - name: Stop local services
         if: always()
         run: |
