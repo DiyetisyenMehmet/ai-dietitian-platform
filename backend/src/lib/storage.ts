@@ -1,7 +1,7 @@
-import { createReadStream, createWriteStream } from "node:fs";
-import { mkdir, rm, stat } from "node:fs/promises";
+import crypto from "node:crypto";
+import { createReadStream } from "node:fs";
+import { link, mkdir, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
 
 import { env } from "../config/env";
@@ -35,7 +35,7 @@ export interface PutObjectInput extends StoredObjectRef {
   contentType: string;
 }
 
-/** Result of reading an object from storage. */
+/** Result of reading an object. */
 export interface GetObjectResult {
   stream: NodeJS.ReadableStream;
   contentType?: string;
@@ -46,7 +46,7 @@ export interface GetObjectResult {
 export interface StorageProvider {
   /** Short backend identifier persisted alongside the object reference. */
   readonly name: string;
-  /** Writes (or overwrites) an object. */
+  /** Writes a new object. Providers must not silently overwrite existing data. */
   put(input: PutObjectInput): Promise<StoredObjectRef>;
   /** Opens an object for reads. */
   get(ref: StoredObjectRef): Promise<GetObjectResult>;
@@ -56,10 +56,23 @@ export interface StorageProvider {
   delete(ref: StoredObjectRef): Promise<void>;
 }
 
+export type StorageErrorCode = "INVALID_REF" | "NOT_FOUND" | "CONFLICT" | "IO_ERROR";
+
+/** Sanitized storage-layer error; never includes an absolute filesystem path. */
+export class StorageError extends Error {
+  constructor(
+    readonly code: StorageErrorCode,
+    message: string,
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
+    this.name = "StorageError";
+  }
+}
+
 /**
- * Sanitizes a namespace/key segment so it can never escape the storage root or
- * inject arbitrary object-name components. Only a conservative character set
- * and explicit slash separators are preserved.
+ * Sanitizes a GCS object-name segment. GCS object names cannot escape a local
+ * filesystem root, but we still keep object names conservative and predictable.
  */
 function safeSegment(segment: string): string {
   return segment
@@ -70,7 +83,7 @@ function safeSegment(segment: string): string {
 }
 
 /** Local-disk storage backend rooted at `STORAGE_LOCAL_ROOT`. */
-class LocalStorageProvider implements StorageProvider {
+export class LocalStorageProvider implements StorageProvider {
   public readonly name = "local";
   private readonly root: string;
 
@@ -78,23 +91,81 @@ class LocalStorageProvider implements StorageProvider {
     this.root = path.resolve(root);
   }
 
+  /**
+   * Reject unsafe refs rather than rewriting them. Rewriting traversal or an
+   * absolute path into a different valid key can create aliasing and overwrite
+   * surprises; a storage reference must resolve exactly as supplied.
+   */
+  private safeSegments(value: string, label: "namespace" | "key"): string[] {
+    const trimmed = value.trim();
+    if (
+      !trimmed ||
+      trimmed.includes("\0") ||
+      path.isAbsolute(trimmed) ||
+      path.win32.isAbsolute(trimmed)
+    ) {
+      throw new StorageError("INVALID_REF", `Invalid storage ${label}.`);
+    }
+
+    const segments = trimmed.replace(/\\/g, "/").split("/");
+    if (segments.some((segment) => !segment || segment === "." || segment === "..")) {
+      throw new StorageError("INVALID_REF", `Invalid storage ${label}.`);
+    }
+    return segments;
+  }
+
   private resolvePath(ref: StoredObjectRef): string {
-    const namespace = safeSegment(ref.namespace);
-    const key = safeSegment(ref.key);
-    return path.join(this.root, namespace, key);
+    const target = path.resolve(
+      this.root,
+      ...this.safeSegments(ref.namespace, "namespace"),
+      ...this.safeSegments(ref.key, "key"),
+    );
+    const rootPrefix = `${this.root}${path.sep}`;
+    if (target !== this.root && !target.startsWith(rootPrefix)) {
+      throw new StorageError("INVALID_REF", "Invalid storage object reference.");
+    }
+    return target;
   }
 
   async put(input: PutObjectInput): Promise<StoredObjectRef> {
-    const filePath = this.resolvePath(input);
-    await mkdir(path.dirname(filePath), { recursive: true });
-    await pipeline(Readable.from(input.body), createWriteStream(filePath));
-    return { namespace: input.namespace, key: input.key };
+    const target = this.resolvePath(input);
+    const directory = path.dirname(target);
+    await mkdir(directory, { recursive: true });
+
+    // Write beside the destination, then atomically claim the final name with a
+    // hard link. `link` fails with EEXIST, so concurrent writes never silently
+    // overwrite health-document bytes.
+    const temp = path.join(directory, `.tmp-${crypto.randomUUID()}`);
+    try {
+      await writeFile(temp, input.body, { flag: "wx" });
+      await link(temp, target);
+      await unlink(temp);
+      return { namespace: input.namespace, key: input.key };
+    } catch (error) {
+      await unlink(temp).catch(() => undefined);
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === "EEXIST") {
+        throw new StorageError("CONFLICT", "Storage object already exists.", { cause: error });
+      }
+      throw new StorageError("IO_ERROR", "Unable to store object.", { cause: error });
+    }
   }
 
   async get(ref: StoredObjectRef): Promise<GetObjectResult> {
-    const filePath = this.resolvePath(ref);
-    const info = await stat(filePath);
-    return { stream: createReadStream(filePath), sizeBytes: info.size };
+    const target = this.resolvePath(ref);
+    try {
+      const info = await stat(target);
+      if (!info.isFile()) {
+        throw new StorageError("NOT_FOUND", "Storage object not found.");
+      }
+      return { stream: createReadStream(target), sizeBytes: info.size };
+    } catch (error) {
+      if (error instanceof StorageError) throw error;
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        throw new StorageError("NOT_FOUND", "Storage object not found.");
+      }
+      throw new StorageError("IO_ERROR", "Unable to read storage object.", { cause: error });
+    }
   }
 
   async getBuffer(ref: StoredObjectRef): Promise<Buffer> {
@@ -107,8 +178,13 @@ class LocalStorageProvider implements StorageProvider {
   }
 
   async delete(ref: StoredObjectRef): Promise<void> {
-    const filePath = this.resolvePath(ref);
-    await rm(filePath, { force: true });
+    const target = this.resolvePath(ref);
+    try {
+      await unlink(target);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+      throw new StorageError("IO_ERROR", "Unable to delete storage object.", { cause: error });
+    }
   }
 }
 
