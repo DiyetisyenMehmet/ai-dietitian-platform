@@ -8,6 +8,7 @@ import { nutritionPlanHungerService } from "./nutrition-plan-hunger.service";
 import { nutritionPlanRevisionService } from "./nutrition-plan-revision.service";
 import { nutritionPlanService } from "./nutrition-plan.service";
 import type {
+  AcceptHungerSnackInput,
   ActivePlanQuery,
   CreateDeviationInput,
   ExtendPlanInput,
@@ -76,6 +77,14 @@ export const nutritionPlanController = {
     const { id } = req.params as PlanIdParam;
     const input = req.body as HungerReportInput;
     const result = await nutritionPlanHungerService.report(userId, id, input);
+    sendCreated(res, { result });
+  }),
+
+  acceptHungerSnack: asyncHandler(async (req: Request, res: Response) => {
+    const userId = requireUserId(req);
+    const { id } = req.params as PlanIdParam;
+    const { eventId } = req.body as AcceptHungerSnackInput;
+    const result = await nutritionPlanHungerService.acceptSnack(userId, id, eventId);
     sendCreated(res, { result });
   }),
 
