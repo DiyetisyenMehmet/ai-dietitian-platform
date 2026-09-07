@@ -69,6 +69,11 @@ const stringList = z
   .default([])
   .transform((items) => Array.from(new Set(items)));
 
+/** Local wall-clock preference. Kept as HH:mm rather than a UTC timestamp. */
+const timeOfDaySchema = z
+  .string()
+  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Time must be in HH:mm format");
+
 export const onboardingSchema = z.object({
   fullName: z.string().trim().min(2, "Full name is required").max(120),
   dateOfBirth: dateOfBirthSchema,
@@ -93,6 +98,10 @@ export const onboardingSchema = z.object({
     .int("Water goal must be a whole number")
     .min(500, "Water goal seems too low")
     .max(6000, "Water goal seems too high"),
+  // Optional at API level so already-released clients and existing profile edits
+  // remain backward-compatible. The current onboarding UI requires both values.
+  usualWakeTime: timeOfDaySchema.optional(),
+  usualSleepTime: timeOfDaySchema.optional(),
 });
 
 export type OnboardingInput = z.infer<typeof onboardingSchema>;
