@@ -5,6 +5,7 @@ import { requireConsent } from "../../middleware/require-consent";
 import { validate } from "../../middleware/validate";
 import { nutritionPlanController } from "./nutrition-plan.controller";
 import {
+  acceptHungerSnackSchema,
   activePlanQuerySchema,
   createDeviationSchema,
   extendPlanSchema,
@@ -82,6 +83,15 @@ nutritionPlanRouter.post(
   requireConsent,
   validate({ params: planIdParamSchema, body: hungerReportSchema }),
   nutritionPlanController.reportHunger,
+);
+
+/** Explicitly records a hunger-coach snack only after the user confirms eating it. */
+nutritionPlanRouter.post(
+  "/:id/hunger/snack",
+  authenticate,
+  requireConsent,
+  validate({ params: planIdParamSchema, body: acceptHungerSnackSchema }),
+  nutritionPlanController.acceptHungerSnack,
 );
 
 nutritionPlanRouter.get(
