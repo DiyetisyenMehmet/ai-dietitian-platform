@@ -146,6 +146,17 @@ export interface RefreshNutritionPlanInput {
   dayNumber: number;
 }
 
+export interface AdaptiveSnackSuggestion {
+  name: string;
+  foods: Array<{ name: string; portion: string; calories: number }>;
+  calories: number;
+  proteinGrams: number;
+  carbsGrams: number;
+  fatGrams: number;
+  source: "SKIPPED_MEAL_BUDGET" | "PLANNED_SNACK_REALLOCATION";
+  sourceMealIndex: number | null;
+}
+
 export interface HungerDecisionResult {
   eventId: string;
   decision: HungerDecisionType;
@@ -156,6 +167,13 @@ export interface HungerDecisionResult {
   minutesToNextMeal: number | null;
   previousMealSkipped: boolean;
   suggestedSnackCalories: number | null;
+  suggestedSnack: AdaptiveSnackSuggestion | null;
+}
+
+export interface AcceptedHungerSnackResult {
+  recordId: string;
+  snack: AdaptiveSnackSuggestion;
+  alreadyRecorded: boolean;
 }
 
 export type NutritionPlanSummary = NutritionPlanRecord;
@@ -236,6 +254,15 @@ export const nutritionPlanClient = {
         localDate: localDateYmd(now),
         localTime: localTimeHm(now),
       }),
+    });
+  },
+
+  acceptHungerSnack(planId: string, eventId: string) {
+    return apiRequest<{ result: AcceptedHungerSnackResult }>({
+      path: `/nutrition-plans/${encodeURIComponent(planId)}/hunger/snack`,
+      method: "POST",
+      auth: true,
+      body: JSON.stringify({ eventId }),
     });
   },
 
