@@ -20,8 +20,10 @@ import { errorHandler } from "./middleware/error-handler";
 export function createApp(): Application {
   const app = express();
 
-  // Trust the reverse proxy (needed for correct client IPs behind a load balancer).
-  app.set("trust proxy", 1);
+  // Trust only the explicitly configured number of reverse-proxy hops. Setting
+  // this to 0 disables proxy trust and prevents X-Forwarded-For from affecting
+  // req.ip/rate limiting when the service is exposed directly.
+  app.set("trust proxy", env.TRUST_PROXY_HOPS === 0 ? false : env.TRUST_PROXY_HOPS);
   app.disable("x-powered-by");
 
   // Security headers.
@@ -58,11 +60,14 @@ export function createApp(): Application {
   // Rate limiting for the API surface.
   app.use(env.API_PREFIX, rateLimiter);
 
-  // API documentation (Swagger UI + raw JSON spec).
-  app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
-  app.get("/docs.json", (_req, res) => {
-    res.json(swaggerSpec);
-  });
+  // API documentation (Swagger UI + raw JSON spec) is runtime-configurable so
+  // production can keep internal API surface details private without code forks.
+  if (env.ENABLE_API_DOCS) {
+    app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+    app.get("/docs.json", (_req, res) => {
+      res.json(swaggerSpec);
+    });
+  }
 
   // Application routes.
   app.use(env.API_PREFIX, apiRouter);
