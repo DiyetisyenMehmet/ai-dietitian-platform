@@ -7,6 +7,7 @@ import {
   type DietaryPreference,
   type Gender,
   type OnboardingProfile,
+  type WorkScheduleType,
 } from "@/domain/onboarding/types";
 
 /**
@@ -33,6 +34,7 @@ const DIETARY_PREFERENCES = [
   "GLUTEN_FREE",
   "OTHER",
 ] as const;
+const WORK_SCHEDULE_TYPES = ["REGULAR", "VARIABLE_SHIFT", "NIGHT_SHIFT"] as const;
 
 /** Builds a required numeric-string validator within [min, max]. */
 function numericString(min: number, max: number, message: string) {
@@ -93,6 +95,9 @@ export const onboardingFormSchema = z.object({
     errorMap: () => ({ message: "Lütfen bir beslenme tercihi seçin." }),
   }),
   dailyWaterGoalMl: numericString(500, 6000, "Geçerli bir su hedefi girin (500-6000 ml)."),
+  workScheduleType: z.enum(WORK_SCHEDULE_TYPES, {
+    errorMap: () => ({ message: "Lütfen çalışma düzeninizi seçin." }),
+  }),
   usualWakeTime: timeOfDay,
   usualSleepTime: timeOfDay,
 });
@@ -113,6 +118,7 @@ export interface OnboardingPayload {
   dietaryPreference: DietaryPreference;
   dailyWaterGoalMl: number;
   /** Optional at transport level for backward compatibility with older clients. */
+  workScheduleType?: WorkScheduleType;
   usualWakeTime?: string;
   usualSleepTime?: string;
 }
@@ -133,6 +139,7 @@ export function toOnboardingPayload(values: OnboardingFormValues): OnboardingPay
     allergies: values.allergies.filter((v) => v !== NO_ALLERGY),
     dietaryPreference: values.dietaryPreference,
     dailyWaterGoalMl: Number(values.dailyWaterGoalMl),
+    workScheduleType: values.workScheduleType,
     usualWakeTime: values.usualWakeTime,
     usualSleepTime: values.usualSleepTime,
   };
