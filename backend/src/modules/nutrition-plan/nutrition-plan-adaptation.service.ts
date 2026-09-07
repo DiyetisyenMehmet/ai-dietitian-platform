@@ -1,5 +1,9 @@
 import { prisma } from "../../lib/prisma";
-import type { NutritionPlanContent } from "./types";
+import type { NutritionPlanContent, WorkScheduleType } from "./types";
+import {
+  allowsWallClockHungerAdaptation,
+  workScheduleBehaviorInsight,
+} from "./work-schedule-policy";
 
 const LOOKBACK_DAYS = 30;
 const MIN_RECURRING_HUNGER_EVENTS = 3;
@@ -117,12 +121,14 @@ function shiftedDaysFromContent(value: unknown): number {
 /**
  * Builds a bounded, deterministic behavior profile from nutrition-relevant
  * signals only. One-off behavior never changes timing: recurring hunger requires
- * evidence on at least three distinct days in the same two-hour window.
+ * evidence on at least three distinct days in the same two-hour window. Variable
+ * shift schedules deliberately disable fixed wall-clock hunger learning because
+ * the same clock time can represent different biological points across shifts.
  */
 export const nutritionPlanAdaptationService = {
   async build(userId: string): Promise<NutritionAdaptationProfile> {
     const since = new Date(Date.now() - LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
-    const [memories, rawDeviations, activePlan] = await Promise.all([
+    const [memories, rawDeviations, activePlan, profile] = await Promise.all([
       prisma.aiMemory.findMany({
         where: { userId, memoryType: "MEAL_HABITS", createdAt: { gte: since } },
         orderBy: { createdAt: "asc" },
@@ -146,8 +152,13 @@ export const nutritionPlanAdaptationService = {
         orderBy: { updatedAt: "desc" },
         select: { dailyPlans: true },
       }),
+      prisma.userProfile.findUnique({
+        where: { userId },
+        select: { workScheduleType: true },
+      }),
     ]);
 
+    const workScheduleType = (profile?.workScheduleType ?? null) as WorkScheduleType | null;
     const hungerEvents = memories.filter(
       (memory) => objectValue(memory.content)?.kind === "HUNGER_EVENT",
     );
@@ -155,12 +166,16 @@ export const nutritionPlanAdaptationService = {
       (memory) => objectValue(memory.content)?.kind === "ADDED_SNACK",
     ).length;
 
-    const deviations = [...new Map(
-      rawDeviations.map((item) => [uniqueDeviationKey(item), item] as const),
-    ).values()];
+    const deviations = [
+      ...new Map(rawDeviations.map((item) => [uniqueDeviationKey(item), item] as const)).values(),
+    ];
     const shiftedDays = shiftedDaysFromContent(activePlan?.dailyPlans);
-    const recurring = recurringHungerWindow(hungerEvents);
+    const recurring = allowsWallClockHungerAdaptation(workScheduleType)
+      ? recurringHungerWindow(hungerEvents)
+      : null;
     const behaviorInsights: string[] = [];
+    const scheduleInsight = workScheduleBehaviorInsight(workScheduleType);
+    if (scheduleInsight) behaviorInsights.push(scheduleInsight);
 
     if (recurring) {
       behaviorInsights.push(

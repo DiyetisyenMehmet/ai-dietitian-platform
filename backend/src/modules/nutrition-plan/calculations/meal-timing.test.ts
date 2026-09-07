@@ -34,6 +34,7 @@ test("keeps the established schedule when rhythm data is unavailable", () => {
 
 test("derives deterministic meal times from a regular wake and sleep window", () => {
   const result = calculateMealTiming("LOSE_WEIGHT", {
+    workScheduleType: "REGULAR",
     usualWakeTime: "07:00",
     usualSleepTime: "23:00",
   });
@@ -46,8 +47,9 @@ test("derives deterministic meal times from a regular wake and sleep window", ()
   }
 });
 
-test("supports overnight waking windows without forcing daytime meal times", () => {
+test("supports night-shift overnight waking windows without forcing daytime meal times", () => {
   const result = calculateMealTiming("LOSE_WEIGHT", {
+    workScheduleType: "NIGHT_SHIFT",
     usualWakeTime: "17:00",
     usualSleepTime: "09:00",
   });
@@ -59,6 +61,7 @@ test("supports overnight waking windows without forcing daytime meal times", () 
 
 test("moves only the snack toward an evidence-backed recurring hunger window", () => {
   const result = calculateMealTiming("LOSE_WEIGHT", {
+    workScheduleType: "REGULAR",
     usualWakeTime: "07:00",
     usualSleepTime: "23:00",
     preferredSnackTime: "15:00",
@@ -66,6 +69,17 @@ test("moves only the snack toward an evidence-backed recurring hunger window", (
 
   assert.deepEqual(result.slots.map((slot) => slot.time), ["08:15", "12:25", "15:00", "20:45"]);
   assert.equal(result.slots[2].name, "Snack");
+});
+
+test("variable shift ignores fixed wall-clock hunger adaptation", () => {
+  const result = calculateMealTiming("LOSE_WEIGHT", {
+    workScheduleType: "VARIABLE_SHIFT",
+    usualWakeTime: "07:00",
+    usualSleepTime: "23:00",
+    preferredSnackTime: "15:00",
+  });
+
+  assert.deepEqual(result.slots.map((slot) => slot.time), ["08:15", "12:25", "16:35", "20:45"]);
 });
 
 test("falls back instead of producing compressed meal times from implausible rhythm data", () => {

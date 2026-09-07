@@ -8,6 +8,7 @@ export type PlanDuration = "SEVEN_DAY" | "FOURTEEN_DAY" | "THIRTY_DAY";
 export type WeightGoal = "LOSE_WEIGHT" | "MAINTAIN_WEIGHT" | "GAIN_WEIGHT";
 export type CalculationGender = "MALE" | "FEMALE" | "NEUTRAL";
 export type ActivityLevel = "SEDENTARY" | "LIGHT" | "MODERATE" | "ACTIVE" | "VERY_ACTIVE";
+export type WorkScheduleType = "REGULAR" | "VARIABLE_SHIFT" | "NIGHT_SHIFT";
 
 export interface NutritionProfile {
   ageYears: number;
@@ -23,6 +24,8 @@ export interface NutritionProfile {
   /** Optional HH:mm daily rhythm fields; null for legacy profiles. */
   usualWakeTime?: string | null;
   usualSleepTime?: string | null;
+  /** Structured work rhythm used by deterministic timing/adaptation policy. */
+  workScheduleType?: WorkScheduleType | null;
 }
 
 export interface CalorieCalculation {

@@ -8,11 +8,18 @@
  * and only while minimum meal gaps remain intact.
  */
 
-import type { MealSlot, MealTimingRecommendation, WeightGoal } from "../types";
+import type {
+  MealSlot,
+  MealTimingRecommendation,
+  WeightGoal,
+  WorkScheduleType,
+} from "../types";
+import { allowsWallClockHungerAdaptation } from "../work-schedule-policy";
 
 interface DailyRhythm {
   usualWakeTime?: string | null;
   usualSleepTime?: string | null;
+  workScheduleType?: WorkScheduleType | null;
   /** Evidence-backed recurring hunger time, never a one-off user event. */
   preferredSnackTime?: string | null;
 }
@@ -167,7 +174,10 @@ export function calculateMealTiming(
   const baseSlots = times
     ? template.map((slot, index) => ({ ...slot, time: times[index] }))
     : fallback.map((slot) => ({ ...slot }));
-  const slots = applyRecurringHungerTiming(baseSlots, rhythm.preferredSnackTime);
+  const preferredSnackTime = allowsWallClockHungerAdaptation(rhythm.workScheduleType)
+    ? rhythm.preferredSnackTime
+    : null;
+  const slots = applyRecurringHungerTiming(baseSlots, preferredSnackTime);
 
   return { mealsPerDay: slots.length, slots };
 }

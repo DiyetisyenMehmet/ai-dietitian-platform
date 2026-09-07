@@ -24,11 +24,13 @@ import type {
   BloodTestImplicationInput,
   CalendarDay,
   DailyPlan,
+  MealTimingRecommendation,
   NutritionPlanContent,
   NutritionPlanGenerationInput,
   PlanDuration,
   RealLifePlanningContext,
   WeightGoal,
+  WorkScheduleType,
 } from "./types";
 
 function contentFromPlan(plan: NutritionPlan): NutritionPlanContent {
@@ -74,6 +76,7 @@ async function currentNutritionContext(userId: string): Promise<{
   healthConditions: string[];
   usualWakeTime: string | null;
   usualSleepTime: string | null;
+  workScheduleType: WorkScheduleType | null;
   bloodTestImplications: BloodTestImplicationInput[];
 }> {
   const profile = await prisma.userProfile.findUnique({
@@ -84,6 +87,7 @@ async function currentNutritionContext(userId: string): Promise<{
       healthConditions: true,
       usualWakeTime: true,
       usualSleepTime: true,
+      workScheduleType: true,
     },
   });
   if (!profile) {
@@ -115,6 +119,7 @@ async function currentNutritionContext(userId: string): Promise<{
     healthConditions: profile.healthConditions,
     usualWakeTime: profile.usualWakeTime,
     usualSleepTime: profile.usualSleepTime,
+    workScheduleType: profile.workScheduleType,
     bloodTestImplications,
   };
 }
@@ -132,6 +137,7 @@ async function generationInputFromPlan(
   const mealTiming = calculateMealTiming(goal, {
     usualWakeTime: context.usualWakeTime,
     usualSleepTime: context.usualSleepTime,
+    workScheduleType: context.workScheduleType,
     preferredSnackTime: adaptation.preferredSnackTime,
   });
   const sourceContent = contentFromPlan(plan);
@@ -247,6 +253,7 @@ async function persistAiRevision(params: {
   source: NutritionPlan;
   duration: PlanDuration;
   content: NutritionPlanContent;
+  mealTiming: MealTimingRecommendation;
   aiProvider: string;
   aiModel: string;
   processingTimeMs: number;
@@ -314,6 +321,7 @@ export const nutritionPlanRevisionService = {
         source,
         duration: source.duration,
         content: revisedContent,
+        mealTiming: generationInput.mealTiming,
         aiProvider: generated.aiProvider,
         aiModel: generated.aiModel,
         processingTimeMs: Date.now() - startedAt,
@@ -376,6 +384,7 @@ export const nutritionPlanRevisionService = {
         source,
         duration: input.duration,
         content: extendedContent,
+        mealTiming: generationInput.mealTiming,
         aiProvider: generated.aiProvider,
         aiModel: generated.aiModel,
         processingTimeMs: Date.now() - startedAt,

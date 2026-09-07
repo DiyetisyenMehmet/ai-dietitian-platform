@@ -45,6 +45,8 @@ export interface CreateRevisionVersionData {
   source: NutritionPlan;
   duration: NutritionPlanDuration;
   content: NutritionPlanContent;
+  /** New deterministic timing for AI-generated revisions; calendar-only shifts omit it. */
+  mealTiming?: MealTimingRecommendation;
   aiProvider: string | null;
   aiModel: string | null;
   processingTimeMs: number;
@@ -132,6 +134,7 @@ export const nutritionPlanRepository = {
         data: { isActive: false },
       });
 
+      const mealTiming = data.mealTiming ?? (data.source.mealTiming as unknown as MealTimingRecommendation);
       const plan = await tx.nutritionPlan.create({
         data: {
           userId: data.userId,
@@ -148,8 +151,8 @@ export const nutritionPlanRepository = {
           carbsGrams: data.source.carbsGrams,
           fatGrams: data.source.fatGrams,
           waterMl: data.source.waterMl,
-          mealsPerDay: data.source.mealsPerDay,
-          mealTiming: toJson(data.source.mealTiming),
+          mealsPerDay: mealTiming.mealsPerDay,
+          mealTiming: toJson(mealTiming),
           dailyPlans: toJson(data.content),
           explanations: toJson(data.source.explanations),
           recommendations: toJson(data.source.recommendations),

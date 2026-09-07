@@ -69,6 +69,7 @@ async function buildProfile(userId: string): Promise<NutritionProfile> {
     dailyWaterGoalMl: profile.dailyWaterGoalMl,
     usualWakeTime: profile.usualWakeTime,
     usualSleepTime: profile.usualSleepTime,
+    workScheduleType: profile.workScheduleType,
   };
 }
 
@@ -170,6 +171,7 @@ export const nutritionPlanService = {
       const mealTiming = calculateMealTiming(calories.goal, {
         usualWakeTime: profile.usualWakeTime,
         usualSleepTime: profile.usualSleepTime,
+        workScheduleType: profile.workScheduleType,
         preferredSnackTime: adaptation.preferredSnackTime,
       });
       const durationDays = DURATION_DAYS[duration];
