@@ -18,6 +18,8 @@ interface NutritionPlanState {
   loading: boolean;
   generating: boolean;
   generatingDuration: SupportedNutritionPlanDuration | null;
+  /** Optional household ingredients for the next generated plan. Never persisted in browser storage. */
+  pantryDraft: string;
 }
 
 type SupportedNutritionPlanRecord = NutritionPlanRecord & {
@@ -31,6 +33,7 @@ const EMPTY_STATE: NutritionPlanState = {
   loading: false,
   generating: false,
   generatingDuration: null,
+  pantryDraft: "",
 };
 
 let state: NutritionPlanState = { ...EMPTY_STATE };
@@ -67,6 +70,11 @@ function chooseActive(plans: NutritionPlanRecord[]): NutritionPlanRecord | null 
   );
 }
 
+function planPantryText(plan: NutritionPlanRecord | null): string | null {
+  const value = plan?.dailyPlans?.planningContext?.pantryText?.trim();
+  return value ? value.slice(0, 800) : null;
+}
+
 function mergeActivePlan(plans: NutritionPlanRecord[], plan: NutritionPlanRecord): NutritionPlanRecord[] {
   return [
     plan,
@@ -85,6 +93,7 @@ function completeGeneration(plan: NutritionPlanRecord): NutritionPlanRecord {
     hydrated: true,
     generating: false,
     generatingDuration: null,
+    pantryDraft: planPantryText(plan) ?? state.pantryDraft,
   });
   return plan;
 }
@@ -108,17 +117,28 @@ export const nutritionPlanStore = {
     try {
       const { plans } = await nutritionPlanClient.list();
       const activePlan = chooseActive(plans);
-      emit({ ...state, plans, activePlan, hydrated: true, loading: false });
+      emit({
+        ...state,
+        plans,
+        activePlan,
+        hydrated: true,
+        loading: false,
+        pantryDraft: planPantryText(activePlan) ?? state.pantryDraft,
+      });
       return activePlan;
     } catch {
-      emit({ ...EMPTY_STATE, hydrated: true });
+      emit({ ...EMPTY_STATE, pantryDraft: state.pantryDraft, hydrated: true });
       return null;
     }
   },
 
+  setPantryDraft(value: string): void {
+    patch({ pantryDraft: value.slice(0, 800) });
+  },
+
   async generate(
     duration: SupportedNutritionPlanDuration,
-    pantryText?: string,
+    pantryText = state.pantryDraft,
   ): Promise<NutritionPlanRecord> {
     if (state.generating) throw new Error("Nutrition plan generation is already in progress.");
     patch({ generating: true, generatingDuration: duration });
