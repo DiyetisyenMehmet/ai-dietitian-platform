@@ -72,6 +72,14 @@ export const hungerReportSchema = z
   .strict();
 export type HungerReportInput = z.infer<typeof hungerReportSchema>;
 
+/** Explicit confirmation that the user actually consumed a suggested snack. */
+export const acceptHungerSnackSchema = z
+  .object({
+    eventId: z.string().uuid("A valid hunger event id is required"),
+  })
+  .strict();
+export type AcceptHungerSnackInput = z.infer<typeof acceptHungerSnackSchema>;
+
 /** Route param: a nutrition-plan id (UUID). */
 export const planIdParamSchema = z.object({
   id: z.string().uuid("A valid nutrition plan id is required"),
