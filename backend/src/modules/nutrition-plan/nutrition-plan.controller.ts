@@ -36,8 +36,8 @@ function requireUserId(req: Request): string {
 export const nutritionPlanController = {
   generate: asyncHandler(async (req: Request, res: Response) => {
     const userId = requireUserId(req);
-    const { duration, startDate } = req.body as GeneratePlanInput;
-    const plan = await nutritionPlanService.generate(userId, duration, startDate);
+    const { duration, startDate, pantryText } = req.body as GeneratePlanInput;
+    const plan = await nutritionPlanService.generate(userId, duration, startDate, pantryText);
     sendCreated(res, { plan });
   }),
 
