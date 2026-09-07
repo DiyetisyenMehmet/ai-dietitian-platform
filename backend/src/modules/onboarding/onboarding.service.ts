@@ -19,6 +19,7 @@ export interface PublicProfile {
   dailyWaterGoalMl: number;
   usualWakeTime: string | null;
   usualSleepTime: string | null;
+  workScheduleType: UserProfile["workScheduleType"];
   updatedAt: string;
 }
 
@@ -48,6 +49,7 @@ function toPublicProfile(profile: UserProfile): PublicProfile {
     dailyWaterGoalMl: profile.dailyWaterGoalMl,
     usualWakeTime: profile.usualWakeTime,
     usualSleepTime: profile.usualSleepTime,
+    workScheduleType: profile.workScheduleType,
     updatedAt: profile.updatedAt.toISOString(),
   };
 }
