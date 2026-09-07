@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 
-import type { User } from "@prisma/client";
+import type { RefreshToken, User } from "@prisma/client";
 
 import { env } from "../../config/env";
 import { logger } from "../../lib/logger";
@@ -16,6 +16,13 @@ import { authRepository } from "./auth.repository";
 import type { LoginInput, RegisterInput } from "./auth.schemas";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
+/**
+ * A tiny replay grace only prevents a second in-flight request from revoking
+ * the legitimate successor created milliseconds earlier. A replay outside this
+ * window (or from clearly different session metadata) still triggers the
+ * existing user-wide reuse response.
+ */
+const CONCURRENT_REPLAY_GRACE_MS = 5_000;
 
 /** Contextual metadata captured for a session (best-effort, for auditing). */
 export interface SessionContext {
@@ -47,6 +54,15 @@ export interface AuthResult {
   tokens: AuthTokens;
 }
 
+interface PreparedRefreshToken {
+  id: string;
+  raw: string;
+  tokenHash: string;
+  expiresAt: Date;
+  userAgent: string | null;
+  ipAddress: string | null;
+}
+
 function toPublicUser(user: User): PublicUser {
   return {
     id: user.id,
@@ -60,26 +76,31 @@ function toPublicUser(user: User): PublicUser {
   };
 }
 
-/**
- * Creates and persists a new refresh token for a user, returning the signed
- * token string. The DB record id is generated up-front and used as the JWT
- * `jti`, so a single insert carries the correct hash (no placeholder row).
- */
-async function issueRefreshToken(userId: string, context: SessionContext): Promise<string> {
-  const tokenId = crypto.randomUUID();
-  const token = signRefreshToken({ userId, tokenId });
-  const expiresAt = new Date(Date.now() + env.REFRESH_TOKEN_TTL_DAYS * MS_PER_DAY);
-
-  await authRepository.createRefreshToken({
-    id: tokenId,
-    userId,
-    tokenHash: hashToken(token),
-    expiresAt,
+function prepareRefreshToken(userId: string, context: SessionContext): PreparedRefreshToken {
+  const id = crypto.randomUUID();
+  const raw = signRefreshToken({ userId, tokenId: id });
+  return {
+    id,
+    raw,
+    tokenHash: hashToken(raw),
+    expiresAt: new Date(Date.now() + env.REFRESH_TOKEN_TTL_DAYS * MS_PER_DAY),
     userAgent: context.userAgent ?? null,
     ipAddress: context.ipAddress ?? null,
-  });
+  };
+}
 
-  return token;
+/** Creates and persists a new refresh token for login/register. */
+async function issueRefreshToken(userId: string, context: SessionContext): Promise<string> {
+  const prepared = prepareRefreshToken(userId, context);
+  await authRepository.createRefreshToken({
+    id: prepared.id,
+    userId,
+    tokenHash: prepared.tokenHash,
+    expiresAt: prepared.expiresAt,
+    userAgent: prepared.userAgent,
+    ipAddress: prepared.ipAddress,
+  });
+  return prepared.raw;
 }
 
 async function issueTokens(user: User, context: SessionContext): Promise<AuthTokens> {
@@ -91,6 +112,23 @@ async function issueTokens(user: User, context: SessionContext): Promise<AuthTok
     tokenType: "Bearer",
     expiresIn: env.JWT_ACCESS_TTL,
   };
+}
+
+function isLikelyConcurrentReplay(
+  record: RefreshToken,
+  context: SessionContext,
+  now: Date,
+): boolean {
+  if (!record.revokedAt || !record.replacedById) return false;
+  const ageMs = now.getTime() - record.revokedAt.getTime();
+  if (ageMs < 0 || ageMs > CONCURRENT_REPLAY_GRACE_MS) return false;
+
+  const userAgent = context.userAgent ?? null;
+  const ipAddress = context.ipAddress ?? null;
+  const userAgentCompatible =
+    record.userAgent === userAgent || record.userAgent === null || userAgent === null;
+  const ipCompatible = record.ipAddress === ipAddress || record.ipAddress === null || ipAddress === null;
+  return userAgentCompatible && ipCompatible;
 }
 
 export const authService = {
@@ -117,11 +155,8 @@ export const authService = {
   async login(input: LoginInput, context: SessionContext): Promise<AuthResult> {
     const user = await authRepository.findUserByEmail(input.email);
 
-    // Uniform failure for unknown-email vs bad-password to avoid user enumeration.
     const invalid = ApiError.unauthorized("Invalid email or password.");
     if (!user) {
-      // Still perform a hash comparison against a dummy value to reduce timing
-      // signal, then fail.
       await verifyPassword(input.password, "$2a$12$" + "x".repeat(53));
       throw invalid;
     }
@@ -142,9 +177,11 @@ export const authService = {
   },
 
   /**
-   * Rotates a refresh token: validates it, revokes the presented token, and
-   * issues a brand-new pair. Detects reuse of an already-revoked token and, as
-   * a safety response, revokes the user's entire active token set.
+   * Rotates a refresh token with an atomic conditional claim. Exactly one
+   * concurrent request can revoke the old row and create its successor. A
+   * second in-flight request is rejected without destroying that legitimate
+   * successor; later/different-context replay retains the existing reuse policy
+   * and revokes all active sessions for the user.
    */
   async refresh(refreshTokenRaw: string, context: SessionContext): Promise<AuthResult> {
     let claims: { sub: string; jti: string };
@@ -154,46 +191,44 @@ export const authService = {
       throw ApiError.unauthorized("Invalid or expired refresh token.");
     }
 
-    const record = await authRepository.findRefreshTokenById(claims.jti);
-    if (!record || record.userId !== claims.sub) {
+    const now = new Date();
+    const successor = prepareRefreshToken(claims.sub, context);
+    const rotation = await authRepository.rotateRefreshToken({
+      tokenId: claims.jti,
+      userId: claims.sub,
+      presentedHash: hashToken(refreshTokenRaw),
+      now,
+      successor: {
+        id: successor.id,
+        tokenHash: successor.tokenHash,
+        expiresAt: successor.expiresAt,
+        userAgent: successor.userAgent,
+        ipAddress: successor.ipAddress,
+      },
+    });
+
+    if (rotation.status === "invalid") {
       throw ApiError.unauthorized("Invalid or expired refresh token.");
     }
 
-    // Reuse detection: a token already revoked is being presented again.
-    if (record.revokedAt) {
-      logger.warn(
-        { userId: record.userId, tokenId: record.id },
-        "Refresh token reuse detected — revoking all sessions",
-      );
-      await authRepository.revokeAllForUser(record.userId);
+    if (rotation.status === "already_claimed") {
+      if (!isLikelyConcurrentReplay(rotation.record, context, now)) {
+        logger.warn(
+          { userId: rotation.record.userId, tokenId: rotation.record.id },
+          "Refresh token reuse detected — revoking all sessions",
+        );
+        await authRepository.revokeAllForUser(rotation.record.userId);
+      }
       throw ApiError.unauthorized("Refresh token has already been used.");
     }
 
-    if (record.expiresAt.getTime() <= Date.now()) {
-      throw ApiError.unauthorized("Invalid or expired refresh token.");
-    }
-
-    // Defense-in-depth: the presented token must hash to the stored value.
-    if (hashToken(refreshTokenRaw) !== record.tokenHash) {
-      throw ApiError.unauthorized("Invalid or expired refresh token.");
-    }
-
-    const user = await authRepository.findUserById(record.userId);
-    if (!user || !user.isActive) {
-      throw ApiError.unauthorized("Invalid or expired refresh token.");
-    }
-
-    // Rotate: mint the successor first, then revoke the old one pointing to it.
+    const user = rotation.user;
     const accessToken = signAccessToken({ userId: user.id, email: user.email, role: user.role });
-    const newRefreshToken = await issueRefreshToken(user.id, context);
-    const successorId = verifyRefreshToken(newRefreshToken).jti;
-    await authRepository.revokeRefreshToken(record.id, successorId);
-
     return {
       user: toPublicUser(user),
       tokens: {
         accessToken,
-        refreshToken: newRefreshToken,
+        refreshToken: successor.raw,
         tokenType: "Bearer",
         expiresIn: env.JWT_ACCESS_TTL,
       },
