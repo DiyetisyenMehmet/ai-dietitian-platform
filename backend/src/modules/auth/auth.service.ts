@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 
-import type { RefreshToken, User } from "@prisma/client";
+import { Prisma, type RefreshToken, type User } from "@prisma/client";
 
 import { env } from "../../config/env";
 import { logger } from "../../lib/logger";
@@ -131,6 +131,10 @@ function isLikelyConcurrentReplay(
   return userAgentCompatible && ipCompatible;
 }
 
+function isUniqueConstraintError(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
+}
+
 export const authService = {
   /** Registers a new account and returns the user with an initial token pair. */
   async register(input: RegisterInput, context: SessionContext): Promise<AuthResult> {
@@ -140,11 +144,22 @@ export const authService = {
     }
 
     const passwordHash = await hashPassword(input.password);
-    const user = await authRepository.createUser({
-      email: input.email,
-      passwordHash,
-      fullName: input.fullName,
-    });
+    let user: User;
+    try {
+      user = await authRepository.createUser({
+        email: input.email,
+        passwordHash,
+        fullName: input.fullName,
+      });
+    } catch (error) {
+      // The pre-read is only an optimization for the common case. PostgreSQL's
+      // unique constraint remains the concurrency-safe source of truth when two
+      // registrations for the same normalized email race each other.
+      if (isUniqueConstraintError(error)) {
+        throw ApiError.conflict("An account with this email already exists.");
+      }
+      throw error;
+    }
 
     logger.info({ userId: user.id }, "New user registered");
     const tokens = await issueTokens(user, context);
