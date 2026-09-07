@@ -14,7 +14,10 @@ import { logger } from "../../../lib/logger";
 import { ApiError } from "../../../utils/api-error";
 import { getAIAdapter } from "../../blood-test-analysis/ai-adapter/ai-adapter.factory";
 import { MEAL_GENERATION_BATCH_DAYS, MEAL_GENERATION_CONCURRENCY } from "../constants";
-import { findRealLifePlanViolations } from "../nutrition-plan-realism";
+import {
+  buildRealLifeProviderInsights,
+  findRealLifePlanViolations,
+} from "../nutrition-plan-realism";
 import { findAllergenViolations } from "./allergen-validator";
 import { findNutritionTargetViolations } from "./nutrition-target-validator";
 import type {
@@ -249,6 +252,11 @@ async function generateBatch(
   logger.info(metadata, "Nutrition-plan batch generation started");
 
   try {
+    const realLifeInsights = buildRealLifeProviderInsights(input.realLifePlanning);
+    const providerInsights = [
+      ...realLifeInsights,
+      ...(input.behaviorInsights ?? []),
+    ].slice(0, 6);
     const output = await generateValidatedBatch(
       {
         goal: input.goal,
@@ -262,7 +270,7 @@ async function generateBatch(
         allergies: input.allergies,
         healthConditions: input.healthConditions,
         bloodTestImplications: input.bloodTestImplications,
-        behaviorInsights: input.behaviorInsights,
+        behaviorInsights: providerInsights,
         realLifePlanning: input.realLifePlanning,
         cycleLengthDays: spec.batchDays,
         planDurationDays: input.durationDays,
