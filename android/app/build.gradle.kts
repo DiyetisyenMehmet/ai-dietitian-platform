@@ -49,5 +49,6 @@ android {
 }
 
 dependencies {
+    implementation("androidx.core:core:1.17.0")
     implementation("com.android.billingclient:billing:9.1.0")
 }

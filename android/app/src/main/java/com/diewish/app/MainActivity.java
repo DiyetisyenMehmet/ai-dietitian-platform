@@ -54,6 +54,7 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
     private static final int FILE_CHOOSER_REQUEST = 4102;
     private static final String BILLING_BRIDGE = "DiewishBilling";
     private static final String REMINDER_BRIDGE = "DiewishReminders";
+    private static final String SHARE_BRIDGE = "DiewishShare";
 
     private WebView webView;
     private BillingClient billingClient;
@@ -145,6 +146,10 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
         webView.addJavascriptInterface(
             new DiewishReminderBridge(this, this::isTrustedPage),
             REMINDER_BRIDGE
+        );
+        webView.addJavascriptInterface(
+            new DiewishShareBridge(this, this::isTrustedPage),
+            SHARE_BRIDGE
         );
         webView.setWebViewClient(new TrustedWebViewClient());
         webView.setWebChromeClient(new DiewishChromeClient());
@@ -487,6 +492,7 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
         if (webView != null) {
             webView.removeJavascriptInterface(BILLING_BRIDGE);
             webView.removeJavascriptInterface(REMINDER_BRIDGE);
+            webView.removeJavascriptInterface(SHARE_BRIDGE);
             webView.destroy();
         }
         super.onDestroy();
