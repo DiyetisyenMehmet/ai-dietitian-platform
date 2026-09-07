@@ -1,5 +1,7 @@
 "use client";
 
+import * as React from "react";
+
 import { useNutritionPlan } from "@/application/health/nutrition-plan-store";
 import type { NutritionPlanRecord } from "@/infrastructure/nutrition/nutrition-plan-client";
 import { NutritionPlanReminders, type NutritionReminderEntry } from "@/presentation/components/meals/nutrition-plan-reminders";
@@ -70,6 +72,16 @@ function completed(plan: NutritionPlanRecord): boolean {
 /** Full professional plan experience: plan management plus optional local reminders. */
 export function NutritionPlanExperience() {
   const { activePlan } = useNutritionPlan();
+
+  React.useEffect(() => {
+    if (activePlan) return;
+    try {
+      window.DiewishReminders?.cancelAll();
+    } catch {
+      // An optional native capability must never break the web plan experience.
+    }
+  }, [activePlan]);
+
   return (
     <div className="space-y-5">
       <NutritionPlanView />
