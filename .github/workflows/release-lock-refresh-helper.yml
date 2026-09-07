@@ -1,0 +1,44 @@
+name: Release Lock Refresh Helper
+
+on:
+  push:
+    branches:
+      - work/release-hardening-5
+
+permissions:
+  contents: write
+
+jobs:
+  refresh-lockfiles:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: work/release-hardening-5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Refresh backend lockfile
+        shell: bash
+        run: |
+          cd backend
+          npm install --package-lock-only --ignore-scripts
+          npm audit fix --package-lock-only --ignore-scripts || true
+      - name: Refresh frontend lockfile
+        shell: bash
+        run: |
+          cd frontend
+          npm install --package-lock-only --ignore-scripts
+          npm audit fix --package-lock-only --ignore-scripts || true
+      - name: Commit lockfiles if changed
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/package-lock.json frontend/package-lock.json
+          if git diff --cached --quiet; then
+            echo "Lockfiles already current."
+            exit 0
+          fi
+          git commit -m "chore(deps): refresh security lockfiles"
+          git push origin HEAD:work/release-hardening-5

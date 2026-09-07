@@ -1,5 +1,5 @@
 import type { NextFunction, Request, RequestHandler, Response } from "express";
-import multer from "multer";
+import multer, { type Options as MulterOptions } from "multer";
 
 import { env } from "../../config/env";
 import { ApiError } from "../../utils/api-error";
@@ -10,18 +10,34 @@ export const UPLOAD_FIELD = "file";
 
 const maxBytes = env.BLOOD_TEST_MAX_FILE_SIZE_MB * 1024 * 1024;
 
+type MulterLimits = NonNullable<MulterOptions["limits"]> & {
+  /** Multer 2.3 runtime limit; @types/multer 2.2 has not published it yet. */
+  fieldArrayIndexLimit: number;
+};
+
+const uploadLimits: MulterLimits = {
+  fileSize: maxBytes,
+  files: 1,
+  fields: 2,
+  parts: 3,
+  fieldNameSize: 100,
+  fieldSize: 1024,
+  fieldArrayIndexLimit: 0,
+};
+
 /**
  * Multer instance for blood-test uploads.
  *
  * Files are buffered in memory (not written to a temp path) so the service can
  * sniff their real content type and hand the bytes directly to the storage
- * abstraction. A single file is accepted; size is capped; and an early filter
- * rejects obviously-wrong declared content types. The authoritative type check
- * is a magic-byte inspection performed later in the service.
+ * abstraction. A single file is accepted; size is capped; multipart metadata is
+ * intentionally bounded; and an early filter rejects obviously-wrong declared
+ * content types. The authoritative type check is a magic-byte inspection
+ * performed later in the service.
  */
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: maxBytes, files: 1 },
+  limits: uploadLimits,
   fileFilter: (_req, file, cb) => {
     if (!(ALLOWED_MIME_TYPES as readonly string[]).includes(file.mimetype)) {
       cb(ApiError.badRequest(`Unsupported file type. Allowed types: ${ALLOWED_TYPES_LABEL}.`));
