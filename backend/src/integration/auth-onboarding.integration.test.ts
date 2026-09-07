@@ -159,8 +159,10 @@ test("register -> consent gate -> onboarding -> persisted work-schedule update",
   expectFailure(blockedOnboarding.body);
   assert.equal(blockedOnboarding.body.error.code, "CONSENT_REQUIRED");
 
+  // PRIVACY_POLICY is an informational KVKK illumination notice, not an
+  // affirmative consent. Only the three documents marked mandatory by the
+  // legal module are grantable and required by the health-data write gate.
   const mandatoryConsents = [
-    "PRIVACY_POLICY",
     "TERMS_OF_SERVICE",
     "MEDICAL_DISCLAIMER",
     "KVKK_EXPLICIT_CONSENT",
