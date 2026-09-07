@@ -12,6 +12,7 @@ import { calculateMealTiming } from "./calculations/meal-timing";
 import { calculateWater } from "./calculations/water-calculator";
 import { DURATION_DAYS, isSupportedPlanDuration } from "./constants";
 import { mealGeneratorService } from "./meal-generator/meal-generator.service";
+import { nutritionPlanAdaptationService } from "./nutrition-plan-adaptation.service";
 import { nutritionPlanRepository } from "./nutrition-plan.repository";
 import { assessNutritionPlanSafety } from "./nutrition-plan-safety";
 import type {
@@ -156,7 +157,10 @@ export const nutritionPlanService = {
       // failures never consume a successful generation right.
       await aiUsageService.assertWithinQuota(userId, "NUTRITION_PLAN", tier);
 
-      const { analysisId, implications } = await loadBloodTestImplications(userId);
+      const [{ analysisId, implications }, adaptation] = await Promise.all([
+        loadBloodTestImplications(userId),
+        nutritionPlanAdaptationService.build(userId),
+      ]);
 
       const calories = calculateCalories(profile);
       const macros = calculateMacros(profile, calories.dailyCalories, calories.goal);
@@ -164,6 +168,7 @@ export const nutritionPlanService = {
       const mealTiming = calculateMealTiming(calories.goal, {
         usualWakeTime: profile.usualWakeTime,
         usualSleepTime: profile.usualSleepTime,
+        preferredSnackTime: adaptation.preferredSnackTime,
       });
       const durationDays = DURATION_DAYS[duration];
       const startDate = dateOnlyFromYmd(startDateYmd);
@@ -180,6 +185,7 @@ export const nutritionPlanService = {
         allergies: profile.allergies,
         healthConditions: profile.healthConditions,
         bloodTestImplications: implications,
+        behaviorInsights: adaptation.behaviorInsights,
         durationDays,
       });
 
