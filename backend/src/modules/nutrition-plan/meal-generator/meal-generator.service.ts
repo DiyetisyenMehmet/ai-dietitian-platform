@@ -4,8 +4,8 @@
  * Long plans are generated in bounded provider batches and assembled into the
  * exact 7/14/30-day horizon. A small concurrency cap prevents the synchronous
  * API request from serially waiting on every batch while keeping Vertex load
- * controlled. Every batch is count-, allergen-, and nutrition-target validated
- * before the final plan can be persisted.
+ * controlled. Every batch is count-, allergen-, nutrition-target-, and meal-
+ * structure validated before the final plan can be persisted.
  */
 
 import { logger } from "../../../lib/logger";
@@ -16,6 +16,7 @@ import { findAllergenViolations } from "./allergen-validator";
 import { findNutritionTargetViolations } from "./nutrition-target-validator";
 import type {
   DailyPlan,
+  MealTimingRecommendation,
   NutritionPlanAIInput,
   NutritionPlanAIOutput,
   NutritionPlanGenerationInput,
@@ -84,19 +85,47 @@ function recentSignatures(batches: GeneratedBatch[]): string[] {
     .filter(Boolean);
 }
 
+function hasInvalidMealStructure(
+  cycle: DailyPlan[],
+  mealTiming: MealTimingRecommendation,
+): boolean {
+  return cycle.some((day) => day.meals.length !== mealTiming.mealsPerDay);
+}
+
+/** Provider chooses foods/macros; backend remains authoritative for clock times. */
+function applyDeterministicMealTimes(
+  cycle: DailyPlan[],
+  mealTiming: MealTimingRecommendation,
+): DailyPlan[] {
+  return cycle.map((day) => ({
+    ...day,
+    meals: day.meals.map((meal, index) => ({
+      ...meal,
+      time: mealTiming.slots[index]?.time ?? meal.time,
+    })),
+  }));
+}
+
 async function generateValidatedBatch(input: NutritionPlanAIInput): Promise<NutritionPlanAIOutput> {
   const adapter = getAIAdapter();
 
   let output = await adapter.generateNutritionPlan(input);
   let allergenViolations = findAllergenViolations(output.cycle, input.allergies);
   let nutritionViolations = findNutritionTargetViolations(output.cycle, input);
-  const wrongDayCount = output.cycle.length !== input.cycleLengthDays;
+  let wrongDayCount = output.cycle.length !== input.cycleLengthDays;
+  let invalidMealStructure = hasInvalidMealStructure(output.cycle, input.mealTiming);
 
-  if (wrongDayCount || allergenViolations.length > 0 || nutritionViolations.length > 0) {
+  if (
+    wrongDayCount ||
+    invalidMealStructure ||
+    allergenViolations.length > 0 ||
+    nutritionViolations.length > 0
+  ) {
     logger.warn(
       {
         requestedDays: input.cycleLengthDays,
         receivedDays: output.cycle.length,
+        invalidMealStructure,
         allergenViolationCount: allergenViolations.length,
         nutritionViolationCount: nutritionViolations.length,
         startDayNumber: input.startDayNumber ?? 1,
@@ -106,9 +135,11 @@ async function generateValidatedBatch(input: NutritionPlanAIInput): Promise<Nutr
     output = await adapter.generateNutritionPlan(input);
     allergenViolations = findAllergenViolations(output.cycle, input.allergies);
     nutritionViolations = findNutritionTargetViolations(output.cycle, input);
+    wrongDayCount = output.cycle.length !== input.cycleLengthDays;
+    invalidMealStructure = hasInvalidMealStructure(output.cycle, input.mealTiming);
   }
 
-  if (output.cycle.length !== input.cycleLengthDays) {
+  if (wrongDayCount) {
     logger.error(
       {
         requestedDays: input.cycleLengthDays,
@@ -119,6 +150,20 @@ async function generateValidatedBatch(input: NutritionPlanAIInput): Promise<Nutr
     );
     throw new ApiError(502, "The nutrition-plan provider returned an incomplete plan.", {
       code: "NUTRITION_PLAN_INCOMPLETE",
+      isOperational: false,
+    });
+  }
+
+  if (invalidMealStructure) {
+    logger.error(
+      {
+        expectedMealsPerDay: input.mealTiming.mealsPerDay,
+        startDayNumber: input.startDayNumber ?? 1,
+      },
+      "Nutrition-plan provider returned an invalid meal structure after retry",
+    );
+    throw new ApiError(502, "The nutrition-plan provider returned an invalid meal structure.", {
+      code: "NUTRITION_PLAN_MEAL_STRUCTURE_MISMATCH",
       isOperational: false,
     });
   }
@@ -145,7 +190,8 @@ async function generateValidatedBatch(input: NutritionPlanAIInput): Promise<Nutr
     });
   }
 
-  return { ...output, cycle: relabelDays(output.cycle, input.startDayNumber ?? 1) };
+  const timedCycle = applyDeterministicMealTimes(output.cycle, input.mealTiming);
+  return { ...output, cycle: relabelDays(timedCycle, input.startDayNumber ?? 1) };
 }
 
 async function generateBatch(
