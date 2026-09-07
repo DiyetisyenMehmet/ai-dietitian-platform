@@ -48,11 +48,12 @@ import java.util.Map;
  * The existing responsive Diewish application remains the UI source of truth,
  * while security-sensitive Android capabilities are native. Google Play Billing
  * is never implemented in JavaScript: this Activity owns BillingClient and only
- * exposes a narrow bridge to the exact Diewish HTTPS origin.
+ * exposes narrow bridges to the exact Diewish HTTPS origin.
  */
 public final class MainActivity extends Activity implements PurchasesUpdatedListener {
     private static final int FILE_CHOOSER_REQUEST = 4102;
     private static final String BILLING_BRIDGE = "DiewishBilling";
+    private static final String REMINDER_BRIDGE = "DiewishReminders";
 
     private WebView webView;
     private BillingClient billingClient;
@@ -141,6 +142,10 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
         cookieManager.setAcceptThirdPartyCookies(webView, false);
 
         webView.addJavascriptInterface(new BillingBridge(), BILLING_BRIDGE);
+        webView.addJavascriptInterface(
+            new DiewishReminderBridge(this, this::isTrustedPage),
+            REMINDER_BRIDGE
+        );
         webView.setWebViewClient(new TrustedWebViewClient());
         webView.setWebChromeClient(new DiewishChromeClient());
     }
@@ -481,6 +486,7 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
         if (billingClient != null) billingClient.endConnection();
         if (webView != null) {
             webView.removeJavascriptInterface(BILLING_BRIDGE);
+            webView.removeJavascriptInterface(REMINDER_BRIDGE);
             webView.destroy();
         }
         super.onDestroy();
