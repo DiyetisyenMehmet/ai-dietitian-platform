@@ -3,12 +3,23 @@ import { z } from "zod";
 
 loadDotenv();
 
+const booleanFromEnv = z.preprocess((value) => {
+  if (typeof value !== "string") return value;
+  if (value.toLowerCase() === "true") return true;
+  if (value.toLowerCase() === "false") return false;
+  return value;
+}, z.boolean());
+
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().positive().default(4000),
 
   API_PREFIX: z.string().startsWith("/").default("/api"),
   CORS_ORIGIN: z.string().default("http://localhost:3000"),
+  // Number of trusted reverse-proxy hops. 0 disables proxy trust entirely.
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(10).default(1),
+  // API documentation can be disabled in production without changing code.
+  ENABLE_API_DOCS: booleanFromEnv.default(true),
 
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
 

@@ -20,14 +20,14 @@ import { errorHandler } from "./middleware/error-handler";
 export function createApp(): Application {
   const app = express();
 
-  // Trust the reverse proxy (needed for correct client IPs behind a load balancer).
-  app.set("trust proxy", 1);
+  // Trust only the explicitly configured number of reverse-proxy hops. Setting
+  // this to 0 disables proxy trust and prevents X-Forwarded-For from affecting
+  // req.ip/rate limiting when the service is exposed directly.
+  app.set("trust proxy", env.TRUST_PROXY_HOPS === 0 ? false : env.TRUST_PROXY_HOPS);
   app.disable("x-powered-by");
 
-  // Security headers.
   app.use(helmet());
 
-  // CORS — restricted to the configured frontend origin(s).
   app.use(
     cors({
       origin: corsOrigins,
@@ -35,30 +35,25 @@ export function createApp(): Application {
     }),
   );
 
-  // Response compression.
   app.use(compression());
 
-  // Body parsing with sane size limits.
   app.use(express.json({ limit: "1mb" }));
   app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
-  // Observability: correlation ID first, then request logging.
   app.use(correlationId);
   app.use(requestLogger);
 
-  // Rate limiting for the API surface.
   app.use(env.API_PREFIX, rateLimiter);
 
-  // API documentation (Swagger UI + raw JSON spec).
-  app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
-  app.get("/docs.json", (_req, res) => {
-    res.json(swaggerSpec);
-  });
+  if (env.ENABLE_API_DOCS) {
+    app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+    app.get("/docs.json", (_req, res) => {
+      res.json(swaggerSpec);
+    });
+  }
 
-  // Application routes.
   app.use(env.API_PREFIX, apiRouter);
 
-  // 404 for unmatched routes, then centralized error handling (registered last).
   app.use(notFoundHandler);
   app.use(errorHandler);
 
