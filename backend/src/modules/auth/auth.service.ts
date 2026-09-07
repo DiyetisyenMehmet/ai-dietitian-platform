@@ -15,21 +15,13 @@ import {
 import { authRepository } from "./auth.repository";
 import type { LoginInput, RegisterInput } from "./auth.schemas";
 
-/**
- * A tiny replay grace only prevents a second in-flight request from revoking
- * the legitimate successor created milliseconds earlier. A replay outside this
- * window (or from clearly different session metadata) still triggers the
- * existing user-wide reuse response.
- */
 const CONCURRENT_REPLAY_GRACE_MS = 5_000;
 
-/** Contextual metadata captured for a session (best-effort, for auditing). */
 export interface SessionContext {
   userAgent?: string | null;
   ipAddress?: string | null;
 }
 
-/** Public-safe representation of a user (never leaks the password hash). */
 export interface PublicUser {
   id: string;
   email: string;
@@ -41,14 +33,12 @@ export interface PublicUser {
   createdAt: string;
 }
 
-/** Browser-visible auth token data. Refresh tokens are intentionally excluded. */
 export interface AuthTokens {
   accessToken: string;
   tokenType: "Bearer";
   expiresIn: string;
 }
 
-/** Internal service result. Controllers keep refresh-token fields out of JSON. */
 export interface AuthResult {
   user: PublicUser;
   tokens: AuthTokens;
@@ -78,11 +68,6 @@ function toPublicUser(user: User): PublicUser {
   };
 }
 
-/**
- * Creates a signed refresh token and derives the DB expiry directly from that
- * token's verified `exp` claim. This makes JWT_REFRESH_TTL the single canonical
- * TTL source and prevents JWT-vs-database expiry drift.
- */
 function prepareRefreshToken(userId: string, context: SessionContext): PreparedRefreshToken {
   const id = crypto.randomUUID();
   const raw = signRefreshToken({ userId, tokenId: id });
@@ -101,7 +86,6 @@ function prepareRefreshToken(userId: string, context: SessionContext): PreparedR
   };
 }
 
-/** Creates and persists a new refresh token for login/register. */
 async function issueRefreshToken(
   userId: string,
   context: SessionContext,
@@ -136,10 +120,10 @@ async function issueTokens(user: User, context: SessionContext): Promise<AuthRes
 function isLikelyConcurrentReplay(
   record: RefreshToken,
   context: SessionContext,
-  now: Date,
+  observedAt: Date,
 ): boolean {
   if (!record.revokedAt || !record.replacedById) return false;
-  const ageMs = now.getTime() - record.revokedAt.getTime();
+  const ageMs = observedAt.getTime() - record.revokedAt.getTime();
   if (ageMs < 0 || ageMs > CONCURRENT_REPLAY_GRACE_MS) return false;
 
   const userAgent = context.userAgent ?? null;
@@ -155,7 +139,6 @@ function isUniqueConstraintError(error: unknown): boolean {
 }
 
 export const authService = {
-  /** Registers a new account and returns the user with an initial token pair. */
   async register(input: RegisterInput, context: SessionContext): Promise<AuthResult> {
     const existing = await authRepository.findUserByEmail(input.email);
     if (existing) {
@@ -171,8 +154,6 @@ export const authService = {
         fullName: input.fullName,
       });
     } catch (error) {
-      // PostgreSQL's unique constraint remains the concurrency-safe source of
-      // truth when two registrations for the same normalized email race.
       if (isUniqueConstraintError(error)) {
         throw ApiError.conflict("An account with this email already exists.");
       }
@@ -183,7 +164,6 @@ export const authService = {
     return issueTokens(user, context);
   },
 
-  /** Authenticates credentials and returns the user with a fresh token pair. */
   async login(input: LoginInput, context: SessionContext): Promise<AuthResult> {
     const user = await authRepository.findUserByEmail(input.email);
 
@@ -194,26 +174,14 @@ export const authService = {
     }
 
     const passwordOk = await verifyPassword(input.password, user.passwordHash);
-    if (!passwordOk) {
-      throw invalid;
-    }
-
-    if (!user.isActive) {
-      throw ApiError.forbidden("This account has been deactivated.");
-    }
+    if (!passwordOk) throw invalid;
+    if (!user.isActive) throw ApiError.forbidden("This account has been deactivated.");
 
     await authRepository.updateLastLogin(user.id);
     logger.info({ userId: user.id }, "User logged in");
     return issueTokens(user, context);
   },
 
-  /**
-   * Rotates a refresh token with an atomic conditional claim. Exactly one
-   * concurrent request can revoke the old row and create its successor. A
-   * second in-flight request is rejected without destroying that legitimate
-   * successor; later/different-context replay retains the existing reuse policy
-   * and revokes all active sessions for the user.
-   */
   async refresh(refreshTokenRaw: string, context: SessionContext): Promise<AuthResult> {
     let claims: { sub: string; jti: string };
     try {
@@ -222,13 +190,13 @@ export const authService = {
       throw ApiError.unauthorized("Invalid or expired refresh token.");
     }
 
-    const now = new Date();
+    const claimAt = new Date();
     const successor = prepareRefreshToken(claims.sub, context);
     const rotation = await authRepository.rotateRefreshToken({
       tokenId: claims.jti,
       userId: claims.sub,
       presentedHash: hashToken(refreshTokenRaw),
-      now,
+      now: claimAt,
       successor: {
         id: successor.id,
         tokenHash: successor.tokenHash,
@@ -243,7 +211,11 @@ export const authService = {
     }
 
     if (rotation.status === "already_claimed") {
-      if (!isLikelyConcurrentReplay(rotation.record, context, now)) {
+      // Use the observation time after the transaction, not the pre-claim clock.
+      // Otherwise a winner can set revokedAt a few ms after claimAt, producing a
+      // negative age and causing an ordinary concurrent loser to revoke the new session.
+      const observedAt = new Date();
+      if (!isLikelyConcurrentReplay(rotation.record, context, observedAt)) {
         logger.warn(
           { userId: rotation.record.userId, tokenId: rotation.record.id },
           "Refresh token reuse detected — revoking all sessions",
@@ -267,25 +239,18 @@ export const authService = {
     };
   },
 
-  /**
-   * Logs out by revoking the presented refresh token. Idempotent and quiet: an
-   * invalid/expired token is treated as already-logged-out rather than erroring.
-   */
   async logout(refreshTokenRaw: string): Promise<void> {
     try {
       const claims = verifyRefreshToken(refreshTokenRaw);
       await authRepository.revokeRefreshToken(claims.jti);
     } catch {
-      // Intentionally ignore — logout must not leak token validity.
+      // Logout is intentionally idempotent and does not reveal token validity.
     }
   },
 
-  /** Returns the public profile for an authenticated user id. */
   async getCurrentUser(userId: string): Promise<PublicUser> {
     const user = await authRepository.findUserById(userId);
-    if (!user) {
-      throw ApiError.unauthorized("Session is no longer valid.");
-    }
+    if (!user) throw ApiError.unauthorized("Session is no longer valid.");
     return toPublicUser(user);
   },
 };
