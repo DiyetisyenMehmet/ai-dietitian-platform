@@ -290,7 +290,7 @@ test("register -> consent gate -> onboarding -> persisted work-schedule update",
       loggedAt: new Date(Date.now() + 24 * 60 * 60_000).toISOString(),
     },
   });
-  assert.equal(futureWeight.status, 400);
+  assert.equal(futureWeight.status, 422);
   expectFailure(futureWeight.body);
 
   const weighIn = await apiRequest<WeightLogData>(baseUrl, "/api/tracking/weight", {
