@@ -90,6 +90,12 @@ enum DietaryPreference {
   OTHER
 }
 
+enum WorkScheduleType {
+  REGULAR
+  VARIABLE_SHIFT
+  NIGHT_SHIFT
+}
+
 model UserProfile {
   id                String            @id @default(uuid())
   userId            String            @unique
@@ -106,6 +112,7 @@ model UserProfile {
   dailyWaterGoalMl  Int
   usualWakeTime     String?
   usualSleepTime    String?
+  workScheduleType  WorkScheduleType?
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 
@@ -357,7 +364,6 @@ model NutritionPlanDeviation {
   id        String   @id @default(uuid())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
   userId String
   user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
   planId String

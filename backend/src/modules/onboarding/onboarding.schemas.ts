@@ -6,8 +6,8 @@ import { z } from "zod";
  * requests against `onboardingSchema` and the service consumes the inferred type.
  *
  * Enum members mirror the Prisma enums (Gender / ActivityLevel /
- * DietaryPreference) so the persistence layer receives values it can store
- * without translation.
+ * DietaryPreference / WorkScheduleType) so the persistence layer receives values
+ * it can store without translation.
  */
 
 const GENDERS = ["MALE", "FEMALE", "OTHER", "PREFER_NOT_TO_SAY"] as const;
@@ -23,6 +23,7 @@ const DIETARY_PREFERENCES = [
   "GLUTEN_FREE",
   "OTHER",
 ] as const;
+const WORK_SCHEDULE_TYPES = ["REGULAR", "VARIABLE_SHIFT", "NIGHT_SHIFT"] as const;
 
 /** Reasonable human bounds — guards against typos and abuse, not medical limits. */
 const MIN_AGE_YEARS = 13; // App Store / KVKK minimum age posture for V1.
@@ -102,6 +103,10 @@ export const onboardingSchema = z.object({
   // remain backward-compatible. The current onboarding UI requires both values.
   usualWakeTime: timeOfDaySchema.optional(),
   usualSleepTime: timeOfDaySchema.optional(),
+  // Legacy clients can omit this. New clients persist the user's broad work/shift
+  // pattern separately from clock times so a night worker is never treated as a
+  // conventional daytime schedule merely because their sleep crosses midnight.
+  workScheduleType: z.enum(WORK_SCHEDULE_TYPES).optional(),
 });
 
 export type OnboardingInput = z.infer<typeof onboardingSchema>;

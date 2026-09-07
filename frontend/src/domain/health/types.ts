@@ -12,6 +12,7 @@ import type {
   ActivityLevel,
   DietaryPreference,
   Gender,
+  WorkScheduleType,
 } from "@/domain/onboarding/types";
 
 /** A single recorded weight measurement. */
@@ -70,6 +71,11 @@ export interface HealthProfile {
   allergies: string[];
   dailyCalorieGoal: number;
   dailyWaterGoalMl: number;
+  /** Local wall-clock profile preferences; null for legacy profiles. */
+  usualWakeTime: string | null;
+  usualSleepTime: string | null;
+  /** Broad work/shift pattern; null until a legacy user chooses one. */
+  workScheduleType: WorkScheduleType | null;
   /** ISO date the account/profile was created. */
   memberSince: string;
 }

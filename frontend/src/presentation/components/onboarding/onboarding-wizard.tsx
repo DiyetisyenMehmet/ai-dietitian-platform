@@ -20,9 +20,11 @@ import {
   HEALTH_CONDITION_PRESETS,
   NO_ALLERGY,
   NO_HEALTH_CONDITION,
+  WORK_SCHEDULE_TYPE_OPTIONS,
   type ActivityLevel,
   type DietaryPreference,
   type Gender,
+  type WorkScheduleType,
 } from "@/domain/onboarding/types";
 import { onboardingService } from "@/application/onboarding/onboarding-service";
 import { authStore, useAuth } from "@/application/auth/auth-store";
@@ -70,7 +72,7 @@ const STEP_FIELDS: (keyof OnboardingFormValues)[][] = [
   ["activityLevel"],
   ["healthConditions", "allergies"],
   ["dietaryPreference", "dailyWaterGoalMl"],
-  ["usualWakeTime", "usualSleepTime"],
+  ["workScheduleType", "usualWakeTime", "usualSleepTime"],
 ];
 
 const STEP_META = [
@@ -84,7 +86,7 @@ const STEP_META = [
   { title: "Beslenme & su", subtitle: "Beslenme tercihinizi ve su hedefinizi belirleyin." },
   {
     title: "Günlük düzeniniz",
-    subtitle: "Öğün saatlerini yaşam düzeninize göre planlayabilmemiz için gereklidir.",
+    subtitle: "Öğün saatlerini yaşam ve çalışma düzeninize göre planlayabilmemiz için gereklidir.",
   },
 ];
 
@@ -117,6 +119,7 @@ export function OnboardingWizard() {
       allergies: [],
       dietaryPreference: "" as unknown as DietaryPreference,
       dailyWaterGoalMl: "2500",
+      workScheduleType: "REGULAR" as WorkScheduleType,
       usualWakeTime: "",
       usualSleepTime: "",
     },
@@ -125,6 +128,7 @@ export function OnboardingWizard() {
   const gender = watch("gender");
   const activityLevel = watch("activityLevel");
   const dietaryPreference = watch("dietaryPreference");
+  const workScheduleType = watch("workScheduleType");
   const healthConditions = watch("healthConditions");
   const allergies = watch("allergies");
 
@@ -325,10 +329,22 @@ export function OnboardingWizard() {
           {step === 5 && (
             <>
               <div className="rounded-xl border border-primary/15 bg-primary/5 p-4 text-sm leading-relaxed text-muted-foreground">
-                Bu saatler öğün ve ara öğünleri günlük yaşam düzeninize göre planlamak için kullanılır.
-                Sabit bir “akşamdan sonra yemek yok” kuralı uygulamak yerine, planınızı uyanma ve uyku
-                düzeninize göre kişiselleştiririz.
+                Çalışma düzeniniz ile uyanma ve uyku saatleriniz, öğün ve ara öğün zamanlarını günlük
+                yaşamınıza göre planlamak için kullanılır. Sabit bir “19:00 sonrası yemek yok” kuralı
+                uygulanmaz; gece vardiyası da kendi uyanıklık penceresine göre değerlendirilir.
               </div>
+              <FormField
+                id="workScheduleType"
+                label="Çalışma düzeniniz"
+                error={errors.workScheduleType?.message}
+              >
+                <OptionCards
+                  ariaLabel="Çalışma düzeni"
+                  options={WORK_SCHEDULE_TYPE_OPTIONS}
+                  value={workScheduleType ?? ""}
+                  onChange={(v) => setValue("workScheduleType", v, { shouldValidate: true })}
+                />
+              </FormField>
               <FormField
                 id="usualWakeTime"
                 label="Genellikle kaçta uyanırsınız?"
@@ -343,6 +359,12 @@ export function OnboardingWizard() {
               >
                 <Input type="time" {...register("usualSleepTime")} />
               </FormField>
+              {workScheduleType === "VARIABLE_SHIFT" && (
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  Vardiyalarınız değişiyorsa en sık kullandığınız düzeni girin. Günlük planlama ileride
+                  gün bazlı vardiya bilgisiyle daha da hassaslaştırılabilir.
+                </p>
+              )}
             </>
           )}
 

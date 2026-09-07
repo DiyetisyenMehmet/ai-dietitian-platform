@@ -29,6 +29,9 @@ function emptyProfile(): HealthProfile {
     allergies: [],
     dailyCalorieGoal: 0,
     dailyWaterGoalMl: 0,
+    usualWakeTime: null,
+    usualSleepTime: null,
+    workScheduleType: null,
     memberSince: "",
   };
 }
