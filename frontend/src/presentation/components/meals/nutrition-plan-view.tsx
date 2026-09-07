@@ -28,6 +28,7 @@ import {
   type PlannedMeal,
   type SupportedNutritionPlanDuration,
 } from "@/infrastructure/nutrition/nutrition-plan-client";
+import { NutritionPlanAdherenceSummary } from "@/presentation/components/meals/nutrition-plan-adherence-summary";
 import { NutritionPlanDayShareButton } from "@/presentation/components/meals/nutrition-plan-day-share-button";
 import {
   NutritionPlanKacamak,
@@ -507,6 +508,9 @@ export function NutritionPlanView() {
   const weekEnd = Math.min(durationDays, weekStart + 6);
   const visibleDays = Array.from({ length: weekEnd - weekStart + 1 }, (_, index) => weekStart + index);
   const todayTimestamp = startOfLocalDay(new Date());
+  const elapsedDayNumbers = Array.from({ length: durationDays }, (_, index) => index + 1).filter(
+    (dayNumber) => startOfLocalDay(dateForPlanDay(activePlan, dayNumber)) <= todayTimestamp,
+  );
 
   const statusLine = position.completed
     ? "Plan tamamlandı"
@@ -638,6 +642,13 @@ export function NutritionPlanView() {
           </div>
         </CardContent>
       </Card>
+
+      <NutritionPlanAdherenceSummary
+        content={content}
+        elapsedDayNumbers={elapsedDayNumbers}
+        deviations={deviations}
+        loading={deviationsLoading}
+      />
 
       <section className="space-y-3" aria-labelledby="plan-days-heading">
         <div className="flex items-end justify-between gap-3">
