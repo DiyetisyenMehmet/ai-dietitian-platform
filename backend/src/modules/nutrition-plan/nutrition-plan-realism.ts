@@ -8,6 +8,9 @@ const MAX_MEAT_MEALS_PER_WINDOW = 3;
 const MAX_FISH_MEALS_PER_WINDOW = 2;
 const MAX_PROCESSED_MEAT_MEALS_PER_WINDOW = 1;
 const MAX_SPECIALTY_MEALS_PER_WINDOW = 3;
+// These control characters are intentionally stripped from untrusted food/pantry text.
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/g;
 
 const MEAT_TERMS = [
   "dana",
@@ -80,7 +83,7 @@ function normalize(value: string): string {
   return value
     .normalize("NFKC")
     .toLocaleLowerCase("tr-TR")
-    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(CONTROL_CHARACTERS, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -101,7 +104,7 @@ function hasPlantMeatAlternative(value: string): boolean {
 function cleanPantryText(value?: string): string {
   return (value ?? "")
     .normalize("NFKC")
-    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(CONTROL_CHARACTERS, " ")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, MAX_PANTRY_TEXT_LENGTH);
@@ -113,7 +116,7 @@ function pantryIngredients(value?: string): string[] {
     .split(/[,;\r\n]+/)
     .map((item) =>
       item
-        .replace(/[\u0000-\u001f\u007f]/g, " ")
+        .replace(CONTROL_CHARACTERS, " ")
         .replace(/\s+/g, " ")
         .trim()
         .slice(0, MAX_PANTRY_ITEM_LENGTH),
