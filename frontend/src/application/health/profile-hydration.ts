@@ -48,6 +48,9 @@ export function hydrateStoresFromProfile(profile: OnboardingProfile, fullName: s
     healthConditions: profile.healthConditions,
     allergies: profile.allergies,
     dailyWaterGoalMl: profile.dailyWaterGoalMl,
+    usualWakeTime: profile.usualWakeTime,
+    usualSleepTime: profile.usualSleepTime,
+    workScheduleType: profile.workScheduleType,
   });
   dailyTrackingStore.setWaterGoal(profile.dailyWaterGoalMl);
 }
