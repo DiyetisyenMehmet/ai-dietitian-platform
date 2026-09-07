@@ -24,14 +24,17 @@ import {
   GENDER_OPTIONS,
   HEALTH_CONDITION_PRESETS,
   ALLERGY_PRESETS,
+  WORK_SCHEDULE_TYPE_OPTIONS,
   type ActivityLevel,
   type DietaryPreference,
   type Gender,
+  type WorkScheduleType,
 } from "@/domain/onboarding/types";
 import type { OnboardingPayload } from "@/domain/onboarding/validation";
 
 const selectClass =
   "flex h-11 w-full rounded-xl border border-input bg-background px-3.5 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
+const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 /** Editable health profile backed by the onboarding/profile API. */
 export function EditProfileView() {
@@ -49,6 +52,11 @@ export function EditProfileView() {
     profile.dietaryPreference,
   );
   const [dailyWaterGoalMl, setDailyWaterGoalMl] = React.useState(String(profile.dailyWaterGoalMl));
+  const [workScheduleType, setWorkScheduleType] = React.useState<WorkScheduleType>(
+    profile.workScheduleType ?? "REGULAR",
+  );
+  const [usualWakeTime, setUsualWakeTime] = React.useState(profile.usualWakeTime ?? "");
+  const [usualSleepTime, setUsualSleepTime] = React.useState(profile.usualSleepTime ?? "");
   const [conditions, setConditions] = React.useState<string[]>(profile.healthConditions);
   const [allergies, setAllergies] = React.useState<string[]>(profile.allergies);
   const [errors, setErrors] = React.useState<Record<string, string>>({});
@@ -72,6 +80,16 @@ export function EditProfileView() {
       e.targetWeightKg = "Hedef kilo 30-400 kg arasında olmalı.";
     if (!Number.isFinite(waterNum) || waterNum < 500 || waterNum > 6000)
       e.dailyWaterGoalMl = "Su hedefi 500-6000 ml arasında olmalı.";
+
+    const hasWake = usualWakeTime.length > 0;
+    const hasSleep = usualSleepTime.length > 0;
+    if (hasWake !== hasSleep) {
+      e.usualWakeTime = "Uyanma ve uyku saatini birlikte girin.";
+      e.usualSleepTime = "Uyanma ve uyku saatini birlikte girin.";
+    } else if (hasWake && hasSleep) {
+      if (!TIME_PATTERN.test(usualWakeTime)) e.usualWakeTime = "Geçerli bir saat seçin.";
+      if (!TIME_PATTERN.test(usualSleepTime)) e.usualSleepTime = "Geçerli bir saat seçin.";
+    }
     return e;
   };
 
@@ -100,6 +118,8 @@ export function EditProfileView() {
       allergies,
       dietaryPreference,
       dailyWaterGoalMl: Number(dailyWaterGoalMl),
+      workScheduleType,
+      ...(usualWakeTime && usualSleepTime ? { usualWakeTime, usualSleepTime } : {}),
     };
 
     try {
@@ -225,6 +245,51 @@ export function EditProfileView() {
             </option>
           ))}
         </select>
+      </SectionCard>
+
+      <SectionCard icon="moon" title="Günlük ve Çalışma Düzeni">
+        <p className="mb-4 text-xs leading-relaxed text-muted-foreground">
+          Bu bilgiler öğün ve ara öğün saatlerini yaşam düzenine göre planlamak için kullanılır. Gece
+          vardiyasında sabit bir akşam kesim saati uygulanmaz.
+        </p>
+        <div className="space-y-4">
+          <FormField id="workScheduleType" label="Çalışma düzeni">
+            <select
+              className={selectClass}
+              value={workScheduleType}
+              onChange={(e) => setWorkScheduleType(e.target.value as WorkScheduleType)}
+            >
+              {WORK_SCHEDULE_TYPE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                  {option.description ? ` — ${option.description}` : ""}
+                </option>
+              ))}
+            </select>
+          </FormField>
+          <div className="grid grid-cols-2 gap-3">
+            <FormField id="usualWakeTime" label="Genelde uyanma" error={errors.usualWakeTime}>
+              <Input
+                type="time"
+                value={usualWakeTime}
+                onChange={(e) => setUsualWakeTime(e.target.value)}
+              />
+            </FormField>
+            <FormField id="usualSleepTime" label="Genelde uyuma" error={errors.usualSleepTime}>
+              <Input
+                type="time"
+                value={usualSleepTime}
+                onChange={(e) => setUsualSleepTime(e.target.value)}
+              />
+            </FormField>
+          </div>
+          {workScheduleType === "VARIABLE_SHIFT" && (
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Vardiyalarınız değişiyorsa en sık kullandığınız uyku düzenini girebilirsiniz. Tek bir
+              saat, her gün için katı bir kural olarak yorumlanmaz.
+            </p>
+          )}
+        </div>
       </SectionCard>
 
       <SectionCard icon="utensils" title="Beslenme Tercihi">
