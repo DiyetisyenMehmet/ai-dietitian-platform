@@ -97,5 +97,8 @@ export interface OnboardingProfile {
   allergies: string[];
   dietaryPreference: DietaryPreference;
   dailyWaterGoalMl: number;
+  /** Local wall-clock preferences; null for profiles created before this feature. */
+  usualWakeTime: string | null;
+  usualSleepTime: string | null;
   updatedAt: string;
 }

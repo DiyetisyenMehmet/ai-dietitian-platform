@@ -59,6 +59,11 @@ const dateOfBirth = z
     return age >= MIN_AGE && age <= MAX_AGE;
   }, `Yaşınız ${MIN_AGE} ile ${MAX_AGE} arasında olmalıdır.`);
 
+const timeOfDay = z
+  .string()
+  .min(1, "Saat seçimi gereklidir.")
+  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Geçerli bir saat seçin.");
+
 export const onboardingFormSchema = z.object({
   fullName: z
     .string()
@@ -88,6 +93,8 @@ export const onboardingFormSchema = z.object({
     errorMap: () => ({ message: "Lütfen bir beslenme tercihi seçin." }),
   }),
   dailyWaterGoalMl: numericString(500, 6000, "Geçerli bir su hedefi girin (500-6000 ml)."),
+  usualWakeTime: timeOfDay,
+  usualSleepTime: timeOfDay,
 });
 
 export type OnboardingFormValues = z.infer<typeof onboardingFormSchema>;
@@ -105,6 +112,9 @@ export interface OnboardingPayload {
   allergies: string[];
   dietaryPreference: DietaryPreference;
   dailyWaterGoalMl: number;
+  /** Optional at transport level for backward compatibility with older clients. */
+  usualWakeTime?: string;
+  usualSleepTime?: string;
 }
 
 /** Converts validated form values into the numeric API payload. */
@@ -123,6 +133,8 @@ export function toOnboardingPayload(values: OnboardingFormValues): OnboardingPay
     allergies: values.allergies.filter((v) => v !== NO_ALLERGY),
     dietaryPreference: values.dietaryPreference,
     dailyWaterGoalMl: Number(values.dailyWaterGoalMl),
+    usualWakeTime: values.usualWakeTime,
+    usualSleepTime: values.usualSleepTime,
   };
 }
 

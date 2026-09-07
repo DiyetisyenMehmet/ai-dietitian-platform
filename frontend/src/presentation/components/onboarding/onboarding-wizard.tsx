@@ -70,6 +70,7 @@ const STEP_FIELDS: (keyof OnboardingFormValues)[][] = [
   ["activityLevel"],
   ["healthConditions", "allergies"],
   ["dietaryPreference", "dailyWaterGoalMl"],
+  ["usualWakeTime", "usualSleepTime"],
 ];
 
 const STEP_META = [
@@ -80,7 +81,11 @@ const STEP_META = [
     title: "Sağlık durumunuz",
     subtitle: "Doğru öneriler için gereklidir. Yoksa \"yok\" seçeneğini işaretleyin.",
   },
-  { title: "Beslenme & su", subtitle: "Son birkaç tercih ve hazırsınız." },
+  { title: "Beslenme & su", subtitle: "Beslenme tercihinizi ve su hedefinizi belirleyin." },
+  {
+    title: "Günlük düzeniniz",
+    subtitle: "Öğün saatlerini yaşam düzeninize göre planlayabilmemiz için gereklidir.",
+  },
 ];
 
 const TOTAL_STEPS = STEP_META.length;
@@ -112,6 +117,8 @@ export function OnboardingWizard() {
       allergies: [],
       dietaryPreference: "" as unknown as DietaryPreference,
       dailyWaterGoalMl: "2500",
+      usualWakeTime: "",
+      usualSleepTime: "",
     },
   });
 
@@ -311,6 +318,30 @@ export function OnboardingWizard() {
                   placeholder="2500"
                   {...register("dailyWaterGoalMl")}
                 />
+              </FormField>
+            </>
+          )}
+
+          {step === 5 && (
+            <>
+              <div className="rounded-xl border border-primary/15 bg-primary/5 p-4 text-sm leading-relaxed text-muted-foreground">
+                Bu saatler öğün ve ara öğünleri günlük yaşam düzeninize göre planlamak için kullanılır.
+                Sabit bir “akşamdan sonra yemek yok” kuralı uygulamak yerine, planınızı uyanma ve uyku
+                düzeninize göre kişiselleştiririz.
+              </div>
+              <FormField
+                id="usualWakeTime"
+                label="Genellikle kaçta uyanırsınız?"
+                error={errors.usualWakeTime?.message}
+              >
+                <Input type="time" {...register("usualWakeTime")} />
+              </FormField>
+              <FormField
+                id="usualSleepTime"
+                label="Genellikle kaçta uyursunuz?"
+                error={errors.usualSleepTime?.message}
+              >
+                <Input type="time" {...register("usualSleepTime")} />
               </FormField>
             </>
           )}

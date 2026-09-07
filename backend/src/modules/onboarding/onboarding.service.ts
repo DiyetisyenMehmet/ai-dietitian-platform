@@ -17,6 +17,8 @@ export interface PublicProfile {
   allergies: string[];
   dietaryPreference: UserProfile["dietaryPreference"];
   dailyWaterGoalMl: number;
+  usualWakeTime: string | null;
+  usualSleepTime: string | null;
   updatedAt: string;
 }
 
@@ -44,6 +46,8 @@ function toPublicProfile(profile: UserProfile): PublicProfile {
     allergies: profile.allergies,
     dietaryPreference: profile.dietaryPreference,
     dailyWaterGoalMl: profile.dailyWaterGoalMl,
+    usualWakeTime: profile.usualWakeTime,
+    usualSleepTime: profile.usualSleepTime,
     updatedAt: profile.updatedAt.toISOString(),
   };
 }
