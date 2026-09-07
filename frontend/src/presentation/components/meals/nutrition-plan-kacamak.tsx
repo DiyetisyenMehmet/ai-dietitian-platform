@@ -15,13 +15,15 @@ import {
 import { Button } from "@/presentation/components/ui/button";
 import { Input } from "@/presentation/components/ui/input";
 
+const WHOLE_MEAL_VALUE = "__WHOLE_MEAL__";
+
 const OPTION_COPY: Record<
   NutritionPlanDeviationType,
   { label: string; help: string }
 > = {
   SKIPPED: {
     label: "Yemedim",
-    help: "Planlanan bu besini tüketmediğini belirtir.",
+    help: "Planlanan tek bir besini veya öğünün tamamını tüketmediğini belirtir.",
   },
   REPLACED: {
     label: "Değiştirdim",
@@ -170,11 +172,14 @@ export function NutritionPlanKacamak({
     setNote("");
   };
 
+  const wholeMealSkipped = selectedType === "SKIPPED" && foodIndex === WHOLE_MEAL_VALUE;
   const needsPlannedFood = selectedType !== null && selectedType !== "EXTRA";
-  const parsedFoodIndex = foodIndex === "" ? undefined : Number(foodIndex);
+  const parsedFoodIndex =
+    foodIndex === "" || foodIndex === WHOLE_MEAL_VALUE ? undefined : Number(foodIndex);
+  const hasPlannedTarget = !needsPlannedFood || wholeMealSkipped || parsedFoodIndex !== undefined;
   const canSubmit =
     selectedType !== null &&
-    (!needsPlannedFood || parsedFoodIndex !== undefined) &&
+    hasPlannedTarget &&
     (selectedType !== "REPLACED" || actualItemName.trim().length > 0) &&
     (selectedType !== "EXTRA" || actualItemName.trim().length > 0) &&
     (selectedType !== "PORTION_CHANGED" || actualPortion.trim().length > 0);
@@ -184,11 +189,11 @@ export function NutritionPlanKacamak({
     const input: CreateNutritionPlanDeviationInput = {
       dayNumber,
       mealIndex,
-      scope: selectedType === "EXTRA" ? "MEAL" : "FOOD",
+      scope: selectedType === "EXTRA" || wholeMealSkipped ? "MEAL" : "FOOD",
       type: selectedType,
     };
 
-    if (selectedType !== "EXTRA" && parsedFoodIndex !== undefined) {
+    if (selectedType !== "EXTRA" && !wholeMealSkipped && parsedFoodIndex !== undefined) {
       input.foodIndex = parsedFoodIndex;
     }
     if (actualItemName.trim()) input.actualItemName = actualItemName.trim();
@@ -311,13 +316,18 @@ export function NutritionPlanKacamak({
             <div className="space-y-3 border-t border-border/70 pt-3">
               {needsPlannedFood && (
                 <label className="block text-xs font-medium">
-                  Hangi besin?
+                  {selectedType === "SKIPPED" ? "Neyi yemedin?" : "Hangi besin?"}
                   <select
                     className="mt-1.5 h-10 w-full rounded-xl border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     value={foodIndex}
                     onChange={(event) => setFoodIndex(event.target.value)}
                   >
-                    <option value="">Besin seç</option>
+                    <option value="">Seç</option>
+                    {selectedType === "SKIPPED" && (
+                      <option value={WHOLE_MEAL_VALUE}>
+                        Tüm öğün · Bu öğündeki hiçbir besini tüketmedim
+                      </option>
+                    )}
                     {meal.foods.map((food, index) => (
                       <option key={`${food.name}-${index}`} value={index}>
                         {food.name} · {food.portion}
@@ -325,6 +335,12 @@ export function NutritionPlanKacamak({
                     ))}
                   </select>
                 </label>
+              )}
+
+              {wholeMealSkipped && (
+                <p className="rounded-xl bg-muted/60 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+                  Bu öğündeki hiçbir besini tüketmediğin, öğünün tamamı için tek bir kayıt olarak işaretlenecek.
+                </p>
               )}
 
               {(selectedType === "REPLACED" || selectedType === "EXTRA") && (
