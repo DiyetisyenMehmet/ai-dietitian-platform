@@ -6,13 +6,16 @@ const API_BASE_URL = process.env.E2E_API_BASE_URL || "http://127.0.0.1:4000/api"
 /**
  * Full-stack browser smoke for the first-run health-data path.
  *
- * The backend API already has a direct integration test. This browser layer is
- * deliberately focused on what that test cannot prove: a real user can create
+ * The backend API already has direct integration tests. This browser layer is
+ * deliberately focused on what those tests cannot prove: a real user can create
  * an account, grant only the three affirmative consents, complete every
- * onboarding step, select a night-shift rhythm and have those exact values
- * persisted by the backend.
+ * onboarding step, persist a night-shift rhythm, then record a same-day weigh-in
+ * without replacing the immutable onboarding baseline used by Progress.
  */
-test("register -> consent -> onboarding persists night-shift rhythm", async ({ page, request }) => {
+test("register -> consent -> onboarding -> same-day weigh-in preserves baseline", async ({
+  page,
+  request,
+}) => {
   const email = `browser.e2e.${Date.now()}.${Math.random().toString(16).slice(2)}@example.com`;
   const password = "BrowserE2EPass123";
 
@@ -82,8 +85,9 @@ test("register -> consent -> onboarding persists night-shift rhythm", async ({ p
   expect(session.user.onboardingCompleted).toBe(true);
   expect(session.tokens.accessToken).toBeTruthy();
 
+  const authHeaders = { authorization: `Bearer ${session.tokens.accessToken}` };
   const profileResponse = await request.get(`${API_BASE_URL}/onboarding`, {
-    headers: { authorization: `Bearer ${session.tokens.accessToken}` },
+    headers: authHeaders,
   });
   expect(profileResponse.status()).toBe(200);
 
@@ -92,4 +96,46 @@ test("register -> consent -> onboarding persists night-shift rhythm", async ({ p
   expect(profileBody.data.profile.workScheduleType).toBe("NIGHT_SHIFT");
   expect(profileBody.data.profile.usualWakeTime).toBe("17:00");
   expect(profileBody.data.profile.usualSleepTime).toBe("09:00");
+  expect(profileBody.data.profile.currentWeightKg).toBe(70);
+  expect(profileBody.data.profile.targetWeightKg).toBe(65);
+
+  // The onboarding transaction creates an immutable 70 kg baseline. A second
+  // weigh-in on the same calendar day must remain a separate measurement, update
+  // currentWeightKg, and leave Progress calculating from the original 70 kg.
+  await page.goto(`${WEB_BASE_URL}/progress`);
+  await expect(page.getByText("Kilo İlerlemen")).toBeVisible();
+  await expect(page.getByText("70.0", { exact: true }).first()).toBeVisible();
+
+  await page.getByLabel("Bugünkü kilon (kg)").fill("68.5");
+  await page.getByRole("button", { name: "Kaydet", exact: true }).click();
+
+  await expect(page.getByText("68.5", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("70.0", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("65.0", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Hedefe 3,5 kg kaldı", { exact: true })).toBeVisible();
+
+  const updatedProfileResponse = await request.get(`${API_BASE_URL}/onboarding`, {
+    headers: authHeaders,
+  });
+  expect(updatedProfileResponse.status()).toBe(200);
+  const updatedProfileBody = await updatedProfileResponse.json();
+  expect(updatedProfileBody.success).toBe(true);
+  expect(updatedProfileBody.data.profile.currentWeightKg).toBe(68.5);
+  expect(updatedProfileBody.data.profile.targetWeightKg).toBe(65);
+
+  const weightResponse = await request.get(`${API_BASE_URL}/tracking/weight`, {
+    headers: authHeaders,
+  });
+  expect(weightResponse.status()).toBe(200);
+  const weightBody = await weightResponse.json();
+  expect(weightBody.success).toBe(true);
+  expect(weightBody.data.logs).toHaveLength(2);
+
+  const baseline = weightBody.data.logs.find((log) => log.note === "Başlangıç");
+  expect(baseline).toBeTruthy();
+  expect(baseline.weightKg).toBe(70);
+
+  const current = weightBody.data.logs.find((log) => log.note !== "Başlangıç");
+  expect(current).toBeTruthy();
+  expect(current.weightKg).toBe(68.5);
 });
