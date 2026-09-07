@@ -15,6 +15,7 @@ export type DietaryPreference =
   | "MEDITERRANEAN"
   | "GLUTEN_FREE"
   | "OTHER";
+export type WorkScheduleType = "REGULAR" | "VARIABLE_SHIFT" | "NIGHT_SHIFT";
 
 /** A selectable option with a value, label and optional helper description. */
 export interface SelectOption<T extends string> {
@@ -48,6 +49,24 @@ export const DIETARY_PREFERENCE_OPTIONS: readonly SelectOption<DietaryPreference
   { value: "MEDITERRANEAN", label: "Akdeniz" },
   { value: "GLUTEN_FREE", label: "Glutensiz" },
   { value: "OTHER", label: "Diğer" },
+] as const;
+
+export const WORK_SCHEDULE_TYPE_OPTIONS: readonly SelectOption<WorkScheduleType>[] = [
+  {
+    value: "REGULAR",
+    label: "Düzenli",
+    description: "Uyanma, uyku ve çalışma saatlerim çoğunlukla sabit",
+  },
+  {
+    value: "VARIABLE_SHIFT",
+    label: "Değişken / vardiyalı",
+    description: "Çalışma ve uyku saatlerim günlere göre değişebiliyor",
+  },
+  {
+    value: "NIGHT_SHIFT",
+    label: "Gece vardiyası",
+    description: "Çoğunlukla gece çalışıyor, gündüz uyuyorum",
+  },
 ] as const;
 
 /**
@@ -100,5 +119,7 @@ export interface OnboardingProfile {
   /** Local wall-clock preferences; null for profiles created before this feature. */
   usualWakeTime: string | null;
   usualSleepTime: string | null;
+  /** Broad work/shift pattern; null for legacy profiles until the user chooses one. */
+  workScheduleType: WorkScheduleType | null;
   updatedAt: string;
 }
