@@ -52,8 +52,12 @@ jobs:
       - run: npm ci
       - name: Reject high-severity dependency advisories
         run: npm audit --audit-level=high
+      - name: Validate Prisma schema
+        run: npx prisma validate
       - run: npx prisma generate
       - run: npx prisma migrate deploy
+      - name: Lint backend
+        run: npm run lint
       - run: npm test
       - run: npm run test:integration
       - run: npm run type-check
