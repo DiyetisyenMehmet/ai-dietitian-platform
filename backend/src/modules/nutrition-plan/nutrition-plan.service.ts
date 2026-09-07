@@ -13,6 +13,7 @@ import { calculateWater } from "./calculations/water-calculator";
 import { DURATION_DAYS, isSupportedPlanDuration } from "./constants";
 import { mealGeneratorService } from "./meal-generator/meal-generator.service";
 import { nutritionPlanRepository } from "./nutrition-plan.repository";
+import { assessNutritionPlanSafety } from "./nutrition-plan-safety";
 import type {
   BloodTestImplicationInput,
   CalendarDay,
@@ -65,6 +66,22 @@ async function buildProfile(userId: string): Promise<NutritionProfile> {
     allergies: profile.allergies,
     dailyWaterGoalMl: profile.dailyWaterGoalMl,
   };
+}
+
+function assertOrdinaryPlanSafety(profile: NutritionProfile): void {
+  const assessment = assessNutritionPlanSafety(profile);
+  if (assessment.eligible) return;
+
+  throw new ApiError(
+    422,
+    "Bu profil için otomatik öğün planı oluşturmak güvenli değil. Kişisel plan oluşturmadan önce bir sağlık veya beslenme uzmanıyla değerlendirme yapman gerekiyor.",
+    {
+      code: "NUTRITION_PLAN_SAFETY_REVIEW_REQUIRED",
+      details: {
+        reasons: assessment.reasons,
+      },
+    },
+  );
 }
 
 async function loadBloodTestImplications(userId: string): Promise<{
@@ -129,9 +146,14 @@ export const nutritionPlanService = {
         );
       }
 
+      const profile = await buildProfile(userId);
+      assertOrdinaryPlanSafety(profile);
+
+      // Quota is only asserted after deterministic safety eligibility. Usage is
+      // recorded only after a complete plan is persisted, so safety/provider
+      // failures never consume a successful generation right.
       await aiUsageService.assertWithinQuota(userId, "NUTRITION_PLAN", tier);
 
-      const profile = await buildProfile(userId);
       const { analysisId, implications } = await loadBloodTestImplications(userId);
 
       const calories = calculateCalories(profile);
