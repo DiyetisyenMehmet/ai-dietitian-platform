@@ -4,14 +4,20 @@
  * Long plans are generated in bounded provider batches and assembled into the
  * exact 7/14/30-day horizon. A small concurrency cap prevents the synchronous
  * API request from serially waiting on every batch while keeping Vertex load
- * controlled. Every batch is count-, allergen-, nutrition-target-, and meal-
- * structure validated before the final plan can be persisted.
+ * controlled. Pantry-aware real-life generation is deliberately serialized so
+ * each batch can respect the rolling 14-day food-frequency budget established
+ * by the preceding generated days. Every batch is count-, allergen-, nutrition-
+ * target-, realism-, and meal-structure validated before persistence.
  */
 
 import { logger } from "../../../lib/logger";
 import { ApiError } from "../../../utils/api-error";
 import { getAIAdapter } from "../../blood-test-analysis/ai-adapter/ai-adapter.factory";
 import { MEAL_GENERATION_BATCH_DAYS, MEAL_GENERATION_CONCURRENCY } from "../constants";
+import {
+  buildRealLifeProviderInsights,
+  findRealLifePlanViolations,
+} from "../nutrition-plan-realism";
 import { findAllergenViolations } from "./allergen-validator";
 import { findNutritionTargetViolations } from "./nutrition-target-validator";
 import type {
@@ -76,10 +82,14 @@ function buildBatchSpecs(startDayNumber: number, daysToGenerate: number): BatchS
   return specs;
 }
 
-function recentSignatures(batches: GeneratedBatch[]): string[] {
+function orderedGeneratedDays(batches: GeneratedBatch[]): DailyPlan[] {
   return [...batches]
     .sort((a, b) => a.startDayNumber - b.startDayNumber)
-    .flatMap((batch) => batch.output.cycle)
+    .flatMap((batch) => batch.output.cycle);
+}
+
+function recentSignatures(batches: GeneratedBatch[]): string[] {
+  return orderedGeneratedDays(batches)
     .slice(-MAX_AVOID_SIGNATURES)
     .map(daySignature)
     .filter(Boolean);
@@ -106,12 +116,21 @@ function applyDeterministicMealTimes(
   }));
 }
 
-async function generateValidatedBatch(input: NutritionPlanAIInput): Promise<NutritionPlanAIOutput> {
+async function generateValidatedBatch(
+  input: NutritionPlanAIInput,
+  priorDays: DailyPlan[],
+): Promise<NutritionPlanAIOutput> {
   const adapter = getAIAdapter();
 
   let output = await adapter.generateNutritionPlan(input);
   let allergenViolations = findAllergenViolations(output.cycle, input.allergies);
   let nutritionViolations = findNutritionTargetViolations(output.cycle, input);
+  let realismViolations = findRealLifePlanViolations(
+    output.cycle,
+    input.startDayNumber ?? 1,
+    priorDays,
+    input.realLifePlanning,
+  );
   let wrongDayCount = output.cycle.length !== input.cycleLengthDays;
   let invalidMealStructure = hasInvalidMealStructure(output.cycle, input.mealTiming);
 
@@ -119,7 +138,8 @@ async function generateValidatedBatch(input: NutritionPlanAIInput): Promise<Nutr
     wrongDayCount ||
     invalidMealStructure ||
     allergenViolations.length > 0 ||
-    nutritionViolations.length > 0
+    nutritionViolations.length > 0 ||
+    realismViolations.length > 0
   ) {
     logger.warn(
       {
@@ -128,6 +148,7 @@ async function generateValidatedBatch(input: NutritionPlanAIInput): Promise<Nutr
         invalidMealStructure,
         allergenViolationCount: allergenViolations.length,
         nutritionViolationCount: nutritionViolations.length,
+        realismViolationCount: realismViolations.length,
         startDayNumber: input.startDayNumber ?? 1,
       },
       "Nutrition-plan batch failed deterministic validation; retrying once",
@@ -135,6 +156,12 @@ async function generateValidatedBatch(input: NutritionPlanAIInput): Promise<Nutr
     output = await adapter.generateNutritionPlan(input);
     allergenViolations = findAllergenViolations(output.cycle, input.allergies);
     nutritionViolations = findNutritionTargetViolations(output.cycle, input);
+    realismViolations = findRealLifePlanViolations(
+      output.cycle,
+      input.startDayNumber ?? 1,
+      priorDays,
+      input.realLifePlanning,
+    );
     wrongDayCount = output.cycle.length !== input.cycleLengthDays;
     invalidMealStructure = hasInvalidMealStructure(output.cycle, input.mealTiming);
   }
@@ -190,6 +217,21 @@ async function generateValidatedBatch(input: NutritionPlanAIInput): Promise<Nutr
     });
   }
 
+  if (realismViolations.length > 0) {
+    logger.error(
+      {
+        violationCount: realismViolations.length,
+        violationCodes: [...new Set(realismViolations.map((item) => item.code))],
+        startDayNumber: input.startDayNumber ?? 1,
+      },
+      "Nutrition-plan batch remained outside deterministic real-life policy after retry",
+    );
+    throw new ApiError(502, "The nutrition-plan provider returned an impractical meal pattern.", {
+      code: "NUTRITION_PLAN_REALISM_VALIDATION_FAILED",
+      isOperational: false,
+    });
+  }
+
   const timedCycle = applyDeterministicMealTimes(output.cycle, input.mealTiming);
   return { ...output, cycle: relabelDays(timedCycle, input.startDayNumber ?? 1) };
 }
@@ -198,6 +240,7 @@ async function generateBatch(
   input: NutritionPlanGenerationInput,
   spec: BatchSpec,
   avoidMealSignatures: string[],
+  priorDays: DailyPlan[],
 ): Promise<GeneratedBatch> {
   const startedAt = Date.now();
   const metadata = {
@@ -209,24 +252,33 @@ async function generateBatch(
   logger.info(metadata, "Nutrition-plan batch generation started");
 
   try {
-    const output = await generateValidatedBatch({
-      goal: input.goal,
-      dailyCalories: input.dailyCalories,
-      proteinGrams: input.proteinGrams,
-      carbsGrams: input.carbsGrams,
-      fatGrams: input.fatGrams,
-      waterMl: input.waterMl,
-      mealTiming: input.mealTiming,
-      dietaryPreference: input.dietaryPreference,
-      allergies: input.allergies,
-      healthConditions: input.healthConditions,
-      bloodTestImplications: input.bloodTestImplications,
-      behaviorInsights: input.behaviorInsights,
-      cycleLengthDays: spec.batchDays,
-      planDurationDays: input.durationDays,
-      startDayNumber: spec.startDayNumber,
-      avoidMealSignatures,
-    });
+    const realLifeInsights = buildRealLifeProviderInsights(input.realLifePlanning);
+    const providerInsights = [
+      ...realLifeInsights,
+      ...(input.behaviorInsights ?? []),
+    ].slice(0, 6);
+    const output = await generateValidatedBatch(
+      {
+        goal: input.goal,
+        dailyCalories: input.dailyCalories,
+        proteinGrams: input.proteinGrams,
+        carbsGrams: input.carbsGrams,
+        fatGrams: input.fatGrams,
+        waterMl: input.waterMl,
+        mealTiming: input.mealTiming,
+        dietaryPreference: input.dietaryPreference,
+        allergies: input.allergies,
+        healthConditions: input.healthConditions,
+        bloodTestImplications: input.bloodTestImplications,
+        behaviorInsights: providerInsights,
+        realLifePlanning: input.realLifePlanning,
+        cycleLengthDays: spec.batchDays,
+        planDurationDays: input.durationDays,
+        startDayNumber: spec.startDayNumber,
+        avoidMealSignatures,
+      },
+      priorDays,
+    );
 
     logger.info(
       { ...metadata, processingTimeMs: Date.now() - startedAt },
@@ -265,14 +317,19 @@ async function generateRangeInternal(
     .slice(-MAX_AVOID_SIGNATURES)
     .map(daySignature)
     .filter(Boolean);
+  // Real-life frequency rules are rolling constraints. Serializing these bounded
+  // batches prevents two simultaneous batches from independently spending the
+  // same remaining 14-day meat/fish budget.
+  const concurrency = input.realLifePlanning ? 1 : MEAL_GENERATION_CONCURRENCY;
 
-  for (let offset = 0; offset < specs.length; offset += MEAL_GENERATION_CONCURRENCY) {
-    const wave = specs.slice(offset, offset + MEAL_GENERATION_CONCURRENCY);
+  for (let offset = 0; offset < specs.length; offset += concurrency) {
+    const wave = specs.slice(offset, offset + concurrency);
     const avoidMealSignatures = [...seedSignatures, ...recentSignatures(generated)].slice(
       -MAX_AVOID_SIGNATURES,
     );
+    const knownPriorDays = [...priorDays, ...orderedGeneratedDays(generated)];
     const results = await Promise.all(
-      wave.map((spec) => generateBatch(input, spec, avoidMealSignatures)),
+      wave.map((spec) => generateBatch(input, spec, avoidMealSignatures, knownPriorDays)),
     );
     generated.push(...results);
   }
@@ -286,6 +343,19 @@ async function generateRangeInternal(
   if (days.length !== daysToGenerate || !explanations) {
     throw new ApiError(502, "The nutrition-plan provider returned an incomplete plan.", {
       code: "NUTRITION_PLAN_INCOMPLETE",
+      isOperational: false,
+    });
+  }
+
+  const finalRealismViolations = findRealLifePlanViolations(
+    days,
+    startDayNumber,
+    priorDays,
+    input.realLifePlanning,
+  );
+  if (finalRealismViolations.length > 0) {
+    throw new ApiError(502, "The nutrition-plan provider returned an impractical meal pattern.", {
+      code: "NUTRITION_PLAN_REALISM_VALIDATION_FAILED",
       isOperational: false,
     });
   }

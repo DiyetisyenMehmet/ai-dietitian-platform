@@ -98,6 +98,14 @@ export interface CalendarDay {
   dateOffsetDays?: number;
 }
 
+/** Household-shopping context. It can influence food choice but never safety or nutrition targets. */
+export interface RealLifePlanningContext {
+  market: "TR";
+  budgetProfile: "STANDARD_TR";
+  pantryText?: string;
+  pantryIngredients: string[];
+}
+
 /**
  * Historical field names are retained for backwards compatibility. For every
  * newly generated 7/14/30-day plan, `cycle.length === durationDays` and every
@@ -108,6 +116,8 @@ export interface NutritionPlanContent {
   cycleLengthDays: number;
   cycle: DailyPlan[];
   calendar: CalendarDay[];
+  /** Optional for plans created before pantry-aware real-life planning. */
+  planningContext?: RealLifePlanningContext;
 }
 
 export interface PlanExplanations {
@@ -140,6 +150,8 @@ export interface NutritionPlanGenerationInput {
   bloodTestImplications: BloodTestImplicationInput[];
   /** Bounded behavior context; never permission to override deterministic targets. */
   behaviorInsights?: string[];
+  /** Practical Türkiye/pantry context; never permission to override health targets. */
+  realLifePlanning?: RealLifePlanningContext;
   durationDays: number;
 }
 
