@@ -85,7 +85,7 @@ public final class NutritionReminderScheduler {
             alarms.setAndAllowWhileIdle(
                 AlarmManager.RTC_WAKEUP,
                 at,
-                pendingIntent(context, id),
+                pendingIntent(context, id)
             );
         }
     }
@@ -117,7 +117,7 @@ public final class NutritionReminderScheduler {
             context,
             id.hashCode(),
             intent,
-            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE,
+            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
         );
     }
 }
