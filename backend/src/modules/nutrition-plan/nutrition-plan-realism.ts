@@ -110,9 +110,14 @@ function cleanPantryText(value?: string): string {
 function pantryIngredients(value?: string): string[] {
   const items = (value ?? "")
     .normalize("NFKC")
-    .replace(/[\u0000-\u001f\u007f]/g, " ")
-    .split(/[,;\n]+/)
-    .map((item) => item.replace(/\s+/g, " ").trim().slice(0, MAX_PANTRY_ITEM_LENGTH))
+    .split(/[,;\r\n]+/)
+    .map((item) =>
+      item
+        .replace(/[\u0000-\u001f\u007f]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, MAX_PANTRY_ITEM_LENGTH),
+    )
     .filter(Boolean)
     .map((item) => item.toLocaleLowerCase("tr-TR"));
 
@@ -181,8 +186,10 @@ function classifyDay(
     const fish = hasAny(combined, FISH_TERMS);
     const meat = !hasPlantMeatAlternative(combined) && hasAny(combined, MEAT_TERMS);
     const processed = (meat || fish) && hasAny(combined, PROCESSED_TERMS);
+    // Specialty stems intentionally support normal Turkish suffixes such as
+    // "avokadolu"; pantry ownership still exempts sensible reuse from shopping-sprawl scoring.
     const specialty = SPECIALTY_TERMS.some(
-      (term) => termPattern(term).test(combined) && !pantry.some((item) => item.includes(term)),
+      (term) => combined.includes(term) && !pantry.some((item) => item.includes(term)),
     );
 
     if (meat) meatMeals += 1;
