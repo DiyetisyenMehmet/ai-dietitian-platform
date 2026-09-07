@@ -1,4 +1,4 @@
-import type { NutritionPlanDeviation } from "@prisma/client";
+import type { NutritionPlanDeviation, Prisma } from "@prisma/client";
 
 import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/api-error";
@@ -96,6 +96,73 @@ function numericValue(value: unknown): number {
   return Number.isFinite(number) ? number : 0;
 }
 
+function stringValue(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function snackToJson(snack: AdaptiveSnackSuggestion): Prisma.InputJsonObject {
+  return {
+    name: snack.name,
+    foods: snack.foods.map((food) => ({
+      name: food.name,
+      portion: food.portion,
+      calories: food.calories,
+    })),
+    calories: snack.calories,
+    proteinGrams: snack.proteinGrams,
+    carbsGrams: snack.carbsGrams,
+    fatGrams: snack.fatGrams,
+    source: snack.source,
+    sourceMealIndex: snack.sourceMealIndex,
+  };
+}
+
+function parseSnackSuggestion(value: unknown): AdaptiveSnackSuggestion | null {
+  const record = objectValue(value);
+  if (!record || typeof record.name !== "string") return null;
+  if (
+    record.source !== "SKIPPED_MEAL_BUDGET" &&
+    record.source !== "PLANNED_SNACK_REALLOCATION"
+  ) {
+    return null;
+  }
+
+  const foods = Array.isArray(record.foods)
+    ? record.foods.flatMap((item) => {
+        const food = objectValue(item);
+        if (!food || typeof food.name !== "string" || typeof food.portion !== "string") return [];
+        return [
+          {
+            name: food.name,
+            portion: food.portion,
+            calories: numericValue(food.calories),
+          },
+        ];
+      })
+    : [];
+  if (!foods.length) return null;
+
+  const rawSourceMealIndex = record.sourceMealIndex;
+  const sourceMealIndex =
+    rawSourceMealIndex === null || rawSourceMealIndex === undefined
+      ? null
+      : numericValue(rawSourceMealIndex);
+
+  return {
+    name: record.name,
+    foods,
+    calories: numericValue(record.calories),
+    proteinGrams: numericValue(record.proteinGrams),
+    carbsGrams: numericValue(record.carbsGrams),
+    fatGrams: numericValue(record.fatGrams),
+    source: record.source,
+    sourceMealIndex:
+      sourceMealIndex !== null && Number.isInteger(sourceMealIndex) && sourceMealIndex >= 0
+        ? sourceMealIndex
+        : null,
+  };
+}
+
 function acceptedSnackState(
   memories: Array<{ content: unknown }>,
   planId: string,
@@ -113,16 +180,13 @@ function acceptedSnackState(
     ) {
       continue;
     }
-    const snack = objectValue(content.snack);
+    const snack = parseSnackSuggestion(content.snack);
     if (!snack) continue;
     if (snack.source === "SKIPPED_MEAL_BUDGET") {
-      skippedBudgetCaloriesUsed += numericValue(snack.calories);
+      skippedBudgetCaloriesUsed += snack.calories;
     }
-    if (snack.source === "PLANNED_SNACK_REALLOCATION") {
-      const sourceMealIndex = numericValue(snack.sourceMealIndex);
-      if (Number.isInteger(sourceMealIndex) && sourceMealIndex >= 0) {
-        usedPlannedSnackIndexes.add(sourceMealIndex);
-      }
+    if (snack.source === "PLANNED_SNACK_REALLOCATION" && snack.sourceMealIndex !== null) {
+      usedPlannedSnackIndexes.add(snack.sourceMealIndex);
     }
   }
 
@@ -344,7 +408,11 @@ export const nutritionPlanHungerService = {
       } else {
         decision = {
           ...decision,
-          decision: nextMeal ? (input.hungerLevel === "VERY_HUNGRY" ? "EAT_PLANNED_MEAL" : "WAIT_FOR_MEAL") : "DAY_COMPLETE",
+          decision: nextMeal
+            ? input.hungerLevel === "VERY_HUNGRY"
+              ? "EAT_PLANNED_MEAL"
+              : "WAIT_FOR_MEAL"
+            : "DAY_COMPLETE",
           message: nextMeal
             ? input.hungerLevel === "VERY_HUNGRY"
               ? `Açlığın belirgin ancak günlük plan bütçene güvenle ekleyebileceğim ayrı bir ara öğün kalmadı. Ekstra kalori eklemek yerine ${nextMeal.name} öğününü biraz öne alman daha uygun.`
@@ -373,7 +441,7 @@ export const nutritionPlanHungerService = {
           minutesToNextMeal: decision.minutesToNextMeal,
           previousMealSkipped,
           suggestedSnackCalories: decision.suggestedSnackCalories,
-          suggestedSnack,
+          suggestedSnack: suggestedSnack ? snackToJson(suggestedSnack) : null,
         },
       },
     });
@@ -392,7 +460,7 @@ export const nutritionPlanHungerService = {
     if (!event || content?.kind !== "HUNGER_EVENT" || content.planId !== planId) {
       throw ApiError.badRequest("Geçerli bir Acıktım ara öğün önerisi bulunamadı.");
     }
-    const snack = objectValue(content.suggestedSnack);
+    const snack = parseSnackSuggestion(content.suggestedSnack);
     if (!snack || content.decision !== "SMALL_SNACK") {
       throw ApiError.badRequest("Bu açlık değerlendirmesinde kullanılabilir bir ara öğün yok.");
     }
@@ -412,11 +480,8 @@ export const nutritionPlanHungerService = {
     }
 
     const dayNumber = numericValue(content.dayNumber);
-    const name = typeof snack.name === "string" ? snack.name : "Uyarlanmış ara öğün";
-    const calories = numericValue(snack.calories);
-    const proteinG = numericValue(snack.proteinGrams);
-    const carbsG = numericValue(snack.carbsGrams);
-    const fatG = numericValue(snack.fatGrams);
+    const localDate = stringValue(content.localDate);
+    const localTime = stringValue(content.localTime);
 
     const [memory] = await prisma.$transaction([
       prisma.aiMemory.create({
@@ -429,9 +494,9 @@ export const nutritionPlanHungerService = {
             planVersion: plan.version,
             dayNumber,
             hungerEventId: eventId,
-            localDate: content.localDate,
-            localTime: content.localTime,
-            snack,
+            localDate,
+            localTime,
+            snack: snackToJson(snack),
           },
         },
       }),
@@ -439,11 +504,11 @@ export const nutritionPlanHungerService = {
         data: {
           userId,
           mealType: "SNACK",
-          name,
-          calories,
-          proteinG,
-          carbsG,
-          fatG,
+          name: snack.name,
+          calories: snack.calories,
+          proteinG: snack.proteinGrams,
+          carbsG: snack.carbsGrams,
+          fatG: snack.fatGrams,
         },
       }),
     ]);
