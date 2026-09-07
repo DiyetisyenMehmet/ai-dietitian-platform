@@ -1,3 +1,5 @@
+import { pipeline } from "node:stream/promises";
+
 import type { Request, Response } from "express";
 
 import type { AuditContext } from "../../lib/audit";
@@ -5,7 +7,11 @@ import { ApiError } from "../../utils/api-error";
 import { sendCreated, sendSuccess } from "../../utils/api-response";
 import { asyncHandler } from "../../utils/async-handler";
 import { bloodTestService, type IncomingFile } from "./blood-test.service";
-import type { UploadIdParam, UploadMetadataInput } from "./blood-test.schemas";
+import type {
+  ListBloodTestsQuery,
+  UploadIdParam,
+  UploadMetadataInput,
+} from "./blood-test.schemas";
 
 function auditContext(req: Request): AuditContext {
   return {
@@ -21,13 +27,31 @@ function requireUserId(req: Request): string {
   return req.user.id;
 }
 
-/** Normalizes the multer file into the service's IncomingFile, or 400. */
 function requireFile(req: Request): IncomingFile {
   const file = req.file;
   if (!file || !file.buffer) {
     throw ApiError.badRequest('A file is required in the "file" field.');
   }
   return { buffer: file.buffer, originalName: file.originalname, size: file.size };
+}
+
+function safeAsciiFilename(filename: string): string {
+  const ascii = filename
+    .normalize("NFKD")
+    .replace(/[^\x20-\x7E]/g, "_")
+    .replace(/["\\\r\n]/g, "_")
+    .trim();
+  return ascii || "blood-test-file";
+}
+
+function encodeRfc5987(filename: string): string {
+  return encodeURIComponent(filename).replace(/[!'()*]/g, (char) =>
+    `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+}
+
+function contentDisposition(filename: string): string {
+  return `inline; filename="${safeAsciiFilename(filename)}"; filename*=UTF-8''${encodeRfc5987(filename)}`;
 }
 
 export const bloodTestController = {
@@ -41,8 +65,9 @@ export const bloodTestController = {
 
   list: asyncHandler(async (req: Request, res: Response) => {
     const userId = requireUserId(req);
-    const uploads = await bloodTestService.list(userId);
-    sendSuccess(res, { uploads });
+    const { limit, cursor } = req.query as unknown as ListBloodTestsQuery;
+    const page = await bloodTestService.list(userId, limit, cursor);
+    sendSuccess(res, page);
   }),
 
   getById: asyncHandler(async (req: Request, res: Response) => {
@@ -58,13 +83,23 @@ export const bloodTestController = {
     const { row, stream } = await bloodTestService.getFile(userId, id);
 
     res.setHeader("Content-Type", row.mimeType);
-    res.setHeader("Content-Length", row.fileSizeBytes);
-    // `inline` lets browsers preview PDFs/images; the filename is used on save.
-    res.setHeader(
-      "Content-Disposition",
-      `inline; filename="${encodeURIComponent(row.originalFilename)}"`,
-    );
-    stream.pipe(res);
+    res.setHeader("Content-Length", String(row.fileSizeBytes));
+    res.setHeader("Content-Disposition", contentDisposition(row.originalFilename));
+
+    const abortSource = () => stream.destroy();
+    req.once("aborted", abortSource);
+    try {
+      await pipeline(stream, res);
+    } catch (error) {
+      if (req.aborted || res.destroyed) return;
+      if (res.headersSent) {
+        res.destroy(error instanceof Error ? error : undefined);
+        return;
+      }
+      throw error;
+    } finally {
+      req.off("aborted", abortSource);
+    }
   }),
 
   replace: asyncHandler(async (req: Request, res: Response) => {

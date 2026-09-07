@@ -1,8 +1,10 @@
 import crypto from "node:crypto";
 import path from "node:path";
+import type { Readable } from "node:stream";
 
 import type { BloodTestUpload } from "@prisma/client";
 
+import { env } from "../../config/env";
 import { recordAudit, type AuditContext } from "../../lib/audit";
 import { logger } from "../../lib/logger";
 import { getStorageProvider, type StoredObjectRef } from "../../lib/storage";
@@ -16,14 +18,12 @@ import {
 import { bloodTestRepository } from "./blood-test.repository";
 import type { UploadMetadataInput } from "./blood-test.schemas";
 
-/** A file received from the upload middleware, normalized for the service. */
 export interface IncomingFile {
   buffer: Buffer;
   originalName: string;
   size: number;
 }
 
-/** Public-safe representation of an upload (internal storage refs omitted). */
 export interface PublicBloodTestUpload {
   id: string;
   status: BloodTestUpload["status"];
@@ -36,6 +36,13 @@ export interface PublicBloodTestUpload {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface PublicBloodTestPage {
+  items: PublicBloodTestUpload[];
+  nextCursor: string | null;
+}
+
+const maxFileBytes = env.BLOOD_TEST_MAX_FILE_SIZE_MB * 1024 * 1024;
 
 function toPublic(row: BloodTestUpload): PublicBloodTestUpload {
   return {
@@ -52,7 +59,6 @@ function toPublic(row: BloodTestUpload): PublicBloodTestUpload {
   };
 }
 
-/** Per-user storage namespace so objects are grouped and easy to scope. */
 function namespaceFor(userId: string): string {
   return `blood-tests/${userId}`;
 }
@@ -62,52 +68,58 @@ function refFor(userId: string, storageKey: string): StoredObjectRef {
 }
 
 /**
- * Produces a safe display filename: strips any directory component, removes
- * control/reserved characters, and bounds the length. Never used as a storage
- * key (those are random), only for display/download.
+ * Converts the untrusted client filename into display-only metadata. The final
+ * extension always follows the detected content type, so a valid PDF uploaded
+ * as `report.exe` can never be served back with a misleading executable name.
  */
 function sanitizeFilename(name: string, mime: AllowedMimeType): string {
-  const base = path.basename(name || "").replace(/[/\\]/g, "");
+  const normalized = (name || "").replace(/\\/g, "/");
+  const base = path.basename(normalized);
   // eslint-disable-next-line no-control-regex
   const cleaned = base.replace(/[\u0000-\u001f<>:"|?*]/g, "").trim();
-  const fallback = `blood-test.${MIME_EXTENSION[mime]}`;
-  const safe = cleaned.length > 0 ? cleaned : fallback;
-  return safe.length > 200 ? safe.slice(-200) : safe;
+  const lastDot = cleaned.lastIndexOf(".");
+  const rawStem = lastDot > 0 ? cleaned.slice(0, lastDot) : cleaned;
+  const stem = rawStem.replace(/[. ]+$/g, "").trim() || "blood-test";
+  const extension = MIME_EXTENSION[mime];
+  const maxStemLength = Math.max(1, 200 - extension.length - 1);
+  return `${stem.slice(0, maxStemLength)}.${extension}`;
 }
 
-/**
- * Validates the true content type and returns the sniffed mime plus a freshly
- * generated storage key. Rejects anything not in the allowed set regardless of
- * the client-declared type.
- */
 function validateAndDescribe(file: IncomingFile): {
   mime: AllowedMimeType;
   storageKey: string;
   checksum: string;
+  size: number;
 } {
   if (!file.buffer || file.buffer.length === 0) {
     throw ApiError.badRequest("The uploaded file is empty.");
   }
+  if (file.buffer.length > maxFileBytes) {
+    throw ApiError.badRequest(
+      `File is too large. Maximum size is ${env.BLOOD_TEST_MAX_FILE_SIZE_MB} MB.`,
+    );
+  }
+
   const mime = detectAllowedMimeType(file.buffer);
   if (!mime) {
     throw ApiError.badRequest(
       `Unsupported or corrupt file. Allowed types: ${ALLOWED_TYPES_LABEL}.`,
     );
   }
+
   const storageKey = `${crypto.randomUUID()}.${MIME_EXTENSION[mime]}`;
   const checksum = crypto.createHash("sha256").update(file.buffer).digest("hex");
-  return { mime, storageKey, checksum };
+  return { mime, storageKey, checksum, size: file.buffer.length };
 }
 
 export const bloodTestService = {
-  /** Stores a new blood-test file and its metadata for the user. */
   async upload(
     userId: string,
     file: IncomingFile,
     metadata: UploadMetadataInput,
     context: AuditContext,
   ): Promise<PublicBloodTestUpload> {
-    const { mime, storageKey, checksum } = validateAndDescribe(file);
+    const { mime, storageKey, checksum, size } = validateAndDescribe(file);
     const storage = getStorageProvider();
 
     await storage.put({
@@ -125,13 +137,12 @@ export const bloodTestService = {
         storageKey,
         originalFilename: sanitizeFilename(file.originalName, mime),
         mimeType: mime,
-        fileSizeBytes: file.size,
+        fileSizeBytes: size,
         checksumSha256: checksum,
         label: metadata.label ?? null,
         testDate: metadata.testDate ? new Date(`${metadata.testDate}T00:00:00.000Z`) : null,
       });
     } catch (error) {
-      // Roll back the orphaned object if the metadata insert fails.
       await storage.delete(refFor(userId, storageKey)).catch(() => undefined);
       throw error;
     }
@@ -140,18 +151,28 @@ export const bloodTestService = {
       action: "BLOOD_TEST_UPLOADED",
       userId,
       context,
-      metadata: { uploadId: created.id, mimeType: mime, fileSizeBytes: file.size },
+      metadata: { uploadId: created.id, mimeType: mime, fileSizeBytes: size },
     });
     return toPublic(created);
   },
 
-  /** Returns the user's upload history (newest first). */
-  async list(userId: string): Promise<PublicBloodTestUpload[]> {
-    const rows = await bloodTestRepository.listByUser(userId);
-    return rows.map(toPublic);
+  async list(userId: string, limit: number, cursor?: string): Promise<PublicBloodTestPage> {
+    if (cursor) {
+      const cursorRow = await bloodTestRepository.findByIdForUser(cursor, userId);
+      if (!cursorRow) {
+        throw ApiError.badRequest("Invalid blood-test history cursor.");
+      }
+    }
+
+    const rows = await bloodTestRepository.listByUser(userId, limit, cursor);
+    const hasMore = rows.length > limit;
+    const pageRows = hasMore ? rows.slice(0, limit) : rows;
+    return {
+      items: pageRows.map(toPublic),
+      nextCursor: hasMore ? (pageRows.at(-1)?.id ?? null) : null,
+    };
   },
 
-  /** Returns a single upload's metadata, or 404 if not owned/found. */
   async getById(userId: string, id: string): Promise<PublicBloodTestUpload> {
     const row = await bloodTestRepository.findByIdForUser(id, userId);
     if (!row) {
@@ -160,14 +181,10 @@ export const bloodTestService = {
     return toPublic(row);
   },
 
-  /**
-   * Opens the stored file for download/streaming. Returns the stream plus the
-   * metadata needed to set response headers. 404 if not owned/found.
-   */
   async getFile(
     userId: string,
     id: string,
-  ): Promise<{ row: BloodTestUpload; stream: NodeJS.ReadableStream }> {
+  ): Promise<{ row: BloodTestUpload; stream: Readable }> {
     const row = await bloodTestRepository.findByIdForUser(id, userId);
     if (!row) {
       throw ApiError.notFound("Blood test upload not found.");
@@ -176,12 +193,6 @@ export const bloodTestService = {
     return { row, stream };
   },
 
-  /**
-   * Replaces the file of an existing upload. The new object is written first,
-   * the record repointed, and the old object removed afterwards (best-effort),
-   * so a failure never leaves the record pointing at missing bytes. Status is
-   * reset to `UPLOADED` since any prior downstream processing is now stale.
-   */
   async replaceFile(
     userId: string,
     id: string,
@@ -193,7 +204,7 @@ export const bloodTestService = {
       throw ApiError.notFound("Blood test upload not found.");
     }
 
-    const { mime, storageKey, checksum } = validateAndDescribe(file);
+    const { mime, storageKey, checksum, size } = validateAndDescribe(file);
     const storage = getStorageProvider();
 
     await storage.put({
@@ -203,21 +214,27 @@ export const bloodTestService = {
       contentType: mime,
     });
 
+    let updatedCount = 0;
     try {
-      await bloodTestRepository.updateFile(id, userId, {
+      const updateResult = await bloodTestRepository.updateFile(id, userId, {
         storageProvider: storage.name,
         storageKey,
         originalFilename: sanitizeFilename(file.originalName, mime),
         mimeType: mime,
-        fileSizeBytes: file.size,
+        fileSizeBytes: size,
         checksumSha256: checksum,
       });
+      updatedCount = updateResult.count;
     } catch (error) {
       await storage.delete(refFor(userId, storageKey)).catch(() => undefined);
       throw error;
     }
 
-    // Remove the superseded object; failure is non-fatal (a stray blob at worst).
+    if (updatedCount !== 1) {
+      await storage.delete(refFor(userId, storageKey)).catch(() => undefined);
+      throw ApiError.notFound("Blood test upload not found.");
+    }
+
     if (existing.storageKey !== storageKey) {
       await storage.delete(refFor(userId, existing.storageKey)).catch((err) => {
         logger.warn(
@@ -231,15 +248,16 @@ export const bloodTestService = {
       action: "BLOOD_TEST_REPLACED",
       userId,
       context,
-      metadata: { uploadId: id, mimeType: mime, fileSizeBytes: file.size },
+      metadata: { uploadId: id, mimeType: mime, fileSizeBytes: size },
     });
 
     const updated = await bloodTestRepository.findByIdForUser(id, userId);
-    // Non-null: the record was just updated within this request.
-    return toPublic(updated as BloodTestUpload);
+    if (!updated) {
+      throw ApiError.notFound("Blood test upload not found.");
+    }
+    return toPublic(updated);
   },
 
-  /** Deletes an upload's record and its stored object (best-effort). */
   async remove(userId: string, id: string, context: AuditContext): Promise<void> {
     const existing = await bloodTestRepository.findByIdForUser(id, userId);
     if (!existing) {
@@ -248,7 +266,6 @@ export const bloodTestService = {
 
     const result = await bloodTestRepository.deleteForUser(id, userId);
     if (result.count === 0) {
-      // Raced with another delete — treat as not found.
       throw ApiError.notFound("Blood test upload not found.");
     }
 

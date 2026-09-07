@@ -22,8 +22,6 @@ const envSchema = z.object({
   JWT_ACCESS_SECRET: z.string().min(32, "JWT_ACCESS_SECRET must be at least 32 characters"),
   JWT_REFRESH_SECRET: z.string().min(32, "JWT_REFRESH_SECRET must be at least 32 characters"),
   JWT_ACCESS_TTL: z.string().default("15m"),
-  // Canonical refresh lifetime. DB expiry and cookie expiry are derived from the
-  // signed JWT's exp claim, so there is no second TTL setting to drift.
   JWT_REFRESH_TTL: z.string().default("7d"),
   JWT_ISSUER: z.string().default("diewish"),
   BCRYPT_ROUNDS: z.coerce.number().int().min(10).max(15).default(12),
@@ -38,6 +36,12 @@ const envSchema = z.object({
   STORAGE_PROVIDER: z.enum(["local"]).default("local"),
   STORAGE_LOCAL_ROOT: z.string().default("./storage/uploads"),
   BLOOD_TEST_MAX_FILE_SIZE_MB: z.coerce.number().int().positive().default(15),
+  BLOOD_TEST_UPLOAD_RATE_LIMIT_WINDOW_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(15 * 60 * 1000),
+  BLOOD_TEST_UPLOAD_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
 });
 
 export type Env = z.infer<typeof envSchema>;

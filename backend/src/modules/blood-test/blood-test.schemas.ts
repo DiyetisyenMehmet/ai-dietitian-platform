@@ -1,21 +1,14 @@
 import { z } from "zod";
 
-/**
- * Zod schemas for the blood-test module. File contents are validated separately
- * (size via multer, true type via magic-byte sniffing); these schemas cover the
- * route params and the optional multipart text fields that accompany a file.
- */
-
-/** Route param: the upload id (UUID). */
 export const uploadIdParamSchema = z.object({
   id: z.string().uuid("A valid upload id is required"),
 });
 
-/**
- * Optional metadata sent alongside an upload as multipart form fields. Values
- * arrive as strings; `testDate` is an ISO calendar date (YYYY-MM-DD) that must
- * not be in the future.
- */
+export const listBloodTestsQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  cursor: z.string().uuid("cursor must be a valid upload id").optional(),
+});
+
 export const uploadMetadataSchema = z.object({
   label: z.string().trim().min(1).max(120).optional(),
   testDate: z
@@ -30,4 +23,5 @@ export const uploadMetadataSchema = z.object({
 });
 
 export type UploadIdParam = z.infer<typeof uploadIdParamSchema>;
+export type ListBloodTestsQuery = z.infer<typeof listBloodTestsQuerySchema>;
 export type UploadMetadataInput = z.infer<typeof uploadMetadataSchema>;
