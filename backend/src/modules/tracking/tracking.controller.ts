@@ -41,6 +41,12 @@ export const trackingController = {
     sendSuccess(res, { logs });
   }),
 
+  getWeightCheckIn: asyncHandler(async (req: Request, res: Response) => {
+    const userId = requireUserId(req);
+    const checkIn = await trackingService.getWeightCheckInStatus(userId);
+    sendSuccess(res, { checkIn });
+  }),
+
   createMeal: asyncHandler(async (req: Request, res: Response) => {
     const userId = requireUserId(req);
     const log = await trackingService.logMeal(userId, req.body as CreateMealLogInput);

@@ -2,6 +2,7 @@ import { Router } from "express";
 
 import { authenticate } from "../../middleware/authenticate";
 import { requireConsent } from "../../middleware/require-consent";
+import { requireCurrentWeightCheckIn } from "../../middleware/require-weight-check-in";
 import { validate } from "../../middleware/validate";
 import { nutritionPlanController } from "./nutrition-plan.controller";
 import {
@@ -30,6 +31,7 @@ nutritionPlanRouter.post(
   "/generate",
   authenticate,
   requireConsent,
+  requireCurrentWeightCheckIn,
   validate({ body: generatePlanSchema }),
   nutritionPlanController.generate,
 );
@@ -47,6 +49,7 @@ nutritionPlanRouter.post(
   "/:id/regenerate",
   authenticate,
   requireConsent,
+  requireCurrentWeightCheckIn,
   validate({ params: planIdParamSchema }),
   nutritionPlanController.regenerate,
 );
@@ -55,6 +58,7 @@ nutritionPlanRouter.post(
   "/:id/refresh",
   authenticate,
   requireConsent,
+  requireCurrentWeightCheckIn,
   validate({ params: planIdParamSchema, body: refreshPlanSchema }),
   nutritionPlanController.refresh,
 );
@@ -63,6 +67,7 @@ nutritionPlanRouter.post(
   "/:id/extend",
   authenticate,
   requireConsent,
+  requireCurrentWeightCheckIn,
   validate({ params: planIdParamSchema, body: extendPlanSchema }),
   nutritionPlanController.extend,
 );

@@ -6,6 +6,10 @@ import {
   nutritionPlanStore,
   useNutritionPlan,
 } from "@/application/health/nutrition-plan-store";
+import {
+  useWeightCheckInStatus,
+  weightStore,
+} from "@/application/health/weight-store";
 import type { NutritionPlanRecord } from "@/infrastructure/nutrition/nutrition-plan-client";
 import { NutritionPlanHungerCoach } from "@/presentation/components/meals/nutrition-plan-hunger-coach";
 import {
@@ -184,9 +188,38 @@ function PantryPlanningCard({ value }: { value: string }) {
   );
 }
 
+function WeightCheckInNotice() {
+  const checkIn = useWeightCheckInStatus();
+  if (!checkIn?.required) return null;
+
+  return (
+    <Card className="border-amber-500/30 bg-amber-500/10">
+      <CardContent className="p-5">
+        <p className="text-sm font-semibold text-amber-700 dark:text-amber-300">
+          Haftalık kilo check-inin gerekli
+        </p>
+        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+          Mevcut planını kullanmaya devam edebilirsin. Ancak güncel kilon kaydedilene kadar yeni
+          plan oluşturma, planı yenileme ve uzatma işlemleri güvenlik gereği durdurulur.
+        </p>
+        <a
+          href="/progress"
+          className="mt-3 inline-flex rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground"
+        >
+          Kilo check-inini tamamla
+        </a>
+      </CardContent>
+    </Card>
+  );
+}
+
 /** Full professional plan experience: plan management plus optional local reminders. */
 export function NutritionPlanExperience() {
   const { activePlan, pantryDraft } = useNutritionPlan();
+
+  React.useEffect(() => {
+    void weightStore.hydrateCheckInFromBackend();
+  }, []);
 
   React.useEffect(() => {
     if (activePlan) return;
@@ -208,6 +241,7 @@ export function NutritionPlanExperience() {
 
   return (
     <div className="space-y-5">
+      <WeightCheckInNotice />
       {!activePlan && <PantryPlanningCard value={pantryDraft} />}
       <NutritionPlanView />
       {activePlan && hungerDayNumber !== null && (

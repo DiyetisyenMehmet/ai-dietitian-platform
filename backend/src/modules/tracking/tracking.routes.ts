@@ -20,7 +20,8 @@ import {
  */
 export const trackingRouter = Router();
 
-/** Weight time-series. */
+/** Weight time-series and backend-owned weekly check-in schedule. */
+trackingRouter.get("/weight/check-in", authenticate, trackingController.getWeightCheckIn);
 trackingRouter.post(
   "/weight",
   authenticate,

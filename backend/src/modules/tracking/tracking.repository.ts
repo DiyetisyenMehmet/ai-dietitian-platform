@@ -35,6 +35,28 @@ export const trackingRepository = {
     });
   },
 
+  async getWeightCheckInContext(userId: string): Promise<{
+    onboardingCompleted: boolean;
+    lastWeightLog: Pick<WeightLog, "loggedAt"> | null;
+  } | null> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        onboardingCompleted: true,
+        weightLogs: {
+          orderBy: { loggedAt: "desc" },
+          take: 1,
+          select: { loggedAt: true },
+        },
+      },
+    });
+    if (!user) return null;
+    return {
+      onboardingCompleted: user.onboardingCompleted,
+      lastWeightLog: user.weightLogs[0] ?? null,
+    };
+  },
+
   createMealLog(data: {
     userId: string;
     mealType: MealLog["mealType"];

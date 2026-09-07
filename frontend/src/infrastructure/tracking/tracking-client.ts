@@ -27,6 +27,15 @@ export interface WeightLog {
   createdAt: string;
 }
 
+export interface WeightCheckInStatus {
+  active: boolean;
+  intervalDays: number;
+  required: boolean;
+  lastLoggedAt: string | null;
+  nextDueAt: string | null;
+  overdueDays: number;
+}
+
 /**
  * Infrastructure-level tracking client. Authenticated (the HTTP client attaches
  * the access token). No UI or cache logic lives here.
@@ -57,6 +66,14 @@ export const trackingClient = {
     const query = since ? `?since=${encodeURIComponent(since.toISOString())}` : "";
     return apiRequest<{ logs: WeightLog[] }>({
       path: `${TRACKING_ENDPOINTS.weight}${query}`,
+      method: "GET",
+      auth: true,
+    });
+  },
+
+  getWeightCheckIn() {
+    return apiRequest<{ checkIn: WeightCheckInStatus }>({
+      path: TRACKING_ENDPOINTS.weightCheckIn,
       method: "GET",
       auth: true,
     });

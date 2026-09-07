@@ -27,6 +27,8 @@ export const TRACKING_ENDPOINTS = {
   meals: "/tracking/meals",
   /** GET weight logs (optionally `?since=<ISO>`) / POST a new weight log. */
   weight: "/tracking/weight",
+  /** GET backend-owned weekly weight check-in status. */
+  weightCheckIn: "/tracking/weight/check-in",
 } as const;
 
 export const ACTIVITY_ENDPOINTS = {

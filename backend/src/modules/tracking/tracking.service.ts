@@ -10,6 +10,12 @@ import type {
   CreateWeightLogInput,
   UpdateMealLogInput,
 } from "./tracking.schemas";
+import {
+  buildWeightCheckInStatus,
+  type WeightCheckInStatus,
+} from "./weight-check-in";
+
+export const WEIGHT_CHECK_IN_REQUIRED_CODE = "WEIGHT_CHECK_IN_REQUIRED";
 
 /** Parses an optional ISO string into a Date, or undefined. */
 function toDate(iso?: string): Date | undefined {
@@ -39,6 +45,27 @@ export const trackingService = {
 
   listWeight(userId: string, since?: Date): Promise<WeightLog[]> {
     return trackingRepository.listWeightLogs(userId, since);
+  },
+
+  async getWeightCheckInStatus(userId: string, now = new Date()): Promise<WeightCheckInStatus> {
+    const context = await trackingRepository.getWeightCheckInContext(userId);
+    if (!context) {
+      throw ApiError.notFound("User not found.");
+    }
+    return buildWeightCheckInStatus(
+      context.onboardingCompleted,
+      context.lastWeightLog?.loggedAt ?? null,
+      now,
+    );
+  },
+
+  async requireCurrentWeightCheckIn(userId: string): Promise<void> {
+    const status = await this.getWeightCheckInStatus(userId);
+    if (!status.required) return;
+    throw new ApiError(409, "Weekly weight check-in is required before recalculating a nutrition plan.", {
+      code: WEIGHT_CHECK_IN_REQUIRED_CODE,
+      details: status,
+    });
   },
 
   logMeal(userId: string, input: CreateMealLogInput): Promise<MealLog> {

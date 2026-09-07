@@ -49,6 +49,25 @@ interface MeData {
   };
 }
 
+interface WeightCheckInData {
+  checkIn: {
+    active: boolean;
+    intervalDays: number;
+    required: boolean;
+    lastLoggedAt: string | null;
+    nextDueAt: string | null;
+    overdueDays: number;
+  };
+}
+
+interface WeightLogData {
+  log: {
+    id: string;
+    weightKg: number;
+    loggedAt: string;
+  };
+}
+
 function expectSuccess<T>(body: ApiEnvelope<T>): asserts body is { success: true; data: T } {
   assert.equal(body.success, true);
 }
@@ -133,6 +152,16 @@ test("register -> consent gate -> onboarding -> persisted work-schedule update",
   expectSuccess(emptyProfile.body);
   assert.equal(emptyProfile.body.data.profile, null);
 
+  const inactiveCheckIn = await apiRequest<WeightCheckInData>(
+    baseUrl,
+    "/api/tracking/weight/check-in",
+    { token: accessToken },
+  );
+  assert.equal(inactiveCheckIn.status, 200);
+  expectSuccess(inactiveCheckIn.body);
+  assert.equal(inactiveCheckIn.body.data.checkIn.active, false);
+  assert.equal(inactiveCheckIn.body.data.checkIn.required, false);
+
   const nightShiftProfile = {
     fullName: "Integration User",
     dateOfBirth: "1990-05-20",
@@ -189,6 +218,17 @@ test("register -> consent gate -> onboarding -> persisted work-schedule update",
   assert.equal(completed.body.data.profile.usualWakeTime, "17:00");
   assert.equal(completed.body.data.profile.usualSleepTime, "09:00");
 
+  const freshCheckIn = await apiRequest<WeightCheckInData>(
+    baseUrl,
+    "/api/tracking/weight/check-in",
+    { token: accessToken },
+  );
+  assert.equal(freshCheckIn.status, 200);
+  expectSuccess(freshCheckIn.body);
+  assert.equal(freshCheckIn.body.data.checkIn.active, true);
+  assert.equal(freshCheckIn.body.data.checkIn.intervalDays, 7);
+  assert.equal(freshCheckIn.body.data.checkIn.required, false);
+
   const storedNightProfile = await apiRequest<OnboardingReadData>(baseUrl, "/api/onboarding", {
     token: accessToken,
   });
@@ -220,6 +260,61 @@ test("register -> consent gate -> onboarding -> persisted work-schedule update",
 
   const baselineWeightRows = await prisma.weightLog.count({ where: { userId } });
   assert.equal(baselineWeightRows, 1, "profile edits must not duplicate the immutable starting weight");
+
+  const oldBaselineAt = new Date(Date.now() - 8 * 86_400_000);
+  await prisma.weightLog.updateMany({ where: { userId }, data: { loggedAt: oldBaselineAt } });
+
+  const dueCheckIn = await apiRequest<WeightCheckInData>(
+    baseUrl,
+    "/api/tracking/weight/check-in",
+    { token: accessToken },
+  );
+  assert.equal(dueCheckIn.status, 200);
+  expectSuccess(dueCheckIn.body);
+  assert.equal(dueCheckIn.body.data.checkIn.required, true);
+
+  const blockedPlan = await apiRequest<unknown>(baseUrl, "/api/nutrition-plans/generate", {
+    method: "POST",
+    token: accessToken,
+    body: { duration: "SEVEN_DAY" },
+  });
+  assert.equal(blockedPlan.status, 409);
+  expectFailure(blockedPlan.body);
+  assert.equal(blockedPlan.body.error.code, "WEIGHT_CHECK_IN_REQUIRED");
+
+  const futureWeight = await apiRequest<WeightLogData>(baseUrl, "/api/tracking/weight", {
+    method: "POST",
+    token: accessToken,
+    body: {
+      weightKg: 69.8,
+      loggedAt: new Date(Date.now() + 24 * 60 * 60_000).toISOString(),
+    },
+  });
+  assert.equal(futureWeight.status, 400);
+  expectFailure(futureWeight.body);
+
+  const weighIn = await apiRequest<WeightLogData>(baseUrl, "/api/tracking/weight", {
+    method: "POST",
+    token: accessToken,
+    body: { weightKg: 69.8 },
+  });
+  assert.equal(weighIn.status, 201);
+  expectSuccess(weighIn.body);
+  assert.equal(weighIn.body.data.log.weightKg, 69.8);
+
+  const satisfiedCheckIn = await apiRequest<WeightCheckInData>(
+    baseUrl,
+    "/api/tracking/weight/check-in",
+    { token: accessToken },
+  );
+  assert.equal(satisfiedCheckIn.status, 200);
+  expectSuccess(satisfiedCheckIn.body);
+  assert.equal(satisfiedCheckIn.body.data.checkIn.required, false);
+
+  const baselineStillExists = await prisma.weightLog.count({
+    where: { userId, note: "Başlangıç" },
+  });
+  assert.equal(baselineStillExists, 1, "weekly check-ins must never replace the immutable baseline");
 
   const me = await apiRequest<MeData>(baseUrl, "/api/auth/me", { token: accessToken });
   assert.equal(me.status, 200);

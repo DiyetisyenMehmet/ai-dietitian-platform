@@ -15,7 +15,12 @@ import { ProgressStatsSection } from "@/presentation/components/progress/progres
 import { WeightChart } from "@/presentation/components/health/weight-chart";
 import { healthIcon } from "@/presentation/components/health/health-icon";
 import { useHealthProfile } from "@/application/health/health-profile-store";
-import { useWeightEntries, weightStore, analyzeWeight } from "@/application/health/weight-store";
+import {
+  analyzeWeight,
+  useWeightCheckInStatus,
+  useWeightEntries,
+  weightStore,
+} from "@/application/health/weight-store";
 import { useActivity } from "@/application/health/activity-store";
 import { journeyStore, useJourneyEvents } from "@/application/health/journey-store";
 import type { JourneyEventType, WeightEntry } from "@/domain/health/types";
@@ -130,8 +135,13 @@ function WeighInForm() {
 export function ProgressView() {
   const profile = useHealthProfile();
   const entries = useWeightEntries();
+  const checkIn = useWeightCheckInStatus();
   const activity = useActivity();
   const history = useJourneyEvents();
+
+  React.useEffect(() => {
+    void weightStore.hydrateCheckInFromBackend();
+  }, []);
 
   const analysis = React.useMemo(
     () => analyzeWeight(entries, profile.targetWeightKg),
@@ -211,12 +221,22 @@ export function ProgressView() {
       <ProgressStatsSection />
 
       <SectionCard icon="scale" title="Kilonu Kaydet">
-        <WeighInForm />
-        {analysis.isWeighInDue && analysis.status !== "no-data" && (
-          <p className="mt-3 text-xs text-amber-600 dark:text-amber-400">
-            Son ölçümünün üzerinden bir hafta geçti. İstersen güncel kilonu ekleyebilirsin.
+        {checkIn?.required && (
+          <div className="mb-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4">
+            <p className="text-sm font-semibold text-amber-700 dark:text-amber-300">
+              Haftalık kilo check-inin bekliyor
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              Beslenme hedeflerinin eski kiloya göre yeniden hesaplanmaması için yeni plan oluşturma, yenileme ve uzatma işlemlerinden önce güncel kilonu kaydetmen gerekiyor. Mevcut planın ve geçmiş kayıtların erişilebilir kalır.
+            </p>
+          </div>
+        )}
+        {!checkIn?.required && checkIn?.active && checkIn.nextDueAt && (
+          <p className="mb-3 text-xs text-muted-foreground">
+            Sonraki haftalık check-in: {formatLongDate(new Date(checkIn.nextDueAt))}
           </p>
         )}
+        <WeighInForm />
       </SectionCard>
 
       <SectionCard icon="activity" title="Aktivite">

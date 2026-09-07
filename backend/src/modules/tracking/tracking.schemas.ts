@@ -12,10 +12,23 @@ const optionalLoggedAt = z
   .datetime({ message: "loggedAt must be an ISO-8601 datetime string." })
   .optional();
 
+/**
+ * Weight timestamps may be historical, but cannot be placed in the future to
+ * bypass the backend-owned weekly check-in schedule. A small clock-skew window
+ * keeps otherwise valid clients from failing around device/server drift.
+ */
+const optionalWeightLoggedAt = z
+  .string()
+  .datetime({ message: "loggedAt must be an ISO-8601 datetime string." })
+  .refine((value) => new Date(value).getTime() <= Date.now() + 5 * 60_000, {
+    message: "loggedAt cannot be in the future.",
+  })
+  .optional();
+
 export const createWeightLogSchema = z.object({
   weightKg: z.number().positive().max(500),
   note: z.string().trim().max(280).optional(),
-  loggedAt: optionalLoggedAt,
+  loggedAt: optionalWeightLoggedAt,
 });
 
 export const createMealLogSchema = z.object({

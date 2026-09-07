@@ -3,7 +3,11 @@
 import * as React from "react";
 
 import type { WeightEntry } from "@/domain/health/types";
-import { trackingClient, type WeightLog } from "@/infrastructure/tracking/tracking-client";
+import {
+  trackingClient,
+  type WeightCheckInStatus,
+  type WeightLog,
+} from "@/infrastructure/tracking/tracking-client";
 import { healthProfileStore } from "./health-profile-store";
 
 export const WEIGH_IN_INTERVAL_DAYS = 7;
@@ -45,11 +49,17 @@ function collapseToLatestPerDay(logs: WeightLog[]): WeightEntry[] {
 }
 
 let entries: WeightEntry[] = [];
+let checkInStatus: WeightCheckInStatus | null = null;
 const listeners = new Set<() => void>();
+const checkInListeners = new Set<() => void>();
 
 function emit() {
   entries = [...entries];
   listeners.forEach((l) => l());
+}
+
+function emitCheckIn() {
+  checkInListeners.forEach((l) => l());
 }
 
 function subscribe(listener: () => void) {
@@ -57,8 +67,17 @@ function subscribe(listener: () => void) {
   return () => listeners.delete(listener);
 }
 
+function subscribeCheckIn(listener: () => void) {
+  checkInListeners.add(listener);
+  return () => checkInListeners.delete(listener);
+}
+
 function getSnapshot() {
   return entries;
+}
+
+function getCheckInSnapshot() {
+  return checkInStatus;
 }
 
 /** Stable chronological order; the explicit baseline always wins ties. */
@@ -78,6 +97,17 @@ function syncProfileWeights(): void {
   const latest = list.at(-1);
   if (first) healthProfileStore.setStartWeight(first.weightKg);
   if (latest) healthProfileStore.setCurrentWeight(latest.weightKg);
+}
+
+async function refreshCheckInStatus(): Promise<WeightCheckInStatus | null> {
+  try {
+    const { checkIn } = await trackingClient.getWeightCheckIn();
+    checkInStatus = checkIn;
+  } catch {
+    checkInStatus = null;
+  }
+  emitCheckIn();
+  return checkInStatus;
 }
 
 export const weightStore = {
@@ -112,6 +142,11 @@ export const weightStore = {
       emit();
       syncProfileWeights();
     }
+    await refreshCheckInStatus();
+  },
+
+  hydrateCheckInFromBackend(): Promise<WeightCheckInStatus | null> {
+    return refreshCheckInStatus();
   },
 
   async add(weightKg: number, note?: string): Promise<void> {
@@ -125,17 +160,24 @@ export const weightStore = {
     ];
     emit();
     syncProfileWeights();
+    await refreshCheckInStatus();
   },
 
   clear() {
     entries = [];
+    checkInStatus = null;
     emit();
+    emitCheckIn();
   },
 };
 
 export function useWeightEntries(): WeightEntry[] {
   const raw = React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
   return React.useMemo(() => sorted(raw), [raw]);
+}
+
+export function useWeightCheckInStatus(): WeightCheckInStatus | null {
+  return React.useSyncExternalStore(subscribeCheckIn, getCheckInSnapshot, getCheckInSnapshot);
 }
 
 export type WeightDirection = "lose" | "gain" | "maintain";
