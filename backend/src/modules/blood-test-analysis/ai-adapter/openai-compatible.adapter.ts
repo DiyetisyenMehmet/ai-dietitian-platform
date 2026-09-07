@@ -436,6 +436,10 @@ export class OpenAICompatibleAdapter implements IAIAdapter {
       .map((signature) => signature.trim())
       .filter(Boolean)
       .slice(-28);
+    const behaviorInsights = (input.behaviorInsights ?? [])
+      .map((insight) => insight.trim())
+      .filter(Boolean)
+      .slice(0, 6);
 
     const schemaHint = [
       "Return JSON with this exact shape:",
@@ -458,6 +462,7 @@ export class OpenAICompatibleAdapter implements IAIAdapter {
       `Generate exactly ${input.cycleLengthDays} unique days in "cycle".`,
       `This batch represents plan days ${startDayNumber}-${endDayNumber} of a ${planDurationDays}-day plan.`,
       "Treat avoidMealSignatures as prior-day meal/food combinations to avoid repeating when practical; they are context, not permission to violate targets, allergies, or dietary constraints.",
+      "Treat behaviorInsights only as bounded preference/adherence context for practical food selection; they must never override calorie/macro targets, mealTiming, allergies, dietary preference, health constraints, or safety rules.",
       "Each day's meals must sum close to the daily calorie and macro targets.",
       "Honor every allergy as a HARD exclusion — no allergen in any food, ever.",
     ].join("\n");
@@ -476,6 +481,7 @@ export class OpenAICompatibleAdapter implements IAIAdapter {
       allergies: input.allergies,
       healthConditions: input.healthConditions,
       bloodTestImplications: input.bloodTestImplications,
+      behaviorInsights,
       cycleLengthDays: input.cycleLengthDays,
       planDurationDays,
       startDayNumber,

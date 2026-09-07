@@ -4,7 +4,8 @@
  * Meal times are derived from the user's usual wake/sleep rhythm when those
  * profile fields are available. AI never decides these clock times. Existing
  * users without rhythm data keep the established fixed schedule as a backwards-
- * compatible fallback.
+ * compatible fallback. A recurring hunger pattern may nudge only a snack slot,
+ * and only while minimum meal gaps remain intact.
  */
 
 import type { MealSlot, MealTimingRecommendation, WeightGoal } from "../types";
@@ -12,6 +13,8 @@ import type { MealSlot, MealTimingRecommendation, WeightGoal } from "../types";
 interface DailyRhythm {
   usualWakeTime?: string | null;
   usualSleepTime?: string | null;
+  /** Evidence-backed recurring hunger time, never a one-off user event. */
+  preferredSnackTime?: string | null;
 }
 
 /** Established fallback used for profiles created before sleep/wake capture. */
@@ -103,7 +106,56 @@ function personalizedTimes(slotCount: number, rhythm: DailyRhythm): string[] | n
   );
 }
 
-/** Resolves deterministic meal timing from goal + optional daily rhythm. */
+function timelineMinutes(slots: MealSlot[]): number[] | null {
+  let dayOffset = 0;
+  let previous = -1;
+  const result: number[] = [];
+  for (const slot of slots) {
+    const clock = parseClock(slot.time);
+    if (clock === null) return null;
+    let minute = clock + dayOffset;
+    if (minute <= previous) {
+      dayOffset += 1440;
+      minute = clock + dayOffset;
+    }
+    result.push(minute);
+    previous = minute;
+  }
+  return result;
+}
+
+/**
+ * Nudges only an existing snack slot toward a recurring hunger window. It never
+ * adds meals or calories and keeps at least two hours between neighbouring meals.
+ */
+function applyRecurringHungerTiming(slots: MealSlot[], preferredTime?: string | null): MealSlot[] {
+  const preferredClock = parseClock(preferredTime);
+  const timeline = timelineMinutes(slots);
+  if (preferredClock === null || !timeline || timeline.length < 3) return slots;
+
+  let preferred = preferredClock;
+  while (preferred < timeline[0]) preferred += 1440;
+  if (preferred > timeline[timeline.length - 1]) return slots;
+
+  const snackIndexes = slots
+    .map((slot, index) => (/snack|ara\s*öğün/i.test(slot.name) ? index : -1))
+    .filter((index) => index > 0 && index < slots.length - 1);
+  if (!snackIndexes.length) return slots;
+
+  const snackIndex = snackIndexes.sort(
+    (a, b) => Math.abs(timeline[a] - preferred) - Math.abs(timeline[b] - preferred),
+  )[0];
+  const min = timeline[snackIndex - 1] + 120;
+  const max = timeline[snackIndex + 1] - 120;
+  if (min > max) return slots;
+
+  const adaptedMinute = roundToFiveMinutes(clamp(preferred, min, max));
+  return slots.map((slot, index) =>
+    index === snackIndex ? { ...slot, time: formatClock(adaptedMinute) } : slot,
+  );
+}
+
+/** Resolves deterministic meal timing from goal + optional daily rhythm/adaptation. */
 export function calculateMealTiming(
   goal: WeightGoal,
   rhythm: DailyRhythm = {},
@@ -112,9 +164,10 @@ export function calculateMealTiming(
   const fallback = goal === "GAIN_WEIGHT" ? GAIN_FALLBACK : STANDARD_FALLBACK;
   const times = personalizedTimes(template.length, rhythm);
 
-  const slots = times
+  const baseSlots = times
     ? template.map((slot, index) => ({ ...slot, time: times[index] }))
     : fallback.map((slot) => ({ ...slot }));
+  const slots = applyRecurringHungerTiming(baseSlots, rhythm.preferredSnackTime);
 
   return { mealsPerDay: slots.length, slots };
 }

@@ -6,6 +6,7 @@ import { ApiError } from "../../utils/api-error";
 import { aiUsageService } from "../ai-usage/ai-usage.service";
 import { bloodTestAnalysisRepository } from "../blood-test-analysis/blood-test-analysis.repository";
 import { ENTITLEMENT_REQUIRED_CODE } from "../payments/constants";
+import { calculateMealTiming } from "./calculations/meal-timing";
 import { DURATION_DAYS, isSupportedPlanDuration } from "./constants";
 import type {
   ExtendPlanInput,
@@ -13,12 +14,12 @@ import type {
   ShiftPlanDayInput,
 } from "./dto/nutrition-plan.schemas";
 import { mealGeneratorService } from "./meal-generator/meal-generator.service";
+import { nutritionPlanAdaptationService } from "./nutrition-plan-adaptation.service";
 import { nutritionPlanRepository } from "./nutrition-plan.repository";
 import type {
   BloodTestImplicationInput,
   CalendarDay,
   DailyPlan,
-  MealTimingRecommendation,
   NutritionPlanContent,
   NutritionPlanGenerationInput,
   PlanDuration,
@@ -66,6 +67,8 @@ async function currentNutritionContext(userId: string): Promise<{
   dietaryPreference: string;
   allergies: string[];
   healthConditions: string[];
+  usualWakeTime: string | null;
+  usualSleepTime: string | null;
   bloodTestImplications: BloodTestImplicationInput[];
 }> {
   const profile = await prisma.userProfile.findUnique({
@@ -74,6 +77,8 @@ async function currentNutritionContext(userId: string): Promise<{
       dietaryPreference: true,
       allergies: true,
       healthConditions: true,
+      usualWakeTime: true,
+      usualSleepTime: true,
     },
   });
   if (!profile) {
@@ -103,6 +108,8 @@ async function currentNutritionContext(userId: string): Promise<{
     dietaryPreference: profile.dietaryPreference,
     allergies: profile.allergies,
     healthConditions: profile.healthConditions,
+    usualWakeTime: profile.usualWakeTime,
+    usualSleepTime: profile.usualSleepTime,
     bloodTestImplications,
   };
 }
@@ -112,19 +119,30 @@ async function generationInputFromPlan(
   plan: NutritionPlan,
   durationDays: number,
 ): Promise<NutritionPlanGenerationInput> {
-  const context = await currentNutritionContext(userId);
+  const [context, adaptation] = await Promise.all([
+    currentNutritionContext(userId),
+    nutritionPlanAdaptationService.build(userId),
+  ]);
+  const goal = goalFromPlan(plan);
+  const mealTiming = calculateMealTiming(goal, {
+    usualWakeTime: context.usualWakeTime,
+    usualSleepTime: context.usualSleepTime,
+    preferredSnackTime: adaptation.preferredSnackTime,
+  });
+
   return {
-    goal: goalFromPlan(plan),
+    goal,
     dailyCalories: plan.dailyCalories,
     proteinGrams: plan.proteinGrams,
     carbsGrams: plan.carbsGrams,
     fatGrams: plan.fatGrams,
     waterMl: plan.waterMl,
-    mealTiming: plan.mealTiming as unknown as MealTimingRecommendation,
+    mealTiming,
     dietaryPreference: context.dietaryPreference,
     allergies: context.allergies,
     healthConditions: context.healthConditions,
     bloodTestImplications: context.bloodTestImplications,
+    behaviorInsights: adaptation.behaviorInsights,
     durationDays,
   };
 }

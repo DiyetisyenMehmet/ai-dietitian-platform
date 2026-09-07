@@ -221,6 +221,7 @@ async function generateBatch(
       allergies: input.allergies,
       healthConditions: input.healthConditions,
       bloodTestImplications: input.bloodTestImplications,
+      behaviorInsights: input.behaviorInsights,
       cycleLengthDays: spec.batchDays,
       planDurationDays: input.durationDays,
       startDayNumber: spec.startDayNumber,
