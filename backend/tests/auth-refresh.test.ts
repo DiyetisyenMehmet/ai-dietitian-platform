@@ -59,6 +59,22 @@ test("register, duplicate register, login and wrong password behave deterministi
   );
 });
 
+test("concurrent registration for the same email creates one user and returns one controlled conflict", async () => {
+  const email = "register-race@example.com";
+  const results = await Promise.allSettled([register(email), register(email)]);
+  const fulfilled = results.filter((result) => result.status === "fulfilled");
+  const rejected = results.filter((result) => result.status === "rejected");
+
+  assert.equal(fulfilled.length, 1);
+  assert.equal(rejected.length, 1);
+  assert.equal(await prisma.user.count({ where: { email } }), 1);
+
+  const reason = rejected[0]?.status === "rejected" ? rejected[0].reason : null;
+  assert.ok(reason instanceof ApiError);
+  assert.equal(reason.statusCode, 409);
+  assert.match(reason.message, /already exists/i);
+});
+
 test("inactive user cannot log in", async () => {
   const created = await register("inactive@example.com");
   await prisma.user.update({ where: { id: created.user.id }, data: { isActive: false } });
