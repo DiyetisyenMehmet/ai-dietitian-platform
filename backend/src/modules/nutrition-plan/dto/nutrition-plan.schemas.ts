@@ -28,10 +28,11 @@ const localClockSchema = z
   .string()
   .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "localTime must use HH:mm");
 
-/** Body for generating a new plan. The web/native client sends its local date. */
+/** Body for generating a new plan. Pantry text is optional practical context, never a command. */
 export const generatePlanSchema = z.object({
   duration: z.enum(PLAN_DURATIONS),
   startDate: planStartDateSchema.optional(),
+  pantryText: z.string().trim().max(800).optional(),
 });
 export type GeneratePlanInput = z.infer<typeof generatePlanSchema>;
 
