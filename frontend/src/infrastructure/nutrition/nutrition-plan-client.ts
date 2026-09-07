@@ -13,6 +13,8 @@ export type NutritionPlanStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAIL
 export type NutritionPlanDeviationScope = "FOOD" | "MEAL" | "DAY";
 export type NutritionPlanDeviationType = "SKIPPED" | "REPLACED" | "EXTRA" | "PORTION_CHANGED";
 export type NutritionPlanRefreshMode = "DAY" | "FROM_DAY";
+export type HungerLevel = "LIGHT" | "HUNGRY" | "VERY_HUNGRY";
+export type HungerDecisionType = "WAIT_FOR_MEAL" | "EAT_PLANNED_MEAL" | "SMALL_SNACK" | "DAY_COMPLETE";
 
 export function isSupportedNutritionPlanDuration(
   value: NutritionPlanDuration,
@@ -144,6 +146,18 @@ export interface RefreshNutritionPlanInput {
   dayNumber: number;
 }
 
+export interface HungerDecisionResult {
+  eventId: string;
+  decision: HungerDecisionType;
+  message: string;
+  nextMealIndex: number | null;
+  nextMealName: string | null;
+  nextMealTime: string | null;
+  minutesToNextMeal: number | null;
+  previousMealSkipped: boolean;
+  suggestedSnackCalories: number | null;
+}
+
 export type NutritionPlanSummary = NutritionPlanRecord;
 
 function localDateYmd(date = new Date()): string {
@@ -151,6 +165,10 @@ function localDateYmd(date = new Date()): string {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function localTimeHm(date = new Date()): string {
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
 export const nutritionPlanClient = {
@@ -203,6 +221,21 @@ export const nutritionPlanClient = {
       method: "POST",
       auth: true,
       body: JSON.stringify({ dayNumber, localDate: localDateYmd() }),
+    });
+  },
+
+  reportHunger(planId: string, dayNumber: number, hungerLevel: HungerLevel) {
+    const now = new Date();
+    return apiRequest<{ result: HungerDecisionResult }>({
+      path: `/nutrition-plans/${encodeURIComponent(planId)}/hunger`,
+      method: "POST",
+      auth: true,
+      body: JSON.stringify({
+        dayNumber,
+        hungerLevel,
+        localDate: localDateYmd(now),
+        localTime: localTimeHm(now),
+      }),
     });
   },
 
