@@ -9,6 +9,7 @@ import {
   createDeviationSchema,
   extendPlanSchema,
   generatePlanSchema,
+  hungerReportSchema,
   planDeviationParamSchema,
   planIdParamSchema,
   refreshPlanSchema,
@@ -72,6 +73,15 @@ nutritionPlanRouter.post(
   requireConsent,
   validate({ params: planIdParamSchema, body: shiftPlanDaySchema }),
   nutritionPlanController.shiftDay,
+);
+
+/** Deterministic hunger coaching + behavior signal capture. */
+nutritionPlanRouter.post(
+  "/:id/hunger",
+  authenticate,
+  requireConsent,
+  validate({ params: planIdParamSchema, body: hungerReportSchema }),
+  nutritionPlanController.reportHunger,
 );
 
 nutritionPlanRouter.get(
