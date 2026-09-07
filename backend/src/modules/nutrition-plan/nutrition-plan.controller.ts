@@ -20,24 +20,16 @@ import type {
   ShiftPlanDayInput,
 } from "./dto/nutrition-plan.schemas";
 
-/** Resolves the authenticated user id or throws 401. */
 function requireUserId(req: Request): string {
-  if (!req.user) {
-    throw ApiError.unauthorized("Authentication required.");
-  }
+  if (!req.user) throw ApiError.unauthorized("Authentication required.");
   return req.user.id;
 }
 
-/**
- * Controller for Diewish's Personalized Nutrition Plan Engine endpoints. The
- * generation pipeline runs synchronously (no job queue in this codebase), so
- * the full plan is returned on completion.
- */
 export const nutritionPlanController = {
   generate: asyncHandler(async (req: Request, res: Response) => {
     const userId = requireUserId(req);
-    const { duration, startDate } = req.body as GeneratePlanInput;
-    const plan = await nutritionPlanService.generate(userId, duration, startDate);
+    const { duration, startDate, pantryText } = req.body as GeneratePlanInput;
+    const plan = await nutritionPlanService.generate(userId, duration, startDate, pantryText);
     sendCreated(res, { plan });
   }),
 
