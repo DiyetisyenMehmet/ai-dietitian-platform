@@ -116,11 +116,14 @@ export const nutritionPlanStore = {
     }
   },
 
-  async generate(duration: SupportedNutritionPlanDuration): Promise<NutritionPlanRecord> {
+  async generate(
+    duration: SupportedNutritionPlanDuration,
+    pantryText?: string,
+  ): Promise<NutritionPlanRecord> {
     if (state.generating) throw new Error("Nutrition plan generation is already in progress.");
     patch({ generating: true, generatingDuration: duration });
     try {
-      const { plan } = await nutritionPlanClient.generate(duration);
+      const { plan } = await nutritionPlanClient.generate(duration, pantryText);
       return completeGeneration(plan);
     } catch (error) {
       return failGeneration(error);
