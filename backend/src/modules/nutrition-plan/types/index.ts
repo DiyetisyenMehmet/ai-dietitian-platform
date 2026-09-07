@@ -138,6 +138,8 @@ export interface NutritionPlanGenerationInput {
   allergies: string[];
   healthConditions: string[];
   bloodTestImplications: BloodTestImplicationInput[];
+  /** Bounded behavior context; never permission to override deterministic targets. */
+  behaviorInsights?: string[];
   durationDays: number;
 }
 
