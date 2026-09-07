@@ -2,13 +2,6 @@ import { z } from "zod";
 
 import { SUPPORTED_PLAN_DURATIONS } from "../constants";
 
-/**
- * Zod DTO schemas for the nutrition-plan endpoints. Single source of truth for
- * request validation; the `validate` middleware parses requests against these
- * and the service/controller consume the inferred types.
- */
-
-/** Supported user-selectable plan durations. SIXTY_DAY is legacy read-only. */
 export const PLAN_DURATIONS = SUPPORTED_PLAN_DURATIONS;
 
 const planStartDateSchema = z
@@ -17,101 +10,54 @@ const planStartDateSchema = z
   .refine((value) => {
     const [year, month, day] = value.split("-").map(Number);
     const parsed = new Date(Date.UTC(year, month - 1, day));
-    return (
-      parsed.getUTCFullYear() === year &&
-      parsed.getUTCMonth() === month - 1 &&
-      parsed.getUTCDate() === day
-    );
+    return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day;
   }, "startDate must be a valid calendar date");
 
-const localClockSchema = z
-  .string()
-  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "localTime must use HH:mm");
+const localClockSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "localTime must use HH:mm");
 
-/** Body for generating a new plan. The web/native client sends its local date. */
+/** Pantry is optional/backwards compatible and never trusted as a nutrition instruction. */
 export const generatePlanSchema = z.object({
   duration: z.enum(PLAN_DURATIONS),
   startDate: planStartDateSchema.optional(),
+  pantryText: z.string().trim().max(800).optional(),
 });
 export type GeneratePlanInput = z.infer<typeof generatePlanSchema>;
 
-/** Paid scoped refresh: one selected day, or the selected day and all future days. */
-export const refreshPlanSchema = z
-  .object({
-    mode: z.enum(["DAY", "FROM_DAY"]),
-    dayNumber: z.number().int().min(1).max(30),
-  })
-  .strict();
+export const refreshPlanSchema = z.object({ mode: z.enum(["DAY", "FROM_DAY"]), dayNumber: z.number().int().min(1).max(30) }).strict();
 export type RefreshPlanInput = z.infer<typeof refreshPlanSchema>;
 
-/** Paid extension keeps existing days and generates only the added horizon. */
-export const extendPlanSchema = z
-  .object({
-    duration: z.enum(PLAN_DURATIONS),
-  })
-  .strict();
+export const extendPlanSchema = z.object({ duration: z.enum(PLAN_DURATIONS) }).strict();
 export type ExtendPlanInput = z.infer<typeof extendPlanSchema>;
 
-/** Paid day shift; localDate prevents stale/double shifts from changing the wrong day. */
-export const shiftPlanDaySchema = z
-  .object({
-    dayNumber: z.number().int().min(1).max(30),
-    localDate: planStartDateSchema,
-  })
-  .strict();
+export const shiftPlanDaySchema = z.object({ dayNumber: z.number().int().min(1).max(30), localDate: planStartDateSchema }).strict();
 export type ShiftPlanDayInput = z.infer<typeof shiftPlanDaySchema>;
 
-/** User-reported hunger level used by the deterministic "Acıktım" coach. */
-export const hungerReportSchema = z
-  .object({
-    dayNumber: z.number().int().min(1).max(60),
-    localDate: planStartDateSchema,
-    localTime: localClockSchema,
-    hungerLevel: z.enum(["LIGHT", "HUNGRY", "VERY_HUNGRY"]),
-  })
-  .strict();
+export const hungerReportSchema = z.object({
+  dayNumber: z.number().int().min(1).max(60),
+  localDate: planStartDateSchema,
+  localTime: localClockSchema,
+  hungerLevel: z.enum(["LIGHT", "HUNGRY", "VERY_HUNGRY"]),
+}).strict();
 export type HungerReportInput = z.infer<typeof hungerReportSchema>;
 
-/** Explicit confirmation that the user actually consumed a suggested snack. */
-export const acceptHungerSnackSchema = z
-  .object({
-    eventId: z.string().uuid("A valid hunger event id is required"),
-  })
-  .strict();
+export const acceptHungerSnackSchema = z.object({ eventId: z.string().uuid("A valid hunger event id is required") }).strict();
 export type AcceptHungerSnackInput = z.infer<typeof acceptHungerSnackSchema>;
 
-/** Route param: a nutrition-plan id (UUID). */
-export const planIdParamSchema = z.object({
-  id: z.string().uuid("A valid nutrition plan id is required"),
-});
+export const planIdParamSchema = z.object({ id: z.string().uuid("A valid nutrition plan id is required") });
 export type PlanIdParam = z.infer<typeof planIdParamSchema>;
 
-/** Route params for a single adherence/deviation record. */
 export const planDeviationParamSchema = z.object({
   id: z.string().uuid("A valid nutrition plan id is required"),
   deviationId: z.string().uuid("A valid deviation id is required"),
 });
 export type PlanDeviationParam = z.infer<typeof planDeviationParamSchema>;
 
-/** Query for fetching the active plan of a given supported duration. */
-export const activePlanQuerySchema = z.object({
-  duration: z.enum(PLAN_DURATIONS),
-});
+export const activePlanQuerySchema = z.object({ duration: z.enum(PLAN_DURATIONS) });
 export type ActivePlanQuery = z.infer<typeof activePlanQuerySchema>;
 
 export const NUTRITION_PLAN_DEVIATION_SCOPES = ["FOOD", "MEAL", "DAY"] as const;
-export const NUTRITION_PLAN_DEVIATION_TYPES = [
-  "SKIPPED",
-  "REPLACED",
-  "EXTRA",
-  "PORTION_CHANGED",
-] as const;
+export const NUTRITION_PLAN_DEVIATION_TYPES = ["SKIPPED", "REPLACED", "EXTRA", "PORTION_CHANGED"] as const;
 
-/**
- * Body for recording a user-reported "Kaçamak". Planned item names/portions are
- * deliberately not accepted from the client; the service derives them from the
- * immutable plan snapshot to prevent inconsistent adherence history.
- */
 export const createDeviationSchema = z
   .object({
     dayNumber: z.number().int().min(1).max(60),
@@ -127,76 +73,30 @@ export const createDeviationSchema = z
   .superRefine((value, ctx) => {
     if (value.scope === "FOOD") {
       if (value.mealIndex === undefined || value.foodIndex === undefined) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Food-level deviations require mealIndex and foodIndex.",
-        });
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Food-level deviations require mealIndex and foodIndex." });
       }
       if (value.type === "EXTRA") {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["type"],
-          message: "Extra intake must be recorded at meal or day level.",
-        });
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["type"], message: "Extra intake must be recorded at meal or day level." });
       }
     }
-
     if (value.scope === "MEAL") {
       if (value.mealIndex === undefined || value.foodIndex !== undefined) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Meal-level deviations require mealIndex and no foodIndex.",
-        });
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Meal-level deviations require mealIndex and no foodIndex." });
       }
     }
-
     if (value.scope === "DAY" && (value.mealIndex !== undefined || value.foodIndex !== undefined)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Day-level deviations cannot include mealIndex or foodIndex.",
-      });
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Day-level deviations cannot include mealIndex or foodIndex." });
     }
-
     if (value.type === "PORTION_CHANGED") {
-      if (value.scope !== "FOOD") {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["scope"],
-          message: "Portion changes must target a planned food.",
-        });
-      }
-      if (!value.actualPortion) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["actualPortion"],
-          message: "The actual portion is required for a portion change.",
-        });
-      }
+      if (value.scope !== "FOOD") ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["scope"], message: "Portion changes must target a planned food." });
+      if (!value.actualPortion) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["actualPortion"], message: "The actual portion is required for a portion change." });
     }
-
     if (value.type === "REPLACED") {
-      if (value.scope === "DAY") {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["scope"],
-          message: "A replacement must target a planned food or meal.",
-        });
-      }
-      if (!value.actualItemName) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["actualItemName"],
-          message: "The replacement item is required.",
-        });
-      }
+      if (value.scope === "DAY") ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["scope"], message: "A replacement must target a planned food or meal." });
+      if (!value.actualItemName) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["actualItemName"], message: "The replacement item is required." });
     }
-
     if (value.type === "EXTRA" && !value.actualItemName) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["actualItemName"],
-        message: "The extra item is required.",
-      });
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["actualItemName"], message: "The extra item is required." });
     }
   });
 export type CreateDeviationInput = z.infer<typeof createDeviationSchema>;
