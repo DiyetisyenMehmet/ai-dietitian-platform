@@ -67,11 +67,19 @@ export interface CalendarDay {
   dateOffsetDays?: number;
 }
 
+export interface RealLifePlanningContext {
+  market: "TR";
+  budgetProfile: "STANDARD_TR";
+  pantryText?: string;
+  pantryIngredients: string[];
+}
+
 export interface NutritionPlanContent {
   durationDays: number;
   cycleLengthDays: number;
   cycle: DailyPlan[];
   calendar: CalendarDay[];
+  planningContext?: RealLifePlanningContext;
 }
 
 export interface PlanExplanations {
@@ -198,12 +206,17 @@ export const nutritionPlanClient = {
     });
   },
 
-  generate(duration: SupportedNutritionPlanDuration) {
+  generate(duration: SupportedNutritionPlanDuration, pantryText?: string) {
+    const normalizedPantryText = pantryText?.trim();
     return apiRequest<{ plan: NutritionPlanRecord }>({
       path: "/nutrition-plans/generate",
       method: "POST",
       auth: true,
-      body: JSON.stringify({ duration, startDate: localDateYmd() }),
+      body: JSON.stringify({
+        duration,
+        startDate: localDateYmd(),
+        ...(normalizedPantryText ? { pantryText: normalizedPantryText } : {}),
+      }),
     });
   },
 
