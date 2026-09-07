@@ -1,5 +1,5 @@
 import type { NextFunction, Request, RequestHandler, Response } from "express";
-import multer from "multer";
+import multer, { type Options as MulterOptions } from "multer";
 
 import { env } from "../../config/env";
 import { ApiError } from "../../utils/api-error";
@@ -9,6 +9,24 @@ import { ALLOWED_MIME_TYPES, ALLOWED_TYPES_LABEL } from "./blood-test.file-types
 export const UPLOAD_FIELD = "file";
 
 const maxBytes = env.BLOOD_TEST_MAX_FILE_SIZE_MB * 1024 * 1024;
+
+type MulterLimits = NonNullable<MulterOptions["limits"]> & {
+  /** Added by Multer 2.3.0; @types/multer 2.2.0 has not published it yet. */
+  fieldArrayIndexLimit: number;
+};
+
+const uploadLimits: MulterLimits = {
+  fileSize: maxBytes,
+  files: 1,
+  fields: 2,
+  parts: 3,
+  fieldNameSize: 100,
+  fieldSize: 1024,
+  // Blood-test metadata uses only flat `label` and `testDate` fields. Multer
+  // 2.3.0 exposes this limit specifically to prevent sparse-array field-name
+  // DoS payloads; no array index is legitimate on this endpoint.
+  fieldArrayIndexLimit: 0,
+};
 
 /**
  * Multer instance for blood-test uploads.
@@ -22,18 +40,7 @@ const maxBytes = env.BLOOD_TEST_MAX_FILE_SIZE_MB * 1024 * 1024;
  */
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: {
-    fileSize: maxBytes,
-    files: 1,
-    fields: 2,
-    parts: 3,
-    fieldNameSize: 100,
-    fieldSize: 1024,
-    // Blood-test metadata uses only flat `label` and `testDate` fields. Multer
-    // 2.3.0 exposes this limit specifically to prevent sparse-array field-name
-    // DoS payloads; no array index is legitimate on this endpoint.
-    fieldArrayIndexLimit: 0,
-  },
+  limits: uploadLimits,
   fileFilter: (_req, file, cb) => {
     if (!(ALLOWED_MIME_TYPES as readonly string[]).includes(file.mimetype)) {
       cb(ApiError.badRequest(`Unsupported file type. Allowed types: ${ALLOWED_TYPES_LABEL}.`));
