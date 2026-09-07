@@ -4,8 +4,8 @@
  * Long plans are generated in bounded provider batches and assembled into the
  * exact 7/14/30-day horizon. A small concurrency cap prevents the synchronous
  * API request from serially waiting on every batch while keeping Vertex load
- * controlled. Every batch is count-validated and allergen-guarded before the
- * final plan can be persisted.
+ * controlled. Every batch is count-, allergen-, and nutrition-target validated
+ * before the final plan can be persisted.
  */
 
 import { logger } from "../../../lib/logger";
@@ -13,6 +13,7 @@ import { ApiError } from "../../../utils/api-error";
 import { getAIAdapter } from "../../blood-test-analysis/ai-adapter/ai-adapter.factory";
 import { MEAL_GENERATION_BATCH_DAYS, MEAL_GENERATION_CONCURRENCY } from "../constants";
 import { findAllergenViolations } from "./allergen-validator";
+import { findNutritionTargetViolations } from "./nutrition-target-validator";
 import type {
   DailyPlan,
   NutritionPlanAIInput,
@@ -38,22 +39,6 @@ interface GeneratedBatch {
 }
 
 const MAX_AVOID_SIGNATURES = 28;
-
-function stripAllergens(cycle: DailyPlan[], allergies: string[]): DailyPlan[] {
-  const violations = findAllergenViolations(cycle, allergies);
-  if (violations.length === 0) return cycle;
-  const offendingFoods = new Set(violations.map((v) => `${v.dayLabel}::${v.mealName}::${v.food}`));
-
-  return cycle.map((day) => ({
-    ...day,
-    meals: day.meals.map((meal) => ({
-      ...meal,
-      foods: meal.foods.filter(
-        (food) => !offendingFoods.has(`${day.dayLabel}::${meal.name}::${food.name}`),
-      ),
-    })),
-  }));
-}
 
 function relabelDays(cycle: DailyPlan[], startDayNumber: number): DailyPlan[] {
   return cycle.map((day, index) => ({ ...day, dayLabel: `${startDayNumber + index}. Gün` }));
@@ -103,21 +88,24 @@ async function generateValidatedBatch(input: NutritionPlanAIInput): Promise<Nutr
   const adapter = getAIAdapter();
 
   let output = await adapter.generateNutritionPlan(input);
-  let violations = findAllergenViolations(output.cycle, input.allergies);
+  let allergenViolations = findAllergenViolations(output.cycle, input.allergies);
+  let nutritionViolations = findNutritionTargetViolations(output.cycle, input);
   const wrongDayCount = output.cycle.length !== input.cycleLengthDays;
 
-  if (wrongDayCount || violations.length > 0) {
+  if (wrongDayCount || allergenViolations.length > 0 || nutritionViolations.length > 0) {
     logger.warn(
       {
         requestedDays: input.cycleLengthDays,
         receivedDays: output.cycle.length,
-        allergenViolationCount: violations.length,
+        allergenViolationCount: allergenViolations.length,
+        nutritionViolationCount: nutritionViolations.length,
         startDayNumber: input.startDayNumber ?? 1,
       },
       "Nutrition-plan batch failed deterministic validation; retrying once",
     );
     output = await adapter.generateNutritionPlan(input);
-    violations = findAllergenViolations(output.cycle, input.allergies);
+    allergenViolations = findAllergenViolations(output.cycle, input.allergies);
+    nutritionViolations = findNutritionTargetViolations(output.cycle, input);
   }
 
   if (output.cycle.length !== input.cycleLengthDays) {
@@ -135,12 +123,26 @@ async function generateValidatedBatch(input: NutritionPlanAIInput): Promise<Nutr
     });
   }
 
-  if (violations.length > 0) {
+  if (allergenViolations.length > 0) {
     logger.error(
-      { violationCount: violations.length, startDayNumber: input.startDayNumber ?? 1 },
-      "Nutrition-plan batch still contained allergen(s) after retry; stripping offending foods",
+      { violationCount: allergenViolations.length, startDayNumber: input.startDayNumber ?? 1 },
+      "Nutrition-plan batch still contained allergen(s) after retry; rejecting batch",
     );
-    output = { ...output, cycle: stripAllergens(output.cycle, input.allergies) };
+    throw new ApiError(502, "The nutrition-plan provider could not produce an allergy-safe plan.", {
+      code: "NUTRITION_PLAN_ALLERGEN_VALIDATION_FAILED",
+      isOperational: false,
+    });
+  }
+
+  if (nutritionViolations.length > 0) {
+    logger.error(
+      { violationCount: nutritionViolations.length, startDayNumber: input.startDayNumber ?? 1 },
+      "Nutrition-plan batch remained outside deterministic nutrition tolerances after retry",
+    );
+    throw new ApiError(502, "The nutrition-plan provider returned inconsistent nutrition totals.", {
+      code: "NUTRITION_PLAN_TARGET_MISMATCH",
+      isOperational: false,
+    });
   }
 
   return { ...output, cycle: relabelDays(output.cycle, input.startDayNumber ?? 1) };
