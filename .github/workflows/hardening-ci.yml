@@ -75,3 +75,115 @@ jobs:
         env:
           NEXT_PUBLIC_API_BASE_URL: https://example.invalid/api
           NEXT_PUBLIC_SITE_URL: https://example.invalid
+
+  browser-e2e:
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: diewish
+          POSTGRES_PASSWORD: diewish
+          POSTGRES_DB: diewish_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U diewish -d diewish_e2e"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      NODE_ENV: test
+      PORT: 4000
+      DATABASE_URL: postgresql://diewish:diewish@127.0.0.1:5432/diewish_e2e?schema=public
+      JWT_ACCESS_SECRET: browser-e2e-access-secret-012345678901234567890123456789
+      JWT_REFRESH_SECRET: browser-e2e-refresh-secret-01234567890123456789012345678
+      CORS_ORIGIN: http://127.0.0.1:3000
+      APP_WEB_URL: http://127.0.0.1:3000
+      LOG_LEVEL: silent
+      BCRYPT_ROUNDS: 10
+      RATE_LIMIT_MAX: 1000
+      AUTH_RATE_LIMIT_MAX: 1000
+      NEXT_TELEMETRY_DISABLED: 1
+      NEXT_PUBLIC_API_BASE_URL: http://127.0.0.1:4000/api
+      NEXT_PUBLIC_SITE_URL: http://127.0.0.1:3000
+      E2E_WEB_BASE_URL: http://127.0.0.1:3000
+      E2E_API_BASE_URL: http://127.0.0.1:4000/api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Prepare backend
+        working-directory: backend
+        run: |
+          npm ci
+          npx prisma generate
+          npx prisma migrate deploy
+          npm run build
+
+      - name: Start backend
+        working-directory: backend
+        run: |
+          npm start > /tmp/diewish-backend.log 2>&1 &
+          echo $! > /tmp/diewish-backend.pid
+
+      - name: Wait for backend
+        run: |
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:4000/api/health > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/diewish-backend.log
+          exit 1
+
+      - name: Prepare frontend and Chromium
+        working-directory: frontend
+        run: |
+          npm ci
+          npm install --no-save --package-lock=false @playwright/test@1.55.0
+          npx playwright install --with-deps chromium
+          npm run build
+
+      - name: Start frontend
+        working-directory: frontend
+        run: |
+          npm start -- -H 127.0.0.1 -p 3000 > /tmp/diewish-frontend.log 2>&1 &
+          echo $! > /tmp/diewish-frontend.pid
+
+      - name: Wait for frontend
+        run: |
+          for attempt in {1..45}; do
+            if curl --fail --silent http://127.0.0.1:3000/register > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/diewish-frontend.log
+          exit 1
+
+      - name: Run browser onboarding smoke
+        working-directory: frontend
+        run: npx playwright test e2e/onboarding-flow.spec.js --workers=1 --reporter=line
+
+      - name: Print service logs on failure
+        if: failure()
+        run: |
+          echo "--- backend ---"
+          cat /tmp/diewish-backend.log || true
+          echo "--- frontend ---"
+          cat /tmp/diewish-frontend.log || true
+
+      - name: Stop local services
+        if: always()
+        run: |
+          if [ -f /tmp/diewish-frontend.pid ]; then kill "$(cat /tmp/diewish-frontend.pid)" || true; fi
+          if [ -f /tmp/diewish-backend.pid ]; then kill "$(cat /tmp/diewish-backend.pid)" || true; fi
