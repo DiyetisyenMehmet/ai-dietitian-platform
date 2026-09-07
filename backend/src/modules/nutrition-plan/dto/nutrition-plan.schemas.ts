@@ -24,6 +24,10 @@ const planStartDateSchema = z
     );
   }, "startDate must be a valid calendar date");
 
+const localClockSchema = z
+  .string()
+  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "localTime must use HH:mm");
+
 /** Body for generating a new plan. The web/native client sends its local date. */
 export const generatePlanSchema = z.object({
   duration: z.enum(PLAN_DURATIONS),
@@ -56,6 +60,17 @@ export const shiftPlanDaySchema = z
   })
   .strict();
 export type ShiftPlanDayInput = z.infer<typeof shiftPlanDaySchema>;
+
+/** User-reported hunger level used by the deterministic "Acıktım" coach. */
+export const hungerReportSchema = z
+  .object({
+    dayNumber: z.number().int().min(1).max(60),
+    localDate: planStartDateSchema,
+    localTime: localClockSchema,
+    hungerLevel: z.enum(["LIGHT", "HUNGRY", "VERY_HUNGRY"]),
+  })
+  .strict();
+export type HungerReportInput = z.infer<typeof hungerReportSchema>;
 
 /** Route param: a nutrition-plan id (UUID). */
 export const planIdParamSchema = z.object({
