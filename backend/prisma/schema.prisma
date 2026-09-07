@@ -104,6 +104,8 @@ model UserProfile {
   allergies         String[]
   dietaryPreference DietaryPreference
   dailyWaterGoalMl  Int
+  usualWakeTime     String?
+  usualSleepTime    String?
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 
