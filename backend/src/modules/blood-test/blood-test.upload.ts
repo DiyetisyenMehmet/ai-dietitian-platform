@@ -15,13 +15,25 @@ const maxBytes = env.BLOOD_TEST_MAX_FILE_SIZE_MB * 1024 * 1024;
  *
  * Files are buffered in memory (not written to a temp path) so the service can
  * sniff their real content type and hand the bytes directly to the storage
- * abstraction. A single file is accepted; size is capped; and an early filter
- * rejects obviously-wrong declared content types. The authoritative type check
- * is a magic-byte inspection performed later in the service.
+ * abstraction. A single file is accepted; size and multipart metadata are
+ * tightly capped; and an early filter rejects obviously-wrong declared content
+ * types. The authoritative type check is a magic-byte inspection performed
+ * later in the service.
  */
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: maxBytes, files: 1 },
+  limits: {
+    fileSize: maxBytes,
+    files: 1,
+    fields: 2,
+    parts: 3,
+    fieldNameSize: 100,
+    fieldSize: 1024,
+    // Blood-test metadata uses only flat `label` and `testDate` fields. Multer
+    // 2.3.0 exposes this limit specifically to prevent sparse-array field-name
+    // DoS payloads; no array index is legitimate on this endpoint.
+    fieldArrayIndexLimit: 0,
+  },
   fileFilter: (_req, file, cb) => {
     if (!(ALLOWED_MIME_TYPES as readonly string[]).includes(file.mimetype)) {
       cb(ApiError.badRequest(`Unsupported file type. Allowed types: ${ALLOWED_TYPES_LABEL}.`));
