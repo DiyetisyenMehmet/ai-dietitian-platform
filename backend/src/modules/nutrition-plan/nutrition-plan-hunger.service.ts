@@ -2,6 +2,11 @@ import type { NutritionPlanDeviation } from "@prisma/client";
 
 import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/api-error";
+import {
+  chooseAdaptiveSnack,
+  plannedSnackSuggestion,
+  type AdaptiveSnackSuggestion,
+} from "./adaptive-snack";
 import { nutritionPlanRepository } from "./nutrition-plan.repository";
 import type { HungerReportInput } from "./dto/nutrition-plan.schemas";
 import type { NutritionPlanContent, PlannedMeal } from "./types";
@@ -22,6 +27,7 @@ export interface HungerDecisionResult {
   minutesToNextMeal: number | null;
   previousMealSkipped: boolean;
   suggestedSnackCalories: number | null;
+  suggestedSnack: AdaptiveSnackSuggestion | null;
 }
 
 function parseClock(value: string): number | null {
@@ -79,6 +85,58 @@ function snackBudget(dailyCalories: number): number {
   return Math.min(200, Math.max(100, rounded));
 }
 
+function objectValue(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function numericValue(value: unknown): number {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function acceptedSnackState(
+  memories: Array<{ content: unknown }>,
+  planId: string,
+  dayNumber: number,
+): { skippedBudgetCaloriesUsed: number; usedPlannedSnackIndexes: Set<number> } {
+  let skippedBudgetCaloriesUsed = 0;
+  const usedPlannedSnackIndexes = new Set<number>();
+
+  for (const memory of memories) {
+    const content = objectValue(memory.content);
+    if (
+      content?.kind !== "ADDED_SNACK" ||
+      content.planId !== planId ||
+      numericValue(content.dayNumber) !== dayNumber
+    ) {
+      continue;
+    }
+    const snack = objectValue(content.snack);
+    if (!snack) continue;
+    if (snack.source === "SKIPPED_MEAL_BUDGET") {
+      skippedBudgetCaloriesUsed += numericValue(snack.calories);
+    }
+    if (snack.source === "PLANNED_SNACK_REALLOCATION") {
+      const sourceMealIndex = numericValue(snack.sourceMealIndex);
+      if (Number.isInteger(sourceMealIndex) && sourceMealIndex >= 0) {
+        usedPlannedSnackIndexes.add(sourceMealIndex);
+      }
+    }
+  }
+
+  return { skippedBudgetCaloriesUsed, usedPlannedSnackIndexes };
+}
+
+function isSnackSlot(planMealTiming: unknown, meal: PlannedMeal, mealIndex: number): boolean {
+  if (/snack|ara\s*öğün/i.test(meal.name)) return true;
+  const timing = objectValue(planMealTiming);
+  const slots = Array.isArray(timing?.slots) ? timing.slots : [];
+  const slot = objectValue(slots[mealIndex]);
+  return typeof slot?.name === "string" && /snack|ara\s*öğün/i.test(slot.name);
+}
+
 function buildDecision(params: {
   hungerLevel: HungerReportInput["hungerLevel"];
   minutesToNextMeal: number | null;
@@ -87,7 +145,7 @@ function buildDecision(params: {
   nextMealName: string | null;
   nextMealTime: string | null;
   dailyCalories: number;
-}): Omit<HungerDecisionResult, "eventId" | "nextMealIndex"> {
+}): Omit<HungerDecisionResult, "eventId" | "nextMealIndex" | "suggestedSnack"> {
   const {
     hungerLevel,
     minutesToNextMeal,
@@ -120,18 +178,17 @@ function buildDecision(params: {
   const longWait = hungerLevel === "HUNGRY" && (minutesToNextMeal ?? 999) > 180;
 
   if (skippedAndHungry || strongHunger || longWait) {
-    const calories = snackBudget(dailyCalories);
     return {
       decision: "SMALL_SNACK",
       message:
         minutesToNextMeal === null
-          ? `Açlığın belirgin. Günlük hedefini gereksiz aşmadan yaklaşık ${calories} kcal'lik küçük ve tok tutucu bir ara öğün uygun olabilir.`
-          : `Bir sonraki öğününe yaklaşık ${Math.max(1, Math.round(minutesToNextMeal / 60))} saat var. Açlığını yönetmek ve sonraki öğünde aşırı acıkmayı önlemek için yaklaşık ${calories} kcal'lik küçük bir ara öğün uygun olabilir.`,
+          ? "Açlığın belirgin. Günün plan bütçesini aşmadan uygun bir ara öğün seçeneği olup olmadığını kontrol ediyorum."
+          : `Bir sonraki öğününe yaklaşık ${Math.max(1, Math.round(minutesToNextMeal / 60))} saat var. Plan bütçeni aşmadan uygun bir ara öğün seçeneği olup olmadığını kontrol ediyorum.`,
       nextMealName,
       nextMealTime,
       minutesToNextMeal,
       previousMealSkipped,
-      suggestedSnackCalories: calories,
+      suggestedSnackCalories: snackBudget(dailyCalories),
     };
   }
 
@@ -192,10 +249,18 @@ export const nutritionPlanHungerService = {
       throw ApiError.badRequest("Acıktım değerlendirmesi yalnızca bugünkü aktif plan günü için yapılabilir.");
     }
 
-    const deviations = await prisma.nutritionPlanDeviation.findMany({
-      where: { userId, planId, dayNumber: input.dayNumber },
-      orderBy: { createdAt: "asc" },
-    });
+    const [deviations, recentMealHabits] = await Promise.all([
+      prisma.nutritionPlanDeviation.findMany({
+        where: { userId, planId, dayNumber: input.dayNumber },
+        orderBy: { createdAt: "asc" },
+      }),
+      prisma.aiMemory.findMany({
+        where: { userId, memoryType: "MEAL_HABITS" },
+        orderBy: { createdAt: "desc" },
+        take: 200,
+        select: { content: true },
+      }),
+    ]);
     const skipped = skippedMealIndexes(deviations, day.meals.length);
 
     let previousIndex: number | null = null;
@@ -211,7 +276,7 @@ export const nutritionPlanHungerService = {
     const previousMealSkipped = previousIndex !== null && skipped.has(previousIndex);
     const nextMeal = nextIndex === null ? null : day.meals[nextIndex];
 
-    const decision = buildDecision({
+    let decision = buildDecision({
       hungerLevel: input.hungerLevel,
       minutesToNextMeal,
       minutesSincePreviousMeal,
@@ -221,9 +286,75 @@ export const nutritionPlanHungerService = {
       dailyCalories: plan.dailyCalories,
     });
 
-    // Store the user-reported event as a bounded meal-habit memory. Future plan
-    // personalization can aggregate repeated hunger windows without mutating the
-    // immutable plan snapshot that produced this recommendation.
+    let suggestedSnack: AdaptiveSnackSuggestion | null = null;
+    if (decision.decision === "SMALL_SNACK") {
+      const accepted = acceptedSnackState(recentMealHabits, planId, input.dayNumber);
+      const futurePlannedSnackIndex = day.meals.findIndex(
+        (meal, index) =>
+          mealMinutes[index] > currentMinute &&
+          !skipped.has(index) &&
+          !accepted.usedPlannedSnackIndexes.has(index) &&
+          isSnackSlot(plan.mealTiming, meal, index),
+      );
+
+      if (futurePlannedSnackIndex >= 0) {
+        suggestedSnack = plannedSnackSuggestion(
+          day.meals[futurePlannedSnackIndex],
+          futurePlannedSnackIndex,
+        );
+      } else {
+        const skippedIndexes = [...skipped].filter((index) => mealMinutes[index] <= currentMinute);
+        const freedCalories = skippedIndexes.reduce(
+          (sum, index) => sum + Math.max(0, day.meals[index]?.calories ?? 0),
+          0,
+        );
+        const freedMacros = skippedIndexes.reduce(
+          (sum, index) => ({
+            proteinGrams: sum.proteinGrams + Math.max(0, day.meals[index]?.proteinGrams ?? 0),
+            carbsGrams: sum.carbsGrams + Math.max(0, day.meals[index]?.carbsGrams ?? 0),
+            fatGrams: sum.fatGrams + Math.max(0, day.meals[index]?.fatGrams ?? 0),
+          }),
+          { proteinGrams: 0, carbsGrams: 0, fatGrams: 0 },
+        );
+        const availableCalories = Math.max(
+          0,
+          freedCalories - accepted.skippedBudgetCaloriesUsed,
+        );
+        const calorieBudget = Math.min(snackBudget(plan.dailyCalories), availableCalories);
+        const profile = await prisma.userProfile.findUnique({ where: { userId } });
+        if (profile) {
+          suggestedSnack = chooseAdaptiveSnack({
+            calorieBudget,
+            allergies: profile.allergies,
+            dietaryPreference: profile.dietaryPreference,
+            freedMacros,
+          });
+        }
+      }
+
+      if (suggestedSnack) {
+        decision = {
+          ...decision,
+          message:
+            suggestedSnack.source === "PLANNED_SNACK_REALLOCATION"
+              ? `Ekstra kalori eklemek yerine planındaki ${suggestedSnack.name} ara öğününü şimdiye çekebilirsin. Onu şimdi tüketirsen aynı ara öğünü daha sonra tekrar tüketme.`
+              : `Atladığın öğünden kalan enerji bütçesinin içinde yaklaşık ${suggestedSnack.calories} kcal'lik ${suggestedSnack.name} uygun bir ara öğün olabilir. Bu öneri günlük hedefinin üzerine ekstra kalori eklemek için oluşturulmadı.`,
+          suggestedSnackCalories: suggestedSnack.calories,
+        };
+      } else {
+        decision = {
+          ...decision,
+          decision: nextMeal ? (input.hungerLevel === "VERY_HUNGRY" ? "EAT_PLANNED_MEAL" : "WAIT_FOR_MEAL") : "DAY_COMPLETE",
+          message: nextMeal
+            ? input.hungerLevel === "VERY_HUNGRY"
+              ? `Açlığın belirgin ancak günlük plan bütçene güvenle ekleyebileceğim ayrı bir ara öğün kalmadı. Ekstra kalori eklemek yerine ${nextMeal.name} öğününü biraz öne alman daha uygun.`
+              : `Günlük plan bütçene güvenle ekleyebileceğim ayrı bir ara öğün kalmadı. ${nextMeal.time} planlı öğününü bekleyebilir, açlığın belirginleşirse öğünü bir miktar öne alabilirsin.`
+            : "Bugünkü planlı enerji bütçen tamamlanmış görünüyor. Yeni bir ara öğünü otomatik olarak eklemiyorum.",
+          suggestedSnackCalories: null,
+        };
+      }
+    }
+
     const event = await prisma.aiMemory.create({
       data: {
         userId,
@@ -242,10 +373,81 @@ export const nutritionPlanHungerService = {
           minutesToNextMeal: decision.minutesToNextMeal,
           previousMealSkipped,
           suggestedSnackCalories: decision.suggestedSnackCalories,
+          suggestedSnack,
         },
       },
     });
 
-    return { eventId: event.id, nextMealIndex: nextIndex, ...decision };
+    return { eventId: event.id, nextMealIndex: nextIndex, suggestedSnack, ...decision };
+  },
+
+  async acceptSnack(userId: string, planId: string, eventId: string) {
+    const plan = await nutritionPlanRepository.findByIdForUser(planId, userId);
+    if (!plan || plan.deletedAt) throw ApiError.notFound("Nutrition plan not found.");
+
+    const event = await prisma.aiMemory.findFirst({
+      where: { id: eventId, userId, memoryType: "MEAL_HABITS" },
+    });
+    const content = objectValue(event?.content);
+    if (!event || content?.kind !== "HUNGER_EVENT" || content.planId !== planId) {
+      throw ApiError.badRequest("Geçerli bir Acıktım ara öğün önerisi bulunamadı.");
+    }
+    const snack = objectValue(content.suggestedSnack);
+    if (!snack || content.decision !== "SMALL_SNACK") {
+      throw ApiError.badRequest("Bu açlık değerlendirmesinde kullanılabilir bir ara öğün yok.");
+    }
+
+    const recent = await prisma.aiMemory.findMany({
+      where: { userId, memoryType: "MEAL_HABITS" },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+      select: { id: true, content: true },
+    });
+    const duplicate = recent.find((item) => {
+      const record = objectValue(item.content);
+      return record?.kind === "ADDED_SNACK" && record.hungerEventId === eventId;
+    });
+    if (duplicate) {
+      return { recordId: duplicate.id, snack, alreadyRecorded: true };
+    }
+
+    const dayNumber = numericValue(content.dayNumber);
+    const name = typeof snack.name === "string" ? snack.name : "Uyarlanmış ara öğün";
+    const calories = numericValue(snack.calories);
+    const proteinG = numericValue(snack.proteinGrams);
+    const carbsG = numericValue(snack.carbsGrams);
+    const fatG = numericValue(snack.fatGrams);
+
+    const [memory] = await prisma.$transaction([
+      prisma.aiMemory.create({
+        data: {
+          userId,
+          memoryType: "MEAL_HABITS",
+          content: {
+            kind: "ADDED_SNACK",
+            planId,
+            planVersion: plan.version,
+            dayNumber,
+            hungerEventId: eventId,
+            localDate: content.localDate,
+            localTime: content.localTime,
+            snack,
+          },
+        },
+      }),
+      prisma.mealLog.create({
+        data: {
+          userId,
+          mealType: "SNACK",
+          name,
+          calories,
+          proteinG,
+          carbsG,
+          fatG,
+        },
+      }),
+    ]);
+
+    return { recordId: memory.id, snack, alreadyRecorded: false };
   },
 };
