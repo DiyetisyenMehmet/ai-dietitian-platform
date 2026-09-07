@@ -4,6 +4,7 @@ import { ApiError } from "../../utils/api-error";
 import { sendCreated, sendNoContent, sendSuccess } from "../../utils/api-response";
 import { asyncHandler } from "../../utils/async-handler";
 import { nutritionPlanDeviationService } from "./nutrition-plan-deviation.service";
+import { nutritionPlanHungerService } from "./nutrition-plan-hunger.service";
 import { nutritionPlanRevisionService } from "./nutrition-plan-revision.service";
 import { nutritionPlanService } from "./nutrition-plan.service";
 import type {
@@ -11,6 +12,7 @@ import type {
   CreateDeviationInput,
   ExtendPlanInput,
   GeneratePlanInput,
+  HungerReportInput,
   PlanDeviationParam,
   PlanIdParam,
   RefreshPlanInput,
@@ -67,6 +69,14 @@ export const nutritionPlanController = {
     const input = req.body as ShiftPlanDayInput;
     const plan = await nutritionPlanRevisionService.shiftDay(userId, id, input);
     sendCreated(res, { plan });
+  }),
+
+  reportHunger: asyncHandler(async (req: Request, res: Response) => {
+    const userId = requireUserId(req);
+    const { id } = req.params as PlanIdParam;
+    const input = req.body as HungerReportInput;
+    const result = await nutritionPlanHungerService.report(userId, id, input);
+    sendCreated(res, { result });
   }),
 
   list: asyncHandler(async (req: Request, res: Response) => {
