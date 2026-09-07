@@ -429,6 +429,14 @@ export class OpenAICompatibleAdapter implements IAIAdapter {
 
   /** @inheritdoc */
   async generateNutritionPlan(input: NutritionPlanAIInput): Promise<NutritionPlanAIOutput> {
+    const startDayNumber = input.startDayNumber ?? 1;
+    const planDurationDays = input.planDurationDays ?? input.cycleLengthDays;
+    const endDayNumber = startDayNumber + input.cycleLengthDays - 1;
+    const avoidMealSignatures = (input.avoidMealSignatures ?? [])
+      .map((signature) => signature.trim())
+      .filter(Boolean)
+      .slice(-28);
+
     const schemaHint = [
       "Return JSON with this exact shape:",
       "{",
@@ -448,6 +456,8 @@ export class OpenAICompatibleAdapter implements IAIAdapter {
       '  "summary": "string"',
       "}",
       `Generate exactly ${input.cycleLengthDays} unique days in "cycle".`,
+      `This batch represents plan days ${startDayNumber}-${endDayNumber} of a ${planDurationDays}-day plan.`,
+      "Treat avoidMealSignatures as prior-day meal/food combinations to avoid repeating when practical; they are context, not permission to violate targets, allergies, or dietary constraints.",
       "Each day's meals must sum close to the daily calorie and macro targets.",
       "Honor every allergy as a HARD exclusion — no allergen in any food, ever.",
     ].join("\n");
@@ -467,6 +477,9 @@ export class OpenAICompatibleAdapter implements IAIAdapter {
       healthConditions: input.healthConditions,
       bloodTestImplications: input.bloodTestImplications,
       cycleLengthDays: input.cycleLengthDays,
+      planDurationDays,
+      startDayNumber,
+      avoidMealSignatures,
     };
 
     const messages: ChatMessage[] = [
