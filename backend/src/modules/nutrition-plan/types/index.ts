@@ -20,6 +20,9 @@ export interface NutritionProfile {
   healthConditions: string[];
   allergies: string[];
   dailyWaterGoalMl: number;
+  /** Optional HH:mm daily rhythm fields; null for legacy profiles. */
+  usualWakeTime?: string | null;
+  usualSleepTime?: string | null;
 }
 
 export interface CalorieCalculation {

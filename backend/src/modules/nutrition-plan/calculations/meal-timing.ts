@@ -1,24 +1,28 @@
 /**
  * Deterministic meal-timing engine.
  *
- * Chooses a number of daily meals and their recommended times / calorie shares
- * based on the weight goal. A muscle-/weight-gain goal favors an extra snack to
- * distribute a calorie surplus; other goals use three balanced main meals plus
- * a light snack. These are general structuring guidelines, not medical advice.
+ * Meal times are derived from the user's usual wake/sleep rhythm when those
+ * profile fields are available. AI never decides these clock times. Existing
+ * users without rhythm data keep the established fixed schedule as a backwards-
+ * compatible fallback.
  */
 
 import type { MealSlot, MealTimingRecommendation, WeightGoal } from "../types";
 
-/** Three main meals plus a light afternoon snack (default structure). */
-const STANDARD_SLOTS: MealSlot[] = [
+interface DailyRhythm {
+  usualWakeTime?: string | null;
+  usualSleepTime?: string | null;
+}
+
+/** Established fallback used for profiles created before sleep/wake capture. */
+const STANDARD_FALLBACK: MealSlot[] = [
   { name: "Breakfast", time: "08:00", calorieShare: 0.3 },
   { name: "Lunch", time: "13:00", calorieShare: 0.35 },
   { name: "Snack", time: "16:30", calorieShare: 0.1 },
   { name: "Dinner", time: "19:30", calorieShare: 0.25 },
 ];
 
-/** Three main meals plus two snacks to spread a calorie surplus (gain goal). */
-const GAIN_SLOTS: MealSlot[] = [
+const GAIN_FALLBACK: MealSlot[] = [
   { name: "Breakfast", time: "08:00", calorieShare: 0.25 },
   { name: "Morning Snack", time: "10:30", calorieShare: 0.1 },
   { name: "Lunch", time: "13:00", calorieShare: 0.3 },
@@ -26,13 +30,91 @@ const GAIN_SLOTS: MealSlot[] = [
   { name: "Dinner", time: "19:30", calorieShare: 0.25 },
 ];
 
+const STANDARD_TEMPLATE: Omit<MealSlot, "time">[] = [
+  { name: "Breakfast", calorieShare: 0.3 },
+  { name: "Lunch", calorieShare: 0.35 },
+  { name: "Snack", calorieShare: 0.1 },
+  { name: "Dinner", calorieShare: 0.25 },
+];
+
+const GAIN_TEMPLATE: Omit<MealSlot, "time">[] = [
+  { name: "Breakfast", calorieShare: 0.25 },
+  { name: "Morning Snack", calorieShare: 0.1 },
+  { name: "Lunch", calorieShare: 0.3 },
+  { name: "Afternoon Snack", calorieShare: 0.1 },
+  { name: "Dinner", calorieShare: 0.25 },
+];
+
+function parseClock(value?: string | null): number | null {
+  if (!value || !/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) return null;
+  const [hours, minutes] = value.split(":").map(Number);
+  return hours * 60 + minutes;
+}
+
+function formatClock(totalMinutes: number): string {
+  const normalized = ((Math.round(totalMinutes) % 1440) + 1440) % 1440;
+  const hours = Math.floor(normalized / 60);
+  const minutes = normalized % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+function roundToFiveMinutes(value: number): number {
+  return Math.round(value / 5) * 5;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
 /**
- * Resolves the recommended meal timing for a weight goal.
- *
- * @param goal - The nutritional weight goal.
- * @returns The meal-timing recommendation (slots + count).
+ * Builds monotonically increasing meal times inside the user's waking window.
+ * The first meal lands roughly 45-90 minutes after waking and the final meal
+ * roughly 2-3 hours before usual sleep. Interior meals are evenly distributed.
  */
-export function calculateMealTiming(goal: WeightGoal): MealTimingRecommendation {
-  const slots = goal === "GAIN_WEIGHT" ? GAIN_SLOTS : STANDARD_SLOTS;
-  return { mealsPerDay: slots.length, slots: slots.map((slot) => ({ ...slot })) };
+function personalizedTimes(slotCount: number, rhythm: DailyRhythm): string[] | null {
+  const wake = parseClock(rhythm.usualWakeTime);
+  const sleepClock = parseClock(rhythm.usualSleepTime);
+  if (wake === null || sleepClock === null) return null;
+
+  let sleep = sleepClock;
+  while (sleep <= wake) sleep += 1440;
+  const wakingWindow = sleep - wake;
+
+  // Reject implausibly short/long waking windows as bad profile data and keep
+  // the established fallback rather than inventing unsafe or overlapping times.
+  if (wakingWindow < 8 * 60 || wakingWindow > 22 * 60) return null;
+
+  const firstOffset = clamp(Math.round(wakingWindow * 0.08), 45, 90);
+  const lastLead = clamp(Math.round(wakingWindow * 0.14), 120, 180);
+  let first = wake + firstOffset;
+  let last = sleep - lastLead;
+
+  const minimumGap = 120;
+  const requiredSpan = minimumGap * (slotCount - 1);
+  if (last - first < requiredSpan) {
+    first = wake + 30;
+    last = sleep - 60;
+  }
+  if (last - first < requiredSpan) return null;
+
+  const step = (last - first) / (slotCount - 1);
+  return Array.from({ length: slotCount }, (_, index) =>
+    formatClock(roundToFiveMinutes(first + step * index)),
+  );
+}
+
+/** Resolves deterministic meal timing from goal + optional daily rhythm. */
+export function calculateMealTiming(
+  goal: WeightGoal,
+  rhythm: DailyRhythm = {},
+): MealTimingRecommendation {
+  const template = goal === "GAIN_WEIGHT" ? GAIN_TEMPLATE : STANDARD_TEMPLATE;
+  const fallback = goal === "GAIN_WEIGHT" ? GAIN_FALLBACK : STANDARD_FALLBACK;
+  const times = personalizedTimes(template.length, rhythm);
+
+  const slots = times
+    ? template.map((slot, index) => ({ ...slot, time: times[index] }))
+    : fallback.map((slot) => ({ ...slot }));
+
+  return { mealsPerDay: slots.length, slots };
 }
