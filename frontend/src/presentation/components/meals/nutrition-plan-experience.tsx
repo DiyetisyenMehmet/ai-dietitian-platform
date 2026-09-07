@@ -2,12 +2,19 @@
 
 import * as React from "react";
 
-import { useNutritionPlan } from "@/application/health/nutrition-plan-store";
+import {
+  nutritionPlanStore,
+  useNutritionPlan,
+} from "@/application/health/nutrition-plan-store";
 import type { NutritionPlanRecord } from "@/infrastructure/nutrition/nutrition-plan-client";
 import { NutritionPlanHungerCoach } from "@/presentation/components/meals/nutrition-plan-hunger-coach";
-import { NutritionPlanReminders, type NutritionReminderEntry } from "@/presentation/components/meals/nutrition-plan-reminders";
+import {
+  NutritionPlanReminders,
+  type NutritionReminderEntry,
+} from "@/presentation/components/meals/nutrition-plan-reminders";
 import { NutritionPlanShareButton } from "@/presentation/components/meals/nutrition-plan-share-button";
 import { NutritionPlanView } from "@/presentation/components/meals/nutrition-plan-view";
+import { Card, CardContent } from "@/presentation/components/ui/card";
 
 function startDate(plan: NutritionPlanRecord): Date {
   const dateOnly = plan.startDate?.slice(0, 10);
@@ -33,7 +40,14 @@ function mealTime(value: string): { hour: number; minute: number } | null {
   if (!match) return null;
   const hour = Number(match[1]);
   const minute = Number(match[2]);
-  if (!Number.isInteger(hour) || !Number.isInteger(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+  if (
+    !Number.isInteger(hour) ||
+    !Number.isInteger(minute) ||
+    hour < 0 ||
+    hour > 23 ||
+    minute < 0 ||
+    minute > 59
+  ) {
     return null;
   }
   return { hour, minute };
@@ -122,13 +136,15 @@ function shareableDays(plan: NutritionPlanRecord) {
     month: "long",
   });
 
-  return Array.from({ length: content.durationDays }, (_, index) => index + 1).flatMap((dayNumber) => {
-    const mapping = content.calendar?.find((item) => item.dayNumber === dayNumber);
-    const cycleIndex = mapping?.cycleIndex ?? ((dayNumber - 1) % content.cycle.length);
-    const day = content.cycle[cycleIndex];
-    if (!day) return [];
-    return [{ dayNumber, dateLabel: formatter.format(dateForDay(plan, dayNumber)), day }];
-  });
+  return Array.from({ length: content.durationDays }, (_, index) => index + 1).flatMap(
+    (dayNumber) => {
+      const mapping = content.calendar?.find((item) => item.dayNumber === dayNumber);
+      const cycleIndex = mapping?.cycleIndex ?? ((dayNumber - 1) % content.cycle.length);
+      const day = content.cycle[cycleIndex];
+      if (!day) return [];
+      return [{ dayNumber, dateLabel: formatter.format(dateForDay(plan, dayNumber)), day }];
+    },
+  );
 }
 
 function completed(plan: NutritionPlanRecord): boolean {
@@ -139,9 +155,38 @@ function completed(plan: NutritionPlanRecord): boolean {
   return Date.now() > last.getTime();
 }
 
+function PantryPlanningCard({ value }: { value: string }) {
+  return (
+    <Card className="border-primary/20">
+      <CardContent className="p-5">
+        <h2 className="text-base font-semibold">Evinde hangi malzemeler var?</h2>
+        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+          Buzdolabı, dolap veya dondurucundaki malzemeleri aklına geldiği gibi yaz. Diewish uygun
+          olanları önce değerlendirir; sağlık hedeflerin, alerjilerin ve güvenli porsiyonlar her
+          zaman önceliklidir. Eksikse yalnızca gerekli ve kolay bulunan malzemeleri tamamlar.
+        </p>
+        <textarea
+          className="mt-4 min-h-28 w-full resize-y rounded-xl border border-input bg-background px-3 py-2 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
+          maxLength={800}
+          value={value}
+          onChange={(event) => nutritionPlanStore.setPantryDraft(event.target.value)}
+          placeholder="Örn. yumurta, yoğurt, mercimek, bulgur, domates, patates, elma, ceviz, biraz tavuk..."
+          aria-label="Evdeki malzemeler"
+        />
+        <div className="mt-2 flex items-start justify-between gap-3 text-xs text-muted-foreground">
+          <p>
+            İsteğe bağlıdır. Bir malzemenin evde olması, plana zorla ekleneceği anlamına gelmez.
+          </p>
+          <span className="shrink-0 tabular-nums">{value.length}/800</span>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 /** Full professional plan experience: plan management plus optional local reminders. */
 export function NutritionPlanExperience() {
-  const { activePlan } = useNutritionPlan();
+  const { activePlan, pantryDraft } = useNutritionPlan();
 
   React.useEffect(() => {
     if (activePlan) return;
@@ -152,18 +197,28 @@ export function NutritionPlanExperience() {
     }
   }, [activePlan]);
 
-  const days = activePlan?.duration === "SIXTY_DAY" ? [] : activePlan ? shareableDays(activePlan) : [];
-  const hungerDayNumber = activePlan?.duration === "SIXTY_DAY" ? null : activePlan ? currentPlanDayNumber(activePlan) : null;
+  const days =
+    activePlan?.duration === "SIXTY_DAY" ? [] : activePlan ? shareableDays(activePlan) : [];
+  const hungerDayNumber =
+    activePlan?.duration === "SIXTY_DAY"
+      ? null
+      : activePlan
+        ? currentPlanDayNumber(activePlan)
+        : null;
 
   return (
     <div className="space-y-5">
+      {!activePlan && <PantryPlanningCard value={pantryDraft} />}
       <NutritionPlanView />
       {activePlan && hungerDayNumber !== null && (
         <NutritionPlanHungerCoach planId={activePlan.id} dayNumber={hungerDayNumber} />
       )}
       {activePlan && days.length > 0 && (
         <div className="flex justify-end">
-          <NutritionPlanShareButton durationDays={activePlan.dailyPlans?.durationDays ?? days.length} days={days} />
+          <NutritionPlanShareButton
+            durationDays={activePlan.dailyPlans?.durationDays ?? days.length}
+            days={days}
+          />
         </div>
       )}
       {activePlan && (
