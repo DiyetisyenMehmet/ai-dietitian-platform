@@ -1,0 +1,332 @@
+name: Staging Deploy + Device APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type DEPLOY_STAGING to deploy isolated staging services"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: diewish-staging-deploy
+  cancel-in-progress: false
+
+env:
+  BACKEND_SERVICE: diewish-backend-staging
+  FRONTEND_SERVICE: diewish-frontend-staging
+  BACKEND_SECRET_DATABASE: diewish-staging-database-url
+  BACKEND_SECRET_JWT_ACCESS: diewish-staging-jwt-access-secret
+  BACKEND_SECRET_JWT_REFRESH: diewish-staging-jwt-refresh-secret
+  BACKEND_SECRET_USDA: diewish-staging-usda-fdc-api-key
+
+jobs:
+  deploy-staging:
+    if: ${{ inputs.confirm == 'DEPLOY_STAGING' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: staging
+    outputs:
+      backend_url: ${{ steps.final-backend.outputs.url }}
+      frontend_url: ${{ steps.final-frontend.outputs.url }}
+    steps:
+      - name: Enforce hardening source branch
+        shell: bash
+        run: |
+          if [ "${GITHUB_REF_NAME}" != "fix/production-hardening" ]; then
+            echo "Staging deployment must run from fix/production-hardening, not ${GITHUB_REF_NAME}." >&2
+            exit 1
+          fi
+
+      - name: Validate required staging configuration
+        shell: bash
+        env:
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ vars.GCP_REGION }}
+          GCP_WIF_PROVIDER: ${{ vars.GCP_WIF_PROVIDER }}
+          GCP_DEPLOYER_SERVICE_ACCOUNT: ${{ vars.GCP_DEPLOYER_SERVICE_ACCOUNT }}
+          GCP_STAGING_RUNTIME_SERVICE_ACCOUNT: ${{ vars.GCP_STAGING_RUNTIME_SERVICE_ACCOUNT }}
+          GCP_ARTIFACT_REPOSITORY: ${{ vars.GCP_ARTIFACT_REPOSITORY }}
+        run: |
+          for name in \
+            GCP_PROJECT_ID \
+            GCP_REGION \
+            GCP_WIF_PROVIDER \
+            GCP_DEPLOYER_SERVICE_ACCOUNT \
+            GCP_STAGING_RUNTIME_SERVICE_ACCOUNT \
+            GCP_ARTIFACT_REPOSITORY; do
+            if [ -z "${!name}" ]; then
+              echo "Missing GitHub staging variable: ${name}" >&2
+              exit 1
+            fi
+          done
+
+      - uses: actions/checkout@v4
+
+      - id: auth
+        name: Authenticate to Google Cloud with Workload Identity Federation
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Configure Artifact Registry Docker auth
+        shell: bash
+        run: gcloud auth configure-docker "${{ vars.GCP_REGION }}-docker.pkg.dev" --quiet
+
+      - name: Verify staging Secret Manager entries exist
+        shell: bash
+        run: |
+          for secret in \
+            "$BACKEND_SECRET_DATABASE" \
+            "$BACKEND_SECRET_JWT_ACCESS" \
+            "$BACKEND_SECRET_JWT_REFRESH" \
+            "$BACKEND_SECRET_USDA"; do
+            gcloud secrets describe "$secret" --project="${{ vars.GCP_PROJECT_ID }}" >/dev/null
+          done
+
+      - name: Build and push backend image
+        shell: bash
+        run: |
+          image="${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GCP_ARTIFACT_REPOSITORY }}/diewish-backend:${GITHUB_SHA}"
+          docker build --pull -t "$image" backend
+          docker push "$image"
+          echo "BACKEND_IMAGE=$image" >> "$GITHUB_ENV"
+
+      # First backend revision obtains the stable Cloud Run backend URL. The
+      # temporary frontend origin is replaced after the frontend is deployed.
+      - id: bootstrap-backend
+        name: Deploy isolated staging backend bootstrap revision
+        uses: google-github-actions/deploy-cloudrun@v3
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          region: ${{ vars.GCP_REGION }}
+          service: ${{ env.BACKEND_SERVICE }}
+          image: ${{ env.BACKEND_IMAGE }}
+          env_vars_update_strategy: overwrite
+          env_vars: |-
+            NODE_ENV=production
+            API_PREFIX=/api
+            CORS_ORIGIN=https://bootstrap.invalid
+            APP_WEB_URL=https://bootstrap.invalid
+            TRUST_PROXY_HOPS=1
+            ENABLE_API_DOCS=false
+            LOG_LEVEL=info
+            REFRESH_COOKIE_SAME_SITE=none
+            AI_PROVIDER=vertex
+            VERTEX_AI_LOCATION=global
+            VERTEX_AI_MODEL=gemini-3.5-flash
+            STORAGE_PROVIDER=local
+            OPEN_FOOD_FACTS_BASE_URL=https://world.openfoodfacts.org
+            OPEN_FOOD_FACTS_USER_AGENT=Diewish-Staging/0.1
+            NUTRITION_PROVIDER_TIMEOUT_MS=8000
+            USDA_CACHE_TTL_HOURS=168
+            OPEN_FOOD_FACTS_CACHE_TTL_HOURS=24
+          secrets_update_strategy: overwrite
+          secrets: |-
+            DATABASE_URL=${{ env.BACKEND_SECRET_DATABASE }}:latest
+            JWT_ACCESS_SECRET=${{ env.BACKEND_SECRET_JWT_ACCESS }}:latest
+            JWT_REFRESH_SECRET=${{ env.BACKEND_SECRET_JWT_REFRESH }}:latest
+            USDA_FDC_API_KEY=${{ env.BACKEND_SECRET_USDA }}:latest
+          flags: >-
+            --allow-unauthenticated
+            --service-account=${{ vars.GCP_STAGING_RUNTIME_SERVICE_ACCOUNT }}
+            --port=4000
+            --cpu=1
+            --memory=1Gi
+            --min=0
+            --max=2
+            --concurrency=40
+            --timeout=180s
+
+      - name: Build and push bootstrap frontend image
+        shell: bash
+        run: |
+          image="${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GCP_ARTIFACT_REPOSITORY }}/diewish-frontend:${GITHUB_SHA}-bootstrap"
+          docker build --pull \
+            --build-arg "NEXT_PUBLIC_API_BASE_URL=${{ steps.bootstrap-backend.outputs.url }}/api" \
+            --build-arg "NEXT_PUBLIC_SITE_URL=https://bootstrap.invalid" \
+            -t "$image" frontend
+          docker push "$image"
+          echo "BOOTSTRAP_FRONTEND_IMAGE=$image" >> "$GITHUB_ENV"
+
+      - id: bootstrap-frontend
+        name: Deploy isolated staging frontend bootstrap revision
+        uses: google-github-actions/deploy-cloudrun@v3
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          region: ${{ vars.GCP_REGION }}
+          service: ${{ env.FRONTEND_SERVICE }}
+          image: ${{ env.BOOTSTRAP_FRONTEND_IMAGE }}
+          flags: >-
+            --allow-unauthenticated
+            --port=3000
+            --cpu=1
+            --memory=512Mi
+            --min=0
+            --max=2
+            --concurrency=80
+            --timeout=60s
+
+      - name: Build and push final frontend image with exact staging URLs
+        shell: bash
+        run: |
+          image="${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GCP_ARTIFACT_REPOSITORY }}/diewish-frontend:${GITHUB_SHA}"
+          docker build --pull \
+            --build-arg "NEXT_PUBLIC_API_BASE_URL=${{ steps.bootstrap-backend.outputs.url }}/api" \
+            --build-arg "NEXT_PUBLIC_SITE_URL=${{ steps.bootstrap-frontend.outputs.url }}" \
+            -t "$image" frontend
+          docker push "$image"
+          echo "FRONTEND_IMAGE=$image" >> "$GITHUB_ENV"
+
+      - id: final-frontend
+        name: Deploy final staging frontend revision
+        uses: google-github-actions/deploy-cloudrun@v3
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          region: ${{ vars.GCP_REGION }}
+          service: ${{ env.FRONTEND_SERVICE }}
+          image: ${{ env.FRONTEND_IMAGE }}
+          flags: >-
+            --allow-unauthenticated
+            --port=3000
+            --cpu=1
+            --memory=512Mi
+            --min=0
+            --max=2
+            --concurrency=80
+            --timeout=60s
+
+      - id: final-backend
+        name: Redeploy backend with exact staging frontend origin
+        uses: google-github-actions/deploy-cloudrun@v3
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          region: ${{ vars.GCP_REGION }}
+          service: ${{ env.BACKEND_SERVICE }}
+          image: ${{ env.BACKEND_IMAGE }}
+          env_vars_update_strategy: overwrite
+          env_vars: |-
+            NODE_ENV=production
+            API_PREFIX=/api
+            CORS_ORIGIN=${{ steps.final-frontend.outputs.url }}
+            APP_WEB_URL=${{ steps.final-frontend.outputs.url }}
+            TRUST_PROXY_HOPS=1
+            ENABLE_API_DOCS=false
+            LOG_LEVEL=info
+            REFRESH_COOKIE_SAME_SITE=none
+            AI_PROVIDER=vertex
+            VERTEX_AI_LOCATION=global
+            VERTEX_AI_MODEL=gemini-3.5-flash
+            STORAGE_PROVIDER=local
+            OPEN_FOOD_FACTS_BASE_URL=https://world.openfoodfacts.org
+            OPEN_FOOD_FACTS_USER_AGENT=Diewish-Staging/0.1
+            NUTRITION_PROVIDER_TIMEOUT_MS=8000
+            USDA_CACHE_TTL_HOURS=168
+            OPEN_FOOD_FACTS_CACHE_TTL_HOURS=24
+          secrets_update_strategy: overwrite
+          secrets: |-
+            DATABASE_URL=${{ env.BACKEND_SECRET_DATABASE }}:latest
+            JWT_ACCESS_SECRET=${{ env.BACKEND_SECRET_JWT_ACCESS }}:latest
+            JWT_REFRESH_SECRET=${{ env.BACKEND_SECRET_JWT_REFRESH }}:latest
+            USDA_FDC_API_KEY=${{ env.BACKEND_SECRET_USDA }}:latest
+          flags: >-
+            --allow-unauthenticated
+            --service-account=${{ vars.GCP_STAGING_RUNTIME_SERVICE_ACCOUNT }}
+            --port=4000
+            --cpu=1
+            --memory=1Gi
+            --min=0
+            --max=2
+            --concurrency=40
+            --timeout=180s
+
+      - name: Verify deployed staging services
+        shell: bash
+        run: |
+          curl --fail --silent --show-error --retry 8 --retry-all-errors \
+            --retry-delay 3 "${{ steps.final-backend.outputs.url }}/api/health" >/dev/null
+          curl --fail --silent --show-error --retry 8 --retry-all-errors \
+            --retry-delay 3 "${{ steps.final-frontend.outputs.url }}/register" >/dev/null
+
+      - name: Write staging deployment manifest
+        shell: bash
+        run: |
+          mkdir -p staging-output
+          cat > staging-output/deployment.txt <<EOF
+          sha=${GITHUB_SHA}
+          backend=${{ steps.final-backend.outputs.url }}
+          frontend=${{ steps.final-frontend.outputs.url }}
+          backend_service=${BACKEND_SERVICE}
+          frontend_service=${FRONTEND_SERVICE}
+          EOF
+
+      - name: Upload staging deployment manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: diewish-staging-deployment-${{ github.run_number }}
+          path: staging-output/deployment.txt
+          if-no-files-found: error
+          retention-days: 14
+
+  build-device-apk:
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android 16 SDK
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.6.0"
+
+      - name: Build staging-bound current-SHA debug APK
+        shell: bash
+        run: >-
+          gradle --no-daemon -p android
+          -PDIEWISH_WEB_BASE_URL=${{ needs.deploy-staging.outputs.frontend_url }}
+          :app:assembleDebug
+
+      - name: Stamp traceable device-test APK
+        shell: bash
+        run: |
+          short_sha="${GITHUB_SHA::7}"
+          mkdir -p android/app/build/staging-apk
+          cp android/app/build/outputs/apk/debug/app-debug.apk \
+            "android/app/build/staging-apk/Diewish-staging-${short_sha}.apk"
+          sha256sum "android/app/build/staging-apk/Diewish-staging-${short_sha}.apk" \
+            > "android/app/build/staging-apk/Diewish-staging-${short_sha}.sha256"
+          cat > "android/app/build/staging-apk/Diewish-staging-${short_sha}.txt" <<EOF
+          sha=${GITHUB_SHA}
+          frontend=${{ needs.deploy-staging.outputs.frontend_url }}
+          backend=${{ needs.deploy-staging.outputs.backend_url }}
+          EOF
+
+      - name: Upload staging device-test APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: diewish-staging-device-apk-${{ github.run_number }}
+          path: android/app/build/staging-apk/
+          if-no-files-found: error
+          retention-days: 14
