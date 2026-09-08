@@ -40,6 +40,11 @@ interface BarcodeDetectorInstance {
 }
 type BarcodeDetectorConstructor = new (options?: { formats?: string[] }) => BarcodeDetectorInstance;
 
+interface NativeBarcodeScannerBridge {
+  isAvailable(): boolean;
+  scanBarcode(): void;
+}
+
 const MEALS: readonly { value: MealTypeDto; label: string }[] = [
   { value: "BREAKFAST", label: "Kahvaltı" },
   { value: "LUNCH", label: "Öğle" },
@@ -50,6 +55,11 @@ const MEALS: readonly { value: MealTypeDto; label: string }[] = [
 function detectorConstructor(): BarcodeDetectorConstructor | null {
   if (typeof window === "undefined") return null;
   return (window as unknown as { BarcodeDetector?: BarcodeDetectorConstructor }).BarcodeDetector ?? null;
+}
+
+function nativeScannerBridge(): NativeBarcodeScannerBridge | null {
+  if (typeof window === "undefined") return null;
+  return (window as unknown as { DiewishScanner?: NativeBarcodeScannerBridge }).DiewishScanner ?? null;
 }
 
 function nutrient(value: number | null, unit: string): string {
@@ -81,6 +91,7 @@ export function BarcodeScannerPanel() {
   const [notFound, setNotFound] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [cameraActive, setCameraActive] = React.useState(false);
+  const [nativeScanning, setNativeScanning] = React.useState(false);
   const [personalizing, setPersonalizing] = React.useState(false);
   const [comparing, setComparing] = React.useState(false);
   const [mealType, setMealType] = React.useState<MealTypeDto>(() => defaultMealType());
@@ -149,7 +160,52 @@ export function BarcodeScannerPanel() {
     [loadPersonalization],
   );
 
+  React.useEffect(() => {
+    const onResult = (event: Event) => {
+      const detail = (event as CustomEvent<{ barcode?: string }>).detail;
+      const code = detail?.barcode?.replace(/\D/g, "") ?? "";
+      setNativeScanning(false);
+      if (/^(?:\d{8}|\d{12}|\d{13})$/.test(code)) {
+        void lookup(code);
+      } else {
+        toast.error("Barkod okunamadı. Lütfen tekrar deneyin.");
+      }
+    };
+    const onCanceled = () => setNativeScanning(false);
+    const onError = (event: Event) => {
+      setNativeScanning(false);
+      const code = (event as CustomEvent<{ code?: string }>).detail?.code;
+      toast.error(
+        code === "CAMERA_PERMISSION_DENIED"
+          ? "Barkod taramak için kamera izni gerekiyor."
+          : "Barkod kamerası açılamadı. Barkodu elle de girebilirsin.",
+      );
+    };
+
+    window.addEventListener("diewish:barcode-result", onResult);
+    window.addEventListener("diewish:barcode-canceled", onCanceled);
+    window.addEventListener("diewish:barcode-error", onError);
+    return () => {
+      window.removeEventListener("diewish:barcode-result", onResult);
+      window.removeEventListener("diewish:barcode-canceled", onCanceled);
+      window.removeEventListener("diewish:barcode-error", onError);
+    };
+  }, [lookup]);
+
   const startCamera = React.useCallback(async () => {
+    const nativeScanner = nativeScannerBridge();
+    if (nativeScanner) {
+      try {
+        if (nativeScanner.isAvailable()) {
+          setNativeScanning(true);
+          nativeScanner.scanBarcode();
+          return;
+        }
+      } catch {
+        setNativeScanning(false);
+      }
+    }
+
     const Detector = detectorConstructor();
     if (!Detector) {
       toast.error("Bu cihazda yerleşik barkod çözme desteklenmiyor. Barkodu elle yazabilirsin.");
@@ -172,7 +228,7 @@ export function BarcodeScannerPanel() {
         if (!scanningRef.current || !videoRef.current) return;
         try {
           const hits = await detector.detect(videoRef.current);
-          const code = hits.find((hit) => /^\d{6,14}$/.test(hit.rawValue))?.rawValue;
+          const code = hits.find((hit) => /^(?:\d{8}|\d{12}|\d{13})$/.test(hit.rawValue))?.rawValue;
           if (code) {
             stopCamera();
             void lookup(code);
@@ -240,8 +296,8 @@ export function BarcodeScannerPanel() {
             </div>
           )}
           <div className="grid grid-cols-2 gap-2">
-            <Button onClick={() => void startCamera()} disabled={cameraActive || loading}>
-              <Camera /> Kamerayı aç
+            <Button onClick={() => void startCamera()} disabled={cameraActive || nativeScanning || loading}>
+              <Camera /> {nativeScanning ? "Barkod taranıyor…" : "Kamerayı aç"}
             </Button>
             <Button variant="outline" onClick={stopCamera} disabled={!cameraActive}>
               <Square /> Durdur
