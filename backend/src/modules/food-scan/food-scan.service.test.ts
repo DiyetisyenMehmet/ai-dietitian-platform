@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { FoodScanService, type NutritionLookupPort } from "./food-scan.service";
+import {
+  FoodScanService,
+  scaleCorrectionsToTarget,
+  type NutritionLookupPort,
+} from "./food-scan.service";
 import type { CanonicalFood } from "../nutrition-data/nutrition-data.types";
 
 function food(name: string, kcal: number, protein: number, carbs: number, fat: number): CanonicalFood {
@@ -26,9 +30,22 @@ function food(name: string, kcal: number, protein: number, carbs: number, fat: n
       sodiumMg: null,
       saltG: null,
     },
-    ingredients: [], allergens: [], additives: [], labels: [], vegan: null, vegetarian: null, glutenFree: null,
-    nutriScore: null, novaGroup: null,
-    provenance: { provider: "USDA", externalId: name, retrievedAt: new Date(0).toISOString(), dataBasis: "PER_100_G", confidence: 0.95 },
+    ingredients: [],
+    allergens: [],
+    additives: [],
+    labels: [],
+    vegan: null,
+    vegetarian: null,
+    glutenFree: null,
+    nutriScore: null,
+    novaGroup: null,
+    provenance: {
+      provider: "USDA",
+      externalId: name,
+      retrievedAt: new Date(0).toISOString(),
+      dataBasis: "PER_100_G",
+      confidence: 0.95,
+    },
   };
 }
 
@@ -50,6 +67,7 @@ test("ingredient corrections are recalculated deterministically from provider fa
   assert.equal(result.totals.proteinG, 16);
   assert.equal(result.totals.carbohydratesG, 40);
   assert.equal(result.totals.fatG, 12);
+  assert.equal(result.estimatedGrams, 210);
 });
 
 test("excluded uncertain ingredients do not contribute to totals", async () => {
@@ -60,6 +78,7 @@ test("excluded uncertain ingredients do not contribute to totals", async () => {
   ]);
   assert.equal(result.totals.energyKcal, 240);
   assert.equal(result.ingredients[1]?.nutrients, null);
+  assert.equal(result.estimatedGrams, 200);
 });
 
 test("unmatched ingredient never receives invented nutrient numbers", async () => {
@@ -70,8 +89,39 @@ test("unmatched ingredient never receives invented nutrient numbers", async () =
   assert.equal(result.totals.energyKcal, null);
 });
 
+test("total plate weight scales included ingredient amounts deterministically", async () => {
+  const service = new FoodScanService(lookup);
+  const result = await service.recalculate(
+    [
+      { name: "fasulye", grams: 200, included: true },
+      { name: "yağ", grams: 10, included: true },
+    ],
+    250,
+  );
+  assert.equal(result.estimatedGrams, 250);
+  assert.equal(
+    Math.round(result.ingredients.reduce((sum, item) => sum + (item.included ? item.estimatedGrams ?? 0 : 0), 0) * 10) / 10,
+    250,
+  );
+  assert.equal(result.totals.energyKcal !== null && result.totals.energyKcal > 330, true);
+});
+
+test("excluded ingredients are not scaled into target plate weight", () => {
+  const scaled = scaleCorrectionsToTarget(
+    [
+      { name: "fasulye", grams: 200, included: true },
+      { name: "yağ", grams: 20, included: false },
+    ],
+    250,
+  );
+  assert.equal(scaled[0]?.grams, 250);
+  assert.equal(scaled[1]?.grams, 20);
+});
+
 test("zero and extreme serving corrections are rejected", async () => {
   const service = new FoodScanService(lookup);
   await assert.rejects(service.recalculate([{ name: "fasulye", grams: 0, included: true }]));
   await assert.rejects(service.recalculate([{ name: "fasulye", grams: 5001, included: true }]));
+  await assert.rejects(service.recalculate([{ name: "fasulye", grams: 100, included: true }], 0));
+  await assert.rejects(service.recalculate([{ name: "fasulye", grams: 100, included: true }], 5001));
 });

@@ -3,6 +3,7 @@ import type { Request, Response } from "express";
 import { ApiError } from "../../utils/api-error";
 import { sendSuccess } from "../../utils/api-response";
 import { asyncHandler } from "../../utils/async-handler";
+import { toPhotoScanResult } from "../nutrition-data/nutrition-scan-result";
 import { foodScanService } from "./food-scan.service";
 import type { FoodScanIngredientCorrection } from "./types";
 
@@ -13,12 +14,12 @@ export const foodScanController = {
       throw ApiError.badRequest('"file" alanında bir görsel yüklemelisiniz.');
     }
     const analysis = await foodScanService.analyze(req.file.buffer);
-    sendSuccess(res, { analysis });
+    sendSuccess(res, { analysis, scan: toPhotoScanResult(analysis) });
   }),
 
   recalculate: asyncHandler(async (req: Request, res: Response) => {
     if (!req.user) throw ApiError.unauthorized("Authentication required.");
-    const body = req.body as { ingredients?: unknown } | undefined;
+    const body = req.body as { ingredients?: unknown; targetGrams?: unknown } | undefined;
     if (!Array.isArray(body?.ingredients)) {
       throw ApiError.badRequest("ingredients bir dizi olmalıdır.");
     }
@@ -30,7 +31,11 @@ export const foodScanController = {
       }
       return { name: item.name, grams: item.grams, included: item.included } satisfies FoodScanIngredientCorrection;
     });
-    const analysis = await foodScanService.recalculate(corrections);
+    const targetGrams = body.targetGrams;
+    if (targetGrams !== undefined && typeof targetGrams !== "number") {
+      throw ApiError.badRequest("targetGrams number olmalıdır.");
+    }
+    const analysis = await foodScanService.recalculate(corrections, targetGrams);
     sendSuccess(res, { analysis });
   }),
 };

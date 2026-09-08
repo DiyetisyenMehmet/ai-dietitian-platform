@@ -49,3 +49,10 @@ export interface FoodScanIngredientCorrection {
   grams: number;
   included: boolean;
 }
+
+export interface FoodScanRecalculationResult {
+  ingredients: ResolvedFoodScanIngredient[];
+  totals: NutrientValues;
+  /** Sum of included corrected ingredients after optional deterministic scaling. */
+  estimatedGrams: number;
+}
