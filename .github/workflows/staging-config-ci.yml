@@ -25,6 +25,9 @@ jobs:
           set -euo pipefail
           workflow=.github/workflows/staging-preview.yml
           script=scripts/bootstrap-staging-gcp.sh
+          android_host=android/app/src/main/java/com/diewish/app/MainActivity.java
+          next_config=frontend/next.config.ts
+          frontend_build=.github/cloudbuild/frontend-staging.yaml
 
           grep -q 'BACKEND_SERVICE: diewish-backend-staging' "$workflow"
           grep -q 'FRONTEND_SERVICE: diewish-frontend-staging' "$workflow"
@@ -38,6 +41,28 @@ jobs:
           grep -q 'STAGING_REF="refs/heads/feature/staging-preview"' "$script"
           grep -Fq "assertion.ref=='\${STAGING_REF}'" "$script"
           grep -q "assertion.repository=='\${GITHUB_REPOSITORY}'" "$script"
+
+          # Cloud Run assigns separate service hosts. Browser/API auth must still
+          # be first-party: browser requests /api on the frontend origin, Next.js
+          # proxies server-side to the isolated backend, and the HttpOnly refresh
+          # cookie keeps the stricter Lax policy.
+          grep -Fq '_API_BASE_URL=/api' "$workflow"
+          grep -Fq '_API_PROXY_TARGET=${BACKEND_URL}' "$workflow"
+          grep -q 'REFRESH_COOKIE_SAME_SITE=lax' "$workflow"
+          grep -q 'DIEWISH_API_PROXY_TARGET' "$next_config"
+          grep -q 'source: "/api/:path\*"' "$next_config"
+          grep -q 'build-arg=DIEWISH_API_PROXY_TARGET=' "$frontend_build"
+          grep -q 'setAcceptThirdPartyCookies(webView, false)' "$android_host"
+
+          if grep -q 'setAcceptThirdPartyCookies(webView, true)' "$android_host"; then
+            echo 'Android WebView must not globally accept third-party cookies.' >&2
+            exit 1
+          fi
+
+          if grep -q 'REFRESH_COOKIE_SAME_SITE=none' "$workflow"; then
+            echo 'Staging refresh cookie unexpectedly weakened to SameSite=None.' >&2
+            exit 1
+          fi
 
           if grep -Eq 'BACKEND_SERVICE: diewish-backend$|FRONTEND_SERVICE: diewish-frontend$' "$workflow"; then
             echo 'Production service name detected in staging deployment workflow.' >&2
