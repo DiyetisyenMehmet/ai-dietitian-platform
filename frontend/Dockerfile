@@ -12,12 +12,14 @@ RUN npm ci
 COPY . .
 
 # NEXT_PUBLIC_* values are inlined at build time; pass them as build args.
-# Staging defaults target the current Google Cloud Run services and can still
-# be overridden explicitly with --build-arg for another environment.
+# Staging uses a relative /api browser base and a server-only rewrite target so
+# refresh cookies remain first-party even across separate Cloud Run services.
 ARG NEXT_PUBLIC_API_BASE_URL=https://diewish-backend-730419163638.europe-west1.run.app/api
 ARG NEXT_PUBLIC_SITE_URL=https://diewish-frontend-730419163638.europe-west1.run.app
+ARG DIEWISH_API_PROXY_TARGET=
 ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
 ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL
+ENV DIEWISH_API_PROXY_TARGET=$DIEWISH_API_PROXY_TARGET
 ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN npm run build
