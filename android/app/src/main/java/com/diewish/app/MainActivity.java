@@ -53,15 +53,17 @@ import java.util.Map;
  * Diewish Android host.
  *
  * The responsive Diewish application remains the UI source of truth, while
- * Android-only capabilities such as system insets, camera permissions, file
- * capture and Google Play Billing are owned by the native host.
+ * Android-only capabilities such as system insets, camera permissions, native
+ * food/barcode scanning and Google Play Billing are owned by the native host.
  */
 public final class MainActivity extends Activity implements PurchasesUpdatedListener {
     private static final int FILE_CHOOSER_REQUEST = 4102;
     private static final int CAMERA_PERMISSION_REQUEST = 4103;
+    private static final int BARCODE_SCAN_REQUEST = 4104;
     private static final String BILLING_BRIDGE = "DiewishBilling";
     private static final String REMINDER_BRIDGE = "DiewishReminders";
     private static final String SHARE_BRIDGE = "DiewishShare";
+    private static final String SCANNER_BRIDGE = "DiewishScanner";
     private static final String FOOD_SCAN_PATH = "/meals/scan";
 
     private WebView webView;
@@ -70,6 +72,7 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
     private boolean billingReady = false;
     private ValueCallback<Uri[]> filePathCallback;
     private boolean pendingFoodCameraAfterPermission;
+    private boolean pendingBarcodeScannerAfterPermission;
     private PermissionRequest pendingWebCameraRequest;
     private final Map<String, ProductDetails> productCache = new HashMap<>();
     private String trustedHost;
@@ -78,9 +81,6 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // Android 15/16 force modern apps into edge-to-edge rendering. Own that
-        // mode explicitly. Safe-area propagation is handled centrally by the
-        // native host and web shell rather than by device-specific dimensions.
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
 
         trustedHost = URI.create(BuildConfig.WEB_BASE_URL).getHost();
@@ -107,11 +107,6 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
             Insets safe = windowInsets.getInsets(handledInsets);
             view.setPadding(safe.left, safe.top, safe.right, safe.bottom);
 
-            // The native container has already accounted for these safe areas.
-            // Zero only the handled inset types before they reach WebView so
-            // CSS env(safe-area-inset-*) cannot apply the same spacing twice.
-            // Keep the object flowing instead of consuming it so later inset
-            // updates (including IME/viewport changes) still reach WebView.
             return new WindowInsetsCompat.Builder(windowInsets)
                 .setInsets(handledInsets, Insets.NONE)
                 .build();
@@ -177,6 +172,7 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
             new DiewishShareBridge(this, this::isTrustedPage),
             SHARE_BRIDGE
         );
+        webView.addJavascriptInterface(new ScannerBridge(), SCANNER_BRIDGE);
         webView.setWebViewClient(new TrustedWebViewClient());
         webView.setWebChromeClient(new DiewishChromeClient());
     }
@@ -497,11 +493,30 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
         }
     }
 
-    /**
-     * Only the food scanner's capture-enabled image input is routed to the
-     * first-party CameraX screen. Other upload fields keep their original MIME
-     * types and chooser semantics (PDFs, blood tests, profile files, etc.).
-     */
+    public final class ScannerBridge {
+        @JavascriptInterface
+        public boolean isAvailable() {
+            return isTrustedPage();
+        }
+
+        @JavascriptInterface
+        public void scanBarcode() {
+            if (!isTrustedPage()) return;
+            runOnUiThread(() -> {
+                if (!isTrustedPage()) return;
+                if (hasCameraPermission()) {
+                    launchBarcodeScanner();
+                } else {
+                    pendingBarcodeScannerAfterPermission = true;
+                    requestPermissions(
+                        new String[]{Manifest.permission.CAMERA},
+                        CAMERA_PERMISSION_REQUEST
+                    );
+                }
+            });
+        }
+    }
+
     private boolean isFoodCaptureRequest(WebChromeClient.FileChooserParams params) {
         if (!params.isCaptureEnabled() || webView == null || webView.getUrl() == null) return false;
         Uri current;
@@ -533,6 +548,20 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
             );
         } catch (ActivityNotFoundException | SecurityException error) {
             launchImageGalleryFallback();
+        }
+    }
+
+    private void launchBarcodeScanner() {
+        try {
+            startActivityForResult(
+                new Intent(this, BarcodeScannerActivity.class),
+                BARCODE_SCAN_REQUEST
+            );
+        } catch (ActivityNotFoundException | SecurityException error) {
+            emitEvent(
+                "diewish:barcode-error",
+                jsonObject("code", "NATIVE_SCANNER_UNAVAILABLE")
+            );
         }
     }
 
@@ -730,9 +759,19 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
             if (granted) {
                 launchFoodCamera();
             } else {
-                // Permission denial must not trap the user; Photo/file selection
-                // remains available without broad media-library permission.
                 launchImageGalleryFallback();
+            }
+        }
+
+        if (pendingBarcodeScannerAfterPermission) {
+            pendingBarcodeScannerAfterPermission = false;
+            if (granted) {
+                launchBarcodeScanner();
+            } else {
+                emitEvent(
+                    "diewish:barcode-error",
+                    jsonObject("code", "CAMERA_PERMISSION_DENIED")
+                );
             }
         }
     }
@@ -744,6 +783,24 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
         Intent data
     ) {
         super.onActivityResult(requestCode, resultCode, data);
+
+        if (requestCode == BARCODE_SCAN_REQUEST) {
+            if (resultCode == RESULT_OK && data != null) {
+                String barcode = data.getStringExtra(BarcodeScannerActivity.EXTRA_BARCODE);
+                if (barcode != null && barcode.matches("\\d{8}|\\d{12}|\\d{13}")) {
+                    emitEvent("diewish:barcode-result", jsonObject("barcode", barcode));
+                    return;
+                }
+                emitEvent(
+                    "diewish:barcode-error",
+                    jsonObject("code", "INVALID_NATIVE_RESULT")
+                );
+                return;
+            }
+            emitEvent("diewish:barcode-canceled", new JSONObject());
+            return;
+        }
+
         if (requestCode != FILE_CHOOSER_REQUEST || filePathCallback == null) {
             return;
         }
@@ -802,6 +859,7 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
             webView.removeJavascriptInterface(BILLING_BRIDGE);
             webView.removeJavascriptInterface(REMINDER_BRIDGE);
             webView.removeJavascriptInterface(SHARE_BRIDGE);
+            webView.removeJavascriptInterface(SCANNER_BRIDGE);
             webView.destroy();
         }
         super.onDestroy();
