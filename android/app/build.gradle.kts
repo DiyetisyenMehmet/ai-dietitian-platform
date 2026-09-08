@@ -52,13 +52,15 @@ dependencies {
     implementation("androidx.core:core:1.17.0")
     implementation("androidx.activity:activity:1.13.0")
 
-    // Stable CameraX stack. CameraX owns the Diewish capture UX so camera,
-    // gallery and later barcode scanning behave consistently across vendors.
+    // CameraX owns Diewish capture/scanning UX consistently across vendors.
     val cameraXVersion = "1.6.2"
     implementation("androidx.camera:camera-core:$cameraXVersion")
     implementation("androidx.camera:camera-camera2:$cameraXVersion")
     implementation("androidx.camera:camera-lifecycle:$cameraXVersion")
     implementation("androidx.camera:camera-view:$cameraXVersion")
+
+    // Bundled/on-device retail barcode decoder. No scan frame leaves the phone.
+    implementation("com.google.mlkit:barcode-scanning:17.3.0")
 
     implementation("com.android.billingclient:billing:9.1.0")
 }
