@@ -1,6 +1,9 @@
 name: Staging Preview Deploy
 
 on:
+  push:
+    branches:
+      - feature/staging-preview
   workflow_dispatch:
 
 permissions:
@@ -12,6 +15,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  PROJECT_ID: project-a2e260c1-839d-4f1d-b90
+  REGION: europe-west1
   BACKEND_SERVICE: diewish-backend-staging
   FRONTEND_SERVICE: diewish-frontend-staging
   ARTIFACT_REPOSITORY: diewish-staging
@@ -22,6 +27,7 @@ env:
 
 jobs:
   deploy-staging:
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[deploy-staging]')) }}
     name: Deploy isolated staging
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -33,14 +39,10 @@ jobs:
       - name: Validate staging contract
         shell: bash
         env:
-          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-          REGION: ${{ vars.GCP_REGION }}
           WIF_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           DEPLOY_SERVICE_ACCOUNT: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
         run: |
           set -euo pipefail
-          : "${PROJECT_ID:?Set staging environment variable GCP_PROJECT_ID}"
-          : "${REGION:?Set staging environment variable GCP_REGION}"
           : "${WIF_PROVIDER:?Set staging environment variable GCP_WORKLOAD_IDENTITY_PROVIDER}"
           : "${DEPLOY_SERVICE_ACCOUNT:?Set staging environment variable GCP_DEPLOY_SERVICE_ACCOUNT}"
 
@@ -49,17 +51,13 @@ jobs:
             exit 1
           fi
 
-          echo "PROJECT_ID=${PROJECT_ID}" >> "$GITHUB_ENV"
-          echo "REGION=${REGION}" >> "$GITHUB_ENV"
-          echo "WIF_PROVIDER=${WIF_PROVIDER}" >> "$GITHUB_ENV"
-          echo "DEPLOY_SERVICE_ACCOUNT=${DEPLOY_SERVICE_ACCOUNT}" >> "$GITHUB_ENV"
           echo "RUNTIME_SERVICE_ACCOUNT=diewish-staging-runtime@${PROJECT_ID}.iam.gserviceaccount.com" >> "$GITHUB_ENV"
 
       - name: Authenticate to Google Cloud with OIDC
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: ${{ env.WIF_PROVIDER }}
-          service_account: ${{ env.DEPLOY_SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
