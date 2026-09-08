@@ -4,23 +4,23 @@ This environment exists only to test current `fix/production-hardening` builds o
 
 ## Isolation guarantees
 
+- Google Cloud project: `project-a2e260c1-839d-4f1d-b90`
+- Region: `europe-west1`
 - Cloud Run backend service: `diewish-backend-staging`
 - Cloud Run frontend service: `diewish-frontend-staging`
 - Artifact Registry repository: `diewish-staging`
-- Runtime identity: `diewish-staging-runtime@<PROJECT_ID>.iam.gserviceaccount.com`
+- Runtime identity: `diewish-staging-runtime@project-a2e260c1-839d-4f1d-b90.iam.gserviceaccount.com`
 - Database: separate Neon project `Diewish Staging` (`shiny-hill-56015697`)
 - Database name: `diewish_staging`
 - No production database branch/copy is used.
 - Debug APKs require an explicit staging web URL and do not silently default to production.
-- Production deploy is not part of the staging workflow.
+- Production deployment is not part of this workflow.
 
 ## Why the database is a separate project
 
 Diewish can contain health and nutrition data. A Neon branch of the production project would copy production data into staging. For scanner testing that is unnecessary and increases privacy risk, so staging uses a clean project with no production rows.
 
 ## One-time Google Cloud bootstrap
-
-Use the same Google Cloud project if desired, but keep service names, secrets and runtime identity staging-specific.
 
 Required APIs:
 
@@ -32,11 +32,13 @@ Required APIs:
 - IAM Credentials API
 - Security Token Service API
 
-Create a Docker Artifact Registry repository named `diewish-staging` in the staging region (currently expected to be `europe-west1`).
+Create the Docker Artifact Registry repository `diewish-staging` in `europe-west1`.
 
 Create the runtime service account:
 
 ```bash
+PROJECT_ID=project-a2e260c1-839d-4f1d-b90
+
 gcloud iam service-accounts create diewish-staging-runtime \
   --project "$PROJECT_ID" \
   --display-name "Diewish staging runtime"
@@ -50,7 +52,7 @@ gcloud projects add-iam-policy-binding "$PROJECT_ID" \
   --role roles/aiplatform.user
 ```
 
-Grant Secret Manager access only to the four staging secrets listed below, not to every project secret.
+Grant Secret Manager access only to the four staging secrets below, not to every project secret.
 
 ## Secret Manager contract
 
@@ -61,7 +63,7 @@ Create these staging-only secrets:
 - `diewish-staging-jwt-refresh`
 - `diewish-staging-usda-fdc-api-key`
 
-`diewish-staging-database-url` must contain the connection string for the clean Neon project `shiny-hill-56015697`. Keep the connection string out of GitHub, source files and chat messages.
+`diewish-staging-database-url` must contain the connection string for the clean Neon project `shiny-hill-56015697`. Keep that connection string out of GitHub, source files and chat messages.
 
 The runtime service account needs `roles/secretmanager.secretAccessor` only on these staging secrets.
 
@@ -75,26 +77,31 @@ The GitHub deployment identity needs enough permission to:
 - push images to `diewish-staging`,
 - deploy/update only the two `*-staging` Cloud Run services,
 - act as `diewish-staging-runtime`,
-- read secret metadata during the preflight step.
+- read staging secret metadata during the preflight step.
 
 Do not grant production database credentials to the deployment identity.
 
-## GitHub `staging` environment variables
+Create a GitHub Actions environment named `staging` and add only these non-secret variables:
 
-Create a GitHub Actions environment named `staging` and add these non-secret variables:
-
-- `GCP_PROJECT_ID`
-- `GCP_REGION` (`europe-west1` for the current Cloud Run geography)
 - `GCP_WORKLOAD_IDENTITY_PROVIDER`
 - `GCP_DEPLOY_SERVICE_ACCOUNT`
 
-No database password, JWT secret, USDA key or Google private key belongs in GitHub variables.
+The project ID and region are fixed in the workflow to prevent accidentally targeting another project/region. No database password, JWT secret, USDA key or Google private key belongs in GitHub variables.
 
-## Manual deployment
+## Controlled deployment trigger
 
-The workflow `.github/workflows/staging-preview.yml` is `workflow_dispatch` only. A push cannot deploy staging or production.
+`.github/workflows/staging-preview.yml` listens to `feature/staging-preview`, but the deploy job is skipped for ordinary pushes.
 
-The workflow performs the following sequence:
+A deployment runs only when either:
+
+- the workflow is manually dispatched where GitHub permits it, or
+- the HEAD commit message contains the literal marker `[deploy-staging]`.
+
+This allows the staging branch to remain outside `main` while still giving us an explicit deployment gate. Never use `[deploy-staging]` in ordinary development commits.
+
+## Deployment sequence
+
+The workflow performs:
 
 1. OIDC authentication to Google Cloud.
 2. Preflight checks for staging-only Artifact Registry, runtime service account and Secret Manager entries.
@@ -124,7 +131,7 @@ No AI credentials are embedded in the frontend or Android APK.
 
 ## Refresh-cookie note
 
-The default Cloud Run `run.app` frontend and backend hosts are different origins. Staging therefore sets `REFRESH_COOKIE_SAME_SITE=none` with a Secure HttpOnly refresh cookie. A production custom-domain setup should prefer stable Diewish-owned web/API hostnames and retain the stricter release WebView cookie policy.
+The default Cloud Run `run.app` frontend and backend hosts are different origins. Staging sets `REFRESH_COOKIE_SAME_SITE=none` with a Secure HttpOnly refresh cookie. A production custom-domain setup should prefer stable Diewish-owned web/API hostnames and retain the stricter release WebView cookie policy.
 
 ## Promotion rule
 
