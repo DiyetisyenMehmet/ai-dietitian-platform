@@ -41,6 +41,16 @@ const envSchema = z.object({
   STORAGE_GCS_BUCKET: z.string().default(""),
   STORAGE_GCS_PREFIX: z.string().default("diewish"),
   BLOOD_TEST_MAX_FILE_SIZE_MB: z.coerce.number().int().positive().default(15),
+
+  // Verified nutrition-data providers. Credentials never leave the backend.
+  USDA_FDC_API_KEY: z.string().optional(),
+  USDA_FDC_BASE_URL: z.string().url().default("https://api.nal.usda.gov/fdc/v1"),
+  OPEN_FOOD_FACTS_BASE_URL: z.string().url().default("https://world.openfoodfacts.org"),
+  OPEN_FOOD_FACTS_USER_AGENT: z.string().min(8).default("Diewish/0.1 (diewishdestek@gmail.com)"),
+  NUTRITION_PROVIDER_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(30_000).default(8_000),
+  USDA_CACHE_TTL_HOURS: z.coerce.number().int().positive().max(24 * 365).default(168),
+  OPEN_FOOD_FACTS_CACHE_TTL_HOURS: z.coerce.number().int().positive().max(24 * 30).default(24),
+
   AI_API_KEY: z.string().optional(),
   AI_API_BASE_URL: z.string().url().default("https://api.openai.com/v1"),
   AI_MODEL: z.string().default("gpt-4o"),
