@@ -51,6 +51,11 @@ if [[ "${STAGING_DATABASE_URL}" != postgresql://* ]]; then
   exit 1
 fi
 
+# Prisma Migrate should use Neon's direct endpoint, while the running service may
+# use the pooled endpoint. If a pooled URL is supplied, derive the equivalent
+# direct host by removing Neon's -pooler hostname suffix.
+DIRECT_DATABASE_URL="${STAGING_DATABASE_URL/-pooler/}"
+
 JWT_ACCESS_SECRET="$(openssl rand -hex 48)"
 JWT_REFRESH_SECRET="$(openssl rand -hex 48)"
 
@@ -101,6 +106,7 @@ gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
 ensure_secret() {
   local name="$1"
   local value="$2"
+  local runtime_access="${3:-true}"
   if ! gcloud secrets describe "${name}" --project "${PROJECT_ID}" >/dev/null 2>&1; then
     gcloud secrets create "${name}" \
       --project "${PROJECT_ID}" \
@@ -111,18 +117,21 @@ ensure_secret() {
     --project "${PROJECT_ID}" \
     --data-file=- \
     --quiet >/dev/null
-  gcloud secrets add-iam-policy-binding "${name}" \
-    --project "${PROJECT_ID}" \
-    --member "serviceAccount:${RUNTIME_SA}" \
-    --role roles/secretmanager.secretAccessor \
-    --quiet >/dev/null
+  if [[ "${runtime_access}" == "true" ]]; then
+    gcloud secrets add-iam-policy-binding "${name}" \
+      --project "${PROJECT_ID}" \
+      --member "serviceAccount:${RUNTIME_SA}" \
+      --role roles/secretmanager.secretAccessor \
+      --quiet >/dev/null
+  fi
 }
 
-ensure_secret "diewish-staging-database-url" "${STAGING_DATABASE_URL}"
-ensure_secret "diewish-staging-jwt-access" "${JWT_ACCESS_SECRET}"
-ensure_secret "diewish-staging-jwt-refresh" "${JWT_REFRESH_SECRET}"
+ensure_secret "diewish-staging-database-url" "${STAGING_DATABASE_URL}" true
+ensure_secret "diewish-staging-direct-database-url" "${DIRECT_DATABASE_URL}" false
+ensure_secret "diewish-staging-jwt-access" "${JWT_ACCESS_SECRET}" true
+ensure_secret "diewish-staging-jwt-refresh" "${JWT_REFRESH_SECRET}" true
 
-unset STAGING_DATABASE_URL JWT_ACCESS_SECRET JWT_REFRESH_SECRET
+unset STAGING_DATABASE_URL DIRECT_DATABASE_URL JWT_ACCESS_SECRET JWT_REFRESH_SECRET
 
 echo "Configuring GitHub OIDC federation..."
 if ! gcloud iam workload-identity-pools describe "${POOL_ID}" \
@@ -156,9 +165,6 @@ gcloud iam service-accounts add-iam-policy-binding "${DEPLOY_SA}" \
   --role roles/iam.workloadIdentityUser \
   --quiet >/dev/null
 
-# The deployment identity can submit builds and administer only Cloud Run-level
-# staging deployments. Production service names are separately guarded by the
-# workflow's *-staging assertions.
 for role in \
   roles/run.admin \
   roles/cloudbuild.builds.editor \
@@ -175,10 +181,10 @@ gcloud iam service-accounts add-iam-policy-binding "${RUNTIME_SA}" \
   --role roles/iam.serviceAccountUser \
   --quiet >/dev/null
 
-# Allow the deployer to validate staging secret metadata without granting it
-# permission to read secret payloads.
+# The deployer can validate staging secret metadata without reading payloads.
 for secret in \
   diewish-staging-database-url \
+  diewish-staging-direct-database-url \
   diewish-staging-jwt-access \
   diewish-staging-jwt-refresh; do
   gcloud secrets add-iam-policy-binding "${secret}" \
@@ -188,16 +194,26 @@ for secret in \
     --quiet >/dev/null
 done
 
-# Cloud Build's execution identity needs to push the images it builds.
+# Cloud Build's execution identity pushes images and alone receives access to the
+# direct migration URL. The running service never receives this secret.
 BUILD_SA="$(gcloud builds get-default-service-account --project "${PROJECT_ID}" 2>/dev/null || true)"
-if [[ -n "${BUILD_SA}" ]]; then
-  gcloud artifacts repositories add-iam-policy-binding "${REPOSITORY}" \
-    --project "${PROJECT_ID}" \
-    --location "${REGION}" \
-    --member "serviceAccount:${BUILD_SA}" \
-    --role roles/artifactregistry.writer \
-    --quiet >/dev/null
+if [[ -z "${BUILD_SA}" ]]; then
+  echo "Could not resolve the Cloud Build default service account." >&2
+  exit 1
 fi
+
+gcloud artifacts repositories add-iam-policy-binding "${REPOSITORY}" \
+  --project "${PROJECT_ID}" \
+  --location "${REGION}" \
+  --member "serviceAccount:${BUILD_SA}" \
+  --role roles/artifactregistry.writer \
+  --quiet >/dev/null
+
+gcloud secrets add-iam-policy-binding "diewish-staging-direct-database-url" \
+  --project "${PROJECT_ID}" \
+  --member "serviceAccount:${BUILD_SA}" \
+  --role roles/secretmanager.secretAccessor \
+  --quiet >/dev/null
 
 cat <<EOF
 
@@ -210,6 +226,7 @@ Deployment service account:
 ${DEPLOY_SA}
 
 Next: push a reviewed commit to feature/staging-preview whose message contains
-[deploy-staging]. The workflow will build isolated Cloud Run services and a
-staging-bound APK. No production service or production database is targeted.
+[deploy-staging]. The workflow will migrate the clean staging database once,
+build isolated Cloud Run services, and produce a staging-bound APK. No
+production service or production database is targeted.
 EOF
