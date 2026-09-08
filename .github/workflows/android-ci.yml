@@ -5,6 +5,7 @@ on:
     branches:
       - fix/production-hardening
       - feature/integrated-test-build
+      - feature/android-native-scanner
     paths:
       - "android/**"
       - ".github/workflows/android-ci.yml"
