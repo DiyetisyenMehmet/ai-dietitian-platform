@@ -29,8 +29,15 @@ jobs:
           grep -q 'BACKEND_SERVICE: diewish-backend-staging' "$workflow"
           grep -q 'FRONTEND_SERVICE: diewish-frontend-staging' "$workflow"
           grep -q 'DATABASE_SECRET_NAME: diewish-staging-database-url' "$workflow"
+          grep -q 'DIRECT_DATABASE_SECRET_NAME: diewish-staging-direct-database-url' "$workflow"
           grep -q 'Diewish Staging Neon DATABASE_URL' "$script"
-          grep -q "assertion.ref=='refs/heads/feature/staging-preview'" "$script"
+
+          # The bootstrap builds the OIDC condition from a fixed STAGING_REF.
+          # Validate both the fixed value and that assertion.ref actually binds
+          # to that variable instead of relying on a brittle rendered literal.
+          grep -q 'STAGING_REF="refs/heads/feature/staging-preview"' "$script"
+          grep -Fq "assertion.ref=='\${STAGING_REF}'" "$script"
+          grep -q "assertion.repository=='\${GITHUB_REPOSITORY}'" "$script"
 
           if grep -Eq 'BACKEND_SERVICE: diewish-backend$|FRONTEND_SERVICE: diewish-frontend$' "$workflow"; then
             echo 'Production service name detected in staging deployment workflow.' >&2
