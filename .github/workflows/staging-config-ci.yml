@@ -1,0 +1,43 @@
+name: Staging Config CI
+
+on:
+  push:
+    branches:
+      - feature/staging-preview
+      - fix/production-hardening
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-staging-config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate bootstrap shell syntax
+        run: bash -n scripts/bootstrap-staging-gcp.sh
+
+      - name: Assert staging isolation contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          workflow=.github/workflows/staging-preview.yml
+          script=scripts/bootstrap-staging-gcp.sh
+
+          grep -q 'BACKEND_SERVICE: diewish-backend-staging' "$workflow"
+          grep -q 'FRONTEND_SERVICE: diewish-frontend-staging' "$workflow"
+          grep -q 'DATABASE_SECRET_NAME: diewish-staging-database-url' "$workflow"
+          grep -q 'Diewish Staging Neon DATABASE_URL' "$script"
+          grep -q "assertion.ref=='refs/heads/feature/staging-preview'" "$script"
+
+          if grep -Eq 'BACKEND_SERVICE: diewish-backend$|FRONTEND_SERVICE: diewish-frontend$' "$workflow"; then
+            echo 'Production service name detected in staging deployment workflow.' >&2
+            exit 1
+          fi
+
+          if grep -q 'wild-dawn-63542383' "$workflow" "$script"; then
+            echo 'Production Neon project reference detected in staging deployment config.' >&2
+            exit 1
+          fi
