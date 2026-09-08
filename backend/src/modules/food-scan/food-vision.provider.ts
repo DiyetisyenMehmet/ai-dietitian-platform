@@ -6,6 +6,7 @@ import type { FoodVisionIngredientCandidate, FoodVisionResult } from "./types";
 
 const MAX_TOKENS = 1_000;
 const MAX_ATTEMPTS = 2;
+const METADATA_BASE_URL = "http://metadata.google.internal/computeMetadata/v1";
 const USER_PROMPT =
   "Görseli yalnız yemek/besin tanıma, porsiyon gramı ve muhtemel tarif bileşenleri açısından analiz et. " +
   "Kalori veya herhangi bir besin değeri üretme. Emin olmadığın malzemeleri optional=true ve düşük confidence ile belirt.";
@@ -15,6 +16,7 @@ type ContentPart =
   | { type: "image_url"; image_url: { url: string } };
 
 type ChatMessage = { role: "system" | "user"; content: string | ContentPart[] };
+type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
 interface ChatCompletionResponse {
   choices?: Array<{ message?: { content?: string | null } }>;
@@ -102,7 +104,11 @@ export function resolveFoodVisionProviderKind(
   if (settings.aiProvider === "abacus") return "abacus";
   if (settings.aiProvider === "openai") return "openai";
   if (settings.abacusApiKey && !settings.aiApiKey) return "abacus";
-  return "openai";
+  if (settings.aiApiKey) return "openai";
+
+  // Vertex is Diewish's primary production direction. A Cloud Run workload can
+  // authenticate without an embedded API key through its service identity.
+  return "vertex";
 }
 
 function normalizedAbacusModel(model: string): string {
@@ -123,10 +129,9 @@ function resolveProvider(): ProviderConfig {
   });
 
   if (kind === "vertex") {
-    if (!env.GOOGLE_CLOUD_PROJECT.trim()) throw notConfigured();
     return {
       kind,
-      project: env.GOOGLE_CLOUD_PROJECT,
+      project: env.GOOGLE_CLOUD_PROJECT.trim(),
       location: env.VERTEX_AI_LOCATION,
       model: env.VERTEX_AI_MODEL,
       provider: "vertex-ai",
@@ -314,6 +319,49 @@ async function requestOpenAICompatible(
 }
 
 let vertexAccessToken: { value: string; expiresAt: number } | null = null;
+let vertexProjectId: string | null = null;
+
+export async function resolveVertexProjectId(
+  configuredProject: string,
+  fetcher: FetchLike = fetch,
+): Promise<string> {
+  const configured = configuredProject.trim();
+  if (configured) return configured;
+  if (vertexProjectId) return vertexProjectId;
+
+  let response: Response;
+  try {
+    response = await fetcher(`${METADATA_BASE_URL}/project/project-id`, {
+      headers: { "Metadata-Flavor": "Google" },
+      signal: AbortSignal.timeout(5_000),
+    });
+  } catch (error) {
+    logger.warn({ err: error }, "Food scan Vertex project metadata request failed");
+    throw new ApiError(503, "Vertex AI proje kimliği alınamadı.", {
+      code: "VERTEX_PROJECT_UNAVAILABLE",
+      isOperational: false,
+    });
+  }
+
+  if (!response.ok) {
+    logger.warn({ status: response.status }, "Food scan Vertex project metadata request failed");
+    throw new ApiError(503, "Vertex AI proje kimliği alınamadı.", {
+      code: "VERTEX_PROJECT_UNAVAILABLE",
+      isOperational: false,
+    });
+  }
+
+  const project = (await response.text()).trim();
+  if (!project) {
+    throw new ApiError(503, "Vertex AI proje kimliği alınamadı.", {
+      code: "VERTEX_PROJECT_UNAVAILABLE",
+      isOperational: false,
+    });
+  }
+
+  vertexProjectId = project;
+  return project;
+}
 
 async function getVertexAccessToken(): Promise<string> {
   if (vertexAccessToken && vertexAccessToken.expiresAt > Date.now() + 60_000) {
@@ -322,13 +370,10 @@ async function getVertexAccessToken(): Promise<string> {
 
   let response: Response;
   try {
-    response = await fetch(
-      "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token",
-      {
-        headers: { "Metadata-Flavor": "Google" },
-        signal: AbortSignal.timeout(5_000),
-      },
-    );
+    response = await fetch(`${METADATA_BASE_URL}/instance/service-accounts/default/token`, {
+      headers: { "Metadata-Flavor": "Google" },
+      signal: AbortSignal.timeout(5_000),
+    });
   } catch (error) {
     logger.warn({ err: error }, "Food scan Vertex service-identity token request failed");
     throw new ApiError(503, "Vertex AI credentials are unavailable.", {
@@ -359,12 +404,12 @@ async function getVertexAccessToken(): Promise<string> {
   return vertexAccessToken.value;
 }
 
-function vertexUrl(provider: VertexProviderConfig): string {
+function vertexUrl(provider: VertexProviderConfig, project: string): string {
   const host =
     provider.location === "global"
       ? "aiplatform.googleapis.com"
       : `${provider.location}-aiplatform.googleapis.com`;
-  return `https://${host}/v1/projects/${encodeURIComponent(provider.project)}/locations/${encodeURIComponent(provider.location)}/publishers/google/models/${encodeURIComponent(provider.model)}:generateContent`;
+  return `https://${host}/v1/projects/${encodeURIComponent(project)}/locations/${encodeURIComponent(provider.location)}/publishers/google/models/${encodeURIComponent(provider.model)}:generateContent`;
 }
 
 function extractVertexText(body: VertexGenerateContentResponse): string {
@@ -381,8 +426,9 @@ async function requestVertex(
   buffer: Buffer,
   mimeType: string,
 ): Promise<string> {
+  const project = await resolveVertexProjectId(provider.project);
   const token = await getVertexAccessToken();
-  const url = vertexUrl(provider);
+  const url = vertexUrl(provider, project);
   const isGemini3 = /^gemini-3(?:[.-]|$)/i.test(provider.model);
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
