@@ -36,7 +36,7 @@ CREATE INDEX IF NOT EXISTS "nutrition_food_aliases_normalized_idx" ON "nutrition
 
 CREATE TABLE IF NOT EXISTS "nutrition_barcode_scans" (
   "id" BIGSERIAL PRIMARY KEY,
-  "user_id" UUID NOT NULL,
+  "user_id" TEXT NOT NULL,
   "barcode" TEXT NOT NULL,
   "provider" TEXT,
   "product_name" TEXT,
@@ -49,7 +49,7 @@ CREATE INDEX IF NOT EXISTS "nutrition_barcode_scans_user_scanned_idx" ON "nutrit
 CREATE INDEX IF NOT EXISTS "nutrition_barcode_scans_barcode_idx" ON "nutrition_barcode_scans"("barcode");
 
 CREATE TABLE IF NOT EXISTS "nutrition_food_favorites" (
-  "user_id" UUID NOT NULL,
+  "user_id" TEXT NOT NULL,
   "barcode" TEXT NOT NULL,
   "provider" TEXT,
   "product_name" TEXT,

@@ -77,7 +77,7 @@ export const nutritionClient = {
       path: `/nutrition/barcode/${encodeURIComponent(barcode)}/favorite`,
       method: "POST",
       auth: true,
-      body: { favorite },
+      body: JSON.stringify({ favorite }),
     });
   },
 } as const;

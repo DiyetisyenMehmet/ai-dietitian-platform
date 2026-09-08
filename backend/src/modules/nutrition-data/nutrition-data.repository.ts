@@ -110,7 +110,7 @@ export const nutritionDataRepository = {
     const payload = food ? JSON.stringify(food) : null;
     await prisma.$executeRaw`
       INSERT INTO nutrition_barcode_scans (user_id, barcode, provider, product_name, payload)
-      VALUES (${userId}::uuid, ${barcode}, ${food?.provider ?? null}, ${food?.displayNameTr ?? food?.name ?? null}, ${payload}::jsonb)
+      VALUES (${userId}, ${barcode}, ${food?.provider ?? null}, ${food?.displayNameTr ?? food?.name ?? null}, ${payload}::jsonb)
     `;
   },
 
@@ -124,7 +124,7 @@ export const nutritionDataRepository = {
     const rows = await prisma.$queryRaw<ScanRow[]>`
       SELECT barcode, provider, product_name, payload, scanned_at
       FROM nutrition_barcode_scans
-      WHERE user_id = ${userId}::uuid
+      WHERE user_id = ${userId}
       ORDER BY scanned_at DESC
       LIMIT ${limit}
     `;
@@ -139,13 +139,13 @@ export const nutritionDataRepository = {
 
   async setFavorite(userId: string, barcode: string, food: CanonicalFood | null, favorite: boolean): Promise<void> {
     if (!favorite) {
-      await prisma.$executeRaw`DELETE FROM nutrition_food_favorites WHERE user_id = ${userId}::uuid AND barcode = ${barcode}`;
+      await prisma.$executeRaw`DELETE FROM nutrition_food_favorites WHERE user_id = ${userId} AND barcode = ${barcode}`;
       return;
     }
     const payload = food ? JSON.stringify(food) : null;
     await prisma.$executeRaw`
       INSERT INTO nutrition_food_favorites (user_id, barcode, provider, product_name, payload)
-      VALUES (${userId}::uuid, ${barcode}, ${food?.provider ?? null}, ${food?.displayNameTr ?? food?.name ?? null}, ${payload}::jsonb)
+      VALUES (${userId}, ${barcode}, ${food?.provider ?? null}, ${food?.displayNameTr ?? food?.name ?? null}, ${payload}::jsonb)
       ON CONFLICT (user_id, barcode) DO UPDATE SET
         provider = EXCLUDED.provider,
         product_name = EXCLUDED.product_name,
@@ -163,7 +163,7 @@ export const nutritionDataRepository = {
     const rows = await prisma.$queryRaw<FavoriteRow[]>`
       SELECT barcode, provider, product_name, payload, created_at
       FROM nutrition_food_favorites
-      WHERE user_id = ${userId}::uuid
+      WHERE user_id = ${userId}
       ORDER BY created_at DESC
       LIMIT ${limit}
     `;
