@@ -7,10 +7,18 @@ export const metadata: Metadata = {
   title: "Beslenme Koçun",
 };
 
-export default function AiChatPage() {
+export default async function AiChatPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ prompt?: string | string[] }>;
+}) {
+  const params = await searchParams;
+  const rawPrompt = Array.isArray(params.prompt) ? params.prompt[0] : params.prompt;
+  const initialPrompt = rawPrompt?.trim().slice(0, 1000) || null;
+
   return (
     <AppShell title="Beslenme Koçun" fill hideHeader>
-      <ChatView />
+      <ChatView initialPrompt={initialPrompt} />
     </AppShell>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { AlertCircle, Menu } from "lucide-react";
 
 import { cn } from "@/shared/lib/utils";
@@ -16,14 +16,13 @@ import { ChatInput } from "./chat-input";
 import { ScrollToBottomButton } from "./scroll-to-bottom";
 
 /** Full-screen AI chat experience: persisted history + backend AI composer. */
-export function ChatView() {
+export function ChatView({ initialPrompt }: { initialPrompt?: string | null }) {
   const conversation = useActiveConversation();
   const profile = useHealthProfile();
   const { isResponding, isLoading, error } = useChatState();
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const [showScrollButton, setShowScrollButton] = React.useState(false);
   const router = useRouter();
-  const searchParams = useSearchParams();
   const promptHandledRef = React.useRef(false);
 
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -48,12 +47,12 @@ export function ChatView() {
 
   React.useEffect(() => {
     if (promptHandledRef.current || isLoading || isResponding) return;
-    const prompt = searchParams.get("prompt")?.trim().slice(0, 1000);
+    const prompt = initialPrompt?.trim().slice(0, 1000);
     if (!prompt) return;
     promptHandledRef.current = true;
     router.replace("/ai");
     chatStore.sendMessage(prompt);
-  }, [isLoading, isResponding, router, searchParams]);
+  }, [initialPrompt, isLoading, isResponding, router]);
 
   const handleScroll = React.useCallback(() => {
     setShowScrollButton(!isNearBottom());
