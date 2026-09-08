@@ -103,8 +103,13 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.6.0"
-      - name: Build current-SHA debug APK
-        run: gradle --no-daemon -p android :app:assembleDebug
+      # Hardening validates native compilation only. Device-test APKs are built
+      # by the staging workflow with an explicit, current staging frontend URL.
+      - name: Build current-SHA debug APK (compile-only target)
+        run: >-
+          gradle --no-daemon -p android
+          -PDIEWISH_WEB_BASE_URL=https://example.invalid
+          :app:assembleDebug
       - name: Stamp current-SHA APK
         shell: bash
         run: |
