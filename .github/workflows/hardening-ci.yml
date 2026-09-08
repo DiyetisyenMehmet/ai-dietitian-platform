@@ -5,6 +5,7 @@ on:
     branches:
       - fix/production-hardening
       - feature/android-native-scanner
+      - feature/staging-preview
   workflow_dispatch:
 
 permissions:
