@@ -4,13 +4,11 @@ import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
-import android.content.ClipData;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
-import android.provider.MediaStore;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.PermissionRequest;
@@ -23,7 +21,6 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 
-import androidx.core.content.FileProvider;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
@@ -44,13 +41,12 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.io.File;
-import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -66,14 +62,14 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
     private static final String BILLING_BRIDGE = "DiewishBilling";
     private static final String REMINDER_BRIDGE = "DiewishReminders";
     private static final String SHARE_BRIDGE = "DiewishShare";
+    private static final String FOOD_SCAN_PATH = "/meals/scan";
 
     private WebView webView;
     private FrameLayout rootView;
     private BillingClient billingClient;
     private boolean billingReady = false;
     private ValueCallback<Uri[]> filePathCallback;
-    private Uri pendingCameraUri;
-    private boolean pendingChooserAfterCameraPermission;
+    private boolean pendingFoodCameraAfterPermission;
     private PermissionRequest pendingWebCameraRequest;
     private final Map<String, ProductDetails> productCache = new HashMap<>();
     private String trustedHost;
@@ -83,9 +79,8 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
         super.onCreate(savedInstanceState);
 
         // Android 15/16 force modern apps into edge-to-edge rendering. Own that
-        // mode explicitly and inset the whole WebView viewport, rather than
-        // padding the WebView's internal document surface. This keeps fixed web
-        // headers and bottom navigation above status/navigation bars.
+        // mode explicitly. Safe-area propagation is handled centrally by the
+        // native host and web shell rather than by device-specific dimensions.
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
 
         trustedHost = URI.create(BuildConfig.WEB_BASE_URL).getHost();
@@ -494,7 +489,47 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
         }
     }
 
-    private Intent createGalleryIntent() {
+    /**
+     * Only the food scanner's capture-enabled image input is routed to the
+     * first-party CameraX screen. Other upload fields keep their original MIME
+     * types and chooser semantics (PDFs, blood tests, profile files, etc.).
+     */
+    private boolean isFoodCaptureRequest(WebChromeClient.FileChooserParams params) {
+        if (!params.isCaptureEnabled() || webView == null || webView.getUrl() == null) return false;
+        Uri current;
+        try {
+            current = Uri.parse(webView.getUrl());
+        } catch (RuntimeException error) {
+            return false;
+        }
+        if (!FOOD_SCAN_PATH.equals(current.getPath())) return false;
+
+        String[] acceptTypes = params.getAcceptTypes();
+        if (acceptTypes == null || acceptTypes.length == 0) return false;
+        for (String raw : acceptTypes) {
+            if (raw == null) continue;
+            for (String value : raw.split(",")) {
+                String mime = value.trim().toLowerCase(Locale.ROOT);
+                if (mime.equals("image/*") || mime.startsWith("image/")) return true;
+            }
+        }
+        return false;
+    }
+
+    private void launchFoodCamera() {
+        if (filePathCallback == null) return;
+        try {
+            startActivityForResult(
+                new Intent(this, FoodCameraActivity.class),
+                FILE_CHOOSER_REQUEST
+            );
+        } catch (ActivityNotFoundException | SecurityException error) {
+            launchImageGalleryFallback();
+        }
+    }
+
+    private void launchImageGalleryFallback() {
+        if (filePathCallback == null) return;
         Intent gallery = new Intent(Intent.ACTION_GET_CONTENT);
         gallery.addCategory(Intent.CATEGORY_OPENABLE);
         gallery.setType("image/*");
@@ -502,61 +537,29 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
             Intent.EXTRA_MIME_TYPES,
             new String[]{"image/jpeg", "image/png", "image/webp"}
         );
-        return gallery;
-    }
-
-    private Intent createCameraIntent() {
-        Intent camera = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-        if (camera.resolveActivity(getPackageManager()) == null) return null;
-
         try {
-            File sharedDir = new File(getCacheDir(), "shared");
-            if (!sharedDir.exists() && !sharedDir.mkdirs()) return null;
-            File image = File.createTempFile("diewish-food-", ".jpg", sharedDir);
-            pendingCameraUri = FileProvider.getUriForFile(
-                this,
-                getPackageName() + ".fileprovider",
-                image
+            startActivityForResult(
+                Intent.createChooser(gallery, "Fotoğraf seç"),
+                FILE_CHOOSER_REQUEST
             );
-            camera.putExtra(MediaStore.EXTRA_OUTPUT, pendingCameraUri);
-            camera.addFlags(
-                Intent.FLAG_GRANT_READ_URI_PERMISSION
-                    | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-            );
-            camera.setClipData(
-                ClipData.newRawUri("Diewish camera capture", pendingCameraUri)
-            );
-            return camera;
-        } catch (IOException | IllegalArgumentException error) {
-            pendingCameraUri = null;
-            return null;
-        }
-    }
-
-    private void launchImageChooser(boolean includeCamera) {
-        if (filePathCallback == null) return;
-
-        Intent gallery = createGalleryIntent();
-        Intent chooser = Intent.createChooser(gallery, "Fotoğraf seç");
-
-        if (includeCamera) {
-            Intent camera = createCameraIntent();
-            if (camera != null) {
-                chooser.putExtra(
-                    Intent.EXTRA_INITIAL_INTENTS,
-                    new Intent[]{camera}
-                );
-            }
-        } else {
-            pendingCameraUri = null;
-        }
-
-        try {
-            startActivityForResult(chooser, FILE_CHOOSER_REQUEST);
         } catch (ActivityNotFoundException error) {
             ValueCallback<Uri[]> callback = filePathCallback;
             filePathCallback = null;
-            pendingCameraUri = null;
+            callback.onReceiveValue(null);
+        }
+    }
+
+    private void launchGenericFileChooser(WebChromeClient.FileChooserParams params) {
+        if (filePathCallback == null) return;
+        try {
+            Intent request = params.createIntent();
+            startActivityForResult(
+                Intent.createChooser(request, "Dosya seç"),
+                FILE_CHOOSER_REQUEST
+            );
+        } catch (ActivityNotFoundException | RuntimeException error) {
+            ValueCallback<Uri[]> callback = filePathCallback;
+            filePathCallback = null;
             callback.onReceiveValue(null);
         }
     }
@@ -566,8 +569,8 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
             == PackageManager.PERMISSION_GRANTED;
     }
 
-    private void requestCameraPermissionForChooser() {
-        pendingChooserAfterCameraPermission = true;
+    private void requestCameraPermissionForFoodCamera() {
+        pendingFoodCameraAfterPermission = true;
         requestPermissions(
             new String[]{Manifest.permission.CAMERA},
             CAMERA_PERMISSION_REQUEST
@@ -633,12 +636,15 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
                 filePathCallback.onReceiveValue(null);
             }
             filePathCallback = filePath;
-            pendingCameraUri = null;
 
-            if (hasCameraPermission()) {
-                launchImageChooser(true);
+            if (isFoodCaptureRequest(fileChooserParams)) {
+                if (hasCameraPermission()) {
+                    launchFoodCamera();
+                } else {
+                    requestCameraPermissionForFoodCamera();
+                }
             } else {
-                requestCameraPermissionForChooser();
+                launchGenericFileChooser(fileChooserParams);
             }
             return true;
         }
@@ -711,11 +717,15 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
             }
         }
 
-        if (pendingChooserAfterCameraPermission) {
-            pendingChooserAfterCameraPermission = false;
-            // Permission denial should not trap the user. Gallery remains a
-            // valid fallback, while a granted permission enables real capture.
-            launchImageChooser(granted);
+        if (pendingFoodCameraAfterPermission) {
+            pendingFoodCameraAfterPermission = false;
+            if (granted) {
+                launchFoodCamera();
+            } else {
+                // Permission denial must not trap the user; Photo/file selection
+                // remains available without broad media-library permission.
+                launchImageGalleryFallback();
+            }
         }
     }
 
@@ -731,22 +741,12 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
         }
 
         Uri[] results = null;
-        if (resultCode == RESULT_OK) {
-            if (data == null || data.getData() == null) {
-                if (pendingCameraUri != null) {
-                    results = new Uri[]{pendingCameraUri};
-                }
-            } else {
-                results = WebChromeClient.FileChooserParams.parseResult(
-                    resultCode,
-                    data
-                );
-            }
+        if (resultCode == RESULT_OK && data != null && data.getData() != null) {
+            results = new Uri[]{data.getData()};
         }
 
         ValueCallback<Uri[]> callback = filePathCallback;
         filePathCallback = null;
-        pendingCameraUri = null;
         callback.onReceiveValue(results);
     }
 
