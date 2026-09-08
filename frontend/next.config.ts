@@ -19,6 +19,11 @@ const securityHeaders = [
   },
 ];
 
+// Staging can keep browser/API traffic first-party even when Cloud Run assigns
+// separate frontend and backend hosts. This value is server/build-only and is
+// intentionally absent in normal builds unless a deployment supplies it.
+const apiProxyTarget = process.env.DIEWISH_API_PROXY_TARGET?.trim().replace(/\/+$/, "");
+
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   // Standalone output produces a minimal, self-contained server bundle for Docker.
@@ -35,6 +40,15 @@ const nextConfig: NextConfig = {
       {
         source: "/:path*",
         headers: securityHeaders,
+      },
+    ];
+  },
+  async rewrites() {
+    if (!apiProxyTarget) return [];
+    return [
+      {
+        source: "/api/:path*",
+        destination: `${apiProxyTarget}/api/:path*`,
       },
     ];
   },
