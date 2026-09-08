@@ -14,10 +14,9 @@ export interface AuthUser {
   createdAt: string;
 }
 
-/** Token pair issued by the backend on register/login/refresh. */
+/** Access-token data returned to JavaScript. Refresh tokens remain HttpOnly. */
 export interface AuthTokens {
   accessToken: string;
-  refreshToken: string;
   tokenType: "Bearer";
   expiresIn: string;
 }

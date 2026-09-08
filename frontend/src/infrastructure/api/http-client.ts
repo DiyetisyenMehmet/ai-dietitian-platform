@@ -13,50 +13,28 @@ export class ApiError extends Error {
   }
 }
 
-/**
- * Optional bearer-token provider. The auth store registers a getter here so the
- * transport layer can attach the access token WITHOUT importing the store
- * (keeping this layer framework-agnostic and dependency-free).
- */
 let accessTokenProvider: (() => string | null) | null = null;
-
-/**
- * Optional single-flight refresh callback registered by the auth store. It is
- * invoked only after an authenticated request receives HTTP 401 and must return
- * a fresh access token, or null when the session can no longer be refreshed.
- */
 let unauthorizedHandler: (() => Promise<string | null>) | null = null;
 
-/** Registers (or clears) the access-token getter used to authorize requests. */
 export function setAccessTokenProvider(provider: (() => string | null) | null): void {
   accessTokenProvider = provider;
 }
 
-/** Registers (or clears) the handler used to refresh an expired session. */
 export function setUnauthorizedHandler(handler: (() => Promise<string | null>) | null): void {
   unauthorizedHandler = handler;
 }
 
 interface RequestOptions extends RequestInit {
-  /** Path relative to the configured API base URL, e.g. "/health". */
   path: string;
-  /** When true, attaches the current access token as a Bearer header. */
   auth?: boolean;
-  /**
-   * Retry once after HTTP 401 by rotating the refresh token. Disable this for
-   * endpoints where 401 is a valid business response (e.g. wrong current
-   * password) rather than evidence that the access token expired.
-   */
   retryOnUnauthorized?: boolean;
 }
 
-/** Standard success envelope returned by the backend. */
 interface SuccessEnvelope<T> {
   success: true;
   data: T;
 }
 
-/** Standard error envelope returned by the backend. */
 interface ErrorEnvelope {
   success: false;
   error: { code: string; message: string };
@@ -70,13 +48,6 @@ function isFormDataBody(body: BodyInit | null | undefined): boolean {
   return typeof FormData !== "undefined" && body instanceof FormData;
 }
 
-/**
- * A protected write can legitimately fail when an established user's legal
- * consent is missing/stale (for example after a legal-document version bump or
- * after withdrawal). Existing data remains accessible, but the user needs a
- * clear recovery path instead of a raw backend error. A hard navigation gives
- * the consent screen a fresh server-backed consent snapshot.
- */
 function redirectToConsent(): void {
   if (typeof window === "undefined" || window.location.pathname === CONSENT_ROUTE) return;
 
@@ -84,17 +55,11 @@ function redirectToConsent(): void {
   try {
     window.sessionStorage.setItem(CONSENT_RETURN_TO_KEY, returnTo);
   } catch {
-    // Storage can be unavailable in hardened/private browser contexts. The
-    // consent flow still works; it simply falls back to the dashboard afterwards.
+    // Consent recovery still works when storage is unavailable.
   }
   window.location.assign(CONSENT_ROUTE);
 }
 
-/**
- * Builds request headers without forcing application/json on multipart uploads.
- * Caller-supplied headers always win, except that an authenticated request gets
- * the current Bearer token when one is available.
- */
 function buildHeaders(
   initial: HeadersInit | undefined,
   body: BodyInit | null | undefined,
@@ -124,6 +89,10 @@ async function performFetch(
   try {
     return await fetch(url, {
       ...init,
+      // Refresh sessions live in an HttpOnly cookie. Keep credentials enabled
+      // for same-origin and configured cross-origin API calls unless a caller
+      // deliberately overrides the fetch credential mode.
+      credentials: init.credentials ?? "include",
       headers: buildHeaders(headers, init.body, auth, token),
     });
   } catch {
@@ -132,14 +101,10 @@ async function performFetch(
 }
 
 /**
- * Thin, framework-agnostic HTTP client wrapping fetch. It unwraps the backend's
- * `{ success, data }` envelope and normalizes `{ success: false, error }` into
- * a typed {@link ApiError}.
- *
- * Authenticated requests automatically retry once after a 401 when the auth
- * store can rotate the refresh token. This prevents a normal 15-minute access
- * token expiry from forcing the user to sign in again. Callers can opt out when
- * an endpoint deliberately uses 401 for a business-level credential failure.
+ * Thin, framework-agnostic HTTP client. Authenticated requests retry exactly
+ * once after a 401 through the auth store's single-flight refresh handler.
+ * Multipart bodies keep their browser-generated boundary and consent failures
+ * retain the existing recovery redirect.
  */
 export async function apiRequest<TResponse>({
   path,
@@ -155,10 +120,6 @@ export async function apiRequest<TResponse>({
   const url = `${env.apiBaseUrl.replace(/\/$/, "")}${path}`;
   let response = await performFetch(url, init, headers, auth, accessTokenProvider?.() ?? null);
 
-  // Access tokens are deliberately short-lived. When an authenticated request
-  // receives 401, ask the auth layer to rotate the refresh token and retry the
-  // original request exactly once with the fresh access token. The refresh call
-  // itself is unauthenticated, so this path cannot recurse indefinitely.
   if (auth && retryOnUnauthorized && response.status === 401 && unauthorizedHandler) {
     let refreshedToken: string | null = null;
     try {
@@ -172,7 +133,6 @@ export async function apiRequest<TResponse>({
     }
   }
 
-  // 204 No Content — nothing to parse.
   if (response.status === 204) {
     return undefined as TResponse;
   }
@@ -201,7 +161,6 @@ export async function apiRequest<TResponse>({
     throw new ApiError(message, response.status, code);
   }
 
-  // Unwrap the success envelope when present; otherwise return the raw body.
   if (body && typeof body === "object" && "success" in body) {
     return (body as SuccessEnvelope<TResponse>).data;
   }

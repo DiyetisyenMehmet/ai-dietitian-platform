@@ -32,6 +32,8 @@ const envSchema = z.object({
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(7),
   JWT_ISSUER: z.string().default("diewish"),
   BCRYPT_ROUNDS: z.coerce.number().int().min(10).max(15).default(12),
+  REFRESH_COOKIE_NAME: z.string().min(1).max(100).default("diewish_refresh"),
+  REFRESH_COOKIE_SAME_SITE: z.enum(["lax", "strict", "none"]).default("lax"),
   APP_WEB_URL: z.string().url().default("http://localhost:3000"),
   EMAIL_VERIFICATION_TTL_HOURS: z.coerce.number().int().positive().default(24),
   PASSWORD_RESET_TTL_MINUTES: z.coerce.number().int().positive().default(60),

@@ -8,10 +8,8 @@ import type {
 } from "@/domain/auth/validation";
 import type { AuthSession } from "@/domain/auth/types";
 
-/** Discriminated result type so the UI never has to catch raw exceptions. */
 export type AuthResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
-/** Maps any thrown error to a friendly, user-facing Turkish message. */
 function toFriendlyError(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.status === 0) return error.message;
@@ -25,11 +23,6 @@ function toFriendlyError(error: unknown): string {
   return "Beklenmeyen bir hata oluştu. Lütfen tekrar deneyin.";
 }
 
-/**
- * Application service coordinating authentication use cases.
- * Delegates validation to Zod schemas (in the forms) and transport to the
- * infrastructure auth client; owns error normalization for presentation.
- */
 export const authService = {
   async login(input: LoginInput): Promise<AuthResult<AuthSession>> {
     try {
@@ -53,12 +46,12 @@ export const authService = {
     }
   },
 
-  /** Revokes the refresh token server-side. Best-effort: never throws to the UI. */
-  async logout(refreshToken: string): Promise<void> {
+  /** Best-effort cookie-session logout. Optional arg keeps older callers source-compatible. */
+  async logout(_legacyRefreshToken?: string | null): Promise<void> {
     try {
-      await authClient.logout({ refreshToken });
+      await authClient.logout();
     } catch {
-      // Ignore — local session is cleared regardless by the caller.
+      // Local in-memory state is cleared by the caller regardless.
     }
   },
 

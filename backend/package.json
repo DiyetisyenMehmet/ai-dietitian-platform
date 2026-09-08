@@ -10,7 +10,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "test": "node --import tsx --test src/lib/storage.test.ts src/modules/ai-chat/nutrition-grounding.test.ts src/modules/food-scan/food-scan.service.test.ts src/modules/food-scan/food-vision.provider.test.ts src/modules/nutrition-data/barcode.test.ts src/modules/nutrition-data/nutrition-calculator.test.ts src/modules/nutrition-data/normalization.test.ts src/modules/nutrition-data/nutrition-data.service.test.ts src/modules/nutrition-data/nutrition-query-aliases.test.ts src/modules/nutrition-data/personalization.test.ts src/modules/nutrition-plan/calculations/meal-timing.test.ts src/modules/nutrition-plan/work-schedule-policy.test.ts src/modules/nutrition-plan/nutrition-plan-safety.test.ts src/modules/nutrition-plan/meal-generator/nutrition-target-validator.test.ts src/modules/nutrition-plan/nutrition-plan-realism.test.ts src/modules/tracking/weight-check-in.test.ts",
-    "test:integration": "node --import tsx --test src/integration/auth-onboarding.integration.test.ts src/integration/ai-chat.integration.test.ts src/integration/nutrition-data.integration.test.ts",
+    "test:integration": "node --import tsx --test src/integration/auth-security.integration.test.ts src/integration/auth-onboarding.integration.test.ts src/integration/ai-chat.integration.test.ts src/integration/nutrition-data.integration.test.ts",
     "type-check": "tsc --noEmit",
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix",

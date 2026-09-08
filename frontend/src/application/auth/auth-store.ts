@@ -3,27 +3,13 @@
 import * as React from "react";
 
 import {
-  apiRequest,
   setAccessTokenProvider,
   setUnauthorizedHandler,
 } from "@/infrastructure/api/http-client";
-import { AUTH_ENDPOINTS } from "@/infrastructure/auth/endpoints";
+import { authClient } from "@/infrastructure/auth/auth-client";
 import type { AuthSession, AuthTokens, AuthUser } from "@/domain/auth/types";
 
-/**
- * Client-side authentication store. Holds the current session (user + tokens),
- * persists it to localStorage so it survives reloads, and exposes it through
- * `useSyncExternalStore` (matching the pattern used by the other stores in this
- * app). It also registers bearer-token + refresh callbacks with the HTTP client
- * so authenticated requests can transparently survive normal access-token
- * expiry without importing this store into the transport layer.
- *
- * Security note: for V1 tokens live in localStorage for simplicity. Moving the
- * refresh token to an httpOnly cookie remains a post-launch hardening item; the
- * store API here would not change.
- */
-
-const STORAGE_KEY = "diewish.auth.session";
+const LEGACY_STORAGE_KEY = "diewish.auth.session";
 
 type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 
@@ -35,8 +21,8 @@ interface AuthState {
 
 let state: AuthState = { status: "loading", user: null, tokens: null };
 let sessionVersion = 0;
+let hydrationPromise: Promise<void> | null = null;
 let refreshPromise: Promise<string | null> | null = null;
-
 const listeners = new Set<() => void>();
 
 function emit(): void {
@@ -48,29 +34,12 @@ function setState(next: AuthState): void {
   emit();
 }
 
-function persist(session: AuthSession | null): void {
+function removeLegacyPersistedSession(): void {
   if (typeof window === "undefined") return;
   try {
-    if (session) {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
-    } else {
-      window.localStorage.removeItem(STORAGE_KEY);
-    }
+    window.localStorage.removeItem(LEGACY_STORAGE_KEY);
   } catch {
-    // Storage may be unavailable (private mode / quota) — degrade gracefully.
-  }
-}
-
-function readPersisted(): AuthSession | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as AuthSession;
-    if (parsed?.user && parsed?.tokens?.accessToken && parsed?.tokens?.refreshToken) return parsed;
-    return null;
-  } catch {
-    return null;
+    // Storage can be unavailable in hardened/private browser contexts.
   }
 }
 
@@ -87,57 +56,35 @@ function cancelNativeNutritionReminders(): void {
 
 function applySession(session: AuthSession): void {
   sessionVersion += 1;
-  persist(session);
   setState({ status: "authenticated", user: session.user, tokens: session.tokens });
 }
 
 function clearSession(): void {
   sessionVersion += 1;
   cancelNativeNutritionReminders();
-  persist(null);
+  removeLegacyPersistedSession();
   setState({ status: "unauthenticated", user: null, tokens: null });
 }
 
 /**
- * Rotates the refresh token at most once for concurrent 401 responses. This is
- * critical because backend refresh tokens are single-use: without a shared
- * promise, several simultaneous API calls could race and invalidate each other.
+ * Rotates the HttpOnly refresh cookie at most once for concurrent 401 responses.
+ * Only the in-memory access token is returned to the transport layer.
  */
 async function refreshAccessToken(): Promise<string | null> {
   if (refreshPromise) return refreshPromise;
-
-  const refreshToken = state.tokens?.refreshToken;
-  if (!refreshToken) return null;
+  if (state.status !== "authenticated") return null;
 
   const versionAtStart = sessionVersion;
-
   refreshPromise = (async () => {
     try {
-      const session = await apiRequest<AuthSession>({
-        path: AUTH_ENDPOINTS.refresh,
-        method: "POST",
-        body: JSON.stringify({ refreshToken }),
-      });
-
-      // The user may have logged out or signed in as another account while the
-      // refresh request was in flight. Never resurrect or overwrite that state.
-      if (
-        sessionVersion !== versionAtStart ||
-        state.tokens?.refreshToken !== refreshToken ||
-        state.status !== "authenticated"
-      ) {
+      const session = await authClient.refresh();
+      if (sessionVersion !== versionAtStart || state.status !== "authenticated") {
         return null;
       }
-
       applySession(session);
       return session.tokens.accessToken;
     } catch {
-      // Only invalidate the session that actually initiated this failed refresh.
-      if (
-        sessionVersion === versionAtStart &&
-        state.tokens?.refreshToken === refreshToken &&
-        state.status === "authenticated"
-      ) {
+      if (sessionVersion === versionAtStart && state.status === "authenticated") {
         clearSession();
       }
       return null;
@@ -149,8 +96,6 @@ async function refreshAccessToken(): Promise<string | null> {
   return refreshPromise;
 }
 
-// Register transport hooks once, at module load. The HTTP client stays generic
-// and knows nothing about how Diewish stores or rotates authentication state.
 setAccessTokenProvider(() => state.tokens?.accessToken ?? null);
 setUnauthorizedHandler(refreshAccessToken);
 
@@ -164,49 +109,57 @@ export const authStore = {
     return state;
   },
 
-  /** Server snapshot — always "loading" so markup matches the first client paint. */
   getServerSnapshot(): AuthState {
     return { status: "loading", user: null, tokens: null };
   },
 
-  /** Rehydrates session from storage. Call once on app mount. */
-  hydrate(): void {
-    const session = readPersisted();
-    if (session) {
-      applySession(session);
-    } else {
-      sessionVersion += 1;
-      setState({ status: "unauthenticated", user: null, tokens: null });
-    }
+  /** Resolves the browser session from the HttpOnly cookie; no token storage is read. */
+  hydrate(): Promise<void> {
+    removeLegacyPersistedSession();
+    if (state.status !== "loading") return Promise.resolve();
+    if (hydrationPromise) return hydrationPromise;
+
+    const versionAtStart = sessionVersion;
+    hydrationPromise = (async () => {
+      try {
+        const session = await authClient.refresh();
+        if (sessionVersion === versionAtStart && state.status === "loading") {
+          applySession(session);
+        }
+      } catch {
+        if (sessionVersion === versionAtStart && state.status === "loading") {
+          sessionVersion += 1;
+          setState({ status: "unauthenticated", user: null, tokens: null });
+        }
+      } finally {
+        hydrationPromise = null;
+      }
+    })();
+    return hydrationPromise;
   },
 
-  /** Stores a freshly authenticated session (login / register / refresh). */
+  /** Stores login/register/refresh results in memory only. */
   setSession(session: AuthSession): void {
+    removeLegacyPersistedSession();
     applySession(session);
   },
 
-  /** Patches the cached user (e.g. after completing onboarding). */
   updateUser(patch: Partial<AuthUser>): void {
     if (!state.user || !state.tokens) return;
-    const user = { ...state.user, ...patch };
-    const session = { user, tokens: state.tokens };
     sessionVersion += 1;
-    persist(session);
-    setState({ ...state, user });
+    setState({ ...state, user: { ...state.user, ...patch } });
   },
 
-  /** Clears the session (logout or unrecoverable refresh failure). */
   clear(): void {
     clearSession();
   },
 
-  /** Returns the current refresh token, if any (for logout/refresh calls). */
-  getRefreshToken(): string | null {
-    return state.tokens?.refreshToken ?? null;
+  /** Compatibility shim: refresh tokens are deliberately no longer JS-readable. */
+  getRefreshToken(): null {
+    return null;
   },
 } as const;
 
-/** React hook exposing the reactive auth state. */
 export function useAuth(): AuthState {
   return React.useSyncExternalStore(
     authStore.subscribe,
