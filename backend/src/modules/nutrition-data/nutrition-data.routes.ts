@@ -12,3 +12,6 @@ nutritionDataRouter.get("/history", nutritionDataController.history);
 nutritionDataRouter.get("/favorites", nutritionDataController.favorites);
 nutritionDataRouter.get("/barcode/:barcode", nutritionDataController.barcode);
 nutritionDataRouter.post("/barcode/:barcode/favorite", nutritionDataController.setFavorite);
+nutritionDataRouter.post("/personalize", nutritionDataController.personalize);
+nutritionDataRouter.post("/personalize-nutrients", nutritionDataController.personalizeNutrients);
+nutritionDataRouter.post("/compare", nutritionDataController.compare);

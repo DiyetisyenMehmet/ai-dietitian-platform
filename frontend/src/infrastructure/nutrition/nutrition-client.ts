@@ -12,6 +12,8 @@ export interface NutrientValuesDto {
   saltG: number | null;
 }
 
+export type MealTypeDto = "BREAKFAST" | "LUNCH" | "DINNER" | "SNACK";
+
 export interface CanonicalFoodDto {
   externalId: string;
   provider: "USDA" | "OPEN_FOOD_FACTS" | "DIEWISH";
@@ -50,6 +52,55 @@ export interface BarcodeHistoryDto {
   scannedAt: string;
 }
 
+export interface PersonalizationContextDto {
+  nutrients: NutrientValuesDto;
+  metrics: {
+    contribution: {
+      caloriesPercent: number | null;
+      proteinPercent: number | null;
+      carbohydratesPercent: number | null;
+      fatPercent: number | null;
+    };
+    remainingAfter: {
+      calories: number | null;
+      proteinG: number | null;
+      carbohydratesG: number | null;
+      fatG: number | null;
+    };
+    portionFit: "LOW" | "BALANCED" | "HIGH" | "UNKNOWN";
+    satiety: "LOW" | "MEDIUM" | "HIGH" | "UNKNOWN";
+    lines: string[];
+  } | null;
+  profileContextUsed: boolean;
+  activePlanUsed: boolean;
+  dietaryCompatibility: "COMPATIBLE" | "INCOMPATIBLE" | "UNKNOWN";
+  allergenDataComplete: boolean;
+  warnings: string[];
+  windowHours: number;
+}
+
+export interface PersonalizationDto extends PersonalizationContextDto {
+  grams: number;
+}
+
+export interface ComparisonDto {
+  source: {
+    food: { displayNameTr: string; provider: string };
+    grams: number;
+    nutrients: NutrientValuesDto;
+  };
+  comparisons: Array<{
+    food: { externalId: string; provider: string; displayNameTr: string };
+    servingGrams: number;
+    targetCalories: number;
+    nutrients: NutrientValuesDto;
+    differenceFromSource: Partial<Record<keyof NutrientValuesDto, number>>;
+    dietaryCompatibility: "COMPATIBLE" | "INCOMPATIBLE" | "UNKNOWN";
+    allergenDataComplete: boolean;
+  }>;
+  warning: string;
+}
+
 export const nutritionClient = {
   barcode(barcode: string) {
     return apiRequest<{ found: boolean; food: CanonicalFoodDto | null }>({
@@ -58,6 +109,7 @@ export const nutritionClient = {
       auth: true,
     });
   },
+
   history(limit = 12) {
     return apiRequest<{ scans: BarcodeHistoryDto[] }>({
       path: `/nutrition/history?limit=${limit}`,
@@ -65,19 +117,74 @@ export const nutritionClient = {
       auth: true,
     });
   },
+
   favorites(limit = 50) {
-    return apiRequest<{ favorites: Array<{ barcode: string; productName: string | null; food: CanonicalFoodDto | null; createdAt: string }> }>({
+    return apiRequest<{
+      favorites: Array<{
+        barcode: string;
+        productName: string | null;
+        food: CanonicalFoodDto | null;
+        createdAt: string;
+      }>;
+    }>({
       path: `/nutrition/favorites?limit=${limit}`,
       method: "GET",
       auth: true,
     });
   },
+
   setFavorite(barcode: string, favorite: boolean) {
     return apiRequest<{ favorite: boolean; food: CanonicalFoodDto | null }>({
       path: `/nutrition/barcode/${encodeURIComponent(barcode)}/favorite`,
       method: "POST",
       auth: true,
       body: JSON.stringify({ favorite }),
+    });
+  },
+
+  personalize(barcode: string, grams: number) {
+    return apiRequest<{ personalization: PersonalizationDto }>({
+      path: "/nutrition/personalize",
+      method: "POST",
+      auth: true,
+      body: JSON.stringify({ barcode, grams }),
+    });
+  },
+
+  personalizeNutrients(nutrients: NutrientValuesDto) {
+    return apiRequest<{ personalization: PersonalizationContextDto }>({
+      path: "/nutrition/personalize-nutrients",
+      method: "POST",
+      auth: true,
+      body: JSON.stringify({ nutrients }),
+    });
+  },
+
+  compare(barcode: string, grams: number) {
+    return apiRequest<{ comparison: ComparisonDto }>({
+      path: "/nutrition/compare",
+      method: "POST",
+      auth: true,
+      body: JSON.stringify({ barcode, grams }),
+    });
+  },
+
+  logMeal(mealType: MealTypeDto, food: CanonicalFoodDto, personalization: PersonalizationDto) {
+    const n = personalization.nutrients;
+    return apiRequest<{ log: { id: string } }>({
+      path: "/tracking/meals",
+      method: "POST",
+      auth: true,
+      body: JSON.stringify({
+        mealType,
+        name: food.displayNameTr || food.name,
+        calories: n.energyKcal ?? undefined,
+        proteinG: n.proteinG ?? undefined,
+        carbsG: n.carbohydratesG ?? undefined,
+        fatG: n.fatG ?? undefined,
+        sodiumMg: n.sodiumMg ?? undefined,
+        sugarG: n.sugarsG ?? undefined,
+      }),
     });
   },
 } as const;
