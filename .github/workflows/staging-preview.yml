@@ -1,0 +1,257 @@
+name: Staging Preview Deploy
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: diewish-staging-preview
+  cancel-in-progress: false
+
+env:
+  BACKEND_SERVICE: diewish-backend-staging
+  FRONTEND_SERVICE: diewish-frontend-staging
+  ARTIFACT_REPOSITORY: diewish-staging
+  DATABASE_SECRET_NAME: diewish-staging-database-url
+  JWT_ACCESS_SECRET_NAME: diewish-staging-jwt-access
+  JWT_REFRESH_SECRET_NAME: diewish-staging-jwt-refresh
+  USDA_SECRET_NAME: diewish-staging-usda-fdc-api-key
+
+jobs:
+  deploy-staging:
+    name: Deploy isolated staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: staging
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate staging contract
+        shell: bash
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          REGION: ${{ vars.GCP_REGION }}
+          WIF_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          DEPLOY_SERVICE_ACCOUNT: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+        run: |
+          set -euo pipefail
+          : "${PROJECT_ID:?Set staging environment variable GCP_PROJECT_ID}"
+          : "${REGION:?Set staging environment variable GCP_REGION}"
+          : "${WIF_PROVIDER:?Set staging environment variable GCP_WORKLOAD_IDENTITY_PROVIDER}"
+          : "${DEPLOY_SERVICE_ACCOUNT:?Set staging environment variable GCP_DEPLOY_SERVICE_ACCOUNT}"
+
+          if [[ "${BACKEND_SERVICE}" != *-staging || "${FRONTEND_SERVICE}" != *-staging ]]; then
+            echo "Refusing to deploy: staging service names must end in -staging."
+            exit 1
+          fi
+
+          echo "PROJECT_ID=${PROJECT_ID}" >> "$GITHUB_ENV"
+          echo "REGION=${REGION}" >> "$GITHUB_ENV"
+          echo "WIF_PROVIDER=${WIF_PROVIDER}" >> "$GITHUB_ENV"
+          echo "DEPLOY_SERVICE_ACCOUNT=${DEPLOY_SERVICE_ACCOUNT}" >> "$GITHUB_ENV"
+          echo "RUNTIME_SERVICE_ACCOUNT=diewish-staging-runtime@${PROJECT_ID}.iam.gserviceaccount.com" >> "$GITHUB_ENV"
+
+      - name: Authenticate to Google Cloud with OIDC
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Verify staging-only Google Cloud resources
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcloud artifacts repositories describe "$ARTIFACT_REPOSITORY" \
+            --project "$PROJECT_ID" \
+            --location "$REGION" >/dev/null
+          gcloud iam service-accounts describe "$RUNTIME_SERVICE_ACCOUNT" \
+            --project "$PROJECT_ID" >/dev/null
+          for secret in \
+            "$DATABASE_SECRET_NAME" \
+            "$JWT_ACCESS_SECRET_NAME" \
+            "$JWT_REFRESH_SECRET_NAME" \
+            "$USDA_SECRET_NAME"; do
+            gcloud secrets describe "$secret" --project "$PROJECT_ID" >/dev/null
+          done
+
+      - name: Configure Artifact Registry Docker auth
+        run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+
+      - name: Build backend image
+        shell: bash
+        run: |
+          set -euo pipefail
+          BACKEND_IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPOSITORY}/backend:${GITHUB_SHA}"
+          echo "BACKEND_IMAGE=${BACKEND_IMAGE}" >> "$GITHUB_ENV"
+          gcloud builds submit backend \
+            --project "$PROJECT_ID" \
+            --tag "$BACKEND_IMAGE" \
+            --quiet
+
+      - name: Deploy backend staging service
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcloud run deploy "$BACKEND_SERVICE" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --platform managed \
+            --image "$BACKEND_IMAGE" \
+            --service-account "$RUNTIME_SERVICE_ACCOUNT" \
+            --allow-unauthenticated \
+            --cpu 1 \
+            --memory 1Gi \
+            --concurrency 40 \
+            --timeout 120 \
+            --min 0 \
+            --max 2 \
+            --set-env-vars "API_PREFIX=/api,CORS_ORIGIN=https://staging.invalid,TRUST_PROXY_HOPS=1,ENABLE_API_DOCS=false,LOG_LEVEL=info,JWT_ISSUER=diewish-staging,REFRESH_COOKIE_NAME=diewish_staging_refresh,REFRESH_COOKIE_SAME_SITE=none,APP_WEB_URL=https://staging.invalid,STORAGE_PROVIDER=local,AI_PROVIDER=vertex,VERTEX_AI_LOCATION=global,VERTEX_AI_MODEL=gemini-3.5-flash,OPEN_FOOD_FACTS_USER_AGENT=Diewish-Staging/0.1" \
+            --set-secrets "DATABASE_URL=${DATABASE_SECRET_NAME}:latest,JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET_NAME}:latest,JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET_NAME}:latest,USDA_FDC_API_KEY=${USDA_SECRET_NAME}:latest" \
+            --quiet
+
+          BACKEND_URL="$(gcloud run services describe "$BACKEND_SERVICE" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --format='value(status.url)')"
+          test -n "$BACKEND_URL"
+          echo "BACKEND_URL=${BACKEND_URL}" >> "$GITHUB_ENV"
+
+      - name: Build frontend image against staging backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          FRONTEND_IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPOSITORY}/frontend:${GITHUB_SHA}"
+          echo "FRONTEND_IMAGE=${FRONTEND_IMAGE}" >> "$GITHUB_ENV"
+          gcloud builds submit . \
+            --project "$PROJECT_ID" \
+            --config .github/cloudbuild/frontend-staging.yaml \
+            --substitutions "_IMAGE=${FRONTEND_IMAGE},_API_BASE_URL=${BACKEND_URL}/api,_SITE_URL=https://staging.invalid" \
+            --quiet
+
+      - name: Deploy frontend staging service
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcloud run deploy "$FRONTEND_SERVICE" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --platform managed \
+            --image "$FRONTEND_IMAGE" \
+            --allow-unauthenticated \
+            --cpu 1 \
+            --memory 512Mi \
+            --concurrency 80 \
+            --timeout 60 \
+            --min 0 \
+            --max 2 \
+            --quiet
+
+          FRONTEND_URL="$(gcloud run services describe "$FRONTEND_SERVICE" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --format='value(status.url)')"
+          test -n "$FRONTEND_URL"
+          echo "FRONTEND_URL=${FRONTEND_URL}" >> "$GITHUB_ENV"
+
+      - name: Bind backend CORS to the staging frontend only
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcloud run services update "$BACKEND_SERVICE" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --update-env-vars "CORS_ORIGIN=${FRONTEND_URL},APP_WEB_URL=${FRONTEND_URL}" \
+            --quiet
+
+      - name: Verify staging health
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in {1..30}; do
+            if curl --fail --silent --show-error "${BACKEND_URL}/api/health" >/dev/null; then
+              break
+            fi
+            if [[ "$attempt" == "30" ]]; then
+              echo "Staging backend health check failed."
+              exit 1
+            fi
+            sleep 2
+          done
+
+          for attempt in {1..30}; do
+            if curl --fail --silent --show-error "${FRONTEND_URL}/register" >/dev/null; then
+              break
+            fi
+            if [[ "$attempt" == "30" ]]; then
+              echo "Staging frontend health check failed."
+              exit 1
+            fi
+            sleep 2
+          done
+
+      - name: Set up JDK 17 for staging APK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android 16 SDK
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.6.0"
+
+      - name: Build staging-bound Android APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon -p android :app:assembleDebug \
+            -PDIEWISH_WEB_BASE_URL="${FRONTEND_URL}"
+
+          short_sha="${GITHUB_SHA::7}"
+          mkdir -p android/app/build/staging-apk
+          apk="android/app/build/staging-apk/Diewish-staging-${short_sha}.apk"
+          cp android/app/build/outputs/apk/debug/app-debug.apk "$apk"
+          sha256sum "$apk" > "${apk}.sha256"
+          cat > android/app/build/staging-apk/staging-manifest.txt <<EOF
+          commit=${GITHUB_SHA}
+          environment=staging
+          frontend=${FRONTEND_URL}
+          backend=${BACKEND_URL}
+          database_project=shiny-hill-56015697
+          EOF
+
+      - name: Upload staging APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: diewish-staging-apk-${{ github.run_number }}
+          path: android/app/build/staging-apk/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Staging summary
+        shell: bash
+        run: |
+          {
+            echo "## Diewish staging preview"
+            echo ""
+            echo "- Commit: \`${GITHUB_SHA}\`"
+            echo "- Frontend: ${FRONTEND_URL}"
+            echo "- Backend: ${BACKEND_URL}"
+            echo "- Database: isolated Diewish Staging Neon project"
+            echo "- APK artifact: \`diewish-staging-apk-${GITHUB_RUN_NUMBER}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
