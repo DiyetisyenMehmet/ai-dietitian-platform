@@ -33,6 +33,14 @@ export interface NutritionProvenance {
   preparationState?: string | null;
   confidence: number;
   sourceReference?: string | null;
+  /** Timestamp at which Diewish last successfully checked this provider record. */
+  lastValidatedAt?: string | null;
+  /** Stable server-side hash of the normalized provider payload, when persisted. */
+  dataHash?: string | null;
+  /** True only when provider refresh failed and a bounded stale cache fallback is being served. */
+  stale?: boolean;
+  /** Provider-declared update timestamp, when the upstream source exposes one. */
+  providerUpdatedAt?: string | null;
 }
 
 export interface FoodServing {

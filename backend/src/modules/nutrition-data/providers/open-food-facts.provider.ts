@@ -25,6 +25,14 @@ function labelFlag(all: readonly string[], tag: string): boolean | null {
 function nutrient(n: Record<string, unknown>, key: string): number | null {
   return num(n[`${key}_100g`]);
 }
+function providerUpdatedAt(product: Record<string, unknown>): string | null {
+  const epochSeconds = num(product.last_modified_t);
+  if (epochSeconds !== null && epochSeconds > 0) return new Date(epochSeconds * 1000).toISOString();
+  const raw = text(product.last_modified_datetime);
+  if (!raw) return null;
+  const parsed = new Date(raw);
+  return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : null;
+}
 
 export function normalizeOpenFoodFactsProduct(raw: unknown, barcodeHint?: string): CanonicalFood | null {
   const root = record(raw);
@@ -81,6 +89,7 @@ export function normalizeOpenFoodFactsProduct(raw: unknown, barcodeHint?: string
       preparationState: "PACKAGED_PRODUCT",
       confidence: 0.75,
       sourceReference: `${env.OPEN_FOOD_FACTS_BASE_URL.replace(/\/$/, "")}/product/${code}`,
+      providerUpdatedAt: providerUpdatedAt(product),
     },
   };
 }
@@ -92,7 +101,6 @@ export class OpenFoodFactsProvider implements NutritionProvider {
   constructor(private readonly fetchImpl: FetchLike = fetch) {}
 
   async search(_query: string, _limit = 10): Promise<CanonicalFood[]> {
-    // OFF search is intentionally disabled for type-ahead: official limit is lower than product lookup.
     return [];
   }
 
@@ -106,7 +114,7 @@ export class OpenFoodFactsProvider implements NutritionProvider {
     const fields = [
       "code","product_name","product_name_tr","generic_name","brands","quantity","serving_size","serving_quantity",
       "image_front_url","image_url","ingredients_text","ingredients_text_tr","allergens_tags","additives_tags","labels_tags",
-      "nutriscore_grade","nutrition_grades","nova_group","nutriments"
+      "nutriscore_grade","nutrition_grades","nova_group","last_modified_t","last_modified_datetime","nutriments"
     ].join(",");
     const url = `${env.OPEN_FOOD_FACTS_BASE_URL.replace(/\/$/, "")}/api/v2/product/${barcode}.json?fields=${encodeURIComponent(fields)}`;
     const response = await this.fetchImpl(url, {

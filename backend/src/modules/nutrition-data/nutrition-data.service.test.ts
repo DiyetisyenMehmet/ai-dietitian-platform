@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { NutritionDataService, type NutritionServiceProviders } from "./nutrition-data.service";
+import type { NutritionDataRepository } from "./nutrition-data.repository";
 import type { CanonicalFood } from "./nutrition-data.types";
 
 function food(provider: "USDA" | "OPEN_FOOD_FACTS", barcode = "4006381333931"): CanonicalFood {
@@ -49,6 +50,8 @@ function providers(overrides?: {
   off?: CanonicalFood | null;
   usda?: CanonicalFood | null;
   usdaConfigured?: boolean;
+  offError?: boolean;
+  usdaError?: boolean;
   onOffCall?: () => void;
   onUsdaCall?: () => void;
 }): NutritionServiceProviders {
@@ -56,6 +59,7 @@ function providers(overrides?: {
     openFoodFacts: {
       async getByBarcode() {
         overrides?.onOffCall?.();
+        if (overrides?.offError) throw new Error("OFF_DOWN");
         return overrides?.off ?? null;
       },
     },
@@ -68,6 +72,7 @@ function providers(overrides?: {
       },
       async searchBrandedBarcode() {
         overrides?.onUsdaCall?.();
+        if (overrides?.usdaError) throw new Error("USDA_DOWN");
         return overrides?.usda ?? null;
       },
     },
@@ -114,6 +119,35 @@ test("malformed barcode is rejected before provider calls", async () => {
   const service = new NutritionDataService(providers({ onOffCall: () => (offCalls += 1) }));
   await assert.rejects(service.getByBarcode("not-a-barcode"));
   assert.equal(offCalls, 0);
+});
+
+test("expired cache is served only when live provider refresh fails", async () => {
+  const stale = {
+    ...food("OPEN_FOOD_FACTS"),
+    provenance: { ...food("OPEN_FOOD_FACTS").provenance, stale: true },
+  };
+  const persistence = {
+    async getFreshBarcode() { return null; },
+    async getStaleBarcode() { return stale; },
+  } as unknown as NutritionDataRepository;
+  const service = new NutritionDataService(
+    providers({ offError: true, usdaConfigured: false }),
+    persistence,
+  );
+  const result = await service.getByBarcode("4006381333931");
+  assert.equal(result?.provenance.stale, true);
+});
+
+test("expired cache is not used when providers positively report a miss", async () => {
+  const persistence = {
+    async getFreshBarcode() { return null; },
+    async getStaleBarcode() { return food("OPEN_FOOD_FACTS"); },
+  } as unknown as NutritionDataRepository;
+  const service = new NutritionDataService(
+    providers({ off: null, usda: null, usdaConfigured: false }),
+    persistence,
+  );
+  assert.equal(await service.getByBarcode("4006381333931"), null);
 });
 
 test("Turkish ingredient search uses deterministic English alias before USDA fallback", async () => {

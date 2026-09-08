@@ -1,4 +1,5 @@
 import { env } from "../../config/env";
+import { logger } from "../../lib/logger";
 import { ApiError } from "../../utils/api-error";
 import { normalizeBarcode } from "./barcode";
 import { NutritionTtlCache } from "./nutrition-cache";
@@ -51,6 +52,18 @@ function uniqueFoods(foods: CanonicalFood[], limit: number): CanonicalFood[] {
   return result;
 }
 
+async function timedProvider<T>(provider: string, operation: string, task: () => Promise<T>): Promise<T> {
+  const startedAt = Date.now();
+  try {
+    const value = await task();
+    logger.info({ event: "nutrition_provider_latency", provider, operation, latencyMs: Date.now() - startedAt, ok: true }, "Nutrition provider request completed");
+    return value;
+  } catch (error) {
+    logger.warn({ event: "nutrition_provider_latency", provider, operation, latencyMs: Date.now() - startedAt, ok: false }, "Nutrition provider request failed");
+    throw error;
+  }
+}
+
 export class NutritionDataService {
   private readonly foodCache = new NutritionTtlCache<CanonicalFood | null>(1_000);
   private readonly searchCache = new NutritionTtlCache<CanonicalFood[]>(250);
@@ -89,7 +102,7 @@ export class NutritionDataService {
       for (const providerQuery of expandNutritionProviderQueries(query)) {
         const remaining = boundedLimit - uniqueFoods(collected, boundedLimit).length;
         if (remaining <= 0) break;
-        const foods = await this.providers.usda.search(providerQuery, remaining);
+        const foods = await timedProvider("USDA", "search", () => this.providers.usda.search(providerQuery, remaining));
         collected.push(...foods);
         if (uniqueFoods(collected, boundedLimit).length >= boundedLimit) break;
       }
@@ -111,20 +124,27 @@ export class NutritionDataService {
     }
     const key = `barcode:${barcode}`;
     const cached = this.foodCache.lookup(key);
-    if (cached.hit) return cached.value;
+    if (cached.hit) {
+      logger.info({ event: "barcode_cache_hit", layer: "memory", barcodeLength: barcode.length }, "Barcode cache hit");
+      return cached.value;
+    }
 
+    let stale: CanonicalFood | null = null;
     if (this.persistence) {
       const persisted = await this.persistence.getFreshBarcode(barcode);
       if (persisted) {
+        logger.info({ event: "barcode_cache_hit", layer: "database", barcodeLength: barcode.length }, "Barcode cache hit");
         this.foodCache.set(key, persisted, 15 * 60 * 1000);
         return persisted;
       }
+      stale = await this.persistence.getStaleBarcode(barcode);
     }
+    logger.info({ event: "barcode_cache_miss", barcodeLength: barcode.length }, "Barcode cache miss");
 
     let offFood: CanonicalFood | null = null;
     let offError: unknown = null;
     try {
-      offFood = await this.providers.openFoodFacts.getByBarcode(barcode);
+      offFood = await timedProvider("OPEN_FOOD_FACTS", "barcode", () => this.providers.openFoodFacts.getByBarcode(barcode));
     } catch (error) {
       offError = error;
     }
@@ -132,6 +152,7 @@ export class NutritionDataService {
     if (offFood) {
       this.foodCache.set(key, offFood, env.OPEN_FOOD_FACTS_CACHE_TTL_HOURS * 60 * 60 * 1000);
       if (this.persistence) await this.persistence.upsertFood(offFood, expiresAt(offFood));
+      logger.info({ event: "barcode_lookup_success", provider: offFood.provider, barcodeLength: barcode.length }, "Barcode lookup succeeded");
       return offFood;
     }
 
@@ -139,7 +160,7 @@ export class NutritionDataService {
     let usdaError: unknown = null;
     if (this.providers.usda.isConfigured()) {
       try {
-        usdaFood = await this.providers.usda.searchBrandedBarcode(barcode);
+        usdaFood = await timedProvider("USDA", "branded_barcode", () => this.providers.usda.searchBrandedBarcode(barcode));
       } catch (error) {
         usdaError = error;
       }
@@ -153,7 +174,19 @@ export class NutritionDataService {
       const ttlHours = ttlHoursFor(selected);
       this.foodCache.set(key, selected, ttlHours * 60 * 60 * 1000);
       if (this.persistence) await this.persistence.upsertFood(selected, expiresAt(selected));
+      logger.info({ event: "barcode_lookup_success", provider: selected.provider, barcodeLength: barcode.length }, "Barcode lookup succeeded");
       return selected;
+    }
+
+    const providerFailed = Boolean(offError || usdaError);
+    if (providerFailed && stale) {
+      const staleFood: CanonicalFood = {
+        ...stale,
+        provenance: { ...stale.provenance, stale: true },
+      };
+      this.foodCache.set(key, staleFood, 5 * 60 * 1000);
+      logger.warn({ event: "barcode_stale_fallback", provider: staleFood.provider, barcodeLength: barcode.length }, "Serving bounded stale barcode data after provider failure");
+      return staleFood;
     }
 
     if (offError && (usdaError || !this.providers.usda.isConfigured())) {
@@ -163,6 +196,7 @@ export class NutritionDataService {
       );
     }
 
+    logger.info({ event: "barcode_lookup_miss", barcodeLength: barcode.length }, "Barcode lookup returned no product");
     this.foodCache.set(key, null, 10 * 60 * 1000);
     return null;
   }

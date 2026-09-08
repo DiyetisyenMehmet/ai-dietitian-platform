@@ -1,9 +1,13 @@
+import crypto from "node:crypto";
+
 import { prisma } from "../../lib/prisma";
 import type { CanonicalFood } from "./nutrition-data.types";
 
 interface FoodRow {
   payload: unknown;
   expires_at: Date;
+  last_validated_at: Date | null;
+  payload_hash: string | null;
 }
 
 interface ScanRow {
@@ -39,31 +43,64 @@ function asFood(value: unknown): CanonicalFood | null {
   return candidate as CanonicalFood;
 }
 
+function hydrateFood(row: FoodRow, stale: boolean): CanonicalFood | null {
+  const food = asFood(row.payload);
+  if (!food) return null;
+  return {
+    ...food,
+    provenance: {
+      ...food.provenance,
+      lastValidatedAt: row.last_validated_at?.toISOString() ?? food.provenance.lastValidatedAt ?? null,
+      dataHash: row.payload_hash ?? food.provenance.dataHash ?? null,
+      stale,
+    },
+  };
+}
+
+function payloadHash(payload: string): string {
+  return crypto.createHash("sha256").update(payload).digest("hex");
+}
+
 /** Persistent server-side nutrition cache and user-scoped barcode history. */
 export const nutritionDataRepository = {
   async getFreshBarcode(barcode: string, now = new Date()): Promise<CanonicalFood | null> {
     const rows = await prisma.$queryRaw<FoodRow[]>`
-      SELECT payload, expires_at
+      SELECT payload, expires_at, last_validated_at, payload_hash
       FROM nutrition_foods
       WHERE barcode = ${barcode} AND expires_at > ${now}
       ORDER BY retrieved_at DESC
       LIMIT 1
     `;
-    return rows[0] ? asFood(rows[0].payload) : null;
+    return rows[0] ? hydrateFood(rows[0], false) : null;
+  },
+
+  /** Most recently validated expired record, used only when live providers fail. */
+  async getStaleBarcode(barcode: string, now = new Date()): Promise<CanonicalFood | null> {
+    const rows = await prisma.$queryRaw<FoodRow[]>`
+      SELECT payload, expires_at, last_validated_at, payload_hash
+      FROM nutrition_foods
+      WHERE barcode = ${barcode} AND expires_at <= ${now}
+      ORDER BY COALESCE(last_validated_at, retrieved_at) DESC
+      LIMIT 1
+    `;
+    return rows[0] ? hydrateFood(rows[0], true) : null;
   },
 
   async searchLocal(query: string, limit: number, now = new Date()): Promise<CanonicalFood[]> {
     const normalized = normalizeAlias(query);
     if (!normalized) return [];
     const pattern = `%${normalized}%`;
-    const rows = await prisma.$queryRaw<Array<{ payload: unknown }>>`
-      SELECT ranked.payload
+    const rows = await prisma.$queryRaw<Array<FoodRow>>`
+      SELECT ranked.payload, ranked.expires_at, ranked.last_validated_at, ranked.payload_hash
       FROM (
         SELECT DISTINCT ON (f.provider, f.external_id)
           f.provider,
           f.external_id,
           f.payload,
-          f.retrieved_at
+          f.retrieved_at,
+          f.expires_at,
+          f.last_validated_at,
+          f.payload_hash
         FROM nutrition_foods f
         LEFT JOIN nutrition_food_aliases a
           ON a.provider = f.provider AND a.external_id = f.external_id
@@ -78,16 +115,22 @@ export const nutritionDataRepository = {
       ORDER BY ranked.retrieved_at DESC
       LIMIT ${limit}
     `;
-    return rows.map((row) => asFood(row.payload)).filter((food): food is CanonicalFood => food !== null);
+    return rows.map((row) => hydrateFood(row, false)).filter((food): food is CanonicalFood => food !== null);
   },
 
   async upsertFood(food: CanonicalFood, expiresAt: Date): Promise<void> {
-    const payload = JSON.stringify(food);
+    const validatedAt = new Date();
+    const enriched: CanonicalFood = {
+      ...food,
+      provenance: { ...food.provenance, lastValidatedAt: validatedAt.toISOString(), stale: false },
+    };
+    const payload = JSON.stringify(enriched);
+    const hash = payloadHash(payload);
     await prisma.$executeRaw`
       INSERT INTO nutrition_foods
-        (provider, external_id, barcode, name, display_name_tr, brand, payload, retrieved_at, expires_at, updated_at)
+        (provider, external_id, barcode, name, display_name_tr, brand, payload, retrieved_at, expires_at, last_validated_at, payload_hash, updated_at)
       VALUES
-        (${food.provider}, ${food.externalId}, ${food.barcode}, ${food.name}, ${food.displayNameTr}, ${food.brand}, ${payload}::jsonb, ${new Date(food.provenance.retrievedAt)}, ${expiresAt}, CURRENT_TIMESTAMP)
+        (${food.provider}, ${food.externalId}, ${food.barcode}, ${food.name}, ${food.displayNameTr}, ${food.brand}, ${payload}::jsonb, ${new Date(food.provenance.retrievedAt)}, ${expiresAt}, ${validatedAt}, ${hash}, CURRENT_TIMESTAMP)
       ON CONFLICT (provider, external_id) DO UPDATE SET
         barcode = EXCLUDED.barcode,
         name = EXCLUDED.name,
@@ -96,6 +139,8 @@ export const nutritionDataRepository = {
         payload = EXCLUDED.payload,
         retrieved_at = EXCLUDED.retrieved_at,
         expires_at = EXCLUDED.expires_at,
+        last_validated_at = EXCLUDED.last_validated_at,
+        payload_hash = EXCLUDED.payload_hash,
         updated_at = CURRENT_TIMESTAMP
     `;
 

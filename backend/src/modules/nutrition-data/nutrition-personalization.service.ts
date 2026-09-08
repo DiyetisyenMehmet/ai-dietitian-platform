@@ -1,5 +1,6 @@
 import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/api-error";
+import { derivePer100gAttentionFlags, derivePortionAttentionFlags } from "./nutrition-attention";
 import { calculatePortion, compareByCalories } from "./nutrition-calculator";
 import { nutritionDataService } from "./nutrition-data.service";
 import type { CanonicalFood, NutrientValues } from "./nutrition-data.types";
@@ -135,6 +136,13 @@ async function personalizeLocal(userId: string, nutrients: NutrientValues, food?
       "Bu ürün için alerjen verisi eksik olabilir; alerjen güvenliği doğrulanmış kabul edilmemelidir.",
     );
   }
+  if (food?.provenance.stale) {
+    warnings.push("Ürün verisi şu anda yeniden doğrulanamadı; son bilinen önbellek kaydı gösteriliyor.");
+  }
+  const attentionFlags = [
+    ...(food ? derivePer100gAttentionFlags(food.nutrientsPer100g) : []),
+    ...derivePortionAttentionFlags(nutrients),
+  ];
   return {
     metrics,
     profileContextUsed: Boolean(profile),
@@ -142,6 +150,7 @@ async function personalizeLocal(userId: string, nutrients: NutrientValues, food?
     dietaryCompatibility: dietary,
     allergenDataComplete: food ? food.allergens.length > 0 : false,
     warnings,
+    attentionFlags,
     windowHours: 24,
   };
 }

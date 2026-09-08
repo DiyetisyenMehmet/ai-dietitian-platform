@@ -5,6 +5,7 @@ import { sendSuccess } from "../../utils/api-response";
 import { asyncHandler } from "../../utils/async-handler";
 import { nutritionDataService } from "./nutrition-data.service";
 import { nutritionPersonalizationService } from "./nutrition-personalization.service";
+import { toBarcodeScanResult } from "./nutrition-scan-result";
 import type { NutrientValues } from "./nutrition-data.types";
 
 const NUTRIENT_KEYS = [
@@ -60,6 +61,7 @@ export const nutritionDataController = {
     sendSuccess(res, {
       found: food !== null,
       food,
+      scan: food ? toBarcodeScanResult(food) : null,
       sourcePolicy: "DIEWISH_CACHE_THEN_OPEN_FOOD_FACTS_THEN_USDA_BRANDED",
     });
   }),
