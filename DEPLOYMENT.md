@@ -21,7 +21,9 @@ The frontend talks to the backend via `NEXT_PUBLIC_API_BASE_URL`. The backend pe
 ## 2. Prerequisites
 
 - Docker + Docker Compose **or** Node.js 20+ and PostgreSQL 16 for a manual run.
-- iyzico merchant credentials (API key + secret) for the payment flow.
+- Google Cloud project with Vertex AI enabled for the primary AI path.
+- A user-managed Cloud Run backend service identity with the minimum Google Cloud permissions required by the enabled services.
+- iyzico merchant credentials if the web iyzico payment flow is enabled.
 - SMTP credentials if transactional email is enabled.
 
 ---
@@ -36,16 +38,34 @@ cp frontend/.env.production.example frontend/.env.production
 ```
 
 ### Backend (`backend/.env.production`)
-Key variables (validated at boot via Zod — the process exits if any required value is missing/invalid):
+Key variables (validated at boot via Zod):
 
 - `NODE_ENV=production`
-- `PORT=4000`
+- `PORT=4000` for local/container fallback; Cloud Run injects its own `PORT`
 - `API_PREFIX=/api`
 - `DATABASE_URL=postgresql://USER:PASSWORD@db:5432/diewish`
 - `CORS_ORIGIN=https://your-frontend-domain`
 - `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`
-- `IYZICO_API_KEY`, `IYZICO_SECRET_KEY`, `IYZICO_BASE_URL`
-- (optional) SMTP / mail settings, AI provider keys
+- `AI_PROVIDER=vertex`
+- `VERTEX_AI_LOCATION=global`
+- `VERTEX_AI_MODEL=gemini-3.5-flash`
+- `GOOGLE_CLOUD_PROJECT` is optional on Cloud Run because the backend resolves the project ID from the metadata server; set it explicitly for non-GCP runtimes
+- `USDA_FDC_API_KEY` for verified generic-food nutrition data
+- `IYZICO_API_KEY`, `IYZICO_SECRET_KEY`, `IYZICO_BASE_URL` only when the web iyzico channel is enabled
+
+### Vertex AI / Cloud Run identity
+
+Diewish does **not** put Gemini API keys or Google service-account JSON files in the APK, frontend, container image, or repository. The Cloud Run backend calls Vertex AI with its attached service identity. The runtime can obtain both the Google Cloud project ID and an OAuth access token from the Cloud Run metadata server.
+
+For the backend Cloud Run service identity:
+
+1. Enable the Vertex AI API in the project.
+2. Attach a dedicated user-managed service account to the backend service.
+3. Grant that service identity only the Vertex permissions it needs (normally `roles/aiplatform.user` at the project level for this inference path).
+4. Do not set `GOOGLE_APPLICATION_CREDENTIALS` to a downloaded JSON key in Cloud Run.
+5. Keep `AI_PROVIDER=vertex`; `GOOGLE_CLOUD_PROJECT` may be omitted on Cloud Run because metadata lookup is supported.
+
+If the service identity is missing Vertex permission, the food scanner returns a structured provider-auth failure rather than falling back to invented nutrition values.
 
 ### Frontend (`frontend/.env.production`)
 - `NEXT_PUBLIC_API_BASE_URL=https://your-api-domain/api`
@@ -116,6 +136,8 @@ Use these for container health checks, load-balancer probes, and uptime monitori
 Already configured in the codebase:
 
 - **Backend:** Helmet-style security headers, CORS allowlist, rate limiting, request logging, gzip compression, fail-fast env validation.
+- **Google Cloud AI:** backend-only Vertex calls using Cloud Run service identity; no Gemini/API secret is shipped to the Android app or browser.
+- **Nutrition safety:** Gemini recognizes food, portions and candidate ingredients; numeric nutrition facts are resolved from nutrition providers and calculated deterministically by the backend.
 - **Frontend (`next.config.ts`):** HSTS, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`, `X-DNS-Prefetch-Control`, `poweredByHeader: false`, compression, and `output: "standalone"` for a minimal runtime image.
 
 ---
@@ -139,9 +161,9 @@ The public website now satisfies the reviewer requirements:
 - Contact information and company details are publicly visible in the footer and Contact page.
 
 ### Remaining external items (outside code scope)
-- Real iyzico **production** credentials.
+- Real iyzico **production** credentials if that channel is enabled.
 - Production domain + TLS certificate.
-- VPS / hosting provisioning.
+- Hosting/service-identity/IAM provisioning.
 - Replace placeholder testimonials and OG image with final assets.
 
 ---
