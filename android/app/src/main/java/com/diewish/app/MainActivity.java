@@ -1,17 +1,19 @@
 package com.diewish.app;
 
+import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
+import android.content.ClipData;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
-import android.graphics.Insets;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Bundle;
-import android.view.WindowInsets;
+import android.provider.MediaStore;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
+import android.webkit.PermissionRequest;
 import android.webkit.SslErrorHandler;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -19,6 +21,13 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.FrameLayout;
+
+import androidx.core.content.FileProvider;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
 
 import com.android.billingclient.api.BillingClient;
 import com.android.billingclient.api.BillingClientStateListener;
@@ -35,6 +44,8 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.File;
+import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -45,32 +56,66 @@ import java.util.Map;
 /**
  * Diewish Android host.
  *
- * The existing responsive Diewish application remains the UI source of truth,
- * while security-sensitive Android capabilities are native. Google Play Billing
- * is never implemented in JavaScript: this Activity owns BillingClient and only
- * exposes narrow bridges to the exact Diewish HTTPS origin.
+ * The responsive Diewish application remains the UI source of truth, while
+ * Android-only capabilities such as system insets, camera permissions, file
+ * capture and Google Play Billing are owned by the native host.
  */
 public final class MainActivity extends Activity implements PurchasesUpdatedListener {
     private static final int FILE_CHOOSER_REQUEST = 4102;
+    private static final int CAMERA_PERMISSION_REQUEST = 4103;
     private static final String BILLING_BRIDGE = "DiewishBilling";
     private static final String REMINDER_BRIDGE = "DiewishReminders";
     private static final String SHARE_BRIDGE = "DiewishShare";
 
     private WebView webView;
+    private FrameLayout rootView;
     private BillingClient billingClient;
     private boolean billingReady = false;
     private ValueCallback<Uri[]> filePathCallback;
+    private Uri pendingCameraUri;
+    private boolean pendingChooserAfterCameraPermission;
+    private PermissionRequest pendingWebCameraRequest;
     private final Map<String, ProductDetails> productCache = new HashMap<>();
     private String trustedHost;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        // Android 15/16 force modern apps into edge-to-edge rendering. Own that
+        // mode explicitly and inset the whole WebView viewport, rather than
+        // padding the WebView's internal document surface. This keeps fixed web
+        // headers and bottom navigation above status/navigation bars.
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
+
         trustedHost = URI.create(BuildConfig.WEB_BASE_URL).getHost();
         configureBilling();
         configureWebView();
-        setContentView(webView);
+        configureRootView();
         webView.loadUrl(BuildConfig.WEB_BASE_URL + "/dashboard");
+    }
+
+    private void configureRootView() {
+        rootView = new FrameLayout(this);
+        rootView.setBackgroundColor(Color.WHITE);
+        rootView.addView(
+            webView,
+            new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+        );
+
+        ViewCompat.setOnApplyWindowInsetsListener(rootView, (view, windowInsets) -> {
+            Insets safe = windowInsets.getInsets(
+                WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout()
+            );
+            view.setPadding(safe.left, safe.top, safe.right, safe.bottom);
+            return windowInsets;
+        });
+
+        setContentView(rootView);
+        ViewCompat.requestApplyInsets(rootView);
     }
 
     private void configureBilling() {
@@ -104,30 +149,6 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
         webView.setBackgroundColor(Color.TRANSPARENT);
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG);
 
-        // Android 15+ enforces edge-to-edge for modern targets. Keep the web
-        // surface inside the actual system-bar insets so status/navigation bars
-        // never cover Diewish content on gesture or 3-button navigation devices.
-        webView.setOnApplyWindowInsetsListener((view, insets) -> {
-            int left;
-            int top;
-            int right;
-            int bottom;
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                Insets bars = insets.getInsets(WindowInsets.Type.systemBars());
-                left = bars.left;
-                top = bars.top;
-                right = bars.right;
-                bottom = bars.bottom;
-            } else {
-                left = insets.getSystemWindowInsetLeft();
-                top = insets.getSystemWindowInsetTop();
-                right = insets.getSystemWindowInsetRight();
-                bottom = insets.getSystemWindowInsetBottom();
-            }
-            view.setPadding(left, top, right, bottom);
-            return insets;
-        });
-
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
@@ -136,7 +157,9 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         settings.setSupportMultipleWindows(false);
         settings.setMediaPlaybackRequiresUserGesture(true);
-        settings.setUserAgentString(settings.getUserAgentString() + " DiewishAndroid/" + BuildConfig.VERSION_NAME);
+        settings.setUserAgentString(
+            settings.getUserAgentString() + " DiewishAndroid/" + BuildConfig.VERSION_NAME
+        );
 
         CookieManager cookieManager = CookieManager.getInstance();
         cookieManager.setAcceptCookie(true);
@@ -159,11 +182,17 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
         String current = webView == null ? null : webView.getUrl();
         if (current == null) return false;
         try {
-            Uri uri = Uri.parse(current);
-            return "https".equalsIgnoreCase(uri.getScheme()) && trustedHost.equalsIgnoreCase(uri.getHost());
+            return isTrustedOrigin(Uri.parse(current));
         } catch (RuntimeException ignored) {
             return false;
         }
+    }
+
+    private boolean isTrustedOrigin(Uri uri) {
+        return uri != null
+            && "https".equalsIgnoreCase(uri.getScheme())
+            && trustedHost != null
+            && trustedHost.equalsIgnoreCase(uri.getHost());
     }
 
     private void emitBillingStatus(BillingResult result) {
@@ -205,10 +234,16 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
                 JSONObject offerJson = new JSONObject();
                 offerJson.put("offerToken", offer.getOfferToken());
                 offerJson.put("basePlanId", offer.getBasePlanId());
-                offerJson.put("offerId", offer.getOfferId() == null ? JSONObject.NULL : offer.getOfferId());
+                offerJson.put(
+                    "offerId",
+                    offer.getOfferId() == null ? JSONObject.NULL : offer.getOfferId()
+                );
 
                 JSONArray phasesJson = new JSONArray();
-                for (ProductDetails.PricingPhase phase : offer.getPricingPhases().getPricingPhaseList()) {
+                for (
+                    ProductDetails.PricingPhase phase
+                        : offer.getPricingPhases().getPricingPhaseList()
+                ) {
                     JSONObject phaseJson = new JSONObject();
                     phaseJson.put("formattedPrice", phase.getFormattedPrice());
                     phaseJson.put("priceCurrencyCode", phase.getPriceCurrencyCode());
@@ -226,8 +261,12 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
         return item;
     }
 
-    private ProductDetails.SubscriptionOfferDetails preferredOffer(ProductDetails details, String requestedToken) {
-        List<ProductDetails.SubscriptionOfferDetails> offers = details.getSubscriptionOfferDetails();
+    private ProductDetails.SubscriptionOfferDetails preferredOffer(
+        ProductDetails details,
+        String requestedToken
+    ) {
+        List<ProductDetails.SubscriptionOfferDetails> offers =
+            details.getSubscriptionOfferDetails();
         if (offers == null || offers.isEmpty()) return null;
         if (requestedToken != null && !requestedToken.isEmpty()) {
             for (ProductDetails.SubscriptionOfferDetails offer : offers) {
@@ -250,7 +289,10 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
                 row.put("purchaseToken", purchase.getPurchaseToken());
                 row.put("purchaseState", purchase.getPurchaseState());
                 row.put("acknowledged", purchase.isAcknowledged());
-                row.put("orderId", purchase.getOrderId() == null ? JSONObject.NULL : purchase.getOrderId());
+                row.put(
+                    "orderId",
+                    purchase.getOrderId() == null ? JSONObject.NULL : purchase.getOrderId()
+                );
                 row.put("products", new JSONArray(purchase.getProducts()));
                 payload.put(row);
             }
@@ -267,8 +309,11 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
             List<Purchase> purchased = new ArrayList<>();
             List<Purchase> pending = new ArrayList<>();
             for (Purchase purchase : purchases) {
-                if (purchase.getPurchaseState() == Purchase.PurchaseState.PURCHASED) purchased.add(purchase);
-                else if (purchase.getPurchaseState() == Purchase.PurchaseState.PENDING) pending.add(purchase);
+                if (purchase.getPurchaseState() == Purchase.PurchaseState.PURCHASED) {
+                    purchased.add(purchase);
+                } else if (purchase.getPurchaseState() == Purchase.PurchaseState.PENDING) {
+                    pending.add(purchase);
+                }
             }
             if (!purchased.isEmpty()) emitPurchases("PURCHASED", purchased);
             if (!pending.isEmpty()) emitPurchases("PENDING", pending);
@@ -277,7 +322,12 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
 
         JSONObject detail = new JSONObject();
         try {
-            detail.put("state", code == BillingClient.BillingResponseCode.USER_CANCELED ? "CANCELED" : "ERROR");
+            detail.put(
+                "state",
+                code == BillingClient.BillingResponseCode.USER_CANCELED
+                    ? "CANCELED"
+                    : "ERROR"
+            );
             detail.put("responseCode", code);
         } catch (JSONException ignored) {
         }
@@ -299,7 +349,10 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
         public void queryProducts(String productIdsJson) {
             if (!isTrustedPage()) return;
             if (!billingReady) {
-                emitEvent("diewish:billing-products", jsonObject("error", "BILLING_UNAVAILABLE"));
+                emitEvent(
+                    "diewish:billing-products",
+                    jsonObject("error", "BILLING_UNAVAILABLE")
+                );
                 return;
             }
 
@@ -309,13 +362,18 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
                 for (int i = 0; i < ids.length() && i < 10; i++) {
                     String id = ids.optString(i, "").trim();
                     if (id.isEmpty()) continue;
-                    products.add(QueryProductDetailsParams.Product.newBuilder()
-                        .setProductId(id)
-                        .setProductType(BillingClient.ProductType.SUBS)
-                        .build());
+                    products.add(
+                        QueryProductDetailsParams.Product.newBuilder()
+                            .setProductId(id)
+                            .setProductType(BillingClient.ProductType.SUBS)
+                            .build()
+                    );
                 }
                 if (products.isEmpty()) {
-                    emitEvent("diewish:billing-products", jsonObject("error", "NO_PRODUCTS"));
+                    emitEvent(
+                        "diewish:billing-products",
+                        jsonObject("error", "NO_PRODUCTS")
+                    );
                     return;
                 }
 
@@ -327,12 +385,18 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
                     JSONObject detail = new JSONObject();
                     JSONArray items = new JSONArray();
                     try {
-                        if (result.getResponseCode() != BillingClient.BillingResponseCode.OK) {
+                        if (
+                            result.getResponseCode()
+                                != BillingClient.BillingResponseCode.OK
+                        ) {
                             detail.put("error", "QUERY_FAILED");
                             detail.put("responseCode", result.getResponseCode());
                         } else {
                             productCache.clear();
-                            for (ProductDetails product : queryResult.getProductDetailsList()) {
+                            for (
+                                ProductDetails product
+                                    : queryResult.getProductDetailsList()
+                            ) {
                                 productCache.put(product.getProductId(), product);
                                 items.put(productToJson(product));
                             }
@@ -343,38 +407,61 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
                     emitEvent("diewish:billing-products", detail);
                 });
             } catch (JSONException error) {
-                emitEvent("diewish:billing-products", jsonObject("error", "INVALID_REQUEST"));
+                emitEvent(
+                    "diewish:billing-products",
+                    jsonObject("error", "INVALID_REQUEST")
+                );
             }
         }
 
         @JavascriptInterface
-        public void purchase(String productId, String offerToken, String obfuscatedAccountId) {
+        public void purchase(
+            String productId,
+            String offerToken,
+            String obfuscatedAccountId
+        ) {
             if (!isTrustedPage() || !billingReady) return;
             if (obfuscatedAccountId == null || obfuscatedAccountId.length() != 64) {
-                emitEvent("diewish:billing-purchase", jsonObject("state", "INVALID_ACCOUNT"));
+                emitEvent(
+                    "diewish:billing-purchase",
+                    jsonObject("state", "INVALID_ACCOUNT")
+                );
                 return;
             }
 
             ProductDetails details = productCache.get(productId);
             if (details == null) {
-                emitEvent("diewish:billing-purchase", jsonObject("state", "PRODUCT_NOT_READY"));
+                emitEvent(
+                    "diewish:billing-purchase",
+                    jsonObject("state", "PRODUCT_NOT_READY")
+                );
                 return;
             }
-            ProductDetails.SubscriptionOfferDetails offer = preferredOffer(details, offerToken);
+            ProductDetails.SubscriptionOfferDetails offer =
+                preferredOffer(details, offerToken);
             if (offer == null) {
-                emitEvent("diewish:billing-purchase", jsonObject("state", "OFFER_NOT_READY"));
+                emitEvent(
+                    "diewish:billing-purchase",
+                    jsonObject("state", "OFFER_NOT_READY")
+                );
                 return;
             }
 
-            BillingFlowParams.ProductDetailsParams productParams = BillingFlowParams.ProductDetailsParams.newBuilder()
-                .setProductDetails(details)
-                .setOfferToken(offer.getOfferToken())
-                .build();
+            BillingFlowParams.ProductDetailsParams productParams =
+                BillingFlowParams.ProductDetailsParams.newBuilder()
+                    .setProductDetails(details)
+                    .setOfferToken(offer.getOfferToken())
+                    .build();
             BillingFlowParams flow = BillingFlowParams.newBuilder()
-                .setProductDetailsParamsList(Collections.singletonList(productParams))
+                .setProductDetailsParamsList(
+                    Collections.singletonList(productParams)
+                )
                 .setObfuscatedAccountId(obfuscatedAccountId)
                 .build();
-            BillingResult result = billingClient.launchBillingFlow(MainActivity.this, flow);
+            BillingResult result = billingClient.launchBillingFlow(
+                MainActivity.this,
+                flow
+            );
             if (result.getResponseCode() != BillingClient.BillingResponseCode.OK) {
                 JSONObject payload = jsonObject("state", "ERROR");
                 try {
@@ -392,22 +479,109 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
                 .setProductType(BillingClient.ProductType.SUBS)
                 .build();
             billingClient.queryPurchasesAsync(params, (result, purchases) -> {
-                if (result.getResponseCode() == BillingClient.BillingResponseCode.OK) {
+                if (
+                    result.getResponseCode()
+                        == BillingClient.BillingResponseCode.OK
+                ) {
                     emitPurchases("RESTORED", purchases);
                 } else {
-                    emitEvent("diewish:billing-purchase", jsonObject("state", "RESTORE_FAILED"));
+                    emitEvent(
+                        "diewish:billing-purchase",
+                        jsonObject("state", "RESTORE_FAILED")
+                    );
                 }
             });
         }
     }
 
+    private Intent createGalleryIntent() {
+        Intent gallery = new Intent(Intent.ACTION_GET_CONTENT);
+        gallery.addCategory(Intent.CATEGORY_OPENABLE);
+        gallery.setType("image/*");
+        gallery.putExtra(
+            Intent.EXTRA_MIME_TYPES,
+            new String[]{"image/jpeg", "image/png", "image/webp"}
+        );
+        return gallery;
+    }
+
+    private Intent createCameraIntent() {
+        Intent camera = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+        if (camera.resolveActivity(getPackageManager()) == null) return null;
+
+        try {
+            File sharedDir = new File(getCacheDir(), "shared");
+            if (!sharedDir.exists() && !sharedDir.mkdirs()) return null;
+            File image = File.createTempFile("diewish-food-", ".jpg", sharedDir);
+            pendingCameraUri = FileProvider.getUriForFile(
+                this,
+                getPackageName() + ".fileprovider",
+                image
+            );
+            camera.putExtra(MediaStore.EXTRA_OUTPUT, pendingCameraUri);
+            camera.addFlags(
+                Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            );
+            camera.setClipData(
+                ClipData.newRawUri("Diewish camera capture", pendingCameraUri)
+            );
+            return camera;
+        } catch (IOException | IllegalArgumentException error) {
+            pendingCameraUri = null;
+            return null;
+        }
+    }
+
+    private void launchImageChooser(boolean includeCamera) {
+        if (filePathCallback == null) return;
+
+        Intent gallery = createGalleryIntent();
+        Intent chooser = Intent.createChooser(gallery, "Fotoğraf seç");
+
+        if (includeCamera) {
+            Intent camera = createCameraIntent();
+            if (camera != null) {
+                chooser.putExtra(
+                    Intent.EXTRA_INITIAL_INTENTS,
+                    new Intent[]{camera}
+                );
+            }
+        } else {
+            pendingCameraUri = null;
+        }
+
+        try {
+            startActivityForResult(chooser, FILE_CHOOSER_REQUEST);
+        } catch (ActivityNotFoundException error) {
+            ValueCallback<Uri[]> callback = filePathCallback;
+            filePathCallback = null;
+            pendingCameraUri = null;
+            callback.onReceiveValue(null);
+        }
+    }
+
+    private boolean hasCameraPermission() {
+        return checkSelfPermission(Manifest.permission.CAMERA)
+            == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private void requestCameraPermissionForChooser() {
+        pendingChooserAfterCameraPermission = true;
+        requestPermissions(
+            new String[]{Manifest.permission.CAMERA},
+            CAMERA_PERMISSION_REQUEST
+        );
+    }
+
     private final class TrustedWebViewClient extends WebViewClient {
         @Override
-        public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+        public boolean shouldOverrideUrlLoading(
+            WebView view,
+            WebResourceRequest request
+        ) {
             Uri uri = request.getUrl();
-            if ("https".equalsIgnoreCase(uri.getScheme()) && trustedHost.equalsIgnoreCase(uri.getHost())) {
-                return false;
-            }
+            if (isTrustedOrigin(uri)) return false;
             try {
                 startActivity(new Intent(Intent.ACTION_VIEW, uri));
             } catch (ActivityNotFoundException ignored) {
@@ -416,7 +590,11 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
         }
 
         @Override
-        public void onReceivedSslError(WebView view, SslErrorHandler handler, android.net.http.SslError error) {
+        public void onReceivedSslError(
+            WebView view,
+            SslErrorHandler handler,
+            android.net.http.SslError error
+        ) {
             handler.cancel();
         }
 
@@ -425,10 +603,16 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
             super.onPageFinished(view, url);
             if (isTrustedPage()) {
                 view.evaluateJavascript(
-                    "window.__DIEWISH_ANDROID_APP__ = true; document.documentElement.classList.add('diewish-android');",
+                    "window.__DIEWISH_ANDROID_APP__ = true;"
+                        + "window.__DIEWISH_ANDROID_BUILD_REVISION__ = "
+                        + JSONObject.quote(BuildConfig.BUILD_REVISION)
+                        + ";document.documentElement.classList.add('diewish-android');",
                     null
                 );
-                emitEvent("diewish:billing-status", jsonObject("ready", billingReady));
+                emitEvent(
+                    "diewish:billing-status",
+                    jsonObject("ready", billingReady)
+                );
             }
         }
     }
@@ -440,27 +624,130 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
             ValueCallback<Uri[]> filePath,
             FileChooserParams fileChooserParams
         ) {
-            if (filePathCallback != null) filePathCallback.onReceiveValue(null);
-            filePathCallback = filePath;
-            try {
-                Intent intent = fileChooserParams.createIntent();
-                startActivityForResult(intent, FILE_CHOOSER_REQUEST);
+            if (!isTrustedPage()) {
+                filePath.onReceiveValue(null);
                 return true;
-            } catch (ActivityNotFoundException error) {
-                filePathCallback = null;
-                return false;
             }
+
+            if (filePathCallback != null) {
+                filePathCallback.onReceiveValue(null);
+            }
+            filePathCallback = filePath;
+            pendingCameraUri = null;
+
+            if (hasCameraPermission()) {
+                launchImageChooser(true);
+            } else {
+                requestCameraPermissionForChooser();
+            }
+            return true;
+        }
+
+        @Override
+        public void onPermissionRequest(PermissionRequest request) {
+            runOnUiThread(() -> {
+                if (
+                    !isTrustedPage()
+                        || !isTrustedOrigin(request.getOrigin())
+                        || !requestsOnlyVideoCapture(request)
+                ) {
+                    request.deny();
+                    return;
+                }
+
+                if (hasCameraPermission()) {
+                    request.grant(
+                        new String[]{PermissionRequest.RESOURCE_VIDEO_CAPTURE}
+                    );
+                    return;
+                }
+
+                if (pendingWebCameraRequest != null) {
+                    pendingWebCameraRequest.deny();
+                }
+                pendingWebCameraRequest = request;
+                requestPermissions(
+                    new String[]{Manifest.permission.CAMERA},
+                    CAMERA_PERMISSION_REQUEST
+                );
+            });
+        }
+
+        @Override
+        public void onPermissionRequestCanceled(PermissionRequest request) {
+            if (pendingWebCameraRequest == request) {
+                pendingWebCameraRequest = null;
+            }
+        }
+
+        private boolean requestsOnlyVideoCapture(PermissionRequest request) {
+            String[] resources = request.getResources();
+            if (resources.length != 1) return false;
+            return PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(resources[0]);
         }
     }
 
     @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == FILE_CHOOSER_REQUEST && filePathCallback != null) {
-            Uri[] results = WebChromeClient.FileChooserParams.parseResult(resultCode, data);
-            filePathCallback.onReceiveValue(results);
-            filePathCallback = null;
+    protected void onRequestPermissionsResult(
+        int requestCode,
+        String[] permissions,
+        int[] grantResults
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode != CAMERA_PERMISSION_REQUEST) return;
+
+        boolean granted = grantResults.length > 0
+            && grantResults[0] == PackageManager.PERMISSION_GRANTED;
+
+        if (pendingWebCameraRequest != null) {
+            PermissionRequest request = pendingWebCameraRequest;
+            pendingWebCameraRequest = null;
+            if (granted && isTrustedPage()) {
+                request.grant(
+                    new String[]{PermissionRequest.RESOURCE_VIDEO_CAPTURE}
+                );
+            } else {
+                request.deny();
+            }
         }
+
+        if (pendingChooserAfterCameraPermission) {
+            pendingChooserAfterCameraPermission = false;
+            // Permission denial should not trap the user. Gallery remains a
+            // valid fallback, while a granted permission enables real capture.
+            launchImageChooser(granted);
+        }
+    }
+
+    @Override
+    protected void onActivityResult(
+        int requestCode,
+        int resultCode,
+        Intent data
+    ) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != FILE_CHOOSER_REQUEST || filePathCallback == null) {
+            return;
+        }
+
+        Uri[] results = null;
+        if (resultCode == RESULT_OK) {
+            if (data == null || data.getData() == null) {
+                if (pendingCameraUri != null) {
+                    results = new Uri[]{pendingCameraUri};
+                }
+            } else {
+                results = WebChromeClient.FileChooserParams.parseResult(
+                    resultCode,
+                    data
+                );
+            }
+        }
+
+        ValueCallback<Uri[]> callback = filePathCallback;
+        filePathCallback = null;
+        pendingCameraUri = null;
+        callback.onReceiveValue(results);
     }
 
     private void handleBackNavigation() {
@@ -472,7 +759,11 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
         if (webView != null && isTrustedPage()) {
             Uri current = Uri.parse(webView.getUrl());
             String path = current.getPath();
-            if (path != null && !"/dashboard".equals(path) && !"/dashboard/".equals(path)) {
+            if (
+                path != null
+                    && !"/dashboard".equals(path)
+                    && !"/dashboard/".equals(path)
+            ) {
                 webView.loadUrl(BuildConfig.WEB_BASE_URL + "/dashboard");
                 return;
             }
@@ -489,6 +780,16 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
     @Override
     protected void onDestroy() {
         if (billingClient != null) billingClient.endConnection();
+
+        if (pendingWebCameraRequest != null) {
+            pendingWebCameraRequest.deny();
+            pendingWebCameraRequest = null;
+        }
+        if (filePathCallback != null) {
+            filePathCallback.onReceiveValue(null);
+            filePathCallback = null;
+        }
+
         if (webView != null) {
             webView.removeJavascriptInterface(BILLING_BRIDGE);
             webView.removeJavascriptInterface(REMINDER_BRIDGE);
