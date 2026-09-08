@@ -9,6 +9,11 @@ test("validates EAN-13, EAN-8 and UPC-A check digits", () => {
   assert.equal(normalizeBarcode("036000291452"), "036000291452");
 });
 
+test("accepts UPC-E and expands it to canonical UPC-A when needed", () => {
+  assert.equal(normalizeBarcode("06543217"), "065100004327");
+  assert.equal(isSupportedBarcode("06543217"), true);
+});
+
 test("rejects malformed and invalid-checksum barcodes", () => {
   assert.equal(isSupportedBarcode("4006381333932"), false);
   assert.equal(isSupportedBarcode("abc"), false);
