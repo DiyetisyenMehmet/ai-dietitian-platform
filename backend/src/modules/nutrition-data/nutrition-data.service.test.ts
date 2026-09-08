@@ -1,0 +1,108 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+
+import { NutritionDataService, type NutritionServiceProviders } from "./nutrition-data.service";
+import type { CanonicalFood } from "./nutrition-data.types";
+
+function food(provider: "USDA" | "OPEN_FOOD_FACTS", barcode = "4006381333931"): CanonicalFood {
+  return {
+    externalId: `${provider}-1`,
+    provider,
+    name: "Test food",
+    displayNameTr: "Test besin",
+    brand: null,
+    barcode,
+    imageUrl: null,
+    quantity: null,
+    serving: null,
+    nutrientsPer100g: {
+      energyKcal: 100,
+      proteinG: 10,
+      carbohydratesG: 10,
+      fatG: 2,
+      saturatedFatG: null,
+      sugarsG: null,
+      fiberG: null,
+      sodiumMg: null,
+      saltG: null,
+    },
+    ingredients: [],
+    allergens: [],
+    additives: [],
+    labels: [],
+    vegan: null,
+    vegetarian: null,
+    glutenFree: null,
+    nutriScore: null,
+    novaGroup: null,
+    provenance: {
+      provider,
+      externalId: `${provider}-1`,
+      retrievedAt: new Date(0).toISOString(),
+      dataBasis: "PER_100_G",
+      confidence: provider === "USDA" ? 0.95 : 0.75,
+    },
+  };
+}
+
+function providers(overrides?: {
+  off?: CanonicalFood | null;
+  usda?: CanonicalFood | null;
+  usdaConfigured?: boolean;
+  onOffCall?: () => void;
+  onUsdaCall?: () => void;
+}): NutritionServiceProviders {
+  return {
+    openFoodFacts: {
+      async getByBarcode() {
+        overrides?.onOffCall?.();
+        return overrides?.off ?? null;
+      },
+    },
+    usda: {
+      isConfigured() {
+        return overrides?.usdaConfigured ?? true;
+      },
+      async search() {
+        return [];
+      },
+      async searchBrandedBarcode() {
+        overrides?.onUsdaCall?.();
+        return overrides?.usda ?? null;
+      },
+    },
+  };
+}
+
+test("barcode lookup prefers Open Food Facts and skips USDA when OFF has the product", async () => {
+  let usdaCalls = 0;
+  const service = new NutritionDataService(
+    providers({ off: food("OPEN_FOOD_FACTS"), usda: food("USDA"), onUsdaCall: () => (usdaCalls += 1) }),
+  );
+  const result = await service.getByBarcode("4006381333931");
+  assert.equal(result?.provider, "OPEN_FOOD_FACTS");
+  assert.equal(usdaCalls, 0);
+});
+
+test("barcode lookup falls back to USDA Branded when OFF has no product", async () => {
+  const service = new NutritionDataService(providers({ off: null, usda: food("USDA") }));
+  const result = await service.getByBarcode("4006381333931");
+  assert.equal(result?.provider, "USDA");
+});
+
+test("negative barcode result is cached briefly and does not repeat provider calls", async () => {
+  let offCalls = 0;
+  const service = new NutritionDataService(
+    providers({ off: null, usda: null, usdaConfigured: false, onOffCall: () => (offCalls += 1) }),
+  );
+  assert.equal(await service.getByBarcode("4006381333931"), null);
+  assert.equal(await service.getByBarcode("4006381333931"), null);
+  assert.equal(offCalls, 1);
+});
+
+test("malformed barcode is rejected before provider calls", async () => {
+  let offCalls = 0;
+  const service = new NutritionDataService(providers({ onOffCall: () => (offCalls += 1) }));
+  await assert.rejects(service.getByBarcode("not-a-barcode"));
+  assert.equal(offCalls, 0);
+});
