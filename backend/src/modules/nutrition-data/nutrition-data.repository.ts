@@ -57,17 +57,25 @@ export const nutritionDataRepository = {
     if (!normalized) return [];
     const pattern = `%${normalized}%`;
     const rows = await prisma.$queryRaw<Array<{ payload: unknown }>>`
-      SELECT DISTINCT f.payload
-      FROM nutrition_foods f
-      LEFT JOIN nutrition_food_aliases a
-        ON a.provider = f.provider AND a.external_id = f.external_id
-      WHERE f.expires_at > ${now}
-        AND (
-          LOWER(f.display_name_tr) LIKE ${pattern}
-          OR LOWER(f.name) LIKE ${pattern}
-          OR a.normalized_alias LIKE ${pattern}
-        )
-      ORDER BY f.retrieved_at DESC
+      SELECT ranked.payload
+      FROM (
+        SELECT DISTINCT ON (f.provider, f.external_id)
+          f.provider,
+          f.external_id,
+          f.payload,
+          f.retrieved_at
+        FROM nutrition_foods f
+        LEFT JOIN nutrition_food_aliases a
+          ON a.provider = f.provider AND a.external_id = f.external_id
+        WHERE f.expires_at > ${now}
+          AND (
+            LOWER(f.display_name_tr) LIKE ${pattern}
+            OR LOWER(f.name) LIKE ${pattern}
+            OR a.normalized_alias LIKE ${pattern}
+          )
+        ORDER BY f.provider, f.external_id, f.retrieved_at DESC
+      ) ranked
+      ORDER BY ranked.retrieved_at DESC
       LIMIT ${limit}
     `;
     return rows.map((row) => asFood(row.payload)).filter((food): food is CanonicalFood => food !== null);
