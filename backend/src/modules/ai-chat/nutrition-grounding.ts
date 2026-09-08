@@ -17,25 +17,26 @@ export function parseNutritionBarcode(message: string): string | null {
 
 export function parseNutritionQuestion(message: string): { query: string; grams: number } | null {
   const normalized = message.trim().replace(/\s+/g, " ");
-  const withServing = normalized.match(
-    /(\d+(?:[.,]\d+)?)\s*(?:g|gr|gram)\s+(.+?)(?=\s+(?:kaç|ne kadar)\s+(?:kalori|kcal|protein|karbonhidrat|yağ|lif|şeker)|[?.!]|$)/i,
-  );
-  if (withServing) {
-    const grams = Number(withServing[1]?.replace(",", "."));
-    const query = withServing[2]?.trim() ?? "";
-    if (Number.isFinite(grams) && grams > 0 && grams <= 5_000 && query.length >= 2) {
-      return { query, grams };
-    }
-  }
 
-  // Scan result CTA wording: "250 g kuru fasulye hakkında ...". This form is
-  // still grounded server-side; the frontend does not provide trusted numbers.
+  // Scanner CTA wording is intentionally resolved before the broader explicit-
+  // gram matcher so "250 g kuru fasulye hakkında ..." stops at "hakkında".
   const scanContext = normalized.match(
     /(\d+(?:[.,]\d+)?)\s*(?:g|gr|gram)\s+(.{2,120}?)\s+hakkında(?:\s|,|\.|:|$)/i,
   );
   if (scanContext) {
     const grams = Number(scanContext[1]?.replace(",", "."));
     const query = scanContext[2]?.trim() ?? "";
+    if (Number.isFinite(grams) && grams > 0 && grams <= 5_000 && query.length >= 2) {
+      return { query, grams };
+    }
+  }
+
+  const withServing = normalized.match(
+    /(\d+(?:[.,]\d+)?)\s*(?:g|gr|gram)\s+(.+?)(?=\s+(?:kaç|ne kadar)\s+(?:kalori|kcal|protein|karbonhidrat|yağ|lif|şeker)|[?.!]|$)/i,
+  );
+  if (withServing) {
+    const grams = Number(withServing[1]?.replace(",", "."));
+    const query = withServing[2]?.trim() ?? "";
     if (Number.isFinite(grams) && grams > 0 && grams <= 5_000 && query.length >= 2) {
       return { query, grams };
     }
