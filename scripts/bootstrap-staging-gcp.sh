@@ -10,6 +10,8 @@ DEPLOY_SA_NAME="diewish-staging-deployer"
 POOL_ID="github-actions"
 PROVIDER_ID="diewish-staging"
 GITHUB_REPOSITORY="DiyetisyenMehmet/ai-dietitian-platform"
+GITHUB_REPOSITORY_ID="1295514788"
+GITHUB_REPOSITORY_OWNER_ID="301813832"
 STAGING_REF="refs/heads/feature/staging-preview"
 
 RUNTIME_SA="${RUNTIME_SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
@@ -29,6 +31,7 @@ require_command openssl
 echo "Diewish staging bootstrap"
 echo "Project: ${PROJECT_ID}"
 echo "Region : ${REGION}"
+echo "GitHub: ${GITHUB_REPOSITORY} (${GITHUB_REPOSITORY_ID})"
 echo "Production Cloud Run services are not modified by this script."
 echo
 
@@ -153,12 +156,15 @@ if ! gcloud iam workload-identity-pools providers describe "${PROVIDER_ID}" \
     --workload-identity-pool "${POOL_ID}" \
     --display-name "Diewish staging GitHub" \
     --issuer-uri "https://token.actions.githubusercontent.com" \
-    --attribute-mapping "google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.ref=assertion.ref" \
-    --attribute-condition "assertion.repository=='${GITHUB_REPOSITORY}' && assertion.ref=='${STAGING_REF}'" \
+    --attribute-mapping "google.subject=assertion.sub,attribute.repository_id=assertion.repository_id,attribute.repository_owner_id=assertion.repository_owner_id,attribute.ref=assertion.ref" \
+    --attribute-condition "assertion.repository_id=='${GITHUB_REPOSITORY_ID}' && assertion.repository_owner_id=='${GITHUB_REPOSITORY_OWNER_ID}' && assertion.ref=='${STAGING_REF}'" \
     --quiet
 fi
 
-PRINCIPAL_SET="principalSet://iam.googleapis.com/projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${POOL_ID}/attribute.repository/${GITHUB_REPOSITORY}"
+# Bind service-account impersonation to the immutable repository ID, not the
+# mutable owner/repository name. The provider itself additionally checks the
+# immutable owner ID and exact staging branch ref.
+PRINCIPAL_SET="principalSet://iam.googleapis.com/projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${POOL_ID}/attribute.repository_id/${GITHUB_REPOSITORY_ID}"
 gcloud iam service-accounts add-iam-policy-binding "${DEPLOY_SA}" \
   --project "${PROJECT_ID}" \
   --member "${PRINCIPAL_SET}" \
