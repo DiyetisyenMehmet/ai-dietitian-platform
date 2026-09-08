@@ -557,7 +557,7 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
                 Intent.createChooser(request, "Dosya seç"),
                 FILE_CHOOSER_REQUEST
             );
-        } catch (ActivityNotFoundException | RuntimeException error) {
+        } catch (RuntimeException error) {
             ValueCallback<Uri[]> callback = filePathCallback;
             filePathCallback = null;
             callback.onReceiveValue(null);
