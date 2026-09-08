@@ -2,7 +2,10 @@ plugins {
     id("com.android.application")
 }
 
-val diewishWebBaseUrl = providers.gradleProperty("DIEWISH_WEB_BASE_URL")
+val stagingWebBaseUrl = providers.gradleProperty("DIEWISH_WEB_BASE_URL")
+    .orElse("https://staging.invalid")
+    .get()
+val productionWebBaseUrl = providers.gradleProperty("DIEWISH_PRODUCTION_WEB_BASE_URL")
     .orElse("https://diewish-frontend-730419163638.europe-west1.run.app")
     .get()
 val buildRevision = providers.environmentVariable("GITHUB_SHA")
@@ -21,7 +24,6 @@ android {
         versionCode = 2
         versionName = "0.1.1"
 
-        buildConfigField("String", "WEB_BASE_URL", "\"${diewishWebBaseUrl}\"")
         buildConfigField("String", "BUILD_REVISION", "\"${buildRevision}\"")
     }
 
@@ -32,9 +34,15 @@ android {
     buildTypes {
         debug {
             versionNameSuffix = "-dev.${buildRevision}"
+            // Debug APKs must never silently target production. The staging
+            // deployment workflow supplies DIEWISH_WEB_BASE_URL explicitly.
+            buildConfigField("String", "WEB_BASE_URL", "\"${stagingWebBaseUrl}\"")
+            buildConfigField("String", "APP_ENVIRONMENT", "\"staging\"")
         }
         release {
             isMinifyEnabled = true
+            buildConfigField("String", "WEB_BASE_URL", "\"${productionWebBaseUrl}\"")
+            buildConfigField("String", "APP_ENVIRONMENT", "\"production\"")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
