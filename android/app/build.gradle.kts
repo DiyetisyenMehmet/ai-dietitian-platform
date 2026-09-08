@@ -3,8 +3,16 @@ plugins {
 }
 
 val diewishWebBaseUrl = providers.gradleProperty("DIEWISH_WEB_BASE_URL")
-    .orElse("https://diewish-frontend-730419163638.europe-west1.run.app")
-    .get()
+    .orElse(providers.environmentVariable("DIEWISH_WEB_BASE_URL"))
+    .orNull
+    ?.trim()
+    ?.removeSuffix("/")
+    ?: throw GradleException(
+        "DIEWISH_WEB_BASE_URL must be provided explicitly so the APK cannot silently target a stale environment."
+    )
+require(diewishWebBaseUrl.startsWith("https://")) {
+    "DIEWISH_WEB_BASE_URL must use HTTPS."
+}
 val buildRevision = providers.environmentVariable("GITHUB_SHA")
     .orElse("local")
     .get()
