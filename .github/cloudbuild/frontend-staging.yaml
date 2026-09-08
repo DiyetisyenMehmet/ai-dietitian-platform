@@ -5,6 +5,7 @@ steps:
       - --file=frontend/Dockerfile
       - --build-arg=NEXT_PUBLIC_API_BASE_URL=${_API_BASE_URL}
       - --build-arg=NEXT_PUBLIC_SITE_URL=${_SITE_URL}
+      - --build-arg=DIEWISH_API_PROXY_TARGET=${_API_PROXY_TARGET}
       - --tag=${_IMAGE}
       - frontend
 images:
