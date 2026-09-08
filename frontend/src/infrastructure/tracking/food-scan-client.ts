@@ -1,4 +1,5 @@
 import { apiRequest } from "@/infrastructure/api/http-client";
+import type { NormalizedNutritionScanDto } from "@/infrastructure/nutrition/nutrition-client";
 
 export interface NutrientValuesDto {
   energyKcal: number | null;
@@ -45,7 +46,7 @@ export const foodScanClient = {
   analyze(file: File) {
     const form = new FormData();
     form.append("file", file, file.name);
-    return apiRequest<{ analysis: FoodScanResultDto }>({
+    return apiRequest<{ analysis: FoodScanResultDto; scan: NormalizedNutritionScanDto }>({
       path: "/food-scan/analyze",
       method: "POST",
       auth: true,
@@ -53,12 +54,17 @@ export const foodScanClient = {
     });
   },
 
-  recalculate(ingredients: Array<{ name: string; grams: number; included: boolean }>) {
-    return apiRequest<{ analysis: Pick<FoodScanResultDto, "ingredients" | "totals"> }>({
+  recalculate(
+    ingredients: Array<{ name: string; grams: number; included: boolean }>,
+    targetGrams?: number,
+  ) {
+    return apiRequest<{
+      analysis: Pick<FoodScanResultDto, "ingredients" | "totals" | "estimatedGrams">;
+    }>({
       path: "/food-scan/recalculate",
       method: "POST",
       auth: true,
-      body: JSON.stringify({ ingredients }),
+      body: JSON.stringify({ ingredients, ...(targetGrams === undefined ? {} : { targetGrams }) }),
     });
   },
 

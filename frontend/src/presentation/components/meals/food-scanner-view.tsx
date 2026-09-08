@@ -28,6 +28,10 @@ import {
 } from "@/infrastructure/tracking/food-scan-client";
 import { Button } from "@/presentation/components/ui/button";
 import { Card, CardContent } from "@/presentation/components/ui/card";
+import {
+  NutritionAttentionSection,
+  NutritionFactsGrid,
+} from "./nutrition-scan-sections";
 
 interface EditableIngredient {
   name: string;
@@ -42,10 +46,6 @@ const MEAL_TYPES: readonly { value: MealTypeDto; label: string }[] = [
   { value: "SNACK", label: "Ara öğün" },
 ];
 
-function fmt(value: number | null, suffix: string): string {
-  return value === null ? "Bilgi yok" : `${Math.round(value * 10) / 10} ${suffix}`;
-}
-
 function friendlyError(error: unknown): string {
   if (error instanceof ApiError) return error.message;
   return "Görsel analiz edilemedi. Lütfen farklı ve daha net bir fotoğraf dene.";
@@ -59,6 +59,18 @@ function defaultMealType(): MealTypeDto {
   return "SNACK";
 }
 
+function coachHref(analysis: FoodScanResultDto): string {
+  const grams = analysis.estimatedGrams ?? 100;
+  const prompt = `${grams} g ${analysis.dishName} hakkında doğrulanmış besin verilerini ve günlük hedeflerimi kullanarak benim için ne ifade ettiğini açıklar mısın? Fotoğraftaki tarif ve porsiyonun tahmini olduğunu dikkate al.`;
+  return `/ai?prompt=${encodeURIComponent(prompt)}`;
+}
+
+function sumIncluded(ingredients: EditableIngredient[]): number {
+  return Math.round(
+    ingredients.filter((item) => item.included).reduce((sum, item) => sum + item.grams, 0) * 10,
+  ) / 10;
+}
+
 export function FoodScannerView() {
   const [preview, setPreview] = React.useState<string | null>(null);
   const [file, setFile] = React.useState<File | null>(null);
@@ -69,19 +81,21 @@ export function FoodScannerView() {
   const [editing, setEditing] = React.useState(false);
   const [recalculating, setRecalculating] = React.useState(false);
   const [ingredients, setIngredients] = React.useState<EditableIngredient[]>([]);
+  const [targetGrams, setTargetGrams] = React.useState(100);
   const [mealType, setMealType] = React.useState<MealTypeDto>(() => defaultMealType());
   const [loggingMeal, setLoggingMeal] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const personalizationRequestRef = React.useRef(0);
 
   const syncEditable = React.useCallback((value: FoodScanResultDto) => {
-    setIngredients(
-      value.ingredients.map((item) => ({
-        name: item.name,
-        grams: item.estimatedGrams ?? 1,
-        included: item.included,
-      })),
-    );
+    const editable = value.ingredients.map((item) => ({
+      name: item.name,
+      grams: item.estimatedGrams ?? 1,
+      included: item.included,
+    }));
+    setIngredients(editable);
+    const inferred = value.estimatedGrams ?? sumIncluded(editable);
+    setTargetGrams(Math.max(1, Math.min(5000, inferred || 100)));
   }, []);
 
   const loadPersonalization = React.useCallback(async (value: FoodScanResultDto) => {
@@ -106,6 +120,7 @@ export function FoodScannerView() {
     setAnalysis(null);
     setPersonalization(null);
     setIngredients([]);
+    setTargetGrams(100);
     setEditing(false);
     setPersonalizing(false);
   }, []);
@@ -130,6 +145,7 @@ export function FoodScannerView() {
       setAnalysis(null);
       setPersonalization(null);
       setIngredients([]);
+      setTargetGrams(100);
       setEditing(false);
       setPersonalizing(false);
     };
@@ -157,19 +173,23 @@ export function FoodScannerView() {
     if (!analysis || recalculating) return;
     setRecalculating(true);
     try {
-      const result = await foodScanClient.recalculate(ingredients);
-      const next = { ...analysis, ...result.analysis };
+      const result = await foodScanClient.recalculate(ingredients, targetGrams);
+      const next: FoodScanResultDto = {
+        ...analysis,
+        ...result.analysis,
+        estimatedPortion: "Düzeltilmiş porsiyon",
+      };
       setAnalysis(next);
       syncEditable(next);
       setEditing(false);
       void loadPersonalization(next);
-      toast.success("Besin değerleri düzeltmelerine göre yeniden hesaplandı.");
+      toast.success("Porsiyon ve malzemeler doğrultusunda besin değerleri yeniden hesaplandı.");
     } catch (error) {
       toast.error("Yeniden hesaplanamadı", { description: friendlyError(error) });
     } finally {
       setRecalculating(false);
     }
-  }, [analysis, ingredients, loadPersonalization, recalculating, syncEditable]);
+  }, [analysis, ingredients, loadPersonalization, recalculating, syncEditable, targetGrams]);
 
   const onLogMeal = React.useCallback(async () => {
     if (!analysis || loggingMeal) return;
@@ -249,165 +269,198 @@ export function FoodScannerView() {
       </Card>
 
       {analysis && (
-        <section className="space-y-4">
-          <Card>
-            <CardContent className="space-y-5 p-5">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-primary">1. Bu ne?</p>
-                <div className="mt-1 flex items-start justify-between gap-3">
-                  <div>
-                    <h3 className="text-xl font-bold">{analysis.dishName}</h3>
-                    <p className="text-sm text-muted-foreground">
-                      {analysis.estimatedPortion}
-                      {analysis.estimatedGrams ? ` · yaklaşık ${analysis.estimatedGrams} g` : ""}
-                    </p>
-                  </div>
-                  <span className="rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-600">
-                    %{Math.round(analysis.confidence)}
-                  </span>
+        <Card>
+          <CardContent className="space-y-6 p-5">
+            <section>
+              <p className="text-xs font-semibold uppercase tracking-wide text-primary">1. Bu ne?</p>
+              <div className="mt-1 flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-xl font-bold">{analysis.dishName}</h3>
+                  <p className="text-sm text-muted-foreground">
+                    {analysis.estimatedPortion}
+                    {analysis.estimatedGrams ? ` · yaklaşık ${analysis.estimatedGrams} g` : ""}
+                  </p>
                 </div>
+                <span className="rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-600">
+                  Görsel güveni %{Math.round(analysis.confidence)}
+                </span>
               </div>
+            </section>
 
-              <div>
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-primary">2. Besin değerleri</p>
-                    <p className="text-xs text-muted-foreground">Dahil edilen ve kaynağa eşleşen malzemelerden hesaplanır.</p>
-                  </div>
-                  <Button size="sm" variant="outline" onClick={() => setEditing((value) => !value)}>
-                    <Pencil /> Malzemeleri Düzenle
-                  </Button>
+            <section>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-primary">2. Besin değerleri</p>
+                  <p className="text-xs text-muted-foreground">Dahil edilen ve güvenilir kaynağa eşleşen malzemelerden hesaplanır.</p>
                 </div>
-                <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  <div className="rounded-xl bg-muted/50 p-3"><p className="text-xs text-muted-foreground">Enerji</p><p className="font-bold">{fmt(analysis.totals.energyKcal, "kcal")}</p></div>
-                  <div className="rounded-xl bg-muted/50 p-3"><p className="text-xs text-muted-foreground">Protein</p><p className="font-bold">{fmt(analysis.totals.proteinG, "g")}</p></div>
-                  <div className="rounded-xl bg-muted/50 p-3"><p className="text-xs text-muted-foreground">Karbonhidrat</p><p className="font-bold">{fmt(analysis.totals.carbohydratesG, "g")}</p></div>
-                  <div className="rounded-xl bg-muted/50 p-3"><p className="text-xs text-muted-foreground">Yağ</p><p className="font-bold">{fmt(analysis.totals.fatG, "g")}</p></div>
-                  <div className="rounded-xl bg-muted/50 p-3"><p className="text-xs text-muted-foreground">Lif</p><p className="font-semibold">{fmt(analysis.totals.fiberG, "g")}</p></div>
-                  <div className="rounded-xl bg-muted/50 p-3"><p className="text-xs text-muted-foreground">Şeker</p><p className="font-semibold">{fmt(analysis.totals.sugarsG, "g")}</p></div>
-                  <div className="rounded-xl bg-muted/50 p-3"><p className="text-xs text-muted-foreground">Tuz</p><p className="font-semibold">{fmt(analysis.totals.saltG, "g")}</p></div>
-                  <div className="rounded-xl bg-muted/50 p-3"><p className="text-xs text-muted-foreground">Sodyum</p><p className="font-semibold">{fmt(analysis.totals.sodiumMg, "mg")}</p></div>
-                </div>
+                <Button size="sm" variant="outline" onClick={() => setEditing((value) => !value)}>
+                  <Pencil /> Malzemeleri Düzenle
+                </Button>
               </div>
+              <div className="mt-3">
+                <NutritionFactsGrid
+                  portion={analysis.totals}
+                  portionLabel={`${analysis.estimatedGrams ?? targetGrams} g tahmini/düzeltilmiş porsiyon`}
+                />
+              </div>
+            </section>
 
-              <div className="space-y-2">
-                <p className="text-sm font-semibold">Muhtemel malzemeler</p>
-                {(editing ? ingredients : analysis.ingredients).map((item, index) => {
-                  const display = analysis.ingredients[index];
-                  if (editing) {
-                    const editable = item as EditableIngredient;
-                    return (
-                      <div key={`${editable.name}-${index}`} className="grid grid-cols-[auto_1fr_90px] items-center gap-2 rounded-xl border p-3">
-                        <input
-                          type="checkbox"
-                          checked={editable.included}
-                          onChange={(event) => setIngredients((current) => current.map((entry, i) => i === index ? { ...entry, included: event.target.checked } : entry))}
-                          aria-label={`${editable.name} dahil`}
-                        />
-                        <input
-                          value={editable.name}
-                          onChange={(event) => setIngredients((current) => current.map((entry, i) => i === index ? { ...entry, name: event.target.value } : entry))}
-                          className="min-w-0 rounded-lg border px-2 py-1.5 text-sm"
-                        />
-                        <div className="flex items-center gap-1">
-                          <input
-                            type="number"
-                            min={1}
-                            max={5000}
-                            value={editable.grams}
-                            onChange={(event) => setIngredients((current) => current.map((entry, i) => i === index ? { ...entry, grams: Number(event.target.value) || 1 } : entry))}
-                            className="w-16 rounded-lg border px-2 py-1.5 text-sm"
-                          />
-                          <span className="text-xs">g</span>
-                        </div>
-                      </div>
-                    );
-                  }
+            <section className="space-y-2">
+              <p className="text-sm font-semibold">Muhtemel malzemeler</p>
+              {editing && (
+                <div className="rounded-xl border bg-muted/20 p-3">
+                  <label className="text-xs font-semibold" htmlFor="photo-target-grams">Toplam porsiyon</label>
+                  <div className="mt-1 flex items-center gap-2">
+                    <input
+                      id="photo-target-grams"
+                      type="number"
+                      min={1}
+                      max={5000}
+                      value={targetGrams}
+                      onChange={(event) => setTargetGrams(Math.max(1, Math.min(5000, Number(event.target.value) || 1)))}
+                      className="w-28 rounded-lg border px-2 py-1.5 text-sm"
+                    />
+                    <span className="text-sm">g</span>
+                    <span className="text-xs text-muted-foreground">Malzeme gramları sunucuda oransal ve deterministik ölçeklenir.</span>
+                  </div>
+                </div>
+              )}
+
+              {(editing ? ingredients : analysis.ingredients).map((item, index) => {
+                const display = analysis.ingredients[index];
+                if (editing) {
+                  const editable = item as EditableIngredient;
                   return (
-                    <div key={`${display?.name ?? index}`} className="flex items-center justify-between gap-3 rounded-xl border p-3 text-sm">
-                      <div>
-                        <p className="font-semibold">{display?.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {display?.estimatedGrams ? `~${display.estimatedGrams} g` : "Miktar belirsiz"} · görsel güveni %{Math.round(display?.confidence ?? 0)}
-                          {display?.optional ? " · muhtemel" : ""}
-                        </p>
+                    <div key={`${editable.name}-${index}`} className="grid grid-cols-[auto_1fr_90px] items-center gap-2 rounded-xl border p-3">
+                      <input
+                        type="checkbox"
+                        checked={editable.included}
+                        onChange={(event) => setIngredients((current) => current.map((entry, i) => i === index ? { ...entry, included: event.target.checked } : entry))}
+                        aria-label={`${editable.name} dahil`}
+                      />
+                      <input
+                        value={editable.name}
+                        onChange={(event) => setIngredients((current) => current.map((entry, i) => i === index ? { ...entry, name: event.target.value } : entry))}
+                        className="min-w-0 rounded-lg border px-2 py-1.5 text-sm"
+                      />
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          min={1}
+                          max={5000}
+                          value={editable.grams}
+                          onChange={(event) => setIngredients((current) => current.map((entry, i) => i === index ? { ...entry, grams: Number(event.target.value) || 1 } : entry))}
+                          className="w-16 rounded-lg border px-2 py-1.5 text-sm"
+                        />
+                        <span className="text-xs">g</span>
                       </div>
-                      <span className={`text-xs font-semibold ${display?.matchedFood ? "text-emerald-600" : "text-amber-600"}`}>
-                        {display?.matchedFood ? display.matchedFood.provider : "Kaynak eşleşmedi"}
-                      </span>
                     </div>
                   );
-                })}
-                {editing && (
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      className="flex-1"
-                      onClick={() => setIngredients((current) => [...current, { name: "", grams: 10, included: true }])}
-                    >
-                      <Plus /> Malzeme ekle
-                    </Button>
-                    <Button className="flex-1" onClick={() => void onRecalculate()} isLoading={recalculating}>
-                      <RefreshCcw /> Yeniden hesapla
-                    </Button>
+                }
+                return (
+                  <div key={`${display?.name ?? index}`} className="flex items-center justify-between gap-3 rounded-xl border p-3 text-sm">
+                    <div>
+                      <p className="font-semibold">{display?.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {display?.estimatedGrams ? `~${display.estimatedGrams} g` : "Miktar belirsiz"} · görsel güveni %{Math.round(display?.confidence ?? 0)}
+                        {display?.optional ? " · muhtemel" : ""}
+                      </p>
+                    </div>
+                    <span className={`text-xs font-semibold ${display?.matchedFood ? "text-emerald-600" : "text-amber-600"}`}>
+                      {display?.matchedFood ? `${display.matchedFood.provider} ile eşleşti` : "Kaynak eşleşmedi"}
+                    </span>
                   </div>
-                )}
-              </div>
+                );
+              })}
+              {editing && (
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => setIngredients((current) => [...current, { name: "", grams: 10, included: true }])}
+                  >
+                    <Plus /> Malzeme ekle
+                  </Button>
+                  <Button className="flex-1" onClick={() => void onRecalculate()} isLoading={recalculating}>
+                    <RefreshCcw /> Yeniden hesapla
+                  </Button>
+                </div>
+              )}
+            </section>
 
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-primary">3. Senin İçin</p>
-                {personalizing && <p className="mt-2 text-sm text-muted-foreground">Aktif planın ve bugünkü kayıtlarınla karşılaştırılıyor…</p>}
-                {!personalizing && personalization?.metrics && (
-                  <div className="mt-2 space-y-2">
-                    {personalization.metrics.lines.map((line) => (
-                      <p key={line} className="rounded-xl bg-primary/5 p-3 text-sm">{line}</p>
-                    ))}
-                  </div>
-                )}
-                {!personalizing && personalization && !personalization.metrics && (
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    Aktif bir beslenme planın olduğunda bu öğünün günlük hedeflerine katkısı burada gösterilir.
-                  </p>
-                )}
-                {!personalizing && !personalization && (
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    Kişisel değerlendirme şu anda alınamadı; yukarıdaki besin değerleri bundan etkilenmez.
-                  </p>
-                )}
-                {personalization?.warnings.map((warning) => (
-                  <div key={warning} className="mt-2 flex gap-2 rounded-xl border border-amber-500/30 p-3 text-sm">
-                    <AlertCircle className="size-4 shrink-0 text-amber-600" />
-                    <span>{warning}</span>
+            <section>
+              <p className="text-xs font-semibold uppercase tracking-wide text-primary">3. Senin İçin</p>
+              {personalizing && <p className="mt-2 text-sm text-muted-foreground">Aktif planın ve bugünkü kayıtlarınla karşılaştırılıyor…</p>}
+              {!personalizing && personalization?.metrics && (
+                <div className="mt-2 space-y-2">
+                  {personalization.metrics.lines.map((line) => (
+                    <p key={line} className="rounded-xl bg-primary/5 p-3 text-sm">{line}</p>
+                  ))}
+                </div>
+              )}
+              {!personalizing && personalization && !personalization.metrics && (
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Aktif bir beslenme planın olduğunda bu öğünün günlük hedeflerine katkısı burada gösterilir.
+                </p>
+              )}
+              {!personalizing && !personalization && (
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Kişisel değerlendirme şu anda alınamadı; yukarıdaki deterministik besin değerleri bundan etkilenmez.
+                </p>
+              )}
+            </section>
+
+            <section>
+              <p className="text-xs font-semibold uppercase tracking-wide text-primary">4. Dikkat edilebilecekler</p>
+              <div className="mt-2">
+                <NutritionAttentionSection
+                  flags={personalization?.attentionFlags ?? []}
+                  warnings={personalization?.warnings}
+                />
+              </div>
+            </section>
+
+            <section>
+              <p className="text-xs font-semibold uppercase tracking-wide text-primary">5. Kaynak ve belirsizlik</p>
+              <div className="mt-2 space-y-2">
+                {analysis.ingredients.filter((item) => item.included).map((item) => (
+                  <div key={`${item.name}-${item.matchedFood?.externalId ?? "unmatched"}`} className="rounded-xl border p-3 text-xs">
+                    <p className="font-semibold">{item.name}</p>
+                    <p className="text-muted-foreground">
+                      Görsel tahmini: %{Math.round(item.confidence)} · {item.optional ? "muhtemel içerik" : "ana içerik adayı"}
+                    </p>
+                    <p className="text-muted-foreground">
+                      Besin kaynağı: {item.matchedFood ? `${item.matchedFood.provider} (${item.matchedFood.displayNameTr})` : "eşleşmedi; nutrient uydurulmadı"}
+                    </p>
                   </div>
                 ))}
               </div>
-
-              <div className="flex gap-2 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-muted-foreground">
+              <div className="mt-2 flex gap-2 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-muted-foreground">
                 <AlertCircle className="size-4 shrink-0 text-amber-600" />
                 <p>{analysis.disclaimer}</p>
               </div>
+            </section>
 
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-primary">4. Ne yapabilirsin?</p>
-                <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                  <div className="flex gap-2">
-                    <select
-                      value={mealType}
-                      onChange={(event) => setMealType(event.target.value as MealTypeDto)}
-                      className="min-w-0 flex-1 rounded-xl border bg-background px-3 py-2 text-sm"
-                    >
-                      {MEAL_TYPES.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                    </select>
-                    <Button onClick={() => void onLogMeal()} isLoading={loggingMeal}><Utensils /> Öğüne ekle</Button>
-                  </div>
-                  <Button asChild variant="outline">
-                    <Link href="/ai"><MessageCircle /> AI Koç&apos;a sor</Link>
-                  </Button>
+            <section>
+              <p className="text-xs font-semibold uppercase tracking-wide text-primary">6. Ne yapabilirsin?</p>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                <div className="flex gap-2">
+                  <select
+                    value={mealType}
+                    onChange={(event) => setMealType(event.target.value as MealTypeDto)}
+                    className="min-w-0 flex-1 rounded-xl border bg-background px-3 py-2 text-sm"
+                  >
+                    {MEAL_TYPES.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>
+                  <Button onClick={() => void onLogMeal()} isLoading={loggingMeal}><Utensils /> Öğüne ekle</Button>
                 </div>
+                <Button asChild variant="outline">
+                  <Link href={coachHref(analysis)}><MessageCircle /> AI Koç&apos;a sor</Link>
+                </Button>
               </div>
-            </CardContent>
-          </Card>
-        </section>
+            </section>
+          </CardContent>
+        </Card>
       )}
 
       <Card>

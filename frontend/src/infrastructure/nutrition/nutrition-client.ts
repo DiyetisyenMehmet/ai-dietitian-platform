@@ -14,6 +14,20 @@ export interface NutrientValuesDto {
 
 export type MealTypeDto = "BREAKFAST" | "LUNCH" | "DINNER" | "SNACK";
 
+export interface NutritionProvenanceDto {
+  provider: "USDA" | "OPEN_FOOD_FACTS" | "DIEWISH";
+  externalId: string;
+  retrievedAt: string;
+  dataBasis: "PER_100_G" | "PER_SERVING";
+  preparationState?: string | null;
+  confidence: number;
+  sourceReference?: string | null;
+  lastValidatedAt?: string | null;
+  dataHash?: string | null;
+  stale?: boolean;
+  providerUpdatedAt?: string | null;
+}
+
 export interface CanonicalFoodDto {
   externalId: string;
   provider: "USDA" | "OPEN_FOOD_FACTS" | "DIEWISH";
@@ -34,14 +48,47 @@ export interface CanonicalFoodDto {
   glutenFree: boolean | null;
   nutriScore: string | null;
   novaGroup: number | null;
-  provenance: {
-    provider: string;
-    externalId: string;
-    retrievedAt: string;
-    dataBasis: string;
-    confidence: number;
-    sourceReference?: string | null;
+  provenance: NutritionProvenanceDto;
+}
+
+export interface NormalizedNutritionScanDto {
+  scanType: "PHOTO" | "BARCODE" | "NUTRITION_LABEL";
+  identity: {
+    name: string;
+    brand: string | null;
+    barcode: string | null;
+    imageUrl: string | null;
   };
+  serving: { description: string | null; grams: number | null; confidence: number | null };
+  nutrients: {
+    per100g: NutrientValuesDto | null;
+    perServing: NutrientValuesDto;
+    estimated: boolean;
+  };
+  ingredients: Array<{
+    name: string;
+    grams: number | null;
+    included: boolean;
+    confidence: number;
+    optional: boolean;
+    nutritionSource: { provider: string; externalId: string; confidence: number } | null;
+  }>;
+  provenance: {
+    nutrition: NutritionProvenanceDto[];
+    recognition: "AI_ESTIMATED" | "BARCODE_EXACT" | "OCR_ESTIMATED";
+  };
+  product: {
+    quantity: string | null;
+    allergens: string[];
+    additives: string[];
+    labels: string[];
+    vegan: boolean | null;
+    vegetarian: boolean | null;
+    glutenFree: boolean | null;
+    nutriScore: string | null;
+    novaGroup: number | null;
+  } | null;
+  disclaimer: string | null;
 }
 
 export interface BarcodeHistoryDto {
@@ -50,6 +97,19 @@ export interface BarcodeHistoryDto {
   productName: string | null;
   food: CanonicalFoodDto | null;
   scannedAt: string;
+}
+
+export interface NutritionAttentionFlagDto {
+  code:
+    | "HIGH_SUGARS"
+    | "HIGH_SATURATED_FAT"
+    | "HIGH_SALT"
+    | "HIGH_ENERGY_DENSITY"
+    | "PORTION_HIGH_SODIUM"
+    | "PORTION_HIGH_SUGARS";
+  severity: "INFO" | "WATCH";
+  basis: "PER_100_G" | "PORTION";
+  message: string;
 }
 
 export interface PersonalizationContextDto {
@@ -76,6 +136,7 @@ export interface PersonalizationContextDto {
   dietaryCompatibility: "COMPATIBLE" | "INCOMPATIBLE" | "UNKNOWN";
   allergenDataComplete: boolean;
   warnings: string[];
+  attentionFlags: NutritionAttentionFlagDto[];
   windowHours: number;
 }
 
@@ -103,7 +164,11 @@ export interface ComparisonDto {
 
 export const nutritionClient = {
   barcode(barcode: string) {
-    return apiRequest<{ found: boolean; food: CanonicalFoodDto | null }>({
+    return apiRequest<{
+      found: boolean;
+      food: CanonicalFoodDto | null;
+      scan: NormalizedNutritionScanDto | null;
+    }>({
       path: `/nutrition/barcode/${encodeURIComponent(barcode)}`,
       method: "GET",
       auth: true,

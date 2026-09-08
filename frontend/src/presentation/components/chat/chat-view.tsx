@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AlertCircle, Menu } from "lucide-react";
 
 import { cn } from "@/shared/lib/utils";
@@ -21,6 +22,9 @@ export function ChatView() {
   const { isResponding, isLoading, error } = useChatState();
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const [showScrollButton, setShowScrollButton] = React.useState(false);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const promptHandledRef = React.useRef(false);
 
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const messages = conversation.messages;
@@ -41,6 +45,15 @@ export function ChatView() {
     if (isNearBottom()) scrollToBottom(messages.length <= 1 ? "auto" : "smooth");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages.length, lastMessage?.content, conversation.id]);
+
+  React.useEffect(() => {
+    if (promptHandledRef.current || isLoading || isResponding) return;
+    const prompt = searchParams.get("prompt")?.trim().slice(0, 1000);
+    if (!prompt) return;
+    promptHandledRef.current = true;
+    router.replace("/ai");
+    chatStore.sendMessage(prompt);
+  }, [isLoading, isResponding, router, searchParams]);
 
   const handleScroll = React.useCallback(() => {
     setShowScrollButton(!isNearBottom());
