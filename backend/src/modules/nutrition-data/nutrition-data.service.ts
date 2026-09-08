@@ -3,13 +3,23 @@ import { ApiError } from "../../utils/api-error";
 import { normalizeBarcode } from "./barcode";
 import { NutritionTtlCache } from "./nutrition-cache";
 import type { CanonicalFood } from "./nutrition-data.types";
-import { openFoodFactsProvider, type OpenFoodFactsProvider } from "./providers/open-food-facts.provider";
-import { usdaFoodDataCentralProvider, type UsdaFoodDataCentralProvider } from "./providers/usda.provider";
+import { openFoodFactsProvider } from "./providers/open-food-facts.provider";
+import { usdaFoodDataCentralProvider } from "./providers/usda.provider";
 import { selectPreferredFood } from "./source-policy";
 
-interface NutritionServiceProviders {
-  usda: UsdaFoodDataCentralProvider;
-  openFoodFacts: OpenFoodFactsProvider;
+export interface UsdaNutritionProviderPort {
+  isConfigured(): boolean;
+  search(query: string, limit?: number): Promise<CanonicalFood[]>;
+  searchBrandedBarcode(barcode: string): Promise<CanonicalFood | null>;
+}
+
+export interface OpenFoodFactsProviderPort {
+  getByBarcode(barcode: string): Promise<CanonicalFood | null>;
+}
+
+export interface NutritionServiceProviders {
+  usda: UsdaNutritionProviderPort;
+  openFoodFacts: OpenFoodFactsProviderPort;
 }
 
 function providerError(message: string, details?: unknown): ApiError {
@@ -29,8 +39,8 @@ export class NutritionDataService {
     }
     const boundedLimit = Math.min(Math.max(Math.trunc(limit) || 10, 1), 25);
     const key = `search:${query.toLocaleLowerCase("tr-TR")}:${boundedLimit}`;
-    const cached = this.searchCache.get(key);
-    if (cached) return cached;
+    const cached = this.searchCache.lookup(key);
+    if (cached.hit) return cached.value ?? [];
     if (!this.providers.usda.isConfigured()) {
       throw new ApiError(503, "USDA FoodData Central sunucuda yapılandırılmamış.", {
         code: "NUTRITION_PROVIDER_NOT_CONFIGURED",
@@ -51,8 +61,8 @@ export class NutritionDataService {
       throw new ApiError(400, "Geçersiz veya desteklenmeyen barkod.", { code: "INVALID_BARCODE" });
     }
     const key = `barcode:${barcode}`;
-    const cached = this.foodCache.get(key);
-    if (cached !== null) return cached;
+    const cached = this.foodCache.lookup(key);
+    if (cached.hit) return cached.value;
 
     let offFood: CanonicalFood | null = null;
     let offError: unknown = null;
@@ -68,26 +78,35 @@ export class NutritionDataService {
     }
 
     let usdaFood: CanonicalFood | null = null;
+    let usdaError: unknown = null;
     if (this.providers.usda.isConfigured()) {
       try {
         usdaFood = await this.providers.usda.searchBrandedBarcode(barcode);
       } catch (error) {
-        if (offError) throw providerError("Barkod veri kaynaklarına şu anda ulaşılamıyor.", String(error));
+        usdaError = error;
       }
     }
 
-    const selected = selectPreferredFood([offFood, usdaFood].filter((v): v is CanonicalFood => v !== null), "BARCODE");
+    const selected = selectPreferredFood(
+      [offFood, usdaFood].filter((value): value is CanonicalFood => value !== null),
+      "BARCODE",
+    );
     if (selected) {
-      const ttlHours = selected.provider === "OPEN_FOOD_FACTS" ? env.OPEN_FOOD_FACTS_CACHE_TTL_HOURS : env.USDA_CACHE_TTL_HOURS;
+      const ttlHours =
+        selected.provider === "OPEN_FOOD_FACTS"
+          ? env.OPEN_FOOD_FACTS_CACHE_TTL_HOURS
+          : env.USDA_CACHE_TTL_HOURS;
       this.foodCache.set(key, selected, ttlHours * 60 * 60 * 1000);
       return selected;
     }
 
-    if (offError && !this.providers.usda.isConfigured()) {
-      throw providerError("Barkod veri kaynağına şu anda ulaşılamıyor.", String(offError));
+    if (offError && (usdaError || !this.providers.usda.isConfigured())) {
+      throw providerError(
+        "Barkod veri kaynaklarına şu anda ulaşılamıyor.",
+        `${String(offError)}${usdaError ? `; ${String(usdaError)}` : ""}`,
+      );
     }
 
-    // Negative result gets a short cache to avoid hammering OFF on repeated scans.
     this.foodCache.set(key, null, 10 * 60 * 1000);
     return null;
   }

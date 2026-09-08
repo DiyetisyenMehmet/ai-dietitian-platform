@@ -5,6 +5,7 @@ import { authRouter } from "../modules/auth/auth.routes";
 import { bloodTestRouter } from "../modules/blood-test/blood-test.routes";
 import { bloodTestAnalysisModule } from "../modules/blood-test-analysis/blood-test-analysis.module";
 import { nutritionPlanModule } from "../modules/nutrition-plan/nutrition-plan.module";
+import { nutritionDataModule } from "../modules/nutrition-data/nutrition-data.module";
 import { aiChatModule } from "../modules/ai-chat/ai-chat.module";
 import { aiUsageModule } from "../modules/ai-usage/ai-usage.module";
 import { paymentsModule } from "../modules/payments/payments.module";
@@ -30,6 +31,9 @@ apiRouter.use("/auth", authRouter);
 apiRouter.use("/account", accountRouter);
 apiRouter.use("/onboarding", onboardingRouter);
 apiRouter.use("/food-scan", foodScanRouter);
+for (const { path, router } of nutritionDataModule.routes) {
+  apiRouter.use(path, router);
+}
 
 // Blood-test analysis module (Sprint 12). `mountFirst` routers are mounted
 // before the Sprint 11 upload router so their concrete paths (e.g. /analyses)
