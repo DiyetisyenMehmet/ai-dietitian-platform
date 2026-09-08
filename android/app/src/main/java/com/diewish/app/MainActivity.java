@@ -102,11 +102,19 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
         );
 
         ViewCompat.setOnApplyWindowInsetsListener(rootView, (view, windowInsets) -> {
-            Insets safe = windowInsets.getInsets(
-                WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout()
-            );
+            int handledInsets = WindowInsetsCompat.Type.systemBars()
+                | WindowInsetsCompat.Type.displayCutout();
+            Insets safe = windowInsets.getInsets(handledInsets);
             view.setPadding(safe.left, safe.top, safe.right, safe.bottom);
-            return windowInsets;
+
+            // The native container has already accounted for these safe areas.
+            // Zero only the handled inset types before they reach WebView so
+            // CSS env(safe-area-inset-*) cannot apply the same spacing twice.
+            // Keep the object flowing instead of consuming it so later inset
+            // updates (including IME/viewport changes) still reach WebView.
+            return new WindowInsetsCompat.Builder(windowInsets)
+                .setInsets(handledInsets, Insets.NONE)
+                .build();
         });
 
         setContentView(rootView);
