@@ -11,11 +11,15 @@ RUN npm ci
 
 COPY . .
 
-# NEXT_PUBLIC_* values are inlined at build time; pass them as build args.
-# Staging defaults target the current Google Cloud Run services and can still
-# be overridden explicitly with --build-arg for another environment.
-ARG NEXT_PUBLIC_API_BASE_URL=https://diewish-backend-730419163638.europe-west1.run.app/api
-ARG NEXT_PUBLIC_SITE_URL=https://diewish-frontend-730419163638.europe-west1.run.app
+# NEXT_PUBLIC_* values are inlined at build time. They are deliberately required
+# instead of silently falling back to an old Cloud Run environment; a build must
+# explicitly declare which backend/site it targets.
+ARG NEXT_PUBLIC_API_BASE_URL
+ARG NEXT_PUBLIC_SITE_URL
+RUN test -n "$NEXT_PUBLIC_API_BASE_URL" \
+    && test -n "$NEXT_PUBLIC_SITE_URL" \
+    && case "$NEXT_PUBLIC_API_BASE_URL" in https://*|http://127.0.0.1:*|http://localhost:*) ;; *) exit 1 ;; esac \
+    && case "$NEXT_PUBLIC_SITE_URL" in https://*|http://127.0.0.1:*|http://localhost:*) ;; *) exit 1 ;; esac
 ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
 ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL
 ENV NEXT_TELEMETRY_DISABLED=1
