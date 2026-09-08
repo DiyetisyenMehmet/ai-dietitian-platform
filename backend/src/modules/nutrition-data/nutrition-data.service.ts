@@ -4,6 +4,7 @@ import { normalizeBarcode } from "./barcode";
 import { NutritionTtlCache } from "./nutrition-cache";
 import { nutritionDataRepository, type NutritionDataRepository } from "./nutrition-data.repository";
 import type { CanonicalFood } from "./nutrition-data.types";
+import { expandNutritionProviderQueries } from "./nutrition-query-aliases";
 import { openFoodFactsProvider } from "./providers/open-food-facts.provider";
 import { usdaFoodDataCentralProvider } from "./providers/usda.provider";
 import { selectPreferredFood } from "./source-policy";
@@ -35,6 +36,19 @@ function ttlHoursFor(food: CanonicalFood): number {
 
 function expiresAt(food: CanonicalFood): Date {
   return new Date(Date.now() + ttlHoursFor(food) * 60 * 60 * 1000);
+}
+
+function uniqueFoods(foods: CanonicalFood[], limit: number): CanonicalFood[] {
+  const seen = new Set<string>();
+  const result: CanonicalFood[] = [];
+  for (const food of foods) {
+    const key = `${food.provider}:${food.externalId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(food);
+    if (result.length >= limit) break;
+  }
+  return result;
 }
 
 export class NutritionDataService {
@@ -69,8 +83,17 @@ export class NutritionDataService {
         code: "NUTRITION_PROVIDER_NOT_CONFIGURED",
       });
     }
+
     try {
-      const foods = await this.providers.usda.search(query, boundedLimit);
+      const collected: CanonicalFood[] = [];
+      for (const providerQuery of expandNutritionProviderQueries(query)) {
+        const remaining = boundedLimit - uniqueFoods(collected, boundedLimit).length;
+        if (remaining <= 0) break;
+        const foods = await this.providers.usda.search(providerQuery, remaining);
+        collected.push(...foods);
+        if (uniqueFoods(collected, boundedLimit).length >= boundedLimit) break;
+      }
+      const foods = uniqueFoods(collected, boundedLimit);
       this.searchCache.set(key, foods, env.USDA_CACHE_TTL_HOURS * 60 * 60 * 1000);
       if (this.persistence) {
         await Promise.all(foods.map((food) => this.persistence!.upsertFood(food, expiresAt(food))));
@@ -165,7 +188,9 @@ export class NutritionDataService {
     const barcode = normalizeBarcode(input);
     if (!barcode) throw new ApiError(400, "Geçersiz barkod.", { code: "INVALID_BARCODE" });
     const food = favorite ? await this.getByBarcode(barcode) : null;
-    if (favorite && !food) throw new ApiError(404, "Ürün bulunamadı.", { code: "BARCODE_NOT_FOUND" });
+    if (favorite && !food) {
+      throw new ApiError(404, "Ürün bulunamadı.", { code: "BARCODE_NOT_FOUND" });
+    }
     if (this.persistence) await this.persistence.setFavorite(userId, barcode, food, favorite);
     return food;
   }

@@ -77,7 +77,11 @@ function providers(overrides?: {
 test("barcode lookup prefers Open Food Facts and skips USDA when OFF has the product", async () => {
   let usdaCalls = 0;
   const service = new NutritionDataService(
-    providers({ off: food("OPEN_FOOD_FACTS"), usda: food("USDA"), onUsdaCall: () => (usdaCalls += 1) }),
+    providers({
+      off: food("OPEN_FOOD_FACTS"),
+      usda: food("USDA"),
+      onUsdaCall: () => (usdaCalls += 1),
+    }),
   );
   const result = await service.getByBarcode("4006381333931");
   assert.equal(result?.provider, "OPEN_FOOD_FACTS");
@@ -93,7 +97,12 @@ test("barcode lookup falls back to USDA Branded when OFF has no product", async 
 test("negative barcode result is cached briefly and does not repeat provider calls", async () => {
   let offCalls = 0;
   const service = new NutritionDataService(
-    providers({ off: null, usda: null, usdaConfigured: false, onOffCall: () => (offCalls += 1) }),
+    providers({
+      off: null,
+      usda: null,
+      usdaConfigured: false,
+      onOffCall: () => (offCalls += 1),
+    }),
   );
   assert.equal(await service.getByBarcode("4006381333931"), null);
   assert.equal(await service.getByBarcode("4006381333931"), null);
@@ -105,4 +114,25 @@ test("malformed barcode is rejected before provider calls", async () => {
   const service = new NutritionDataService(providers({ onOffCall: () => (offCalls += 1) }));
   await assert.rejects(service.getByBarcode("not-a-barcode"));
   assert.equal(offCalls, 0);
+});
+
+test("Turkish ingredient search uses deterministic English alias before USDA fallback", async () => {
+  const queries: string[] = [];
+  const resultFood = { ...food("USDA", ""), externalId: "USDA-chicken", displayNameTr: "Tavuk göğsü" };
+  const service = new NutritionDataService({
+    openFoodFacts: { async getByBarcode() { return null; } },
+    usda: {
+      isConfigured() { return true; },
+      async search(query) {
+        queries.push(query);
+        return query === "cooked chicken breast" ? [resultFood] : [];
+      },
+      async searchBrandedBarcode() { return null; },
+    },
+  });
+
+  const results = await service.search("Pişmiş tavuk göğsü", 5);
+  assert.equal(results[0]?.externalId, "USDA-chicken");
+  assert.equal(queries[0], "cooked chicken breast");
+  assert.equal(queries.includes("Pişmiş tavuk göğsü"), true);
 });
