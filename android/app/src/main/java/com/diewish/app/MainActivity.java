@@ -688,7 +688,7 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
     }
 
     @Override
-    protected void onRequestPermissionsResult(
+    public void onRequestPermissionsResult(
         int requestCode,
         String[] permissions,
         int[] grantResults
