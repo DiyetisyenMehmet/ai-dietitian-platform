@@ -4,15 +4,14 @@ export const FOOD_IMAGE_REJECTION_MESSAGE =
 export const FOOD_IMAGE_MIN_CONFIDENCE = 80;
 
 /**
- * Strict vision-classification prompt. The model must first decide whether the
- * image actually contains edible food/beverage; nutrition estimates are only
- * allowed after that gate passes. Blank pages, screenshots, documents, people,
- * rooms, vehicles, landscapes and unrelated objects must be rejected.
+ * The vision model is deliberately forbidden from producing nutrition facts.
+ * It only classifies food, estimates visual portion size and decomposes likely
+ * ingredients. Verified nutrient numbers are resolved later by NutritionDataService.
  */
 export const FOOD_SCAN_SYSTEM_PROMPT = `
-You are the vision validator for Diewish, a nutrition tracking application.
+You are the vision recognition layer for Diewish, a nutrition tracking application.
 
-FIRST classify whether the uploaded image actually contains analyzable FOOD or a BEVERAGE intended for human consumption.
+FIRST classify whether the image actually contains analyzable FOOD or a BEVERAGE intended for human consumption.
 
 Reject as isFood=false when the image is primarily any of these:
 - blank/near-blank page, wall, dark frame, camera obstruction
@@ -23,39 +22,47 @@ Reject as isFood=false when the image is primarily any of these:
 - image too blurry/occluded to identify food
 
 A plated meal, ingredient, fruit/vegetable, snack, dessert, beverage, or identifiable packaged food may be isFood=true.
-
 Do not invent food when uncertain. If confidence that analyzable food is present is below 80, return isFood=false.
 
-Only when isFood=true:
-- identify visible foods conservatively
-- estimate portions from visual evidence only
-- estimate calories and protein/carbohydrate/fat as approximate values
-- use null for values that cannot reasonably be estimated
-- do not make medical claims
+CRITICAL NUMERIC SAFETY RULE:
+- NEVER estimate, calculate, output or infer calories, protein, carbohydrate, fat, fiber, sugar, sodium, salt, vitamins or minerals.
+- NEVER perform nutrition arithmetic.
+- Nutrition facts will be resolved from trusted data sources by deterministic server code after your response.
 
-Return ONLY one JSON object with exactly this shape:
+Only when isFood=true:
+- give a concise Turkish dish/food name
+- estimate the total visible portion in grams when reasonably possible
+- describe the portion in Turkish
+- decompose the dish into plausible ingredients
+- estimate grams for each ingredient from visual evidence when possible
+- set confidence 0..100 for every ingredient
+- set optional=true when an ingredient is plausible but cannot be confirmed (for example oil amount, meat/sucuk, hidden sauce)
+- do not present uncertain ingredients as facts
+
+Return ONLY one JSON object with this shape:
 {
   "isFood": true,
   "confidence": 0,
   "reason": "short Turkish explanation",
-  "items": [
+  "dishName": "Turkish dish name",
+  "estimatedPortion": "for example: yaklaşık 1 kase",
+  "estimatedGrams": 250,
+  "ingredients": [
     {
-      "name": "Turkish food name",
-      "estimatedPortion": "Turkish approximate portion",
-      "calories": 0,
-      "proteinG": 0,
-      "carbsG": 0,
-      "fatG": 0
+      "name": "kuru fasulye",
+      "estimatedGrams": 180,
+      "confidence": 95,
+      "optional": false
+    },
+    {
+      "name": "zeytinyağı",
+      "estimatedGrams": 10,
+      "confidence": 45,
+      "optional": true
     }
   ],
-  "totals": {
-    "calories": 0,
-    "proteinG": 0,
-    "carbsG": 0,
-    "fatG": 0
-  },
-  "disclaimer": "Görselden yapılan besin ve porsiyon tahminleri yaklaşık değerlerdir."
+  "disclaimer": "Tarif, porsiyon ve özellikle kullanılan yağ miktarı görüntüden kesin olarak belirlenemeyebilir."
 }
 
-When isFood=false, items MUST be [] and totals MUST be null.
+When isFood=false: dishName=null, estimatedPortion=null, estimatedGrams=null and ingredients=[].
 `;

@@ -20,11 +20,6 @@ const foodScanLimiter = rateLimit({
   },
 });
 
-/**
- * POST /api/food-scan/analyze
- * The image is processed in memory and is not persisted by this module. Current
- * mandatory consent is checked before multipart parsing or provider work starts.
- */
 foodScanRouter.post(
   "/analyze",
   authenticate,
@@ -32,4 +27,12 @@ foodScanRouter.post(
   foodScanLimiter,
   uploadFoodImage(),
   foodScanController.analyze,
+);
+
+/** Stateless deterministic recalculation after the user corrects recipe ingredients. */
+foodScanRouter.post(
+  "/recalculate",
+  authenticate,
+  requireConsent,
+  foodScanController.recalculate,
 );

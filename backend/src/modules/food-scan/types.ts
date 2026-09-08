@@ -1,31 +1,51 @@
-export interface FoodScanItem {
+import type { NutrientValues, NutritionProviderId } from "../nutrition-data/nutrition-data.types";
+
+export interface FoodVisionIngredientCandidate {
   name: string;
-  /** Human-readable visual portion estimate, e.g. "yaklaşık 1 kase". */
-  estimatedPortion: string;
-  calories: number | null;
-  proteinG: number | null;
-  carbsG: number | null;
-  fatG: number | null;
+  estimatedGrams: number | null;
+  /** 0..100 visual confidence for this ingredient being present. */
+  confidence: number;
+  /** True when the ingredient is plausible but not visually certain. */
+  optional: boolean;
 }
 
-export interface FoodScanNutritionTotals {
-  calories: number | null;
-  proteinG: number | null;
-  carbsG: number | null;
-  fatG: number | null;
-}
-
-/**
- * Provider-agnostic result of food-image classification + visual estimation.
- * Values are estimates only; the user must be able to review them before any
- * meal-log persistence is attempted.
- */
-export interface FoodScanResult {
+/** Provider output: recognition/portion decomposition only. No nutrient numbers. */
+export interface FoodVisionResult {
   isFood: boolean;
-  /** 0..100 confidence that the image contains analyzable food/beverage. */
   confidence: number;
   reason: string;
-  items: FoodScanItem[];
-  totals: FoodScanNutritionTotals | null;
+  dishName: string | null;
+  estimatedPortion: string | null;
+  estimatedGrams: number | null;
+  ingredients: FoodVisionIngredientCandidate[];
   disclaimer: string;
+}
+
+export interface ResolvedFoodScanIngredient extends FoodVisionIngredientCandidate {
+  included: boolean;
+  matchedFood: {
+    externalId: string;
+    provider: NutritionProviderId;
+    displayNameTr: string;
+    confidence: number;
+  } | null;
+  nutrients: NutrientValues | null;
+}
+
+export interface FoodScanResult {
+  isFood: boolean;
+  confidence: number;
+  reason: string;
+  dishName: string;
+  estimatedPortion: string;
+  estimatedGrams: number | null;
+  ingredients: ResolvedFoodScanIngredient[];
+  totals: NutrientValues;
+  disclaimer: string;
+}
+
+export interface FoodScanIngredientCorrection {
+  name: string;
+  grams: number;
+  included: boolean;
 }

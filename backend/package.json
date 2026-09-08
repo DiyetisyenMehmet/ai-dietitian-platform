@@ -4,14 +4,12 @@
   "private": true,
   "description": "Backend for Diewish — personal health & nutrition platform (Modular Monolith, DDD-ready).",
   "main": "dist/index.js",
-  "engines": {
-    "node": ">=20"
-  },
+  "engines": { "node": ">=20" },
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "test": "node --import tsx --test src/lib/storage.test.ts src/modules/nutrition-data/barcode.test.ts src/modules/nutrition-data/nutrition-calculator.test.ts src/modules/nutrition-data/normalization.test.ts src/modules/nutrition-data/nutrition-data.service.test.ts src/modules/nutrition-plan/calculations/meal-timing.test.ts src/modules/nutrition-plan/work-schedule-policy.test.ts src/modules/nutrition-plan/nutrition-plan-safety.test.ts src/modules/nutrition-plan/meal-generator/nutrition-target-validator.test.ts src/modules/nutrition-plan/nutrition-plan-realism.test.ts src/modules/tracking/weight-check-in.test.ts",
+    "test": "node --import tsx --test src/lib/storage.test.ts src/modules/food-scan/food-scan.service.test.ts src/modules/nutrition-data/barcode.test.ts src/modules/nutrition-data/nutrition-calculator.test.ts src/modules/nutrition-data/normalization.test.ts src/modules/nutrition-data/nutrition-data.service.test.ts src/modules/nutrition-plan/calculations/meal-timing.test.ts src/modules/nutrition-plan/work-schedule-policy.test.ts src/modules/nutrition-plan/nutrition-plan-safety.test.ts src/modules/nutrition-plan/meal-generator/nutrition-target-validator.test.ts src/modules/nutrition-plan/nutrition-plan-realism.test.ts src/modules/tracking/weight-check-in.test.ts",
     "test:integration": "node --import tsx --test src/integration/auth-onboarding.integration.test.ts src/integration/ai-chat.integration.test.ts",
     "type-check": "tsc --noEmit",
     "lint": "eslint . --max-warnings 0",
@@ -24,9 +22,7 @@
     "prisma:studio": "prisma studio",
     "start:migrate": "prisma migrate deploy && node dist/index.js"
   },
-  "prisma": {
-    "schema": "prisma/schema.prisma"
-  },
+  "prisma": { "schema": "prisma/schema.prisma" },
   "dependencies": {
     "@prisma/client": "6.2.1",
     "bcryptjs": "^2.4.3",
@@ -68,7 +64,5 @@
     "typescript": "5.7.3",
     "typescript-eslint": "8.21.0"
   },
-  "overrides": {
-    "qs": "6.16.0"
-  }
+  "overrides": { "qs": "6.16.0" }
 }

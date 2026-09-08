@@ -2,9 +2,9 @@ import { env } from "../../config/env";
 import { logger } from "../../lib/logger";
 import { ApiError } from "../../utils/api-error";
 import { FOOD_SCAN_SYSTEM_PROMPT } from "./constants";
-import type { FoodScanItem, FoodScanNutritionTotals, FoodScanResult } from "./types";
+import type { FoodVisionIngredientCandidate, FoodVisionResult } from "./types";
 
-const MAX_TOKENS = 900;
+const MAX_TOKENS = 1_000;
 const MAX_ATTEMPTS = 2;
 
 type ContentPart =
@@ -84,39 +84,30 @@ function parseJson(raw: string): unknown {
   }
 }
 
-function finiteOrNull(value: unknown): number | null {
+function finitePositiveOrNull(value: unknown, max: number): number | null {
   if (value === null || value === undefined || value === "") return null;
   const n = Number(value);
-  return Number.isFinite(n) && n >= 0 ? n : null;
+  return Number.isFinite(n) && n > 0 && n <= max ? Math.round(n * 10) / 10 : null;
 }
 
-function normalizeItem(value: unknown): FoodScanItem | null {
+function confidence(value: unknown): number {
+  return Math.max(0, Math.min(100, Number(value) || 0));
+}
+
+function normalizeIngredient(value: unknown): FoodVisionIngredientCandidate | null {
   if (!value || typeof value !== "object") return null;
-  const item = value as Record<string, unknown>;
-  const name = String(item.name ?? "").trim();
+  const ingredient = value as Record<string, unknown>;
+  const name = String(ingredient.name ?? "").trim();
   if (!name) return null;
   return {
     name: name.slice(0, 120),
-    estimatedPortion: String(item.estimatedPortion ?? "Yaklaşık porsiyon").trim().slice(0, 120),
-    calories: finiteOrNull(item.calories),
-    proteinG: finiteOrNull(item.proteinG),
-    carbsG: finiteOrNull(item.carbsG),
-    fatG: finiteOrNull(item.fatG),
+    estimatedGrams: finitePositiveOrNull(ingredient.estimatedGrams, 5_000),
+    confidence: confidence(ingredient.confidence),
+    optional: ingredient.optional === true,
   };
 }
 
-function normalizeTotals(value: unknown): FoodScanNutritionTotals | null {
-  if (!value || typeof value !== "object") return null;
-  const totals = value as Record<string, unknown>;
-  return {
-    calories: finiteOrNull(totals.calories),
-    proteinG: finiteOrNull(totals.proteinG),
-    carbsG: finiteOrNull(totals.carbsG),
-    fatG: finiteOrNull(totals.fatG),
-  };
-}
-
-function normalizeResult(raw: string): FoodScanResult {
+function normalizeResult(raw: string): FoodVisionResult {
   const parsed = parseJson(raw);
   if (!parsed || typeof parsed !== "object") {
     throw new ApiError(502, "Besin analiz servisi geçersiz yanıt verdi.", {
@@ -126,22 +117,29 @@ function normalizeResult(raw: string): FoodScanResult {
   }
 
   const value = parsed as Record<string, unknown>;
-  const confidence = Math.max(0, Math.min(100, Number(value.confidence) || 0));
   const isFood = value.isFood === true;
-  const items =
-    isFood && Array.isArray(value.items)
-      ? value.items.map(normalizeItem).filter((item): item is FoodScanItem => item !== null).slice(0, 12)
+  const ingredients =
+    isFood && Array.isArray(value.ingredients)
+      ? value.ingredients
+          .map(normalizeIngredient)
+          .filter((item): item is FoodVisionIngredientCandidate => item !== null)
+          .slice(0, 16)
       : [];
+  const dishName = isFood ? String(value.dishName ?? "").trim().slice(0, 120) || null : null;
 
   return {
     isFood,
-    confidence,
+    confidence: confidence(value.confidence),
     reason: String(value.reason ?? "").trim().slice(0, 500),
-    items,
-    totals: isFood ? normalizeTotals(value.totals) : null,
+    dishName,
+    estimatedPortion: isFood
+      ? String(value.estimatedPortion ?? "").trim().slice(0, 120) || null
+      : null,
+    estimatedGrams: isFood ? finitePositiveOrNull(value.estimatedGrams, 5_000) : null,
+    ingredients,
     disclaimer:
       String(value.disclaimer ?? "").trim() ||
-      "Görselden yapılan besin ve porsiyon tahminleri yaklaşık değerlerdir.",
+      "Tarif ve porsiyon görüntüden tahmin edilir; besin değerleri güvenilir veri kaynaklarından hesaplanır.",
   };
 }
 
@@ -160,8 +158,8 @@ async function requestVision(buffer: Buffer, mimeType: string): Promise<string> 
         {
           type: "text",
           text:
-            "Önce görselde gerçekten yenilebilir bir besin, yemek veya içecek bulunup bulunmadığını doğrula. " +
-            "Besin değilse kesinlikle isFood=false döndür. Besinse yalnızca görselden makul biçimde çıkarılabilen besinleri, yaklaşık porsiyonları ve yaklaşık makroları JSON olarak döndür.",
+            "Görseli yalnız yemek/besin tanıma, porsiyon gramı ve muhtemel tarif bileşenleri açısından analiz et. " +
+            "Kalori veya herhangi bir besin değeri üretme. Emin olmadığın malzemeleri optional=true ve düşük confidence ile belirt.",
         },
         { type: "image_url", image_url: { url: dataUrl(buffer, mimeType) } },
       ],
@@ -224,10 +222,10 @@ async function requestVision(buffer: Buffer, mimeType: string): Promise<string> 
   });
 }
 
-/** Uses the configured provider while keeping the food-scan service vendor-neutral. */
+/** Vision is vendor-neutral and returns no nutrition facts by design. */
 export async function analyzeFoodImageWithProvider(
   buffer: Buffer,
   mimeType: string,
-): Promise<FoodScanResult> {
+): Promise<FoodVisionResult> {
   return normalizeResult(await requestVision(buffer, mimeType));
 }
