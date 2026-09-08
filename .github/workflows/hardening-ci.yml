@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - fix/production-hardening
+      - feature/android-native-scanner
   workflow_dispatch:
 
 permissions:
