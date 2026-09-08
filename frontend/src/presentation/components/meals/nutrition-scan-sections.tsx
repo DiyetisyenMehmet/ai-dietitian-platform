@@ -12,6 +12,12 @@ function value(value: number | null, unit: string): string {
   return value === null ? "Bilgi yok" : `${Math.round(value * 10) / 10} ${unit}`;
 }
 
+function providerLabel(provider: NutritionProvenanceDto["provider"]): string {
+  if (provider === "OPEN_FOOD_FACTS") return "Open Food Facts";
+  if (provider === "USDA") return "USDA FoodData Central";
+  return "Diewish";
+}
+
 const NUTRIENTS: readonly [keyof NutrientValuesDto, string, string][] = [
   ["energyKcal", "Enerji", "kcal"],
   ["proteinG", "Protein", "g"],
@@ -128,7 +134,7 @@ export function NutritionProvenanceSection({ sources }: { sources: NutritionProv
           <div key={`${source.provider}-${source.externalId}`} className="rounded-xl border p-3 text-xs text-muted-foreground">
             <div className="flex items-center gap-2 font-semibold text-foreground">
               <Database className="size-4" />
-              <span>{source.provider}</span>
+              <span>{providerLabel(source.provider)}</span>
               {source.stale && <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-amber-700">önbellek</span>}
             </div>
             <p className="mt-1">Kaynak kimliği: {source.externalId}</p>
