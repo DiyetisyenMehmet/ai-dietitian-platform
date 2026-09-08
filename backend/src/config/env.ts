@@ -60,6 +60,8 @@ const envSchema = z.object({
   AI_TEMPERATURE: z.coerce.number().min(0).max(2).default(0.2),
   AI_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(5_000).max(180_000).default(60_000),
   AI_PROVIDER: z.enum(["openai", "abacus", "vertex"]).optional(),
+  // Optional on Cloud Run: the food-vision adapter can resolve the project ID
+  // from the metadata server. Keep this explicit for local/non-GCP runtimes.
   GOOGLE_CLOUD_PROJECT: z.string().default(""),
   VERTEX_AI_LOCATION: z.string().default("global"),
   VERTEX_AI_MODEL: z.string().default("gemini-3.5-flash"),
@@ -112,10 +114,6 @@ function loadEnv(): Env {
   }
   if (parsed.data.STORAGE_PROVIDER === "gcs" && !parsed.data.STORAGE_GCS_BUCKET.trim()) {
     console.error("❌ Invalid environment configuration:\n  - STORAGE_GCS_BUCKET: required when STORAGE_PROVIDER=gcs");
-    process.exit(1);
-  }
-  if (parsed.data.AI_PROVIDER === "vertex" && !parsed.data.GOOGLE_CLOUD_PROJECT.trim()) {
-    console.error("❌ Invalid environment configuration:\n  - GOOGLE_CLOUD_PROJECT: required when AI_PROVIDER=vertex");
     process.exit(1);
   }
   return parsed.data;
