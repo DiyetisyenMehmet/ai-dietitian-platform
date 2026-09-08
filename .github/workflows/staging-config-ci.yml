@@ -35,12 +35,21 @@ jobs:
           grep -q 'DIRECT_DATABASE_SECRET_NAME: diewish-staging-direct-database-url' "$workflow"
           grep -q 'Diewish Staging Neon DATABASE_URL' "$script"
 
-          # The bootstrap builds the OIDC condition from a fixed STAGING_REF.
-          # Validate both the fixed value and that assertion.ref actually binds
-          # to that variable instead of relying on a brittle rendered literal.
+          # WIF trust is pinned to immutable GitHub IDs and the exact staging ref.
+          grep -q 'GITHUB_REPOSITORY_ID="1295514788"' "$script"
+          grep -q 'GITHUB_REPOSITORY_OWNER_ID="301813832"' "$script"
           grep -q 'STAGING_REF="refs/heads/feature/staging-preview"' "$script"
+          grep -Fq "assertion.repository_id=='\${GITHUB_REPOSITORY_ID}'" "$script"
+          grep -Fq "assertion.repository_owner_id=='\${GITHUB_REPOSITORY_OWNER_ID}'" "$script"
           grep -Fq "assertion.ref=='\${STAGING_REF}'" "$script"
-          grep -q "assertion.repository=='\${GITHUB_REPOSITORY}'" "$script"
+          grep -q 'attribute.repository_id=assertion.repository_id' "$script"
+          grep -q 'attribute.repository_owner_id=assertion.repository_owner_id' "$script"
+          grep -Fq 'attribute.repository_id/${GITHUB_REPOSITORY_ID}' "$script"
+
+          if grep -Fq "assertion.repository=='\${GITHUB_REPOSITORY}'" "$script"; then
+            echo 'WIF trust must not rely on the mutable GitHub repository name.' >&2
+            exit 1
+          fi
 
           # Cloud Run assigns separate service hosts. Browser/API auth must still
           # be first-party: browser requests /api on the frontend origin, Next.js
