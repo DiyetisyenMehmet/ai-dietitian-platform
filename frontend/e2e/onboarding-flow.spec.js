@@ -3,15 +3,6 @@ const { test, expect } = require("@playwright/test");
 const WEB_BASE_URL = process.env.E2E_WEB_BASE_URL || "http://127.0.0.1:3000";
 const API_BASE_URL = process.env.E2E_API_BASE_URL || "http://127.0.0.1:4000/api";
 
-/**
- * Full-stack browser smoke for the first-run health-data path.
- *
- * The backend API already has direct integration tests. This browser layer is
- * deliberately focused on what those tests cannot prove: a real user can create
- * an account, grant only the three affirmative consents, complete every
- * onboarding step, persist a night-shift rhythm, then record a same-day weigh-in
- * without replacing the immutable onboarding baseline used by Progress.
- */
 test("register -> consent -> onboarding -> same-day weigh-in preserves baseline", async ({
   page,
   request,
@@ -31,8 +22,6 @@ test("register -> consent -> onboarding -> same-day weigh-in preserves baseline"
   await expect(page).toHaveURL(/\/consent$/);
   await expect(page.getByRole("heading", { name: "Bilgilendirme ve onaylar" })).toBeVisible();
 
-  // KVKK aydınlatması is informational, not an affirmative permission. The UI
-  // must expose exactly the three mandatory consent checkboxes.
   const consentCheckboxes = page.getByRole("checkbox");
   await expect(consentCheckboxes).toHaveCount(3);
   for (let index = 0; index < 3; index += 1) {
@@ -77,15 +66,39 @@ test("register -> consent -> onboarding -> same-day weigh-in preserves baseline"
 
   await expect(page).toHaveURL(/\/dashboard$/, { timeout: 15_000 });
 
-  const session = await page.evaluate(() => {
-    const raw = window.localStorage.getItem("diewish.auth.session");
-    return raw ? JSON.parse(raw) : null;
-  });
-  expect(session).toBeTruthy();
-  expect(session.user.onboardingCompleted).toBe(true);
-  expect(session.tokens.accessToken).toBeTruthy();
+  const legacySession = await page.evaluate(() =>
+    window.localStorage.getItem("diewish.auth.session"),
+  );
+  expect(legacySession).toBeNull();
 
-  const authHeaders = { authorization: `Bearer ${session.tokens.accessToken}` };
+  const cookies = await page.context().cookies(API_BASE_URL);
+  const refreshCookie = cookies.find((cookie) => cookie.name === "diewish_refresh");
+  expect(refreshCookie).toBeTruthy();
+  expect(refreshCookie.httpOnly).toBe(true);
+  expect(refreshCookie.path).toBe("/api/auth");
+  expect(refreshCookie.sameSite).toBe("Lax");
+
+  // Reload destroys the in-memory access token. Remaining on the dashboard proves
+  // the app rehydrates a fresh access token from the HttpOnly refresh cookie.
+  await page.reload();
+  await expect(page).toHaveURL(/\/dashboard$/, { timeout: 15_000 });
+  const persistedAfterReload = await page.evaluate(() =>
+    window.localStorage.getItem("diewish.auth.session"),
+  );
+  expect(persistedAfterReload).toBeNull();
+
+  // Use an independent API login only for direct backend state assertions. The
+  // JSON response contains the short-lived access token but no refresh token.
+  const loginResponse = await request.post(`${API_BASE_URL}/auth/login`, {
+    data: { email, password },
+  });
+  expect(loginResponse.status()).toBe(200);
+  const loginBody = await loginResponse.json();
+  expect(loginBody.success).toBe(true);
+  expect(loginBody.data.tokens.accessToken).toBeTruthy();
+  expect(loginBody.data.tokens.refreshToken).toBeUndefined();
+  const authHeaders = { authorization: `Bearer ${loginBody.data.tokens.accessToken}` };
+
   const profileResponse = await request.get(`${API_BASE_URL}/onboarding`, {
     headers: authHeaders,
   });
@@ -99,9 +112,6 @@ test("register -> consent -> onboarding -> same-day weigh-in preserves baseline"
   expect(profileBody.data.profile.currentWeightKg).toBe(70);
   expect(profileBody.data.profile.targetWeightKg).toBe(65);
 
-  // The onboarding transaction creates an immutable 70 kg baseline. A second
-  // weigh-in on the same calendar day must remain a separate measurement, update
-  // currentWeightKg, and leave Progress calculating from the original 70 kg.
   await page.goto(`${WEB_BASE_URL}/progress`);
   await expect(page.getByText("Kilo İlerlemen")).toBeVisible();
   await expect(page.getByText("70.0", { exact: true }).first()).toBeVisible();
