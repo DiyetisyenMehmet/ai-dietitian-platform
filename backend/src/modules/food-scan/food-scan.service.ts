@@ -7,6 +7,7 @@ import { nutritionDataService } from "../nutrition-data/nutrition-data.service";
 import { selectBestNutritionMatch, type NutritionMatch } from "../nutrition-data/nutrition-match";
 import { EMPTY_NUTRIENTS, type CanonicalFood, type NutrientValues } from "../nutrition-data/nutrition-data.types";
 import { FOOD_IMAGE_MIN_CONFIDENCE, FOOD_IMAGE_REJECTION_MESSAGE } from "./constants";
+import { buildFoodScanDisclaimer } from "./food-scan-disclaimer";
 import { analyzeFoodImageWithProvider } from "./food-vision.provider";
 import type {
   FoodScanIngredientCorrection,
@@ -310,9 +311,7 @@ export class FoodScanService {
       estimatedGrams: vision.estimatedGrams,
       ingredients,
       totals: deterministicTotals(ingredients),
-      disclaimer:
-        `${edibleWeightGuarded ? "Görsel açıklaması yenmeyen kısımları ağırlığa dahil ettiği için otomatik gram ve besin hesabı yapılmadı; yenilebilir miktarı Malzemeleri Düzenle alanından girebilirsiniz. " : ""}` +
-        "Bu değerler tahminidir. Tarif, porsiyon ve özellikle kullanılan yağ miktarına göre değişebilir. Kalori ve besin değerleri AI tarafından üretilmez; eşleşen güvenilir besin verilerinden deterministik olarak hesaplanır. Görselden doğrulanamayan isteğe bağlı malzemeler, siz dahil etmedikçe toplama eklenmez.",
+      disclaimer: buildFoodScanDisclaimer(vision, edibleWeightGuarded),
     };
   }
 
