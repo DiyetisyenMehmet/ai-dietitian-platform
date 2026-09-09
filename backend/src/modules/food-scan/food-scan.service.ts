@@ -4,6 +4,7 @@ import { logger } from "../../lib/logger";
 import { ApiError } from "../../utils/api-error";
 import { calculatePortion } from "../nutrition-data/nutrition-calculator";
 import { nutritionDataService } from "../nutrition-data/nutrition-data.service";
+import { selectBestNutritionMatch, type NutritionMatch } from "../nutrition-data/nutrition-match";
 import { EMPTY_NUTRIENTS, type CanonicalFood, type NutrientValues } from "../nutrition-data/nutrition-data.types";
 import { FOOD_IMAGE_MIN_CONFIDENCE, FOOD_IMAGE_REJECTION_MESSAGE } from "./constants";
 import { analyzeFoodImageWithProvider } from "./food-vision.provider";
@@ -17,6 +18,7 @@ import type {
 
 const MAX_INGREDIENTS = 20;
 const MAX_SERVING_GRAMS = 5_000;
+const NUTRITION_MATCH_CANDIDATES = 10;
 
 export interface NutritionLookupPort {
   search(query: string, limit?: number): Promise<CanonicalFood[]>;
@@ -64,12 +66,17 @@ function includedByDefault(candidate: FoodVisionIngredientCandidate): boolean {
   return !candidate.optional || candidate.confidence >= 70;
 }
 
-async function bestFoodMatch(service: NutritionLookupPort, name: string): Promise<CanonicalFood | null> {
+async function bestFoodMatch(service: NutritionLookupPort, name: string): Promise<NutritionMatch | null> {
   try {
-    return (await service.search(name, 5))[0] ?? null;
+    const candidates = await service.search(name, NUTRITION_MATCH_CANDIDATES);
+    return selectBestNutritionMatch(name, candidates);
   } catch {
     return null;
   }
+}
+
+function boundedMatchConfidence(match: NutritionMatch): number {
+  return Math.round(Math.min(match.relevance, match.food.provenance.confidence) * 100) / 100;
 }
 
 async function resolveIngredient(
@@ -77,18 +84,21 @@ async function resolveIngredient(
   candidate: FoodVisionIngredientCandidate,
   included = includedByDefault(candidate),
 ): Promise<ResolvedFoodScanIngredient> {
-  const food = await bestFoodMatch(service, candidate.name);
+  const match = await bestFoodMatch(service, candidate.name);
+  const food = match?.food ?? null;
   const grams = candidate.estimatedGrams;
   const nutrients = food && grams && included ? calculatePortion(food.nutrientsPer100g, grams).nutrients : null;
   return {
     ...candidate,
     included,
-    matchedFood: food
+    matchedFood: food && match
       ? {
           externalId: food.externalId,
           provider: food.provider,
           displayNameTr: food.displayNameTr,
-          confidence: food.provenance.confidence,
+          // This is match confidence, bounded by provider provenance confidence.
+          // It must never be confused with the AI's visual ingredient confidence.
+          confidence: boundedMatchConfidence(match),
         }
       : null,
     nutrients,
@@ -117,8 +127,9 @@ async function fallbackDishIngredient(
   estimatedGrams: number | null,
 ): Promise<ResolvedFoodScanIngredient | null> {
   if (!estimatedGrams) return null;
-  const food = await bestFoodMatch(service, dishName);
-  if (!food) return null;
+  const match = await bestFoodMatch(service, dishName);
+  const food = match?.food ?? null;
+  if (!food || !match) return null;
   return {
     name: dishName,
     estimatedGrams,
@@ -129,7 +140,7 @@ async function fallbackDishIngredient(
       externalId: food.externalId,
       provider: food.provider,
       displayNameTr: food.displayNameTr,
-      confidence: food.provenance.confidence,
+      confidence: boundedMatchConfidence(match),
     },
     nutrients: calculatePortion(food.nutrientsPer100g, estimatedGrams).nutrients,
   };
@@ -210,6 +221,7 @@ export class FoodScanService {
         confidenceBucket: vision.confidence >= 85 ? "HIGH" : vision.confidence >= 65 ? "MEDIUM" : "LOW",
         ingredientCount: ingredients.length,
         matchedIngredientCount: ingredients.filter((item) => item.matchedFood).length,
+        unmatchedIngredientCount: ingredients.filter((item) => !item.matchedFood).length,
       },
       "Food photo scan completed",
     );
@@ -260,6 +272,7 @@ export class FoodScanService {
       {
         ingredientCount: scaledCorrections.length,
         includedIngredientCount: scaledCorrections.filter((item) => item.included).length,
+        matchedIngredientCount: ingredients.filter((item) => item.matchedFood).length,
         targetGramsUsed: targetGrams !== undefined,
       },
       "Food photo scan corrections recalculated",
