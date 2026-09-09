@@ -58,6 +58,7 @@ test("matches common Turkish ingredients through deterministic English aliases",
     ["zeytinyağı", "Oil, olive, salad or cooking"],
     ["tuz", "Salt, table"],
     ["baharatlar", "Spices, mixed"],
+    ["karpuz", "Watermelon, raw"],
   ];
 
   for (const [query, candidate] of cases) {
