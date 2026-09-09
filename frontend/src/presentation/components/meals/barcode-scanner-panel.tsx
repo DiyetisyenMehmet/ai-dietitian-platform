@@ -107,6 +107,7 @@ export function BarcodeScannerPanel() {
     timerRef.current = null;
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
+    if (videoRef.current) videoRef.current.srcObject = null;
     setCameraActive(false);
   }, []);
   React.useEffect(() => stopCamera, [stopCamera]);
@@ -193,6 +194,8 @@ export function BarcodeScannerPanel() {
   }, [lookup]);
 
   const startCamera = React.useCallback(async () => {
+    if (cameraActive || nativeScanning || loading) return;
+
     const nativeScanner = nativeScannerBridge();
     if (nativeScanner) {
       try {
@@ -213,38 +216,56 @@ export function BarcodeScannerPanel() {
     }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: "environment" } },
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
         audio: false,
       });
-      streamRef.current = stream;
-      setCameraActive(true);
       const video = videoRef.current;
-      if (!video) return;
+      if (!video) {
+        stream.getTracks().forEach((track) => track.stop());
+        throw new Error("camera preview unavailable");
+      }
+
+      streamRef.current = stream;
       video.srcObject = stream;
+      setCameraActive(true);
       await video.play();
       scanningRef.current = true;
       const detector = new Detector({ formats: ["ean_13", "ean_8", "upc_a", "upc_e"] });
       const frame = async () => {
-        if (!scanningRef.current || !videoRef.current) return;
-        try {
-          const hits = await detector.detect(videoRef.current);
-          const code = hits.find((hit) => /^(?:\d{8}|\d{12}|\d{13})$/.test(hit.rawValue))?.rawValue;
-          if (code) {
-            stopCamera();
-            void lookup(code);
-            return;
+        const current = videoRef.current;
+        if (!scanningRef.current || !current) return;
+        if (current.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+          try {
+            const hits = await detector.detect(current);
+            const code = hits
+              .map((hit) => hit.rawValue.replace(/\D/g, ""))
+              .find((value) => /^(?:\d{8}|\d{12}|\d{13})$/.test(value));
+            if (code) {
+              stopCamera();
+              void lookup(code);
+              return;
+            }
+          } catch {
+            // A transient frame decode error is expected while autofocus/exposure settles.
           }
-        } catch {
-          // A transient frame decode error is expected while the camera moves.
         }
-        timerRef.current = window.setTimeout(() => void frame(), 250);
+        timerRef.current = window.setTimeout(() => void frame(), 200);
       };
       void frame();
-    } catch {
+    } catch (error) {
       stopCamera();
-      toast.error("Kamera açılamadı. İzni kontrol edebilir veya barkodu elle girebilirsin.");
+      const denied = error instanceof DOMException && error.name === "NotAllowedError";
+      toast.error(
+        denied
+          ? "Barkod taramak için kamera izni gerekiyor."
+          : "Kamera açılamadı. İzni kontrol edebilir veya barkodu elle girebilirsin.",
+      );
     }
-  }, [lookup, stopCamera]);
+  }, [cameraActive, loading, lookup, nativeScanning, stopCamera]);
 
   const updatePortion = React.useCallback(async () => {
     if (!food?.barcode || !Number.isFinite(grams) || grams <= 0) return;
@@ -290,14 +311,19 @@ export function BarcodeScannerPanel() {
               Barkod cihazında çözülür; sunucuya kamera görüntüsü değil yalnız barkod numarası gönderilir.
             </p>
           </div>
-          {cameraActive && (
-            <div className="overflow-hidden rounded-2xl border bg-black">
-              <video ref={videoRef} playsInline muted className="aspect-video w-full object-cover" />
-            </div>
-          )}
+          <div className={cameraActive ? "overflow-hidden rounded-2xl border bg-black" : "hidden"}>
+            <video
+              ref={videoRef}
+              playsInline
+              muted
+              autoPlay
+              className="aspect-video w-full object-cover"
+              aria-label="Barkod kamera önizlemesi"
+            />
+          </div>
           <div className="grid grid-cols-2 gap-2">
             <Button onClick={() => void startCamera()} disabled={cameraActive || nativeScanning || loading}>
-              <Camera /> {nativeScanning ? "Barkod taranıyor…" : "Kamerayı aç"}
+              <Camera /> {nativeScanning ? "Barkod taranıyor…" : cameraActive ? "Kamera açık" : "Kamerayı aç"}
             </Button>
             <Button variant="outline" onClick={stopCamera} disabled={!cameraActive}>
               <Square /> Durdur
