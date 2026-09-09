@@ -131,4 +131,4 @@ A successful staging test does not deploy production. Production promotion remai
 
 The deploy marker commit is documentation-only and exists solely to trigger the isolated staging workflow after exact-SHA CI has passed.
 
-Current validation target: watermelon source matching and edible-only portion-weight safety for photo scans.
+Current validation target: contextual single-food versus mixed-dish uncertainty copy and hardened vision reasoning policy.
