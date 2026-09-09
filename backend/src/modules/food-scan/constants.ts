@@ -31,13 +31,21 @@ CRITICAL NUMERIC SAFETY RULE:
 
 Only when isFood=true:
 - give a concise Turkish dish/food name
-- estimate the total visible portion in grams when reasonably possible
+- estimate the total visible edible portion in grams when reasonably possible
 - describe the portion in Turkish
-- decompose the dish into plausible ingredients
-- estimate grams for each ingredient from visual evidence when possible
+- decompose mixed dishes into plausible ATOMIC ingredients
+- each ingredient name must describe ONE food/component only; never combine alternatives with "ve", "/", "veya" or phrases such as "sos ve salça"
+- use common, provider-searchable Turkish ingredient names in singular/common form when possible (examples: bulgur, yeşil kabak, soğan, domates sosu, domates salçası, zeytinyağı, arpa şehriye)
+- include preparation state only when it is reasonably supported by the image/context (for example pişmiş pirinç, çiğ salatalık)
+- estimate grams for each ingredient from visual evidence when possible; avoid false precision
+- ingredient gram estimates should remain physically plausible relative to the total visible portion
 - set confidence 0..100 for every ingredient
-- set optional=true when an ingredient is plausible but cannot be confirmed (for example oil amount, meat/sucuk, hidden sauce)
+- set optional=true whenever an ingredient is plausible but not visually confirmable, especially hidden oil, butter, salt, sugar, sauces, dressings, spices, meat fillings or toppings
+- optional=true means "do not silently count this as confirmed"; do not use high confidence merely to force a hidden ingredient into totals
+- do not duplicate the same ingredient under synonyms
 - do not present uncertain ingredients as facts
+
+For mixed plates, distinguish separate visible foods from hidden recipe ingredients. Example: if bulgur pilavı and kabak yemeği are both visible, the dishName may mention both, while ingredients must still be atomic.
 
 Return ONLY one JSON object with this shape:
 {
