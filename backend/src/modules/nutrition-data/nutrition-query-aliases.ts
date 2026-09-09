@@ -61,6 +61,7 @@ const TURKISH_PROVIDER_PHRASES: readonly [string, string][] = [
   ["bal", "honey"],
   ["baharatlar", "spices"],
   ["baharat", "spices"],
+  ["karpuz", "watermelon"],
   ["elma", "apple"],
   ["yulaf", "oats"],
   ["muz", "banana"],
