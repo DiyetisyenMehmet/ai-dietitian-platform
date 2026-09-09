@@ -31,6 +31,15 @@ const PREPARATION_WORDS = new Set([
   "firinda",
 ]);
 
+/**
+ * USDA does not consistently index Turkish pasta shapes as their exact English
+ * subtype. These modifiers may safely fall back to the generic pasta record;
+ * the displayed provenance still exposes the generic USDA food that was used.
+ * Do not add nutritionally meaningful modifiers (for example "chicken" or
+ * "wholegrain") here.
+ */
+const SAFE_GENERIC_SUBTYPE_WORDS = new Set(["orzo", "vermicelli"]);
+
 function stem(token: string): string {
   if (token.length > 4 && token.endsWith("ies")) return `${token.slice(0, -3)}y`;
   if (token.length > 4 && token.endsWith("es")) return token.slice(0, -2);
@@ -46,7 +55,9 @@ function tokens(value: string): string[] {
 }
 
 function coreTokens(value: string): string[] {
-  const result = tokens(value).filter((token) => !PREPARATION_WORDS.has(token));
+  const result = tokens(value).filter(
+    (token) => !PREPARATION_WORDS.has(token) && !SAFE_GENERIC_SUBTYPE_WORDS.has(token),
+  );
   return result.length > 0 ? [...new Set(result)] : [...new Set(tokens(value))];
 }
 
