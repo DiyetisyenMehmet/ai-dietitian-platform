@@ -1,13 +1,26 @@
 steps:
+  - name: gcr.io/cloud-builders/git
+    entrypoint: sh
+    args:
+      - -c
+      - |
+        set -eu
+        git init /workspace/repo
+        cd /workspace/repo
+        git remote add origin https://github.com/DiyetisyenMehmet/ai-dietitian-platform.git
+        git fetch --depth=1 origin "${_GIT_SHA}"
+        git checkout --detach FETCH_HEAD
+        test "$(git rev-parse HEAD)" = "${_GIT_SHA}"
+
   - name: gcr.io/cloud-builders/docker
     args:
       - build
-      - --file=frontend/Dockerfile
+      - --file=/workspace/repo/frontend/Dockerfile
       - --build-arg=NEXT_PUBLIC_API_BASE_URL=${_API_BASE_URL}
       - --build-arg=NEXT_PUBLIC_SITE_URL=${_SITE_URL}
       - --build-arg=DIEWISH_API_PROXY_TARGET=${_API_PROXY_TARGET}
       - --tag=${_IMAGE}
-      - frontend
+      - /workspace/repo/frontend
 images:
   - ${_IMAGE}
 options:
