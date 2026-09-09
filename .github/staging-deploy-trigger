@@ -1,2 +1,3 @@
-staging deploy trigger
-source_sha=b06c16de655d2b2f26dfd94d900ec21d48321f24
+staging web preview trigger
+source_sha=7077eaffba5102a1d2a66d280278e70a4c90d014
+purpose=verify food-scan provider hardening and browser barcode camera
