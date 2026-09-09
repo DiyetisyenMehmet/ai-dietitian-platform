@@ -61,7 +61,6 @@ const TURKISH_PROVIDER_PHRASES: readonly [string, string][] = [
   ["bal", "honey"],
   ["baharatlar", "spices"],
   ["baharat", "spices"],
-  ["salca", "tomato paste"],
   ["elma", "apple"],
   ["yulaf", "oats"],
   ["muz", "banana"],
@@ -102,7 +101,8 @@ function replacePhrase(input: string, from: string, to: string): string {
  * Returns a bounded provider-query sequence. Common Turkish ingredient names
  * are translated deterministically for USDA's English-first corpus, while the
  * original query is retained as a fallback for brands and foods whose names are
- * already indexed verbatim.
+ * already indexed verbatim. Ambiguous standalone terms are intentionally left
+ * untranslated rather than forcing a potentially incorrect nutrient source.
  */
 export function expandNutritionProviderQueries(input: string): string[] {
   const original = input.trim();
