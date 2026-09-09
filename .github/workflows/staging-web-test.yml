@@ -1,0 +1,129 @@
+name: Staging Web Test
+
+on:
+  push:
+    branches:
+      - feature/staging-preview
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: diewish-staging-web-test
+  cancel-in-progress: false
+
+env:
+  PROJECT_ID: project-a2e260c1-839d-4f1d-b90
+  REGION: europe-west1
+  WIF_PROVIDER: projects/730419163638/locations/global/workloadIdentityPools/github-actions/providers/diewish-staging
+  DEPLOY_SERVICE_ACCOUNT: diewish-staging-deployer@project-a2e260c1-839d-4f1d-b90.iam.gserviceaccount.com
+  BACKEND_SERVICE: diewish-backend-staging
+  FRONTEND_SERVICE: diewish-frontend-staging
+
+jobs:
+  expose-web-preview:
+    if: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[web-preview]') }}
+    name: Expose staging web preview
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: staging
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate staging-only target
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$BACKEND_SERVICE" == *-staging ]]
+          [[ "$FRONTEND_SERVICE" == *-staging ]]
+          [[ "$DEPLOY_SERVICE_ACCOUNT" == diewish-staging-deployer@* ]]
+
+      - name: Authenticate to Google Cloud with OIDC
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Expose staging services for browser testing
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          gcloud run services update "$BACKEND_SERVICE" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --no-invoker-iam-check \
+            --quiet
+
+          gcloud run services update "$FRONTEND_SERVICE" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --no-invoker-iam-check \
+            --quiet
+
+          BACKEND_URL="$(gcloud run services describe "$BACKEND_SERVICE" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --format='value(status.url)')"
+          FRONTEND_URL="$(gcloud run services describe "$FRONTEND_SERVICE" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --format='value(status.url)')"
+
+          test -n "$BACKEND_URL"
+          test -n "$FRONTEND_URL"
+
+          echo "BACKEND_URL=$BACKEND_URL" >> "$GITHUB_ENV"
+          echo "FRONTEND_URL=$FRONTEND_URL" >> "$GITHUB_ENV"
+
+      - name: Bind backend to staging frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcloud run services update "$BACKEND_SERVICE" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --update-env-vars "CORS_ORIGIN=${FRONTEND_URL},APP_WEB_URL=${FRONTEND_URL}" \
+            --quiet
+
+      - name: Verify browser web preview
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          retry() {
+            local url="$1"
+            local label="$2"
+            for attempt in {1..30}; do
+              if curl --fail --silent --show-error "$url" >/dev/null; then
+                echo "$label OK: $url"
+                return 0
+              fi
+              sleep 2
+            done
+            echo "$label failed: $url"
+            return 1
+          }
+
+          retry "${BACKEND_URL}/api/health" "backend health"
+          retry "${FRONTEND_URL}/register" "frontend register"
+          retry "${FRONTEND_URL}/api/health" "same-origin proxy"
+
+      - name: Web preview summary
+        shell: bash
+        run: |
+          {
+            echo "## Diewish staging web test"
+            echo ""
+            echo "- Frontend: ${FRONTEND_URL}"
+            echo "- Backend: ${BACKEND_URL}"
+            echo "- Browser API: ${FRONTEND_URL}/api"
+            echo "- APK: intentionally not built in this workflow"
+          } >> "$GITHUB_STEP_SUMMARY"
