@@ -4,12 +4,14 @@ import { ApiError } from "../../utils/api-error";
 import { FOOD_SCAN_SYSTEM_PROMPT } from "./constants";
 import type { FoodVisionIngredientCandidate, FoodVisionResult } from "./types";
 
-const MAX_TOKENS = 1_000;
+const MAX_TOKENS = 2_048;
+const VERTEX_RETRY_MAX_TOKENS = 4_096;
 const MAX_ATTEMPTS = 2;
 const METADATA_BASE_URL = "http://metadata.google.internal/computeMetadata/v1";
 const USER_PROMPT =
   "Görseli yalnız yemek/besin tanıma, porsiyon gramı ve muhtemel tarif bileşenleri açısından analiz et. " +
-  "Kalori veya herhangi bir besin değeri üretme. Emin olmadığın malzemeleri optional=true ve düşük confidence ile belirt.";
+  "Kalori veya herhangi bir besin değeri üretme. En fazla 10 önemli malzeme döndür; reason ve disclaimer kısa olsun. " +
+  "Emin olmadığın malzemeleri optional=true ve düşük confidence ile belirt.";
 
 type ContentPart =
   | { type: "text"; text: string }
@@ -121,6 +123,13 @@ function notConfigured(): ApiError {
   });
 }
 
+function malformedProviderResponse(): ApiError {
+  return new ApiError(502, "Besin analiz servisi geçersiz yanıt verdi.", {
+    code: "FOOD_SCAN_PROVIDER_MALFORMED",
+    isOperational: false,
+  });
+}
+
 function resolveProvider(): ProviderConfig {
   const kind = resolveFoodVisionProviderKind({
     aiProvider: env.AI_PROVIDER,
@@ -163,22 +172,27 @@ function dataUrl(buffer: Buffer, mimeType: string): string {
   return `data:${mimeType};base64,${buffer.toString("base64")}`;
 }
 
-function parseJson(raw: string): unknown {
+/** Never lets provider-generated malformed JSON escape as an unhandled SyntaxError/HTTP 500. */
+export function parseFoodVisionJson(raw: string): unknown {
   const cleaned = raw
     .trim()
     .replace(/^```(?:json)?/i, "")
     .replace(/```$/i, "")
     .trim();
+
   try {
     return JSON.parse(cleaned) as unknown;
   } catch {
     const start = cleaned.indexOf("{");
     const end = cleaned.lastIndexOf("}");
-    if (start !== -1 && end > start) return JSON.parse(cleaned.slice(start, end + 1)) as unknown;
-    throw new ApiError(502, "Besin analiz servisi geçersiz yanıt verdi.", {
-      code: "FOOD_SCAN_PROVIDER_MALFORMED",
-      isOperational: false,
-    });
+    if (start !== -1 && end > start) {
+      try {
+        return JSON.parse(cleaned.slice(start, end + 1)) as unknown;
+      } catch {
+        throw malformedProviderResponse();
+      }
+    }
+    throw malformedProviderResponse();
   }
 }
 
@@ -206,13 +220,8 @@ function normalizeIngredient(value: unknown): FoodVisionIngredientCandidate | nu
 }
 
 function normalizeResult(raw: string): FoodVisionResult {
-  const parsed = parseJson(raw);
-  if (!parsed || typeof parsed !== "object") {
-    throw new ApiError(502, "Besin analiz servisi geçersiz yanıt verdi.", {
-      code: "FOOD_SCAN_PROVIDER_MALFORMED",
-      isOperational: false,
-    });
-  }
+  const parsed = parseFoodVisionJson(raw);
+  if (!parsed || typeof parsed !== "object") throw malformedProviderResponse();
 
   const value = parsed as Record<string, unknown>;
   const isFood = value.isFood === true;
@@ -243,6 +252,10 @@ function normalizeResult(raw: string): FoodVisionResult {
 
 function retryableStatus(status: number): boolean {
   return status === 429 || status >= 500;
+}
+
+function isMalformedProviderError(error: unknown): boolean {
+  return error instanceof ApiError && error.code === "FOOD_SCAN_PROVIDER_MALFORMED";
 }
 
 async function requestOpenAICompatible(
@@ -303,14 +316,38 @@ async function requestOpenAICompatible(
       });
     }
 
-    const body = (await response.json()) as ChatCompletionResponse;
+    let body: ChatCompletionResponse;
+    try {
+      body = (await response.json()) as ChatCompletionResponse;
+    } catch (error) {
+      logger.warn(
+        { err: error, provider: provider.provider, attempt },
+        "Food scan provider returned an invalid response envelope",
+      );
+      if (attempt < MAX_ATTEMPTS) continue;
+      throw malformedProviderResponse();
+    }
+
     const content = body.choices?.[0]?.message?.content;
     if (!content) {
       throw new ApiError(502, "Besin analiz servisinden boş yanıt geldi.", {
         code: "FOOD_SCAN_PROVIDER_EMPTY",
       });
     }
-    return content;
+
+    try {
+      parseFoodVisionJson(content);
+      return content;
+    } catch (error) {
+      if (isMalformedProviderError(error) && attempt < MAX_ATTEMPTS) {
+        logger.warn(
+          { provider: provider.provider, attempt },
+          "Food scan provider returned malformed structured JSON; retrying",
+        );
+        continue;
+      }
+      throw error;
+    }
   }
 
   throw new ApiError(502, "Besin analiz servisine ulaşılamadı.", {
@@ -390,7 +427,17 @@ async function getVertexAccessToken(): Promise<string> {
     });
   }
 
-  const body = (await response.json()) as MetadataTokenResponse;
+  let body: MetadataTokenResponse;
+  try {
+    body = (await response.json()) as MetadataTokenResponse;
+  } catch (error) {
+    logger.warn({ err: error }, "Food scan Vertex service-identity token response was malformed");
+    throw new ApiError(503, "Vertex AI credentials are unavailable.", {
+      code: "VERTEX_CREDENTIALS_UNAVAILABLE",
+      isOperational: false,
+    });
+  }
+
   if (!body.access_token) {
     throw new ApiError(503, "Vertex AI credentials are unavailable.", {
       code: "VERTEX_CREDENTIALS_UNAVAILABLE",
@@ -432,6 +479,7 @@ async function requestVertex(
   const isGemini3 = /^gemini-3(?:[.-]|$)/i.test(provider.model);
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+    const maxOutputTokens = attempt === 1 ? MAX_TOKENS : VERTEX_RETRY_MAX_TOKENS;
     let response: Response;
     try {
       response = await fetch(url, {
@@ -452,7 +500,7 @@ async function requestVertex(
             },
           ],
           generationConfig: {
-            maxOutputTokens: MAX_TOKENS,
+            maxOutputTokens,
             responseMimeType: "application/json",
             responseSchema: FOOD_VISION_VERTEX_RESPONSE_SCHEMA,
             ...(isGemini3 ? { thinkingConfig: { thinkingLevel: "LOW" } } : { temperature: 0.1 }),
@@ -480,10 +528,50 @@ async function requestVertex(
       });
     }
 
-    const body = (await response.json()) as VertexGenerateContentResponse;
+    let body: VertexGenerateContentResponse;
+    try {
+      body = (await response.json()) as VertexGenerateContentResponse;
+    } catch (error) {
+      logger.warn(
+        { err: error, provider: provider.provider, attempt },
+        "Food scan Vertex returned an invalid response envelope",
+      );
+      if (attempt < MAX_ATTEMPTS) continue;
+      throw malformedProviderResponse();
+    }
+
+    const candidate = body.candidates?.[0];
+    const finishReason = candidate?.finishReason;
+    if (finishReason === "MAX_TOKENS") {
+      logger.warn(
+        { provider: provider.provider, model: provider.model, attempt, maxOutputTokens },
+        "Food scan Vertex response hit the output token limit",
+      );
+      if (attempt < MAX_ATTEMPTS) continue;
+      throw new ApiError(502, "Besin analiz servisi yanıtı tamamlayamadı.", {
+        code: "FOOD_SCAN_PROVIDER_TRUNCATED",
+        isOperational: false,
+      });
+    }
+
     const content = extractVertexText(body);
-    if (content) return content;
-    if (body.promptFeedback?.blockReason) {
+    if (content) {
+      try {
+        parseFoodVisionJson(content);
+        return content;
+      } catch (error) {
+        if (isMalformedProviderError(error) && attempt < MAX_ATTEMPTS) {
+          logger.warn(
+            { provider: provider.provider, model: provider.model, finishReason, attempt },
+            "Food scan Vertex returned malformed structured JSON; retrying",
+          );
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    if (body.promptFeedback?.blockReason || finishReason === "SAFETY") {
       throw new ApiError(502, "Besin analiz servisi görsel yanıtını güvenlik nedeniyle engelledi.", {
         code: "FOOD_SCAN_PROVIDER_BLOCKED",
       });
