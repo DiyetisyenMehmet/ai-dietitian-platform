@@ -104,6 +104,7 @@ echo "Configuring least-privilege runtime access..."
 gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
   --member "serviceAccount:${RUNTIME_SA}" \
   --role roles/aiplatform.user \
+  --condition=None \
   --quiet >/dev/null
 
 ensure_secret() {
@@ -125,6 +126,7 @@ ensure_secret() {
       --project "${PROJECT_ID}" \
       --member "serviceAccount:${RUNTIME_SA}" \
       --role roles/secretmanager.secretAccessor \
+      --condition=None \
       --quiet >/dev/null
   fi
 }
@@ -169,6 +171,7 @@ gcloud iam service-accounts add-iam-policy-binding "${DEPLOY_SA}" \
   --project "${PROJECT_ID}" \
   --member "${PRINCIPAL_SET}" \
   --role roles/iam.workloadIdentityUser \
+  --condition=None \
   --quiet >/dev/null
 
 for role in \
@@ -178,6 +181,7 @@ for role in \
   gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
     --member "serviceAccount:${DEPLOY_SA}" \
     --role "${role}" \
+    --condition=None \
     --quiet >/dev/null
 done
 
@@ -185,6 +189,7 @@ gcloud iam service-accounts add-iam-policy-binding "${RUNTIME_SA}" \
   --project "${PROJECT_ID}" \
   --member "serviceAccount:${DEPLOY_SA}" \
   --role roles/iam.serviceAccountUser \
+  --condition=None \
   --quiet >/dev/null
 
 # The deployer can validate staging secret metadata without reading payloads.
@@ -197,6 +202,7 @@ for secret in \
     --project "${PROJECT_ID}" \
     --member "serviceAccount:${DEPLOY_SA}" \
     --role roles/secretmanager.viewer \
+    --condition=None \
     --quiet >/dev/null
 done
 
@@ -213,12 +219,14 @@ gcloud artifacts repositories add-iam-policy-binding "${REPOSITORY}" \
   --location "${REGION}" \
   --member "serviceAccount:${BUILD_SA}" \
   --role roles/artifactregistry.writer \
+  --condition=None \
   --quiet >/dev/null
 
 gcloud secrets add-iam-policy-binding "diewish-staging-direct-database-url" \
   --project "${PROJECT_ID}" \
   --member "serviceAccount:${BUILD_SA}" \
   --role roles/secretmanager.secretAccessor \
+  --condition=None \
   --quiet >/dev/null
 
 cat <<EOF
