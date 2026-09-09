@@ -89,7 +89,7 @@ test("explicit edible-only vision weight remains available for deterministic cal
       { name: "karpuz", estimatedGrams: 600, confidence: 98, optional: false },
     ],
     disclaimer: "Yenilebilir kısım tahminidir.",
-  } as const;
+  };
 
   const vision = sanitizeVisionEdibleWeight(original);
   assert.equal(vision, original);
