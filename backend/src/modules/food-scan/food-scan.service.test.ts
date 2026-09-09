@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import {
   FoodScanService,
+  sanitizeVisionEdibleWeight,
   scaleCorrectionsToTarget,
   type NutritionLookupPort,
 } from "./food-scan.service";
@@ -56,6 +57,45 @@ const lookup: NutritionLookupPort = {
     return [];
   },
 };
+
+test("explicit rind-inclusive vision weight is blocked before nutrition arithmetic", () => {
+  const vision = sanitizeVisionEdibleWeight({
+    isFood: true,
+    confidence: 100,
+    reason: "Karpuz dilimi",
+    dishName: "Karpuz",
+    estimatedPortion: "Yaklaşık 1 büyük dilim (kabuklu ağırlığı dahil)",
+    estimatedGrams: 950,
+    ingredients: [
+      { name: "karpuz", estimatedGrams: 950, confidence: 100, optional: false },
+    ],
+    disclaimer: "Görsel tahminidir.",
+  });
+
+  assert.equal(vision.estimatedGrams, null);
+  assert.equal(vision.ingredients[0]?.estimatedGrams, null);
+  assert.equal(vision.estimatedPortion, "Yaklaşık porsiyon; yenilebilir gram miktarı ayrı belirlenemedi.");
+});
+
+test("explicit edible-only vision weight remains available for deterministic calculation", () => {
+  const original = {
+    isFood: true,
+    confidence: 98,
+    reason: "Karpuzun yenilebilir iç kısmı görülüyor",
+    dishName: "Karpuz",
+    estimatedPortion: "Yaklaşık 1 büyük dilim, yenilebilir iç kısım",
+    estimatedGrams: 600,
+    ingredients: [
+      { name: "karpuz", estimatedGrams: 600, confidence: 98, optional: false },
+    ],
+    disclaimer: "Yenilebilir kısım tahminidir.",
+  } as const;
+
+  const vision = sanitizeVisionEdibleWeight(original);
+  assert.equal(vision, original);
+  assert.equal(vision.estimatedGrams, 600);
+  assert.equal(vision.ingredients[0]?.estimatedGrams, 600);
+});
 
 test("ingredient corrections are recalculated deterministically from provider facts", async () => {
   const service = new FoodScanService(lookup);
