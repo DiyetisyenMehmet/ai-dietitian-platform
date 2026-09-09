@@ -29,6 +29,13 @@ CRITICAL NUMERIC SAFETY RULE:
 - NEVER perform nutrition arithmetic.
 - Nutrition facts will be resolved from trusted data sources by deterministic server code after your response.
 
+CRITICAL EDIBLE-WEIGHT RULE:
+- estimatedGrams and every ingredient estimatedGrams MUST represent only the edible amount that would actually be consumed.
+- NEVER include normally discarded rind/peel, pits/stones, inedible seeds, bones, shells, skewers, packaging, plates, cups or containers in gram estimates.
+- For watermelon and similar fruit, estimate only the edible flesh; do not report rind-inclusive or gross weight.
+- estimatedPortion must describe the edible portion and must not claim that gram estimates include non-edible parts.
+- If edible grams cannot be separated from non-edible weight with reasonable confidence from the image, return estimatedGrams=null and use null for affected ingredient gram estimates rather than guessing a gross weight.
+
 Only when isFood=true:
 - give a concise Turkish dish/food name
 - estimate the total visible edible portion in grams when reasonably possible
