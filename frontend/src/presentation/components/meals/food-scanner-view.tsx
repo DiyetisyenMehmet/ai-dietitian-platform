@@ -5,7 +5,9 @@ import Link from "next/link";
 import { toast } from "sonner";
 import {
   AlertCircle,
+  Camera,
   ImageUp,
+  Images,
   MessageCircle,
   Pencil,
   Plus,
@@ -84,7 +86,8 @@ export function FoodScannerView() {
   const [targetGrams, setTargetGrams] = React.useState(100);
   const [mealType, setMealType] = React.useState<MealTypeDto>(() => defaultMealType());
   const [loggingMeal, setLoggingMeal] = React.useState(false);
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const cameraInputRef = React.useRef<HTMLInputElement>(null);
+  const galleryInputRef = React.useRef<HTMLInputElement>(null);
   const personalizationRequestRef = React.useRef(0);
 
   const syncEditable = React.useCallback((value: FoodScanResultDto) => {
@@ -240,30 +243,69 @@ export function FoodScannerView() {
               <Button className="w-full" onClick={() => void onAnalyze()} isLoading={analyzing} disabled={analyzing}>
                 {!analyzing && <Sparkles aria-hidden="true" />} {analyzing ? "Yemek tanınıyor" : "Görseli analiz et"}
               </Button>
-              <Button variant="outline" className="w-full" disabled={analyzing} onClick={() => fileInputRef.current?.click()}>
-                <ImageUp /> Başka görsel seç
-              </Button>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  variant="outline"
+                  disabled={analyzing}
+                  onClick={() => cameraInputRef.current?.click()}
+                  aria-label="Kamerayla yeni yemek fotoğrafı çek"
+                >
+                  <Camera aria-hidden="true" /> Yeniden çek
+                </Button>
+                <Button
+                  variant="outline"
+                  disabled={analyzing}
+                  onClick={() => galleryInputRef.current?.click()}
+                  aria-label="Galeriden başka yemek fotoğrafı seç"
+                >
+                  <Images aria-hidden="true" /> Galeriden değiştir
+                </Button>
+              </div>
             </div>
           ) : (
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="flex w-full flex-col items-center gap-3 rounded-2xl border-2 border-dashed p-8 text-center hover:border-primary/40"
-            >
-              <span className="flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary">
-                <ImageUp className="size-7" />
+            <div className="rounded-2xl border-2 border-dashed p-6 text-center">
+              <span className="mx-auto flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <ImageUp className="size-7" aria-hidden="true" />
               </span>
-              <span className="text-sm font-semibold">Fotoğraf çek veya galeriden seç</span>
-              <span className="text-xs text-muted-foreground">Yemeğin net göründüğü bir fotoğraf yükle</span>
-            </button>
+              <p className="mt-3 text-sm font-semibold">Yemeğinin fotoğrafını ekle</p>
+              <p className="mt-1 text-xs text-muted-foreground">Net bir fotoğraf çek veya daha önce çektiğin bir görseli galeriden seç.</p>
+              <div className="mt-5 grid gap-2 sm:grid-cols-2">
+                <Button
+                  type="button"
+                  onClick={() => cameraInputRef.current?.click()}
+                  className="w-full"
+                  aria-label="Kamerayla yemek fotoğrafı çek"
+                >
+                  <Camera aria-hidden="true" /> Kamerayla çek
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => galleryInputRef.current?.click()}
+                  className="w-full"
+                  aria-label="Galeriden yemek fotoğrafı seç"
+                >
+                  <Images aria-hidden="true" /> Galeriden seç
+                </Button>
+              </div>
+            </div>
           )}
           <input
-            ref={fileInputRef}
+            ref={cameraInputRef}
             type="file"
             accept="image/jpeg,image/png,image/webp"
             capture="environment"
             className="sr-only"
             onChange={onPick}
+            aria-label="Kamera fotoğraf girişi"
+          />
+          <input
+            ref={galleryInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="sr-only"
+            onChange={onPick}
+            aria-label="Galeri fotoğraf girişi"
           />
         </CardContent>
       </Card>
