@@ -1,6 +1,19 @@
 steps:
+  - name: gcr.io/cloud-builders/git
+    entrypoint: sh
+    args:
+      - -c
+      - |
+        set -eu
+        git init /workspace/repo
+        cd /workspace/repo
+        git remote add origin https://github.com/DiyetisyenMehmet/ai-dietitian-platform.git
+        git fetch --depth=1 origin "${_GIT_SHA}"
+        git checkout --detach FETCH_HEAD
+        test "$(git rev-parse HEAD)" = "${_GIT_SHA}"
+
   - name: node:20-alpine
-    dir: backend
+    dir: /workspace/repo/backend
     entrypoint: sh
     secretEnv:
       - DIRECT_DATABASE_URL
@@ -15,9 +28,9 @@ steps:
   - name: gcr.io/cloud-builders/docker
     args:
       - build
-      - --file=backend/Dockerfile
+      - --file=/workspace/repo/backend/Dockerfile
       - --tag=${_IMAGE}
-      - backend
+      - /workspace/repo/backend
 
 images:
   - ${_IMAGE}
