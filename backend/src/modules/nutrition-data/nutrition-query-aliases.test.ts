@@ -18,6 +18,7 @@ test("expands common Turkish ingredient names to English-first USDA queries", ()
   assert.deepEqual(expandNutritionProviderQueries("soğan"), ["onion", "soğan"]);
   assert.deepEqual(expandNutritionProviderQueries("arpa şehriye"), ["orzo pasta cooked", "arpa şehriye"]);
   assert.deepEqual(expandNutritionProviderQueries("tuz"), ["salt", "tuz"]);
+  assert.deepEqual(expandNutritionProviderQueries("karpuz"), ["watermelon", "karpuz"]);
 });
 
 test("normalizes the observed tomato sauce/paste compound without leaking Turkish stop words", () => {
