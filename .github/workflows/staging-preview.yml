@@ -86,10 +86,11 @@ jobs:
           set -euo pipefail
           BACKEND_IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPOSITORY}/backend:${GITHUB_SHA}"
           echo "BACKEND_IMAGE=${BACKEND_IMAGE}" >> "$GITHUB_ENV"
-          gcloud builds submit . \
+          gcloud builds submit \
+            --no-source \
             --project "$PROJECT_ID" \
             --config .github/cloudbuild/backend-staging.yaml \
-            --substitutions "_IMAGE=${BACKEND_IMAGE}" \
+            --substitutions "_IMAGE=${BACKEND_IMAGE},_GIT_SHA=${GITHUB_SHA}" \
             --quiet
 
       - name: Deploy backend staging service
@@ -128,10 +129,11 @@ jobs:
           set -euo pipefail
           FRONTEND_IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPOSITORY}/frontend:${GITHUB_SHA}"
           echo "FRONTEND_IMAGE=${FRONTEND_IMAGE}" >> "$GITHUB_ENV"
-          gcloud builds submit . \
+          gcloud builds submit \
+            --no-source \
             --project "$PROJECT_ID" \
             --config .github/cloudbuild/frontend-staging.yaml \
-            --substitutions "_IMAGE=${FRONTEND_IMAGE},_API_BASE_URL=/api,_API_PROXY_TARGET=${BACKEND_URL},_SITE_URL=https://staging.invalid" \
+            --substitutions "_IMAGE=${FRONTEND_IMAGE},_GIT_SHA=${GITHUB_SHA},_API_BASE_URL=/api,_API_PROXY_TARGET=${BACKEND_URL},_SITE_URL=https://staging.invalid" \
             --quiet
 
       - name: Deploy frontend staging service
@@ -195,7 +197,6 @@ jobs:
             sleep 2
           done
 
-          # Verify the same-origin proxy reaches the backend health endpoint.
           for attempt in {1..30}; do
             if curl --fail --silent --show-error "${FRONTEND_URL}/api/health" >/dev/null; then
               break
