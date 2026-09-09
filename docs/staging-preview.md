@@ -126,3 +126,7 @@ A successful staging test does not deploy production. Production promotion remai
 - Vertex/Gemini food recognition succeeds for food and non-food images,
 - USDA/Open Food Facts lookup and deterministic nutrient calculation are verified,
 - safe-area behavior is checked on the target Android device.
+
+## Deployment probes
+
+The deploy marker commit is documentation-only and exists solely to trigger the isolated staging workflow after exact-SHA CI has passed.
