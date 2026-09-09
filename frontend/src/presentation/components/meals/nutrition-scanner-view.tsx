@@ -4,31 +4,10 @@ import * as React from "react";
 import { Camera, ScanBarcode } from "lucide-react";
 
 import { BarcodeScannerPanel } from "@/presentation/components/meals/barcode-scanner-panel";
-import { BrowserBarcodeScannerPanel } from "@/presentation/components/meals/browser-barcode-scanner-panel";
 import { FoodScannerView } from "@/presentation/components/meals/food-scanner-view";
-
-interface NativeScannerBridge {
-  isAvailable(): boolean;
-}
-
-function hasNativeScannerBridge(): boolean {
-  if (typeof window === "undefined") return false;
-  const bridge = (window as unknown as { DiewishScanner?: NativeScannerBridge }).DiewishScanner;
-  if (!bridge) return false;
-  try {
-    return bridge.isAvailable();
-  } catch {
-    return false;
-  }
-}
 
 export function NutritionScannerView() {
   const [mode, setMode] = React.useState<"photo" | "barcode">("photo");
-  const [nativeScanner, setNativeScanner] = React.useState(false);
-
-  React.useEffect(() => {
-    setNativeScanner(hasNativeScannerBridge());
-  }, []);
 
   return (
     <div className="space-y-5">
@@ -53,13 +32,7 @@ export function NutritionScannerView() {
         </button>
       </div>
 
-      {mode === "photo" ? (
-        <FoodScannerView />
-      ) : nativeScanner ? (
-        <BarcodeScannerPanel />
-      ) : (
-        <BrowserBarcodeScannerPanel />
-      )}
+      {mode === "photo" ? <FoodScannerView /> : <BarcodeScannerPanel />}
     </div>
   );
 }
