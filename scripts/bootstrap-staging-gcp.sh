@@ -214,6 +214,15 @@ if [[ -z "${BUILD_SA}" ]]; then
   exit 1
 fi
 
+# A caller that creates a Cloud Build must be allowed to act as the build's
+# execution identity. Keep this grant scoped to the resolved staging build SA.
+gcloud iam service-accounts add-iam-policy-binding "${BUILD_SA}" \
+  --project "${PROJECT_ID}" \
+  --member "serviceAccount:${DEPLOY_SA}" \
+  --role roles/iam.serviceAccountUser \
+  --condition=None \
+  --quiet >/dev/null
+
 gcloud artifacts repositories add-iam-policy-binding "${REPOSITORY}" \
   --project "${PROJECT_ID}" \
   --location "${REGION}" \
