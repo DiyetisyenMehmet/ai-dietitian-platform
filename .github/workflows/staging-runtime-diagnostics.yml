@@ -1,0 +1,50 @@
+name: Staging Runtime Diagnostics
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/staging-preview
+    paths:
+      - .github/workflows/staging-runtime-diagnostics.yml
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PROJECT_ID: project-a2e260c1-839d-4f1d-b90
+  REGION: europe-west1
+  WIF_PROVIDER: projects/730419163638/locations/global/workloadIdentityPools/github-actions/providers/diewish-staging
+  DEPLOY_SERVICE_ACCOUNT: diewish-staging-deployer@project-a2e260c1-839d-4f1d-b90.iam.gserviceaccount.com
+  BACKEND_SERVICE: diewish-backend-staging
+
+jobs:
+  runtime-diagnostics:
+    name: Read staging backend errors
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: staging
+    steps:
+      - name: Authenticate to Google Cloud with OIDC
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Read recent 5xx backend errors only
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcloud logging read \
+            'resource.type="cloud_run_revision" AND resource.labels.service_name="diewish-backend-staging" AND severity>=ERROR' \
+            --project "$PROJECT_ID" \
+            --freshness=3h \
+            --limit=100 \
+            --order=desc \
+            --format='table(timestamp,severity,jsonPayload.message,jsonPayload.statusCode,jsonPayload.code,jsonPayload.err.message,jsonPayload.err.name,jsonPayload.err.stack,textPayload)'
