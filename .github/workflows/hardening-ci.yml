@@ -190,6 +190,12 @@ jobs:
         working-directory: frontend
         run: |
           npm ci
+          # GitHub's Ubuntu image also registers Google's Chrome apt repository.
+          # Playwright's --with-deps runs apt-get update even though it installs its
+          # own pinned Chromium build. A temporarily inconsistent external Chrome
+          # index must not make our application E2E gate flaky, so remove only that
+          # unrelated runner repository before asking Playwright for OS libraries.
+          sudo find /etc/apt/sources.list.d -maxdepth 1 -type f -iname '*google*chrome*' -delete
           npx playwright install --with-deps chromium
           npm run build
       - name: Start frontend
