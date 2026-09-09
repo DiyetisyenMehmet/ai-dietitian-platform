@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { ApiError } from "../../utils/api-error";
 import {
   FOOD_VISION_VERTEX_RESPONSE_SCHEMA,
+  parseFoodVisionJson,
   resolveFoodVisionProviderKind,
   resolveVertexProjectId,
 } from "./food-vision.provider";
@@ -54,4 +56,21 @@ test("Vertex food-vision schema contains recognition fields but no nutrition fac
   assert.doesNotMatch(schema, /proteinG/i);
   assert.doesNotMatch(schema, /carbsG/i);
   assert.doesNotMatch(schema, /fatG/i);
+});
+
+test("food-vision JSON parser accepts fenced and surrounding structured JSON", () => {
+  assert.deepEqual(parseFoodVisionJson("```json\n{\"isFood\":false}\n```"), { isFood: false });
+  assert.deepEqual(parseFoodVisionJson("prefix {\"isFood\":true} suffix"), { isFood: true });
+});
+
+test("truncated provider JSON is always converted to a controlled 502 instead of SyntaxError/500", () => {
+  assert.throws(
+    () => parseFoodVisionJson('prefix {"isFood":true,"ingredients":[{"name":"elma"}'),
+    (error: unknown) => {
+      assert.ok(error instanceof ApiError);
+      assert.equal(error.statusCode, 502);
+      assert.equal(error.code, "FOOD_SCAN_PROVIDER_MALFORMED");
+      return true;
+    },
+  );
 });
