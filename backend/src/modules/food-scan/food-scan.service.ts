@@ -13,6 +13,7 @@ import type {
   FoodScanRecalculationResult,
   FoodScanResult,
   FoodVisionIngredientCandidate,
+  FoodVisionResult,
   ResolvedFoodScanIngredient,
 } from "./types";
 
@@ -60,6 +61,73 @@ async function assertUsableImage(buffer: Buffer): Promise<Buffer> {
 
 function cloneEmptyNutrients(): NutrientValues {
   return { ...EMPTY_NUTRIENTS };
+}
+
+function normalizeSafetyText(value: string): string {
+  return value
+    .toLocaleLowerCase("tr-TR")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/ı/g, "i")
+    .replace(/ş/g, "s")
+    .replace(/ğ/g, "g")
+    .replace(/ü/g, "u")
+    .replace(/ö/g, "o")
+    .replace(/ç/g, "c")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function explicitlyClaimsNonEdibleWeight(value: string): boolean {
+  const text = normalizeSafetyText(value);
+  if (!text) return false;
+  const patterns = [
+    /\bkabuklu agirligi dahil\b/,
+    /\bkabuk agirligi dahil\b/,
+    /\bkabugu dahil\b/,
+    /\bkabuk dahil\b/,
+    /\bcekirdek(?:leri| agirligi)? dahil\b/,
+    /\bkemik(?:li| agirligi)? dahil\b/,
+    /\bambalaj(?:i| agirligi)? dahil\b/,
+    /\bbrut agirlik\b/,
+    /\bgross weight\b/,
+    /\brind included\b/,
+    /\bincluding (?:the )?rind\b/,
+    /\bwith (?:the )?rind\b/,
+    /\bpeel included\b/,
+    /\bincluding (?:the )?peel\b/,
+    /\bwith (?:the )?peel\b/,
+    /\bshell included\b/,
+    /\bincluding (?:the )?shell\b/,
+    /\bwith (?:the )?shell\b/,
+    /\bbone included\b/,
+    /\bincluding (?:the )?bone\b/,
+    /\bwith (?:the )?bone\b/,
+  ];
+  return patterns.some((pattern) => pattern.test(text));
+}
+
+/**
+ * Provider recognition is untrusted for portion semantics. If it explicitly
+ * describes a gross/rind/bone/shell-inclusive weight, never let that weight
+ * reach deterministic nutrition arithmetic. We intentionally do not guess an
+ * edible-yield percentage; the user can enter the edible amount explicitly.
+ */
+export function sanitizeVisionEdibleWeight(vision: FoodVisionResult): FoodVisionResult {
+  const unsafe = [vision.estimatedPortion, vision.reason, vision.disclaimer]
+    .filter((value): value is string => Boolean(value))
+    .some(explicitlyClaimsNonEdibleWeight);
+  if (!unsafe) return vision;
+
+  return {
+    ...vision,
+    estimatedPortion: "Yaklaşık porsiyon; yenilebilir gram miktarı ayrı belirlenemedi.",
+    estimatedGrams: null,
+    ingredients: vision.ingredients.map((ingredient) => ({
+      ...ingredient,
+      estimatedGrams: null,
+    })),
+  };
 }
 
 function includedByDefault(candidate: FoodVisionIngredientCandidate): boolean {
@@ -204,7 +272,9 @@ export class FoodScanService {
 
   async analyze(buffer: Buffer): Promise<FoodScanResult> {
     const normalized = await assertUsableImage(buffer);
-    const vision = await analyzeFoodImageWithProvider(normalized, "image/jpeg");
+    const rawVision = await analyzeFoodImageWithProvider(normalized, "image/jpeg");
+    const vision = sanitizeVisionEdibleWeight(rawVision);
+    const edibleWeightGuarded = vision !== rawVision;
     if (!vision.isFood || vision.confidence < FOOD_IMAGE_MIN_CONFIDENCE || !vision.dishName) {
       throw new ApiError(422, FOOD_IMAGE_REJECTION_MESSAGE, {
         code: "NOT_A_FOOD_IMAGE",
@@ -226,6 +296,7 @@ export class FoodScanService {
         matchedIngredientCount: ingredients.filter((item) => item.matchedFood).length,
         unmatchedIngredientCount: ingredients.filter((item) => !item.matchedFood).length,
         optionalIngredientCount: ingredients.filter((item) => item.optional).length,
+        edibleWeightGuarded,
       },
       "Food photo scan completed",
     );
@@ -240,6 +311,7 @@ export class FoodScanService {
       ingredients,
       totals: deterministicTotals(ingredients),
       disclaimer:
+        `${edibleWeightGuarded ? "Görsel açıklaması yenmeyen kısımları ağırlığa dahil ettiği için otomatik gram ve besin hesabı yapılmadı; yenilebilir miktarı Malzemeleri Düzenle alanından girebilirsiniz. " : ""}` +
         "Bu değerler tahminidir. Tarif, porsiyon ve özellikle kullanılan yağ miktarına göre değişebilir. Kalori ve besin değerleri AI tarafından üretilmez; eşleşen güvenilir besin verilerinden deterministik olarak hesaplanır. Görselden doğrulanamayan isteğe bağlı malzemeler, siz dahil etmedikçe toplama eklenmez.",
     };
   }
