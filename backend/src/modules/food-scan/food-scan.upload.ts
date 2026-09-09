@@ -16,7 +16,10 @@ const uploadLimits: MulterLimits = {
   fileSize: MAX_BYTES,
   files: 1,
   fields: 0,
-  parts: 1,
+  // Busboy/Multer may observe the terminating browser multipart boundary as the
+  // next part while enforcing an exact limit of 1. Keep a one-part safety
+  // margin while still allowing only one file and zero text fields.
+  parts: 2,
   fieldNameSize: 100,
   fieldSize: 1024,
   fieldArrayIndexLimit: 0,
@@ -45,6 +48,9 @@ export function uploadFoodImage(): RequestHandler {
         }
         if (error.code === "LIMIT_FILE_COUNT" || error.code === "LIMIT_UNEXPECTED_FILE") {
           return next(ApiError.badRequest(`Yalnızca "${FIELD}" alanında tek bir görsel yükleyebilirsiniz.`));
+        }
+        if (error.code === "LIMIT_PART_COUNT" || error.code === "LIMIT_FIELD_COUNT") {
+          return next(ApiError.badRequest("Yalnızca tek bir görsel yükleyebilirsiniz."));
         }
         return next(ApiError.badRequest(error.message));
       }
