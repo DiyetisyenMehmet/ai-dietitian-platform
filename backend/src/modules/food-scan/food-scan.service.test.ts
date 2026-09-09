@@ -89,6 +89,33 @@ test("unmatched ingredient never receives invented nutrient numbers", async () =
   assert.equal(result.totals.energyKcal, null);
 });
 
+test("irrelevant provider search noise is rejected before nutrition calculation", async () => {
+  const noisyLookup: NutritionLookupPort = {
+    async search() {
+      return [food("VE WONG / FRIED GLUTEN", 390, 21, 40, 16)];
+    },
+  };
+  const service = new FoodScanService(noisyLookup);
+  const result = await service.recalculate([
+    { name: "domates sosu ve salça", grams: 30, included: true },
+  ]);
+  assert.equal(result.ingredients[0]?.matchedFood, null);
+  assert.equal(result.ingredients[0]?.nutrients, null);
+  assert.equal(result.totals.energyKcal, null);
+});
+
+test("Turkish ingredient aliases can resolve a relevant USDA candidate", async () => {
+  const aliasLookup: NutritionLookupPort = {
+    async search() {
+      return [food("Onions, cooked, boiled, drained, without salt", 44, 1.4, 10.2, 0.2)];
+    },
+  };
+  const service = new FoodScanService(aliasLookup);
+  const result = await service.recalculate([{ name: "soğan", grams: 50, included: true }]);
+  assert.equal(result.ingredients[0]?.matchedFood?.provider, "USDA");
+  assert.equal(result.totals.energyKcal, 22);
+});
+
 test("total plate weight scales included ingredient amounts deterministically", async () => {
   const service = new FoodScanService(lookup);
   const result = await service.recalculate(
