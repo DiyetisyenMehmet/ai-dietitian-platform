@@ -303,7 +303,11 @@ test("register -> consent -> onboarding -> scanner -> same-day weigh-in preserve
   });
 
   await page.getByRole("tab", { name: "Fotoğrafla Tara" }).click();
-  await page.locator('input[type="file"]').setInputFiles({
+  const cameraInput = page.getByLabel("Kamera fotoğraf girişi");
+  const galleryInput = page.getByLabel("Galeri fotoğraf girişi");
+  await expect(cameraInput).toHaveAttribute("capture", "environment");
+  expect(await galleryInput.getAttribute("capture")).toBeNull();
+  await galleryInput.setInputFiles({
     name: "meal.png",
     mimeType: "image/png",
     buffer: Buffer.from("89504e470d0a1a0a", "hex"),
