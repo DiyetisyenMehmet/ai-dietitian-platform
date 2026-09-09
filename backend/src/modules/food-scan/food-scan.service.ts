@@ -63,7 +63,10 @@ function cloneEmptyNutrients(): NutrientValues {
 }
 
 function includedByDefault(candidate: FoodVisionIngredientCandidate): boolean {
-  return !candidate.optional || candidate.confidence >= 70;
+  // optional=true explicitly means the vision model considers the ingredient
+  // plausible but unconfirmed. Unconfirmed oil/sauce/salt must never silently
+  // inflate deterministic nutrition totals; the user can opt it in via editing.
+  return !candidate.optional;
 }
 
 async function bestFoodMatch(service: NutritionLookupPort, name: string): Promise<NutritionMatch | null> {
@@ -222,6 +225,7 @@ export class FoodScanService {
         ingredientCount: ingredients.length,
         matchedIngredientCount: ingredients.filter((item) => item.matchedFood).length,
         unmatchedIngredientCount: ingredients.filter((item) => !item.matchedFood).length,
+        optionalIngredientCount: ingredients.filter((item) => item.optional).length,
       },
       "Food photo scan completed",
     );
@@ -236,7 +240,7 @@ export class FoodScanService {
       ingredients,
       totals: deterministicTotals(ingredients),
       disclaimer:
-        "Bu değerler tahminidir. Tarif, porsiyon ve özellikle kullanılan yağ miktarına göre değişebilir. Kalori ve besin değerleri AI tarafından üretilmez; eşleşen güvenilir besin verilerinden deterministik olarak hesaplanır.",
+        "Bu değerler tahminidir. Tarif, porsiyon ve özellikle kullanılan yağ miktarına göre değişebilir. Kalori ve besin değerleri AI tarafından üretilmez; eşleşen güvenilir besin verilerinden deterministik olarak hesaplanır. Görselden doğrulanamayan isteğe bağlı malzemeler, siz dahil etmedikçe toplama eklenmez.",
     };
   }
 
