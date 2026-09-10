@@ -14,7 +14,11 @@ import { env } from "../../../config/env";
 import { logger } from "../../../lib/logger";
 import { ApiError } from "../../../utils/api-error";
 import { getAIAdapter } from "../ai-adapter/ai-adapter.factory";
-import { extractPdfText, meaningfulCharCount } from "../extraction/pdf-text-extractor";
+import {
+  countPdfPages,
+  extractPdfText,
+  meaningfulCharCount,
+} from "../extraction/pdf-text-extractor";
 import {
   BLOOD_TEST_VALIDATION_REJECTION_MESSAGE,
   KNOWN_BLOOD_TEST_PARAMETERS,
@@ -135,6 +139,18 @@ function deterministicVerdict(text: string): DocumentValidationResult | null {
   return null;
 }
 
+/**
+ * Multi-page laboratory PDFs frequently expose a flattened text layer where
+ * table columns from several pages are interleaved. When deterministic checks
+ * cannot confidently classify such a document, validating the flattened text
+ * can create a false negative even though the original PDF is perfectly
+ * readable. In that ambiguous case we preserve the whole document and let the
+ * vision/document-capable provider inspect every page with its layout intact.
+ */
+export function shouldValidatePdfAsWholeDocument(pageCount: number): boolean {
+  return pageCount >= 2;
+}
+
 export const documentValidationService = {
   /**
    * Returns a structured document-class verdict. External AI is the fallback,
@@ -142,6 +158,7 @@ export const documentValidationService = {
    */
   async validate(buffer: Buffer, mimeType: string): Promise<DocumentValidationResult> {
     if (mimeType === PDF_MIME) {
+      const pageCount = countPdfPages(buffer);
       const text = await extractPdfText(buffer).catch(() => "");
       if (meaningfulCharCount(text) >= env.BLOOD_TEST_TEXT_MIN_CHARS) {
         const localVerdict = deterministicVerdict(text);
@@ -150,11 +167,20 @@ export const documentValidationService = {
             {
               classification: localVerdict.classification,
               parameterCount: localVerdict.parameterCount,
+              pageCount,
               validationMode: "deterministic",
             },
             "Blood test document classified without external AI",
           );
           return localVerdict;
+        }
+
+        if (shouldValidatePdfAsWholeDocument(pageCount)) {
+          logger.info(
+            { pageCount, chars: text.length },
+            "Validation: ambiguous multi-page PDF; preserving whole-document layout",
+          );
+          return getAIAdapter().validateBloodTestDocument(buffer, mimeType);
         }
 
         const adapter = getAIAdapter();
@@ -170,7 +196,10 @@ export const documentValidationService = {
 
       // Sparse/absent text layer (scanned/exported image PDF) still needs a
       // vision-capable classifier. This is intentionally the expensive fallback.
-      logger.info("Validation: sparse PDF text layer; using vision classification");
+      logger.info(
+        { pageCount },
+        "Validation: sparse PDF text layer; using whole-document vision classification",
+      );
       return getAIAdapter().validateBloodTestDocument(buffer, mimeType);
     }
 
