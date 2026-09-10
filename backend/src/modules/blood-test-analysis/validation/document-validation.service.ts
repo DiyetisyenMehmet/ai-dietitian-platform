@@ -15,8 +15,7 @@ import { logger } from "../../../lib/logger";
 import { ApiError } from "../../../utils/api-error";
 import { getAIAdapter } from "../ai-adapter/ai-adapter.factory";
 import {
-  countPdfPages,
-  extractPdfText,
+  inspectPdfText,
   meaningfulCharCount,
 } from "../extraction/pdf-text-extractor";
 import {
@@ -99,6 +98,8 @@ function deterministicVerdict(text: string): DocumentValidationResult | null {
   // Strong positive: several known biomarkers PLUS clear laboratory table
   // vocabulary PLUS repeated numeric/unit structure. This is enough to establish
   // document class without paying an external model; it does NOT interpret data.
+  // A second structural gate after extraction still requires multiple recognized
+  // biomarkers, units and laboratory structure before medical interpretation.
   if (
     parameters.length >= Math.max(minimum, 5) &&
     hasLabTerms &&
@@ -141,14 +142,12 @@ function deterministicVerdict(text: string): DocumentValidationResult | null {
 
 /**
  * Multi-page laboratory PDFs frequently expose a flattened text layer where
- * table columns from several pages are interleaved. When deterministic checks
- * cannot confidently classify such a document, validating the flattened text
- * can create a false negative even though the original PDF is perfectly
- * readable. In that ambiguous case we preserve the whole document and let the
- * vision/document-capable provider inspect every page with its layout intact.
+ * table columns from several pages are interleaved. Deterministic validation may
+ * use that text as evidence, but an ambiguous document must be classified from
+ * the ORIGINAL PDF so every page and its visual table layout remain available.
  */
 export function shouldValidatePdfAsWholeDocument(pageCount: number): boolean {
-  return pageCount >= 2;
+  return Number.isFinite(pageCount) && pageCount >= 2;
 }
 
 export const documentValidationService = {
@@ -158,8 +157,12 @@ export const documentValidationService = {
    */
   async validate(buffer: Buffer, mimeType: string): Promise<DocumentValidationResult> {
     if (mimeType === PDF_MIME) {
-      const pageCount = countPdfPages(buffer);
-      const text = await extractPdfText(buffer).catch(() => "");
+      // Validation needs all recovered text even for multi-page PDFs. Extraction
+      // independently keeps its whole-document policy so using this flattened
+      // text as deterministic evidence never causes later pages to be discarded.
+      const inspection = await inspectPdfText(buffer);
+      const { text, pageCount } = inspection;
+
       if (meaningfulCharCount(text) >= env.BLOOD_TEST_TEXT_MIN_CHARS) {
         const localVerdict = deterministicVerdict(text);
         if (localVerdict) {
@@ -184,7 +187,7 @@ export const documentValidationService = {
         }
 
         const adapter = getAIAdapter();
-        const result = await adapter.validateBloodTestDocument(text, mimeType);
+        const result = await adapter.validateBloodTestDocument(text, "text/plain");
         const deterministic = countKnownParameters(text);
         if (deterministic.length > result.parameterCount) {
           result.parameterCount = deterministic.length;
@@ -195,7 +198,7 @@ export const documentValidationService = {
       }
 
       // Sparse/absent text layer (scanned/exported image PDF) still needs a
-      // vision-capable classifier. This is intentionally the expensive fallback.
+      // document-capable classifier. This is intentionally the expensive fallback.
       logger.info(
         { pageCount },
         "Validation: sparse PDF text layer; using whole-document vision classification",
