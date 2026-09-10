@@ -37,6 +37,9 @@ jobs:
         with:
           project_id: ${{ env.PROJECT_ID }}
 
+      # Read-only diagnostics. The filter intentionally excludes ordinary INFO
+      # logs and never requests raw uploaded document bodies or extracted health
+      # values; only structured ERROR metadata is printed.
       - name: Read recent 5xx backend errors only
         shell: bash
         run: |
