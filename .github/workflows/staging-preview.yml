@@ -140,6 +140,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Browser API calls are proxied through this service. Its request
+          # timeout must outlive the backend's 120-second synchronous analysis
+          # window; otherwise the proxy can fail first while the backend later
+          # persists a successful blood-test result.
           gcloud run deploy "$FRONTEND_SERVICE" \
             --project "$PROJECT_ID" \
             --region "$REGION" \
@@ -149,7 +153,7 @@ jobs:
             --cpu 1 \
             --memory 512Mi \
             --concurrency 80 \
-            --timeout 60 \
+            --timeout 180 \
             --min 0 \
             --max 2 \
             --quiet
