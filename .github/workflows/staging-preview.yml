@@ -112,7 +112,7 @@ jobs:
             --timeout 120 \
             --min 0 \
             --max 2 \
-            --set-env-vars "API_PREFIX=/api,CORS_ORIGIN=https://staging.invalid,TRUST_PROXY_HOPS=1,ENABLE_API_DOCS=false,LOG_LEVEL=info,JWT_ISSUER=diewish-staging,REFRESH_COOKIE_NAME=diewish_staging_refresh,REFRESH_COOKIE_SAME_SITE=lax,APP_WEB_URL=https://staging.invalid,STORAGE_PROVIDER=local,AI_PROVIDER=vertex,VERTEX_AI_LOCATION=global,VERTEX_AI_MODEL=gemini-3.5-flash,USDA_FDC_API_KEY=DEMO_KEY,OPEN_FOOD_FACTS_USER_AGENT=Diewish-Staging/0.1" \
+            --set-env-vars "API_PREFIX=/api,CORS_ORIGIN=https://staging.invalid,TRUST_PROXY_HOPS=1,ENABLE_API_DOCS=false,LOG_LEVEL=info,JWT_ISSUER=diewish-staging,REFRESH_COOKIE_NAME=diewish_staging_refresh,REFRESH_COOKIE_SAME_SITE=lax,APP_WEB_URL=https://staging.invalid,STORAGE_PROVIDER=local,AI_PROVIDER=vertex,GOOGLE_CLOUD_PROJECT=${PROJECT_ID},VERTEX_AI_LOCATION=global,VERTEX_AI_MODEL=gemini-3.5-flash,USDA_FDC_API_KEY=DEMO_KEY,OPEN_FOOD_FACTS_USER_AGENT=Diewish-Staging/0.1" \
             --set-secrets "DATABASE_URL=${DATABASE_SECRET_NAME}:latest,JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET_NAME}:latest,JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET_NAME}:latest" \
             --quiet
 
