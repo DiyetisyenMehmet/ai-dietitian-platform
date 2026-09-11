@@ -74,7 +74,10 @@ export function toBarcodeScanResult(food: CanonicalFood): NormalizedNutritionSca
   const servingGrams = food.serving?.gramWeight && food.serving.gramWeight > 0
     ? food.serving.gramWeight
     : 100;
-  const perServing = calculatePortion(food.nutrientsPer100g, servingGrams).nutrients;
+  // Preserve provider-declared serving values when available. Only derive from
+  // per-100g data when the upstream product does not publish a serving basis.
+  const perServing = food.nutrientsPerServing
+    ?? calculatePortion(food.nutrientsPer100g, servingGrams).nutrients;
   return {
     scanType: "BARCODE",
     identity: {

@@ -43,13 +43,33 @@ const food: CanonicalFood = {
   },
 };
 
-test("barcode normalized scan exposes deterministic per-100g and serving values", () => {
+test("barcode normalized scan derives serving values from per-100g data when provider serving values are absent", () => {
   const scan = toBarcodeScanResult(food);
   assert.equal(scan.scanType, "BARCODE");
   assert.equal(scan.serving.grams, 25);
   assert.equal(scan.nutrients.per100g?.energyKcal, 520);
   assert.equal(scan.nutrients.perServing.energyKcal, 130);
   assert.equal(scan.nutrients.estimated, false);
+});
+
+test("barcode normalized scan prefers provider-declared serving nutrients when available", () => {
+  const scan = toBarcodeScanResult({
+    ...food,
+    nutrientsPerServing: {
+      energyKcal: 128,
+      proteinG: 4.8,
+      carbohydratesG: 9.7,
+      fatG: 6.1,
+      saturatedFatG: 1.2,
+      sugarsG: 2.4,
+      fiberG: 1.9,
+      sodiumMg: 48,
+      saltG: 0.12,
+    },
+  });
+  assert.equal(scan.serving.grams, 25);
+  assert.equal(scan.nutrients.perServing.energyKcal, 128);
+  assert.equal(scan.nutrients.perServing.proteinG, 4.8);
 });
 
 test("photo normalized scan keeps recognition estimation separate from nutrition source", () => {
