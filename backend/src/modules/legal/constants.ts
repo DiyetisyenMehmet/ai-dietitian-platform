@@ -77,7 +77,7 @@ Diewish, kullanıcıların kendi hesapları üzerinden kullandığı yapay zekâ
 Mevcut V1 ödeme modeli, Premium veya Premium Plus satın alındığında tek seferlik 30 günlük dijital yazılım erişimi sağlar. Otomatik yenileme ve yıllık tahsilat ayrıca açıkça sunulmadıkça uygulanmaz. Güncel plan, toplam bedel ve süre ödeme öncesinde gösterilir.
 
 ## Ödeme
-Ödeme özelliği kullanıma sunulduğunda kart işlemleri iyzico'nun güvenli ödeme akışında tamamlanır. Diewish kart numarası veya CVV bilgisini kendi veritabanında saklamaz.
+Production ödeme özelliği etkinleştirildiğinde kart işlemi iyzico'nun güvenli ödeme akışında tamamlanır. Diewish kart numarası veya CVV bilgisini kendi veritabanında saklamaz.
 
 ## Tıbbi Sınırlar
 Diewish teşhis, tedavi veya acil sağlık hizmeti sunmaz. Üretilen içerikler bilgilendirme amaçlıdır ve sağlık profesyonelinin değerlendirmesinin yerine geçmez.`;
@@ -87,10 +87,8 @@ const MEDICAL_DISCLAIMER_BODY = `# Tıbbi Sorumluluk Reddi
 Diewish tarafından oluşturulan beslenme planları, kan tahlili özetleri ve yapay zekâ sohbet yanıtları yalnızca genel bilgilendirme amaçlıdır ve tıbbi tavsiye niteliği taşımaz.
 
 - Diewish bir hekim, diyetisyen veya sağlık kuruluşu değildir; teşhis veya tedavi hizmeti sunmaz.
-- Yapay zekâ ve otomatik analizler hatalı, eksik veya bağlamdan yoksun sonuç üretebilir.
-- İlaç başlama, bırakma veya doz değiştirme dahil tıbbi kararlar Diewish çıktısına dayanılarak verilmemelidir.
 - Sağlık kararları almadan önce yetkili bir sağlık profesyoneline danışın.
-- Acil durumda 112'yi arayın veya en yakın sağlık kuruluşuna başvurun.
+- Acil durumda en yakın sağlık kuruluşuna başvurun veya acil yardım hizmetlerini kullanın.
 - Otomatik kan tahlili özetleri hekim değerlendirmesinin yerine geçmez.`;
 
 const KVKK_CONSENT_BODY = `# Sağlık Verilerinin İşlenmesine İlişkin Açık Rıza Metni
