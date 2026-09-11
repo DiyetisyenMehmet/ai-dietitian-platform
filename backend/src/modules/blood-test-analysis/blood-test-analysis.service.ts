@@ -32,6 +32,7 @@ import type {
   BiomarkerExplanation,
   ExtractionResult,
   NormalizedBloodTestValue,
+  NutritionImplication,
 } from "./types";
 
 function assertLooksLikeBloodTest(
@@ -107,7 +108,8 @@ async function buildContext(userId: string): Promise<AnalysisContext> {
 }
 
 function formattedResult(value: NormalizedBloodTestValue): string {
-  return `${value.rawValue}${value.unit ? ` ${value.unit}` : ""}`;
+  const sourceUnit = value.extractedUnit?.trim() || value.unit;
+  return `${value.rawValue}${sourceUnit ? ` ${sourceUnit}` : ""}`;
 }
 
 function formattedReference(value: NormalizedBloodTestValue): string | null {
@@ -125,20 +127,28 @@ function formattedReference(value: NormalizedBloodTestValue): string | null {
 function fallbackExplanation(value: NormalizedBloodTestValue): string {
   const result = formattedResult(value);
   const reference = formattedReference(value);
+  const isLabReference = value.referenceRange?.source === "LAB_REPORT";
+
+  if (!isLabReference) {
+    if (reference) {
+      return `${value.biomarkerName} sonucunuz ${result}. Raporda güvenilir bir laboratuvar referans aralığı okunamadığı için bu ölçüm normal, düşük veya yüksek olarak sınıflandırılmadı. ${reference} genel referansı yalnızca bilgi amaçlı gösterilebilir.`;
+    }
+    return `${value.biomarkerName} sonucunuz ${result}. Raporda güvenilir bir referans aralığı bulunamadığı için bu ölçüm normal, düşük veya yüksek olarak sınıflandırılmadı.`;
+  }
 
   if (value.status === "UNKNOWN" || !reference) {
-    return `${value.biomarkerName} sonucunuz ${result}. Güvenilir bir referans aralığı bulunamadığı için bu ölçüm normal, düşük veya yüksek olarak sınıflandırılmadı.`;
+    return `${value.biomarkerName} sonucunuz ${result}. Rapordaki referans bilgisi güvenilir biçimde değerlendirilemediği için bu ölçüm sınıflandırılmadı.`;
   }
 
   if (value.status === "NORMAL") {
-    return `${value.biomarkerName} sonucunuz ${result}; bu raporda kullanılan ${reference} referans aralığının içindedir. Bu sınıflandırma yalnızca bu ölçümün laboratuvar aralığındaki konumunu gösterir.`;
+    return `${value.biomarkerName} sonucunuz ${result}; raporda yazan ${reference} referans aralığının içindedir. Bu sınıflandırma yalnızca bu ölçümün laboratuvar aralığındaki konumunu gösterir.`;
   }
 
   if (value.status === "LOW" || value.status === "CRITICALLY_LOW") {
-    return `${value.biomarkerName} sonucunuz ${result}; bu raporda kullanılan ${reference} referans aralığının altındadır. Sonuç, ilgili diğer ölçümler ve kişisel sağlık bağlamıyla birlikte değerlendirilmelidir.`;
+    return `${value.biomarkerName} sonucunuz ${result}; raporda yazan ${reference} referans aralığının altındadır. Sonuç, ilgili diğer ölçümler ve kişisel sağlık bağlamıyla birlikte değerlendirilmelidir.`;
   }
 
-  return `${value.biomarkerName} sonucunuz ${result}; bu raporda kullanılan ${reference} referans aralığının üzerindedir. Sonuç, ilgili diğer ölçümler ve kişisel sağlık bağlamıyla birlikte değerlendirilmelidir.`;
+  return `${value.biomarkerName} sonucunuz ${result}; raporda yazan ${reference} referans aralığının üzerindedir. Sonuç, ilgili diğer ölçümler ve kişisel sağlık bağlamıyla birlikte değerlendirilmelidir.`;
 }
 
 function reconcileExplanations(
@@ -200,6 +210,56 @@ function reconcileExplanations(
   return reconciled;
 }
 
+function isReportClassifiedAbnormal(value: NormalizedBloodTestValue): boolean {
+  if (value.referenceRange?.source !== "LAB_REPORT") return false;
+  return (
+    value.status === "LOW" ||
+    value.status === "HIGH" ||
+    value.status === "CRITICALLY_LOW" ||
+    value.status === "CRITICALLY_HIGH"
+  );
+}
+
+function reconcileNutritionImplications(
+  normalized: NormalizedBloodTestValue[],
+  generated: NutritionImplication[],
+): NutritionImplication[] {
+  const authoritative = new Map<string, NormalizedBloodTestValue>();
+  for (const value of normalized) {
+    if (isReportClassifiedAbnormal(value) && !authoritative.has(value.biomarkerCode)) {
+      authoritative.set(value.biomarkerCode, value);
+    }
+  }
+
+  const accepted = new Map<string, NutritionImplication>();
+  let rejectedCount = 0;
+  for (const implication of generated) {
+    const value = authoritative.get(implication.biomarkerCode);
+    if (!value || accepted.has(value.biomarkerCode)) {
+      rejectedCount += 1;
+      continue;
+    }
+    accepted.set(value.biomarkerCode, {
+      ...implication,
+      biomarkerCode: value.biomarkerCode,
+      biomarkerName: value.biomarkerName,
+    });
+  }
+
+  if (rejectedCount > 0) {
+    logger.warn(
+      {
+        providerNutritionImplicationCount: generated.length,
+        acceptedNutritionImplicationCount: accepted.size,
+        rejectedNutritionImplicationCount: rejectedCount,
+      },
+      "Blood-test nutrition implications reconciled against report-classified values",
+    );
+  }
+
+  return Array.from(accepted.values());
+}
+
 export const bloodTestAnalysisService = {
   async analyze(userId: string, bloodTestId: string): Promise<BloodTestAnalysis> {
     const upload = await bloodTestRepository.findByIdForUser(bloodTestId, userId);
@@ -255,8 +315,8 @@ export const bloodTestAnalysisService = {
 
       const rangeMap = await referenceRangesService.getRangeMapForCodes(codes, context);
       const normalized = normalizationService.normalize(extraction.values, rangeMap);
-      const abnormal: NormalizedBloodTestValue[] = normalized.filter(
-        (value) => value.status !== "NORMAL" && value.status !== "UNKNOWN",
+      const abnormal: NormalizedBloodTestValue[] = normalized.filter((value) =>
+        isReportClassifiedAbnormal(value),
       );
 
       const longitudinalComparison = await longitudinalComparisonService.buildForUser(
@@ -274,6 +334,10 @@ export const bloodTestAnalysisService = {
       const adapter = getAIAdapter();
       const aiResult = await adapter.analyzeBloodTestValues(normalized, context);
       const explanations = reconcileExplanations(normalized, aiResult.explanations);
+      const nutritionImplications = reconcileNutritionImplications(
+        normalized,
+        aiResult.nutritionImplications,
+      );
 
       const overallRecommendations =
         quality.warning !== null
@@ -288,7 +352,7 @@ export const bloodTestAnalysisService = {
         abnormalValues: abnormal,
         abnormalCount: abnormal.length,
         aiExplanations: explanations,
-        nutritionImplications: aiResult.nutritionImplications,
+        nutritionImplications,
         overallRecommendations,
         summary: aiResult.summary,
         aiProvider: adapter.info.provider,

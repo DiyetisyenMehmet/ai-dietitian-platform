@@ -34,25 +34,47 @@ const STATUS_LABELS: Record<BloodTestValueStatus, string> = {
   UNKNOWN: "Referans değerlendirilemedi",
 };
 
+function isLabReportReference(value: BloodTestNormalizedValue): boolean {
+  return value.referenceRange?.source === "LAB_REPORT";
+}
+
+/**
+ * Old persisted analyses may contain statuses computed from a generic fallback
+ * range or an application-invented "critical" threshold. Never present those
+ * legacy decisions as laboratory facts. New analyses already obey the same rule
+ * in the backend; this guard also makes history safe immediately.
+ */
+function displayStatus(value: BloodTestNormalizedValue): BloodTestValueStatus {
+  if (!isLabReportReference(value)) return "UNKNOWN";
+  if (value.status === "CRITICALLY_LOW") return "LOW";
+  if (value.status === "CRITICALLY_HIGH") return "HIGH";
+  return value.status;
+}
+
+function sourceResultText(value: BloodTestNormalizedValue): string {
+  const sourceUnit = value.extractedUnit?.trim() || value.unit;
+  return `${value.rawValue}${sourceUnit ? ` ${sourceUnit}` : ""}`;
+}
+
 function StatusBadge({ test }: { test: BloodTestSummaryView }) {
   if (test.status === "analyzing") {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-medium text-primary">
-        <Loader2 className="size-3 animate-spin" aria-hidden="true" />
+      <span className="inline-flex w-fit max-w-full items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-medium text-primary">
+        <Loader2 className="size-3 shrink-0 animate-spin" aria-hidden="true" />
         Analiz ediliyor
       </span>
     );
   }
   if (test.status === "failed") {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-destructive/10 px-2.5 py-0.5 text-[11px] font-medium text-destructive">
-        <AlertTriangle className="size-3" aria-hidden="true" />
+      <span className="inline-flex w-fit max-w-full items-center gap-1.5 rounded-full bg-destructive/10 px-2.5 py-0.5 text-[11px] font-medium text-destructive">
+        <AlertTriangle className="size-3 shrink-0" aria-hidden="true" />
         Analiz başarısız
       </span>
     );
   }
   return (
-    <span className="inline-flex rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+    <span className="inline-flex w-fit max-w-full rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
       Analiz tamamlandı
     </span>
   );
@@ -85,39 +107,50 @@ function referenceText(value: BloodTestNormalizedValue): string {
   return "Referans aralığı değerlendirilemedi";
 }
 
+function referenceSourceText(value: BloodTestNormalizedValue): string {
+  if (isLabReportReference(value)) return "Kaynak: laboratuvar raporu";
+  if (value.referenceRange) {
+    return "Kaynak: genel Diewish referansı · yalnızca bilgi amaçlı, sınıflandırmada kullanılmaz";
+  }
+  return "Raporda güvenilir bir referans aralığı bulunamadı";
+}
+
 function resultPositionText(value: BloodTestNormalizedValue): string {
-  switch (value.status) {
+  const status = displayStatus(value);
+  switch (status) {
     case "NORMAL":
-      return "Sonucunuz bu laboratuvarın referans aralığındadır.";
+      return "Sonucunuz raporda yazan laboratuvar referans aralığındadır.";
     case "LOW":
-      return "Sonucunuz bu laboratuvarın referans aralığının altındadır.";
+      return "Sonucunuz raporda yazan laboratuvar referans aralığının altındadır.";
     case "HIGH":
-      return "Sonucunuz bu laboratuvarın referans aralığının üzerindedir.";
-    case "CRITICALLY_LOW":
-      return "Sonucunuz bu laboratuvarın referans aralığının belirgin biçimde altındadır.";
-    case "CRITICALLY_HIGH":
-      return "Sonucunuz bu laboratuvarın referans aralığının belirgin biçimde üzerindedir.";
+      return "Sonucunuz raporda yazan laboratuvar referans aralığının üzerindedir.";
     case "UNKNOWN":
-      return "Bu değer için güvenilir bir referans aralığı bulunmadığından sonuç sınıflandırılmadı.";
+    case "CRITICALLY_LOW":
+    case "CRITICALLY_HIGH":
+      return value.referenceRange
+        ? "Rapordaki referans aralığı güvenilir biçimde okunamadığı için sonuç sınıflandırılmadı; gösterilen genel referans yalnızca bilgi amaçlıdır."
+        : "Bu değer için rapordan güvenilir bir referans aralığı okunamadığından sonuç sınıflandırılmadı.";
   }
 }
 
 function resultInterpretation(value: BloodTestNormalizedValue): string {
-  const result = `${value.rawValue}${value.unit ? ` ${value.unit}` : ""}`;
+  const result = sourceResultText(value);
   const reference = referenceText(value);
-  switch (value.status) {
+  const status = displayStatus(value);
+
+  switch (status) {
     case "NORMAL":
-      return `${result} sonucu, bu rapordaki ${reference} referans aralığındadır.`;
+      return `${result} sonucu, raporda yazan ${reference} referans aralığındadır.`;
     case "LOW":
-      return `${result} sonucu, bu rapordaki ${reference} referans aralığının altındadır.`;
+      return `${result} sonucu, raporda yazan ${reference} referans aralığının altındadır.`;
     case "HIGH":
-      return `${result} sonucu, bu rapordaki ${reference} referans aralığının üzerindedir.`;
-    case "CRITICALLY_LOW":
-      return `${result} sonucu, bu rapordaki ${reference} referans aralığının belirgin biçimde altındadır. Gecikmeden bir sağlık profesyoneliyle değerlendirilmesi uygundur.`;
-    case "CRITICALLY_HIGH":
-      return `${result} sonucu, bu rapordaki ${reference} referans aralığının belirgin biçimde üzerindedir. Gecikmeden bir sağlık profesyoneliyle değerlendirilmesi uygundur.`;
+      return `${result} sonucu, raporda yazan ${reference} referans aralığının üzerindedir.`;
     case "UNKNOWN":
-      return `${result} ölçülmüş olsa da güvenilir bir referans aralığı bulunamadığı için Diewish bu değeri normal, düşük veya yüksek olarak sınıflandırmaz.`;
+    case "CRITICALLY_LOW":
+    case "CRITICALLY_HIGH":
+      return value.referenceRange
+        ? `${result} ölçülmüştür. Raporda güvenilir bir referans aralığı okunamadığı için Diewish bu değeri normal, düşük veya yüksek olarak sınıflandırmaz; ${reference} genel referansı yalnızca bilgi amaçlıdır.`
+        : `${result} ölçülmüştür. Güvenilir bir laboratuvar referans aralığı bulunamadığı için Diewish bu değeri normal, düşük veya yüksek olarak sınıflandırmaz.`;
   }
 }
 
@@ -144,24 +177,28 @@ function valueStatusClass(status: BloodTestValueStatus): string {
 function ResultBadges({ test }: { test: BloodTestSummaryView }) {
   if (test.status !== "analyzed") return null;
 
-  if (test.flaggedCount === 0 && test.unknownCount === 0) {
+  const safeStatuses = test.normalizedValues.map(displayStatus);
+  const flaggedCount = safeStatuses.filter((status) => status === "LOW" || status === "HIGH").length;
+  const unknownCount = safeStatuses.filter((status) => status === "UNKNOWN").length;
+
+  if (flaggedCount === 0 && unknownCount === 0) {
     return (
-      <span className="inline-flex rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+      <span className="inline-flex max-w-full rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
         Referans dışı değer saptanmadı
       </span>
     );
   }
 
   return (
-    <div className="flex flex-wrap gap-1.5">
-      {test.flaggedCount > 0 && (
-        <span className="inline-flex rounded-full bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">
-          {test.flaggedCount} değer referans aralığı dışında
+    <div className="flex min-w-0 flex-wrap gap-1.5">
+      {flaggedCount > 0 && (
+        <span className="inline-flex max-w-full rounded-full bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">
+          {flaggedCount} değer rapor referansının dışında
         </span>
       )}
-      {test.unknownCount > 0 && (
-        <span className="inline-flex rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground">
-          {test.unknownCount} değer için referans değerlendirilemedi
+      {unknownCount > 0 && (
+        <span className="inline-flex max-w-full rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+          {unknownCount} değer için rapor referansı değerlendirilemedi
         </span>
       )}
     </div>
@@ -179,11 +216,8 @@ function PremiumValueEducation({
 }) {
   const education = getBiomarkerEducation(value);
   const deep = getBiomarkerDeepEducation(value);
-  const isFlagged =
-    value.status === "LOW" ||
-    value.status === "HIGH" ||
-    value.status === "CRITICALLY_LOW" ||
-    value.status === "CRITICALLY_HIGH";
+  const safeStatus = displayStatus(value);
+  const isFlagged = safeStatus === "LOW" || safeStatus === "HIGH";
   const relatedValues = deep
     ? deep.relatedCodes
         .map((code) => allValues.find((candidate) => candidate.biomarkerCode === code))
@@ -192,15 +226,15 @@ function PremiumValueEducation({
     : [];
 
   return (
-    <details className="group/value mt-3 rounded-lg border bg-muted/20">
+    <details className="group/value mt-3 min-w-0 max-w-full overflow-hidden rounded-lg bg-muted/20">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-xs font-semibold [&::-webkit-details-marker]:hidden">
-        <span>Daha detaylı incele</span>
+        <span className="min-w-0 break-words">Daha detaylı incele</span>
         <ChevronDown
           className="size-3.5 shrink-0 text-muted-foreground transition-transform group-open/value:rotate-180"
           aria-hidden="true"
         />
       </summary>
-      <div className="space-y-4 border-t px-3 py-3 text-xs leading-relaxed">
+      <div className="min-w-0 space-y-4 border-t px-3 py-3 text-xs leading-relaxed [overflow-wrap:anywhere]">
         {deep && (
           <div>
             <p className="font-semibold text-foreground">{deep.subject} nedir?</p>
@@ -234,12 +268,12 @@ function PremiumValueEducation({
 
         {deep && (
           <>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-lg border bg-background p-2.5">
+            <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+              <div className="min-w-0 rounded-lg bg-background p-2.5">
                 <p className="font-semibold text-foreground">Düşük olduğunda ne anlama gelebilir?</p>
                 <p className="mt-1 text-muted-foreground">{deep.lowMeaning}</p>
               </div>
-              <div className="rounded-lg border bg-background p-2.5">
+              <div className="min-w-0 rounded-lg bg-background p-2.5">
                 <p className="font-semibold text-foreground">Yüksek olduğunda ne anlama gelebilir?</p>
                 <p className="mt-1 text-muted-foreground">{deep.highMeaning}</p>
               </div>
@@ -254,29 +288,30 @@ function PremiumValueEducation({
         {relatedValues.length > 0 && (
           <div>
             <p className="font-semibold text-foreground">Bu raporda birlikte bakılabilecek değerler</p>
-            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            <div className="mt-2 grid min-w-0 gap-2 sm:grid-cols-2">
               {relatedValues.map((related) => {
                 const relatedEducation = getBiomarkerEducation(related);
+                const relatedStatus = displayStatus(related);
                 return (
                   <div
                     key={related.biomarkerCode}
-                    className="flex items-start justify-between gap-2 rounded-lg bg-muted/35 px-2.5 py-2"
+                    className="grid min-w-0 gap-1.5 rounded-lg bg-muted/35 px-2.5 py-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start"
                   >
                     <div className="min-w-0">
-                      <p className="truncate font-medium text-foreground">
+                      <p className="break-words font-medium text-foreground [overflow-wrap:anywhere]">
                         {relatedEducation?.title || related.biomarkerName || related.biomarkerCode}
                       </p>
-                      <p className="mt-0.5 text-[11px] text-muted-foreground">
-                        {related.rawValue}{related.unit ? ` ${related.unit}` : ""}
+                      <p className="mt-0.5 break-words text-[11px] text-muted-foreground [overflow-wrap:anywhere]">
+                        {sourceResultText(related)}
                       </p>
                     </div>
                     <span
                       className={cn(
-                        "inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium",
-                        valueStatusClass(related.status),
+                        "inline-flex w-fit max-w-full rounded-full px-2 py-0.5 text-[10px] font-medium sm:justify-self-end",
+                        valueStatusClass(relatedStatus),
                       )}
                     >
-                      {STATUS_LABELS[related.status]}
+                      {STATUS_LABELS[relatedStatus]}
                     </span>
                   </div>
                 );
@@ -286,7 +321,7 @@ function PremiumValueEducation({
         )}
 
         {explanation && isFlagged && (
-          <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-2.5">
+          <div className="rounded-lg bg-amber-500/5 p-2.5">
             <p className="font-semibold text-foreground">Kişisel AI değerlendirmesi</p>
             <p className="mt-1 text-muted-foreground">{explanation}</p>
           </div>
@@ -303,9 +338,29 @@ function AnalysisDetails({
   test: BloodTestSummaryView;
   premiumDetails: boolean;
 }) {
+  const safeNutritionImplications = test.nutritionImplications.filter((item) => {
+    const value = test.normalizedValues.find(
+      (candidate) => candidate.biomarkerCode === item.biomarkerCode,
+    );
+    if (!value || !isLabReportReference(value)) return false;
+    const status = displayStatus(value);
+    return status === "LOW" || status === "HIGH";
+  });
+
+  const reportAbnormalNames = Array.from(
+    new Set(
+      test.normalizedValues
+        .filter((value) => {
+          const status = displayStatus(value);
+          return status === "LOW" || status === "HIGH";
+        })
+        .map((value) => value.biomarkerName || value.biomarkerCode),
+    ),
+  );
+
   const hasDetails =
     test.normalizedValues.length > 0 ||
-    test.nutritionImplications.length > 0 ||
+    safeNutritionImplications.length > 0 ||
     test.recommendations.length > 0;
   if (!hasDetails) return null;
 
@@ -314,93 +369,106 @@ function AnalysisDetails({
   );
 
   return (
-    <details className="group rounded-2xl border bg-muted/20">
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold [&::-webkit-details-marker]:hidden">
-        <span>Detaylı analizi görüntüle</span>
+    <details className="group min-w-0 max-w-full overflow-hidden rounded-2xl bg-muted/20">
+      <summary className="flex min-w-0 cursor-pointer list-none items-center justify-between gap-3 px-3 py-3 text-sm font-semibold sm:px-4 [&::-webkit-details-marker]:hidden">
+        <span className="min-w-0 break-words">Detaylı analizi görüntüle</span>
         <ChevronDown
           className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180"
           aria-hidden="true"
         />
       </summary>
 
-      <div className="space-y-5 border-t px-4 py-4">
+      <div className="min-w-0 space-y-5 border-t px-3 py-4 sm:px-4">
         {premiumDetails && test.normalizedValues.length > 0 && (
-          <div className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-2.5">
-            <div className="flex flex-wrap items-center gap-2">
+          <div className="min-w-0 rounded-xl bg-primary/5 px-3 py-2.5 [overflow-wrap:anywhere]">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
               <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary">
                 Premium detay
               </span>
-              <p className="text-xs font-semibold">Önce kısa sonuç, isterseniz ayrıntılı tıbbi açıklama</p>
+              <p className="min-w-0 text-xs font-semibold">Önce kısa sonuç, isterseniz ayrıntılı açıklama</p>
             </div>
             <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-              Kartlar hızlı okunacak şekilde kısa tutulur. “Daha detaylı incele” alanında terimin anlamı, vücuttaki görevi, düşük/yüksek durumları ve bu rapordaki ilişkili değerler açıklanır.
+              Rapordan okunan değer ve laboratuvar referansı ayrı gösterilir. Genel Diewish referansı yalnız bilgi amaçlıdır ve laboratuvar aralığı yerine kullanılarak sonuç sınıflandırılmaz.
             </p>
           </div>
         )}
 
         {test.normalizedValues.length > 0 && (
-          <section className="space-y-2.5">
+          <section className="min-w-0 space-y-2.5">
             <div>
               <h4 className="text-sm font-bold">Ölçülen Değerler</h4>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                Değerler, raporda bulunan referans aralığına göre; bu bilgi yoksa güvenli bir referans bulunabildiğinde değerlendirilir.
+              <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                Normal, düşük veya yüksek sınıflandırması yalnızca raporda güvenilir bir laboratuvar referans aralığı bulunduğunda yapılır.
               </p>
             </div>
-            <ul className="space-y-2">
+            <ul className="min-w-0 space-y-2">
               {test.normalizedValues.map((value, index) => {
                 const explanation = explanationByCode.get(value.biomarkerCode);
                 const education = getBiomarkerEducation(value);
                 const fallbackName =
                   explanation?.biomarkerName || value.biomarkerName || value.biomarkerCode;
                 const displayName = education?.title || fallbackName;
+                const safeStatus = displayStatus(value);
+                const safeExplanation =
+                  safeStatus === "UNKNOWN" ? resultInterpretation(value) : explanation?.explanation;
+
                 return (
                   <li
                     key={`${value.biomarkerCode}-${index}`}
-                    className="rounded-xl border bg-background p-3"
+                    className="min-w-0 max-w-full rounded-xl bg-background/80 p-3 [overflow-wrap:anywhere]"
                   >
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-semibold">{displayName}</p>
+                    <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+                      <div className="min-w-0">
+                        <p className="break-words text-sm font-semibold [overflow-wrap:anywhere]">
+                          {displayName}
+                        </p>
                         {premiumDetails && education && (
-                          <p className="mt-0.5 text-[11px] font-medium text-primary/80">
+                          <p className="mt-0.5 break-words text-[11px] font-medium text-primary/80">
                             {education.category}
                           </p>
                         )}
                       </div>
                       <span
                         className={cn(
-                          "inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium",
-                          valueStatusClass(value.status),
+                          "inline-flex w-fit max-w-full rounded-full px-2 py-0.5 text-[11px] font-medium sm:justify-self-end",
+                          valueStatusClass(safeStatus),
                         )}
                       >
-                        {STATUS_LABELS[value.status]}
+                        {STATUS_LABELS[safeStatus]}
                       </span>
                     </div>
 
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Sonuç:{" "}
-                      <span className="font-medium text-foreground">
-                        {value.rawValue}{value.unit ? ` ${value.unit}` : ""}
-                      </span>
-                      <span aria-hidden="true"> • </span>
-                      Referans: {referenceText(value)}
-                    </p>
+                    <div className="mt-2 grid min-w-0 gap-1 text-xs leading-relaxed text-muted-foreground">
+                      <p className="break-words [overflow-wrap:anywhere]">
+                        <span className="font-medium text-foreground">Rapordan okunan sonuç:</span>{" "}
+                        {sourceResultText(value)}
+                      </p>
+                      <p className="break-words [overflow-wrap:anywhere]">
+                        <span className="font-medium text-foreground">
+                          {isLabReportReference(value) ? "Laboratuvar referansı:" : "Genel referans:"}
+                        </span>{" "}
+                        {referenceText(value)}
+                      </p>
+                      <p className="break-words text-[11px] [overflow-wrap:anywhere]">
+                        {referenceSourceText(value)}
+                      </p>
+                    </div>
 
                     {premiumDetails ? (
                       <>
-                        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                        <p className="mt-2 break-words text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
                           {compactExplanation(value)}
                         </p>
                         <PremiumValueEducation
                           value={value}
-                          explanation={explanation?.explanation}
+                          explanation={safeStatus === "UNKNOWN" ? undefined : explanation?.explanation}
                           allValues={test.normalizedValues}
                         />
                       </>
                     ) : (
-                      explanation?.explanation && (
-                        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                          {explanation.explanation}
+                      safeExplanation && (
+                        <p className="mt-2 break-words text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
+                          {safeExplanation}
                         </p>
                       )
                     )}
@@ -411,20 +479,28 @@ function AnalysisDetails({
           </section>
         )}
 
-        {test.nutritionImplications.length > 0 && (
-          <section className="space-y-3">
+        {safeNutritionImplications.length > 0 && (
+          <section className="min-w-0 space-y-3">
             <div>
               <h4 className="text-sm font-bold">Beslenme Açısından Önemli Bulgular</h4>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                Yalnızca ölçülen ve referans değerlendirmesi yapılabilen bulgular üzerinden beslenme desteği planlanır.
+              <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                Bu bölüm yalnızca raporda ölçülen ve laboratuvarın kendi referans aralığının dışında kalan değerlerden oluşturulur.
               </p>
             </div>
-            <div className="space-y-3">
-              {test.nutritionImplications.map((item, index) => (
-                <article key={`${item.biomarkerCode}-${index}`} className="rounded-xl border bg-background p-3">
-                  <h5 className="text-sm font-semibold">{item.biomarkerName || item.biomarkerCode}</h5>
+            <div className="min-w-0 space-y-3">
+              {safeNutritionImplications.map((item, index) => (
+                <article
+                  key={`${item.biomarkerCode}-${index}`}
+                  className="min-w-0 rounded-xl bg-background/80 p-3 [overflow-wrap:anywhere]"
+                >
+                  <h5 className="break-words text-sm font-semibold">
+                    {item.biomarkerName || item.biomarkerCode}
+                  </h5>
+                  <p className="mt-1 text-[11px] font-medium text-primary/80">
+                    Dayanak: raporda ölçülen ve laboratuvar referansının dışında kalan değer
+                  </p>
                   {item.implication && (
-                    <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+                    <p className="mt-1.5 break-words text-sm leading-relaxed text-muted-foreground">
                       {item.implication}
                     </p>
                   )}
@@ -479,15 +555,23 @@ function AnalysisDetails({
         )}
 
         {test.recommendations.length > 0 && (
-          <section>
+          <section className="min-w-0">
             <h4 className="text-sm font-bold">Öğün Planı ve Öncelikler</h4>
-            <ol className="mt-2 space-y-2">
+            <p className="mt-1 break-words text-[11px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
+              {reportAbnormalNames.length > 0
+                ? `Kan tahlili dayanağı: ${reportAbnormalNames.join(", ")}. Öneriler kişisel profil bağlamıyla birlikte üretilir.`
+                : "Bu raporda laboratuvar referansı dışında sınıflandırılmış bir değer yoksa aşağıdaki öneriler genel beslenme bağlamıdır; eksiklik veya hastalık sonucu olarak yorumlanmamalıdır."}
+            </p>
+            <ol className="mt-2 min-w-0 space-y-2">
               {test.recommendations.map((recommendation, index) => (
-                <li key={index} className="flex gap-2.5 text-sm leading-relaxed text-muted-foreground">
+                <li
+                  key={index}
+                  className="flex min-w-0 gap-2.5 text-sm leading-relaxed text-muted-foreground"
+                >
                   <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-bold text-primary">
                     {index + 1}
                   </span>
-                  <span>{recommendation}</span>
+                  <span className="min-w-0 break-words [overflow-wrap:anywhere]">{recommendation}</span>
                 </li>
               ))}
             </ol>
@@ -567,15 +651,15 @@ export function BloodTestsView() {
   }, [removingId]);
 
   return (
-    <div className="space-y-5">
-      <section className="rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/10 via-accent to-background p-5 shadow-card">
-        <div className="flex items-start gap-3">
+    <div className="min-w-0 max-w-full space-y-5 overflow-x-hidden">
+      <section className="min-w-0 max-w-full rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/10 via-accent to-background p-5 shadow-card">
+        <div className="flex min-w-0 items-start gap-3">
           <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/15 text-primary">
             {React.createElement(healthIcon("flask"), { className: "size-6", "aria-hidden": true })}
           </span>
           <div className="min-w-0">
             <h2 className="text-base font-bold">Kan Tahlilleri</h2>
-            <p className="mt-0.5 text-sm text-muted-foreground">
+            <p className="mt-0.5 break-words text-sm text-muted-foreground [overflow-wrap:anywhere]">
               Tahlil dosyan önce gerçek bir laboratuvar raporu olup olmadığı açısından doğrulanır;
               doğrulandıktan sonra değerler çıkarılır ve beslenme odaklı açıklama hazırlanır.
             </p>
@@ -607,7 +691,7 @@ export function BloodTestsView() {
         </p>
       </section>
 
-      <section className="space-y-3">
+      <section className="min-w-0 max-w-full space-y-3">
         <h3 className="text-base font-semibold">Geçmiş Analizler</h3>
         {tests.length === 0 ? (
           <Card>
@@ -621,28 +705,33 @@ export function BloodTestsView() {
             </CardContent>
           </Card>
         ) : (
-          <ul className="space-y-3">
+          <ul className="min-w-0 space-y-3">
             {tests.map((test) => (
-              <li key={test.id}>
+              <li key={test.id} className="min-w-0 max-w-full">
                 <Card
                   className={cn(
+                    "min-w-0 max-w-full overflow-hidden",
                     test.status === "analyzing" && "opacity-90",
                     test.status === "failed" && "border-destructive/30",
                   )}
                 >
-                  <CardContent className="space-y-3 p-4">
-                    <div className="flex items-start justify-between gap-2">
+                  <CardContent className="min-w-0 space-y-3 p-4">
+                    <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold">{test.title}</p>
+                        <p className="break-words text-sm font-semibold [overflow-wrap:anywhere]">
+                          {test.title}
+                        </p>
                         <p className="text-xs text-muted-foreground">
                           {formatLongDate(new Date(test.date))}
                         </p>
                       </div>
-                      <StatusBadge test={test} />
+                      <div className="sm:justify-self-end">
+                        <StatusBadge test={test} />
+                      </div>
                     </div>
                     <p
                       className={cn(
-                        "text-sm leading-relaxed text-muted-foreground",
+                        "break-words text-sm leading-relaxed text-muted-foreground [overflow-wrap:anywhere]",
                         test.status === "failed" && "text-destructive",
                       )}
                     >
@@ -653,7 +742,7 @@ export function BloodTestsView() {
                       <AnalysisDetails test={test} premiumDetails={premiumDetails} />
                     )}
 
-                    <div className="flex items-end justify-between gap-2 pt-1">
+                    <div className="flex min-w-0 flex-wrap items-end justify-between gap-2 pt-1">
                       <ResultBadges test={test} />
                       <button
                         type="button"
@@ -678,7 +767,7 @@ export function BloodTestsView() {
         )}
       </section>
 
-      <p className="px-3 text-center text-[11px] leading-relaxed text-muted-foreground">
+      <p className="break-words px-3 text-center text-[11px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
         Laboratuvar değerleri tek başına tanı koydurmaz; gerektiğinde diğer sonuçlar, belirtiler ve sağlık profesyoneli değerlendirmesiyle birlikte ele alınır. Diewish tıbbi tanı veya tedavinin yerine geçmez.
       </p>
     </div>

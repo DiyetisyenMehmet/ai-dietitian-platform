@@ -120,9 +120,9 @@ function parseDocumentReferenceRange(
 }
 
 /**
- * Computes a value's status relative to a reference range. "Critical" is
- * defined as being at least half a range-width beyond the normal bounds; when
- * only one bound exists, a proportional margin is used.
+ * Computes a value's position against the laboratory's printed reference range.
+ * Diewish deliberately does not invent a "critical" threshold: critical flags
+ * are clinically meaningful only when the laboratory explicitly provides one.
  */
 function computeStatus(
   value: number,
@@ -130,17 +130,8 @@ function computeStatus(
   max: number | null,
 ): BloodTestValueStatus {
   if (min === null && max === null) return "UNKNOWN";
-
-  const width = min !== null && max !== null ? Math.abs(max - min) : null;
-
-  if (min !== null && value < min) {
-    const criticalLow = width !== null ? min - width * 0.5 : min * 0.5;
-    return value <= criticalLow ? "CRITICALLY_LOW" : "LOW";
-  }
-  if (max !== null && value > max) {
-    const criticalHigh = width !== null ? max + width * 0.5 : max * 1.5;
-    return value >= criticalHigh ? "CRITICALLY_HIGH" : "HIGH";
-  }
+  if (min !== null && value < min) return "LOW";
+  if (max !== null && value > max) return "HIGH";
   return "NORMAL";
 }
 
@@ -162,17 +153,15 @@ function toSnapshot(range: BloodTestReferenceRange): ReferenceRangeSnapshot {
  */
 export const normalizationService = {
   /**
-   * Normalizes a batch of extracted values against the report's own range first
-   * and then the database fallback.
-   *
-   * For each value it: matches the label to a canonical code, parses the
-   * numeric value, selects a safe reference range, converts the unit when a DB
-   * fallback requires it, and computes the status. Values whose label cannot be
-   * matched are still returned with an `UNKNOWN` status so nothing is silently
-   * dropped.
+   * Normalizes a batch using the report's own range as the only authoritative
+   * source for NORMAL/LOW/HIGH classification. A database range may still be
+   * retained as an informational fallback and for unit normalization, but it
+   * never turns a report with a missing/unreadable range into a clinical-looking
+   * status. Values whose label cannot be matched are still returned with an
+   * `UNKNOWN` status so nothing is silently dropped.
    *
    * @param extracted - Raw values from the extraction pipeline.
-   * @param ranges - Active fallback reference ranges keyed by canonical code.
+   * @param ranges - Active informational fallback ranges keyed by canonical code.
    * @returns The normalized values.
    */
   normalize(
@@ -194,8 +183,7 @@ export const normalizationService = {
       const referenceRange = documentRange ?? (databaseRange ? toSnapshot(databaseRange) : null);
 
       const parsed = parseNumeric(item.rawValue);
-      const targetUnit =
-        referenceRange?.unit ?? definition?.canonicalUnit ?? extractedUnit ?? "";
+      const targetUnit = referenceRange?.unit ?? definition?.canonicalUnit ?? extractedUnit ?? "";
 
       let numericValue = parsed;
       let conversionFactor = 1;
@@ -208,11 +196,11 @@ export const normalizationService = {
       }
 
       let status: BloodTestValueStatus = "UNKNOWN";
-      if (numericValue !== null && referenceRange) {
+      if (numericValue !== null && documentRange) {
         status = computeStatus(
           numericValue,
-          referenceRange.minValue,
-          referenceRange.maxValue,
+          documentRange.minValue,
+          documentRange.maxValue,
         );
       }
 
