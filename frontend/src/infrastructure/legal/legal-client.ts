@@ -9,6 +9,10 @@ import type {
 
 const BASE = "/legal";
 
+interface LegalDocumentEnvelope {
+  document: LegalDocumentView;
+}
+
 export const legalClient = {
   listDocuments(): Promise<{ documents: LegalDocumentSummary[] }> {
     return apiRequest<{ documents: LegalDocumentSummary[] }>({
@@ -17,11 +21,12 @@ export const legalClient = {
     });
   },
 
-  getDocument(type: LegalDocumentType): Promise<LegalDocumentView> {
-    return apiRequest<LegalDocumentView>({
+  async getDocument(type: LegalDocumentType): Promise<LegalDocumentView> {
+    const { document } = await apiRequest<LegalDocumentEnvelope>({
       path: `${BASE}/documents/${type}`,
       method: "GET",
     });
+    return document;
   },
 
   getConsents(): Promise<ConsentStatusView> {
