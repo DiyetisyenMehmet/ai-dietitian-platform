@@ -2,14 +2,22 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { CheckCircle2, HeartPulse, Info, Loader2, ShieldCheck, XCircle } from "lucide-react";
+import { CheckCircle2, Info, Loader2, ShieldCheck, XCircle } from "lucide-react";
 import { toast } from "sonner";
 
 import { useAuth } from "@/application/auth/auth-store";
 import { consentStore, useConsentState } from "@/application/legal/consent-store";
-import type { LegalDocumentType } from "@/domain/legal/types";
+import type { LegalDocumentType, LegalDocumentView } from "@/domain/legal/types";
 import { Button } from "@/presentation/components/ui/button";
 import { Card, CardContent } from "@/presentation/components/ui/card";
+import {
+  Modal,
+  ModalContent,
+  ModalDescription,
+  ModalFooter,
+  ModalHeader,
+  ModalTitle,
+} from "@/presentation/components/ui/modal";
 
 const LABELS: Record<LegalDocumentType, string> = {
   PRIVACY_POLICY: "Gizlilik Politikası",
@@ -18,14 +26,12 @@ const LABELS: Record<LegalDocumentType, string> = {
   KVKK_EXPLICIT_CONSENT: "Sağlık verisi açık rızası",
 };
 
-/**
- * Privacy/consent management for established users. Informational notices are
- * shown as notices, never as permissions that can be granted or withdrawn.
- */
 export function PrivacyConsentView() {
   const { user } = useAuth();
   const consentState = useConsentState();
-  const [confirmingWithdrawal, setConfirmingWithdrawal] = React.useState(false);
+  const [healthDocument, setHealthDocument] = React.useState<LegalDocumentView | null>(null);
+  const [healthDocumentLoading, setHealthDocumentLoading] = React.useState(false);
+  const [withdrawalOpen, setWithdrawalOpen] = React.useState(false);
   const [withdrawing, setWithdrawing] = React.useState(false);
 
   React.useEffect(() => {
@@ -33,6 +39,16 @@ export function PrivacyConsentView() {
       void consentStore.hydrate(user.id);
     }
   }, [user?.id, consentState.ownerId, consentState.status]);
+
+  React.useEffect(() => {
+    if (consentState.status !== "ready" || healthDocument || healthDocumentLoading) return;
+    setHealthDocumentLoading(true);
+    void consentStore
+      .loadDocument("KVKK_EXPLICIT_CONSENT")
+      .then(setHealthDocument)
+      .catch(() => toast.error("Sağlık verisi açık rıza metni yüklenemedi."))
+      .finally(() => setHealthDocumentLoading(false));
+  }, [consentState.status, healthDocument, healthDocumentLoading]);
 
   const healthConsent = consentState.consent?.items.find(
     (item) => item.type === "KVKK_EXPLICIT_CONSENT",
@@ -43,9 +59,9 @@ export function PrivacyConsentView() {
     setWithdrawing(true);
     try {
       await consentStore.withdraw(user.id, "KVKK_EXPLICIT_CONSENT");
-      setConfirmingWithdrawal(false);
+      setWithdrawalOpen(false);
       toast.success("Sağlık verisi açık rızan geri çekildi.", {
-        description: "Yeni sağlık verisi işleme ve rızaya bağlı yapay zekâ işlemleri durduruldu.",
+        description: "Rızaya bağlı yeni sağlık verisi işleme ve yapay zekâ işlemleri durduruldu.",
       });
     } catch (error) {
       toast.error("Açık rıza geri çekilemedi.", {
@@ -69,12 +85,8 @@ export function PrivacyConsentView() {
       <Card>
         <CardContent className="space-y-4 p-5 text-center">
           <ShieldCheck className="mx-auto size-8 text-primary" aria-hidden="true" />
-          <p className="text-sm text-muted-foreground">
-            {consentState.error ?? "Gizlilik ayarları alınamadı."}
-          </p>
-          <Button onClick={() => user?.id && void consentStore.hydrate(user.id, true)}>
-            Tekrar dene
-          </Button>
+          <p className="text-sm text-muted-foreground">{consentState.error ?? "Gizlilik ayarları alınamadı."}</p>
+          <Button onClick={() => user?.id && void consentStore.hydrate(user.id, true)}>Tekrar dene</Button>
         </CardContent>
       </Card>
     );
@@ -82,23 +94,10 @@ export function PrivacyConsentView() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-start gap-3 rounded-2xl border border-primary/20 bg-primary/5 p-4">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-          <ShieldCheck className="size-5" aria-hidden="true" />
-        </span>
-        <div className="space-y-1">
-          <p className="text-sm font-semibold">Gizlilik ve izinler senin kontrolünde</p>
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            KVKK aydınlatma ve gizlilik metni bir izin değildir. Sağlık verisi açık rızanı ise
-            dilediğin zaman geri çekebilirsin. Bu işlem mevcut kayıtlarını otomatik olarak silmez.
-          </p>
-        </div>
-      </div>
-
       <Card>
         <CardContent className="divide-y divide-border p-0">
           {(consentState.consent?.items ?? []).map((item) => {
-            const informational = !item.mandatory;
+            const informational = !item.consentable;
             return (
               <div key={item.type} className="flex items-center justify-between gap-4 p-4">
                 <div className="min-w-0">
@@ -107,23 +106,12 @@ export function PrivacyConsentView() {
                 </div>
                 {informational ? (
                   <span className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground">
-                    <Info className="size-4" aria-hidden="true" />
-                    Bilgilendirme metni
+                    <Info className="size-4" aria-hidden="true" /> Bilgilendirme metni
                   </span>
                 ) : (
-                  <span
-                    className={
-                      item.granted
-                        ? "inline-flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400"
-                        : "inline-flex items-center gap-1 text-xs font-medium text-destructive"
-                    }
-                  >
-                    {item.granted ? (
-                      <CheckCircle2 className="size-4" aria-hidden="true" />
-                    ) : (
-                      <XCircle className="size-4" aria-hidden="true" />
-                    )}
-                    {item.granted ? "Güncel" : "Onay gerekli"}
+                  <span className={item.granted ? "inline-flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400" : "inline-flex items-center gap-1 text-xs font-medium text-muted-foreground"}>
+                    {item.granted ? <CheckCircle2 className="size-4" aria-hidden="true" /> : <XCircle className="size-4" aria-hidden="true" />}
+                    {item.granted ? "Güncel" : item.mandatory ? "Onay gerekli" : "Aktif değil"}
                   </span>
                 )}
               </div>
@@ -134,74 +122,60 @@ export function PrivacyConsentView() {
 
       <Card className="border-primary/20">
         <CardContent className="space-y-4 p-5">
-          <div className="flex items-start gap-3">
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <HeartPulse className="size-5" aria-hidden="true" />
-            </span>
-            <div>
-              <h2 className="text-sm font-semibold">Sağlık verisi açık rızası</h2>
-              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                Rıza geri çekildiğinde yeni sağlık verisi kaydı, kan tahlili/AI analizi, beslenme planı
-                üretimi ve arka plandaki kişisel sağlık koçluğu işlemleri durdurulur.
-              </p>
-            </div>
+          <div>
+            <h2 className="text-sm font-semibold">Sağlık Verisi Açık Rıza Metni</h2>
+            <p className="mt-1 text-xs text-muted-foreground">{healthDocument ? `Sürüm ${healthDocument.version}` : "Güncel metin"}</p>
+          </div>
+
+          <div className="max-h-80 overflow-y-auto whitespace-pre-wrap rounded-xl border border-border bg-muted/20 p-4 text-xs leading-relaxed text-muted-foreground">
+            {healthDocumentLoading && !healthDocument ? "Yükleniyor…" : healthDocument?.body ?? "Metin yüklenemedi."}
           </div>
 
           {healthConsent?.granted ? (
-            confirmingWithdrawal ? (
-              <div className="space-y-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4">
-                <p className="text-sm font-medium">Açık rızanı geri çekmek istediğinden emin misin?</p>
-                <p className="text-xs leading-relaxed text-muted-foreground">
-                  Mevcut verilerin silinmez. Rızaya bağlı yeni sağlık verisi işleme ve yapay zekâ
-                  özellikleri, yeniden açık rıza verene kadar kullanılamaz.
-                </p>
-                <div className="flex gap-2">
-                  <Button
-                    variant="destructive"
-                    className="flex-1"
-                    isLoading={withdrawing}
-                    disabled={withdrawing}
-                    onClick={() => void withdrawHealthConsent()}
-                  >
-                    Rızayı geri çek
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="flex-1"
-                    disabled={withdrawing}
-                    onClick={() => setConfirmingWithdrawal(false)}
-                  >
-                    Vazgeç
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <Button variant="outline" className="w-full" onClick={() => setConfirmingWithdrawal(true)}>
-                Sağlık verisi açık rızasını geri çek
-              </Button>
-            )
+            <div className="border-t border-border pt-3">
+              <button
+                type="button"
+                className="text-left text-xs font-medium text-blue-600 underline-offset-4 hover:underline dark:text-blue-400"
+                onClick={() => setWithdrawalOpen(true)}
+              >
+                Sağlık verisi açık rızamı geri çekmek istiyorum.
+              </button>
+            </div>
           ) : (
-            <div className="space-y-3">
-              <p className="rounded-xl bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-800 dark:text-amber-200">
-                Sağlık verisi açık rızan aktif değil. Rızaya bağlı yeni sağlık ve yapay zekâ işlemleri
-                backend tarafından engellenir.
-              </p>
-              <Button asChild className="w-full">
-                <Link href="/consent">Güncel metni incele ve yeniden onayla</Link>
-              </Button>
+            <div className="border-t border-border pt-3 text-xs leading-relaxed text-muted-foreground">
+              Sağlık verisi açık rızan aktif değil. Sağlık verisi işlemeyi gerektiren özellikleri kullanmak istersen{" "}
+              <Link className="font-medium text-blue-600 underline-offset-4 hover:underline dark:text-blue-400" href="/consent">
+                açık rıza metnini inceleyip yeniden onaylayabilirsin.
+              </Link>
             </div>
           )}
         </CardContent>
       </Card>
 
       <div className="grid gap-2 sm:grid-cols-2">
-        <Button asChild variant="outline">
-          <Link href="/privacy">Gizlilik Politikasını aç</Link>
-        </Button>
-        <Button asChild variant="outline">
-          <Link href="/terms">Kullanım Koşullarını aç</Link>
-        </Button>
+        <Button asChild variant="outline"><Link href="/privacy">Gizlilik Politikasını aç</Link></Button>
+        <Button asChild variant="outline"><Link href="/terms">Kullanım Koşullarını aç</Link></Button>
       </div>
+
+      <Modal open={withdrawalOpen} onOpenChange={(open) => !withdrawing && setWithdrawalOpen(open)}>
+        <ModalContent>
+          <ModalHeader>
+            <ModalTitle>Sağlık verisi açık rızanı geri çekmek istiyor musun?</ModalTitle>
+            <ModalDescription className="leading-relaxed">
+              Bu işlemden sonra yeni sağlık verisi kaydı, kan tahlili analizi ve rızaya bağlı sağlık kişiselleştirmesi durdurulur. Hesabın ve sağlık verisi işlemeyi gerektirmeyen özellikler çalışmaya devam eder. Mevcut kayıtların bu işlemle otomatik olarak silinmez.
+            </ModalDescription>
+          </ModalHeader>
+          <div className="rounded-xl bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-800 dark:text-amber-200">
+            Devam edersen sağlık verisine dayalı özellikleri yeniden kullanabilmek için tekrar açık rıza vermen gerekir.
+          </div>
+          <ModalFooter>
+            <Button variant="outline" disabled={withdrawing} onClick={() => setWithdrawalOpen(false)}>Vazgeç</Button>
+            <Button variant="destructive" disabled={withdrawing} isLoading={withdrawing} onClick={() => void withdrawHealthConsent()}>
+              Evet, rızamı geri çek
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
     </div>
   );
 }

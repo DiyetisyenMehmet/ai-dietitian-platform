@@ -7,7 +7,10 @@ export interface LegalDocument {
   version: string;
   title: string;
   body: string;
+  /** Whether this document must be accepted before the user can continue globally. */
   mandatory: boolean;
+  /** Whether the document represents an affirmative grant/withdraw consent action. */
+  consentable: boolean;
 }
 
 const DOCUMENT_VERSIONS: Record<LegalDocumentType, string> = {
@@ -74,7 +77,7 @@ Diewish, kullanıcıların kendi hesapları üzerinden kullandığı yapay zekâ
 Mevcut V1 ödeme modeli, Premium veya Premium Plus satın alındığında tek seferlik 30 günlük dijital yazılım erişimi sağlar. Otomatik yenileme ve yıllık tahsilat ayrıca açıkça sunulmadıkça uygulanmaz. Güncel plan, toplam bedel ve süre ödeme öncesinde gösterilir.
 
 ## Ödeme
-Production ödeme özelliği etkinleştirildiğinde kart işlemi iyzico'nun güvenli ödeme akışında tamamlanır. Diewish kart numarası veya CVV bilgisini kendi veritabanında saklamaz.
+Ödeme özelliği kullanıma sunulduğunda kart işlemleri iyzico'nun güvenli ödeme akışında tamamlanır. Diewish kart numarası veya CVV bilgisini kendi veritabanında saklamaz.
 
 ## Tıbbi Sınırlar
 Diewish teşhis, tedavi veya acil sağlık hizmeti sunmaz. Üretilen içerikler bilgilendirme amaçlıdır ve sağlık profesyonelinin değerlendirmesinin yerine geçmez.`;
@@ -84,8 +87,10 @@ const MEDICAL_DISCLAIMER_BODY = `# Tıbbi Sorumluluk Reddi
 Diewish tarafından oluşturulan beslenme planları, kan tahlili özetleri ve yapay zekâ sohbet yanıtları yalnızca genel bilgilendirme amaçlıdır ve tıbbi tavsiye niteliği taşımaz.
 
 - Diewish bir hekim, diyetisyen veya sağlık kuruluşu değildir; teşhis veya tedavi hizmeti sunmaz.
+- Yapay zekâ ve otomatik analizler hatalı, eksik veya bağlamdan yoksun sonuç üretebilir.
+- İlaç başlama, bırakma veya doz değiştirme dahil tıbbi kararlar Diewish çıktısına dayanılarak verilmemelidir.
 - Sağlık kararları almadan önce yetkili bir sağlık profesyoneline danışın.
-- Acil durumda en yakın sağlık kuruluşuna başvurun veya acil yardım hizmetlerini kullanın.
+- Acil durumda 112'yi arayın veya en yakın sağlık kuruluşuna başvurun.
 - Otomatik kan tahlili özetleri hekim değerlendirmesinin yerine geçmez.`;
 
 const KVKK_CONSENT_BODY = `# Sağlık Verilerinin İşlenmesine İlişkin Açık Rıza Metni
@@ -98,29 +103,33 @@ Bu rızayı özgür irademle verdiğimi, rıza vermediğimde hesabımı ve rıza
 
 const DOCUMENT_CONTENT: Record<
   LegalDocumentType,
-  { title: string; body: string; mandatory: boolean }
+  { title: string; body: string; mandatory: boolean; consentable: boolean }
 > = {
   PRIVACY_POLICY: {
     title: "KVKK Aydınlatma ve Gizlilik Bilgilendirmesi",
     body: PRIVACY_POLICY_BODY,
-    // Illumination is information, not consent. It remains available publicly
-    // and in-app but is not represented as an affirmative privacy permission.
     mandatory: false,
+    consentable: false,
   },
   TERMS_OF_SERVICE: {
     title: "Kullanım Koşulları",
     body: TERMS_OF_SERVICE_BODY,
     mandatory: true,
+    consentable: true,
   },
   MEDICAL_DISCLAIMER: {
     title: "Tıbbi Sorumluluk Reddi",
     body: MEDICAL_DISCLAIMER_BODY,
     mandatory: true,
+    consentable: true,
   },
   KVKK_EXPLICIT_CONSENT: {
     title: "Sağlık Verisi Açık Rıza Metni",
     body: KVKK_CONSENT_BODY,
-    mandatory: true,
+    // Health consent is voluntary globally, but remains an auditable grant that
+    // health-data processing routes can require explicitly.
+    mandatory: false,
+    consentable: true,
   },
 };
 
@@ -132,6 +141,7 @@ export const LEGAL_DOCUMENTS: LegalDocument[] = (
   title: DOCUMENT_CONTENT[type].title,
   body: DOCUMENT_CONTENT[type].body,
   mandatory: DOCUMENT_CONTENT[type].mandatory,
+  consentable: DOCUMENT_CONTENT[type].consentable,
 }));
 
 export const LEGAL_DOCUMENT_BY_TYPE: Record<LegalDocumentType, LegalDocument> =

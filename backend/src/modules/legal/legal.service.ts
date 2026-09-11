@@ -15,49 +15,39 @@ import type {
   LegalDocumentView,
 } from "./types";
 
-/**
- * Business logic for legal documents and user consent (Sprint 15).
- *
- * Consent is versioned: a grant only counts while the version the user agreed
- * to matches the document's current version. When legal bumps a document
- * version, previously-granted consent is considered stale and the mandatory
- * consent gate re-triggers, forcing re-acceptance.
- */
+/** Business logic for versioned legal documents and user consent. */
 export const legalService = {
-  /** Lists all legal documents (metadata only, no body). */
   listDocuments(): LegalDocumentSummary[] {
     return LEGAL_DOCUMENTS.map((doc) => ({
       type: doc.type,
       version: doc.version,
       title: doc.title,
       mandatory: doc.mandatory,
+      consentable: doc.consentable,
     }));
   },
 
-  /** Returns a single legal document including its body. */
   getDocument(type: LegalDocumentType): LegalDocumentView {
     const doc = LEGAL_DOCUMENT_BY_TYPE[type];
-    if (!doc) {
-      throw ApiError.notFound("Legal document not found.");
-    }
+    if (!doc) throw ApiError.notFound("Legal document not found.");
     return {
       type: doc.type,
       version: doc.version,
       title: doc.title,
       mandatory: doc.mandatory,
+      consentable: doc.consentable,
       body: doc.body,
     };
   },
 
-  /** Builds the consent-status view for a user across all document types. */
   async getConsentStatus(userId: string): Promise<ConsentStatusView> {
     const latest = await legalRepository.findLatestPerType(userId);
-    const latestByType = new Map(latest.map((r) => [r.type, r]));
+    const latestByType = new Map(latest.map((record) => [record.type, record]));
 
     const items: ConsentStatusItem[] = LEGAL_DOCUMENTS.map((doc) => {
       const record = latestByType.get(doc.type);
       const granted =
-        doc.mandatory &&
+        doc.consentable &&
         !!record &&
         record.granted &&
         record.documentVersion === doc.version;
@@ -65,10 +55,11 @@ export const legalService = {
         type: doc.type,
         currentVersion: doc.version,
         mandatory: doc.mandatory,
+        consentable: doc.consentable,
         granted,
-        consentedVersion: doc.mandatory ? record?.documentVersion ?? null : null,
-        grantedAt: doc.mandatory ? record?.grantedAt ?? null : null,
-        withdrawnAt: doc.mandatory ? record?.withdrawnAt ?? null : null,
+        consentedVersion: doc.consentable ? record?.documentVersion ?? null : null,
+        grantedAt: doc.consentable ? record?.grantedAt ?? null : null,
+        withdrawnAt: doc.consentable ? record?.withdrawnAt ?? null : null,
       };
     });
 
@@ -83,21 +74,17 @@ export const legalService = {
     };
   },
 
-  /**
-   * Records an affirmative consent for a document. Informational notices such
-   * as the KVKK/privacy illumination text are deliberately not consentable.
-   */
   async grantConsent(
     userId: string,
     type: LegalDocumentType,
     context: AuditContext,
   ): Promise<ConsentStatusItem> {
     const doc = LEGAL_DOCUMENT_BY_TYPE[type];
-    if (!doc) {
-      throw ApiError.notFound("Legal document not found.");
-    }
-    if (!doc.mandatory) {
-      throw ApiError.badRequest("This legal document is informational and does not accept consent actions.");
+    if (!doc) throw ApiError.notFound("Legal document not found.");
+    if (!doc.consentable) {
+      throw ApiError.badRequest(
+        "This legal document is informational and does not accept consent actions.",
+      );
     }
 
     await legalRepository.recordGrant({
@@ -119,6 +106,7 @@ export const legalService = {
       type: doc.type,
       currentVersion: doc.version,
       mandatory: doc.mandatory,
+      consentable: doc.consentable,
       granted: true,
       consentedVersion: doc.version,
       grantedAt: new Date(),
@@ -126,21 +114,17 @@ export const legalService = {
     };
   },
 
-  /**
-   * Withdraws consent for an actual consent document. Informational notices do
-   * not represent a permission and therefore cannot be withdrawn.
-   */
   async withdrawConsent(
     userId: string,
     type: LegalDocumentType,
     context: AuditContext,
   ): Promise<ConsentStatusItem> {
     const doc = LEGAL_DOCUMENT_BY_TYPE[type];
-    if (!doc) {
-      throw ApiError.notFound("Legal document not found.");
-    }
-    if (!doc.mandatory) {
-      throw ApiError.badRequest("This legal document is informational and cannot be withdrawn.");
+    if (!doc) throw ApiError.notFound("Legal document not found.");
+    if (!doc.consentable) {
+      throw ApiError.badRequest(
+        "This legal document is informational and cannot be withdrawn.",
+      );
     }
 
     await legalRepository.recordWithdrawal({
@@ -162,6 +146,7 @@ export const legalService = {
       type: doc.type,
       currentVersion: doc.version,
       mandatory: doc.mandatory,
+      consentable: doc.consentable,
       granted: false,
       consentedVersion: doc.version,
       grantedAt: null,
@@ -169,9 +154,23 @@ export const legalService = {
     };
   },
 
-  async getMissingMandatoryConsents(userId: string): Promise<LegalDocumentType[]> {
+  /** Returns missing global consents plus any feature-specific consent types. */
+  async getMissingConsents(
+    userId: string,
+    requiredTypes: LegalDocumentType[] = [],
+  ): Promise<LegalDocumentType[]> {
     const status = await this.getConsentStatus(userId);
-    return status.missingMandatory;
+    const required = new Set<LegalDocumentType>([
+      ...MANDATORY_CONSENTS,
+      ...requiredTypes,
+    ]);
+    return status.items
+      .filter((item) => required.has(item.type) && !item.granted)
+      .map((item) => item.type);
+  },
+
+  async getMissingMandatoryConsents(userId: string): Promise<LegalDocumentType[]> {
+    return this.getMissingConsents(userId);
   },
 
   mandatoryConsents(): LegalDocumentType[] {

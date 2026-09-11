@@ -6,6 +6,7 @@ export interface LegalDocumentSummary {
   version: string;
   title: string;
   mandatory: boolean;
+  consentable: boolean;
 }
 
 /** Full legal document including its body. */
@@ -19,6 +20,8 @@ export interface ConsentStatusItem {
   /** The current (latest) document version. */
   currentVersion: string;
   mandatory: boolean;
+  /** Whether this document accepts affirmative grant/withdraw actions. */
+  consentable: boolean;
   /** Whether the user has an active grant for the current version. */
   granted: boolean;
   /** The version the user last acted on, if any. */
@@ -30,8 +33,8 @@ export interface ConsentStatusItem {
 /** Aggregate consent view returned to the client for gating decisions. */
 export interface ConsentStatusView {
   items: ConsentStatusItem[];
-  /** True when every mandatory document has an active grant for its current version. */
+  /** True when every globally mandatory document has an active grant. */
   allMandatoryGranted: boolean;
-  /** Mandatory document types still missing an up-to-date grant. */
+  /** Globally mandatory document types still missing an up-to-date grant. */
   missingMandatory: LegalDocumentType[];
 }

@@ -9,6 +9,7 @@ export interface LegalDocumentSummary {
   version: string;
   title: string;
   mandatory: boolean;
+  consentable: boolean;
 }
 
 export interface LegalDocumentView extends LegalDocumentSummary {
@@ -19,6 +20,7 @@ export interface ConsentStatusItem {
   type: LegalDocumentType;
   currentVersion: string;
   mandatory: boolean;
+  consentable: boolean;
   granted: boolean;
   consentedVersion: string | null;
   grantedAt: string | null;

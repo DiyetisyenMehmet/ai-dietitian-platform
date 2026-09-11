@@ -39,8 +39,14 @@ export default function ConsentPage() {
   const [saving, setSaving] = React.useState(false);
 
   const items = consentState.consent?.items ?? [];
-  const missing = items.filter((item) => item.mandatory && !item.granted).map((item) => item.type);
-  const allMissingChecked = missing.length > 0 && missing.every((type) => checked[type] === true);
+  const missingMandatory = items
+    .filter((item) => item.mandatory && !item.granted)
+    .map((item) => item.type);
+  const mandatoryReady = missingMandatory.every((type) => checked[type] === true);
+  const selectedToGrant = items
+    .filter((item) => item.consentable && !item.granted && checked[item.type] === true)
+    .map((item) => item.type);
+  const healthConsent = items.find((item) => item.type === "KVKK_EXPLICIT_CONSENT");
 
   React.useEffect(() => {
     if (user?.id && consentState.status === "idle") void consentStore.hydrate(user.id);
@@ -61,20 +67,22 @@ export default function ConsentPage() {
 
   async function submit() {
     if (!user?.id || saving) return;
-    if (!allMissingChecked) {
+    if (!mandatoryReady) {
       toast.error("Devam etmek için zorunlu beyanları ayrı ayrı işaretleyin.");
       return;
     }
 
     setSaving(true);
     try {
-      await consentStore.grantMany(user.id, missing);
+      if (selectedToGrant.length > 0) {
+        await consentStore.grantMany(user.id, selectedToGrant);
+      }
       const current = consentStore.getSnapshot();
-      if (current.consent?.allMandatoryGranted) {
-        toast.success("Onayların kaydedildi.");
+      if (current.consent?.allMandatoryGranted || missingMandatory.length === 0) {
+        toast.success("Onay tercihlerin kaydedildi.");
         router.replace(user.onboardingCompleted ? "/dashboard" : "/onboarding");
       } else {
-        toast.error("Bazı onaylar kaydedilemedi. Lütfen tekrar kontrol edin.");
+        toast.error("Bazı zorunlu onaylar kaydedilemedi. Lütfen tekrar kontrol edin.");
       }
     } catch {
       toast.error("Onaylar kaydedilemedi. Bağlantını kontrol edip tekrar dene.");
@@ -109,7 +117,7 @@ export default function ConsentPage() {
     );
   }
 
-  if (consentState.consent?.allMandatoryGranted) {
+  if (consentState.consent?.allMandatoryGranted && healthConsent?.granted) {
     const destination = user?.onboardingCompleted ? "/dashboard" : "/onboarding";
     return (
       <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center px-4 py-8">
@@ -132,7 +140,7 @@ export default function ConsentPage() {
 
       <div className="mb-6 space-y-2">
         <h1 className="text-2xl font-bold tracking-tight">Bilgilendirme ve onaylar</h1>
-        <p className="text-sm leading-relaxed text-muted-foreground">KVKK aydınlatması bir izin değildir ve ayrı olarak sunulur. Kullanım koşulları, tıbbi sınırlar ve sağlık verisi açık rızası için gerekli olumlu beyanları ayrı ayrı verirsin. Kutular önceden işaretlenmez.</p>
+        <p className="text-sm leading-relaxed text-muted-foreground">KVKK aydınlatması bir izin değildir ve ayrı olarak sunulur. Kullanım koşulları ve tıbbi sınırlar için zorunlu beyanlarını ayrı ayrı verirsin. Sağlık verisi açık rızası isteğe bağlıdır; rıza vermeden hesabını ve sağlık verisi işlemeyi gerektirmeyen işlevleri kullanmaya devam edebilirsin.</p>
       </div>
 
       <div className="space-y-4">
@@ -142,17 +150,19 @@ export default function ConsentPage() {
           if (!item || !summary) return null;
           const granted = item.granted;
           const body = bodies[type];
-          const requiresAffirmativeConsent = item.mandatory;
+          const requiresAffirmativeConsent = item.consentable;
 
           return (
             <Card key={type} className={type === "KVKK_EXPLICIT_CONSENT" ? "border-primary/30" : undefined}>
               <CardContent className="space-y-4 p-5">
                 <div className="flex items-start justify-between gap-3">
                   <div><h2 className="font-semibold">{summary.title}</h2><p className="mt-1 text-xs text-muted-foreground">Sürüm {summary.version}</p></div>
-                  {requiresAffirmativeConsent ? (
+                  {!requiresAffirmativeConsent ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-1 text-[11px] font-semibold text-muted-foreground"><Info className="size-3" aria-hidden="true" /> Bilgilendirme</span>
+                  ) : item.mandatory ? (
                     granted && <span className="rounded-full bg-emerald-500/15 px-2 py-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">Onaylı</span>
                   ) : (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-1 text-[11px] font-semibold text-muted-foreground"><Info className="size-3" aria-hidden="true" /> Bilgilendirme</span>
+                    <span className="rounded-full bg-primary/10 px-2 py-1 text-[11px] font-semibold text-primary">İsteğe bağlı</span>
                   )}
                 </div>
 
@@ -176,7 +186,7 @@ export default function ConsentPage() {
       </div>
 
       <div className="mt-6 space-y-3">
-        <Button size="lg" className="w-full" disabled={!allMissingChecked || saving} isLoading={saving} onClick={() => void submit()}>{saving ? "Onaylar kaydediliyor…" : "Onayla ve Devam Et"}</Button>
+        <Button size="lg" className="w-full" disabled={!mandatoryReady || saving} isLoading={saving} onClick={() => void submit()}>{saving ? "Onaylar kaydediliyor…" : selectedToGrant.includes("KVKK_EXPLICIT_CONSENT") && missingMandatory.length === 0 ? "Rızayı Kaydet ve Devam Et" : "Onayla ve Devam Et"}</Button>
         <Button variant="ghost" className="w-full" onClick={() => void logout()}><LogOut aria-hidden="true" /> Onay vermeden çıkış yap</Button>
       </div>
     </main>
