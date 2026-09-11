@@ -1,0 +1,33 @@
+name: One-shot staging PDF E2E correction
+
+on:
+  push:
+    branches:
+      - feature/staging-preview
+    paths:
+      - .github/workflows/fix-staging-blood-pdf-e2e.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/staging-preview
+          fetch-depth: 0
+      - name: Apply isolated correction and remove helper
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARGET=.github/workflows/staging-web-test.yml
+          grep -F 'for TYPE in PRIVACY_POLICY TERMS_OF_SERVICE MEDICAL_DISCLAIMER KVKK_EXPLICIT_CONSENT; do' "$TARGET"
+          sed -i 's/for TYPE in PRIVACY_POLICY TERMS_OF_SERVICE MEDICAL_DISCLAIMER KVKK_EXPLICIT_CONSENT; do/for TYPE in TERMS_OF_SERVICE MEDICAL_DISCLAIMER KVKK_EXPLICIT_CONSENT; do/' "$TARGET"
+          rm .github/workflows/fix-staging-blood-pdf-e2e.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add "$TARGET" .github/workflows/fix-staging-blood-pdf-e2e.yml
+          git commit -m 'fix(staging): grant only mandatory blood-test consents [web-preview]'
+          git push origin HEAD:feature/staging-preview
