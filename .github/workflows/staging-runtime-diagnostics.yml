@@ -38,8 +38,9 @@ jobs:
           project_id: ${{ env.PROJECT_ID }}
 
       # Read-only diagnostics. The filter intentionally excludes ordinary INFO
-      # logs and never requests raw uploaded document bodies or extracted health
-      # values; only structured ERROR metadata is printed.
+      # logs and never requests raw uploaded document bodies, extracted health
+      # values, request bodies, or provider payloads. Only safe structured error
+      # metadata plus the serving revision are printed.
       - name: Read recent 5xx backend errors only
         shell: bash
         run: |
@@ -47,7 +48,7 @@ jobs:
           gcloud logging read \
             'resource.type="cloud_run_revision" AND resource.labels.service_name="diewish-backend-staging" AND severity>=ERROR' \
             --project "$PROJECT_ID" \
-            --freshness=3h \
+            --freshness=30m \
             --limit=100 \
             --order=desc \
-            --format='table(timestamp,severity,jsonPayload.message,jsonPayload.statusCode,jsonPayload.code,jsonPayload.err.message,jsonPayload.err.name,jsonPayload.err.stack,textPayload)'
+            --format='table(timestamp,resource.labels.revision_name,severity,jsonPayload.message,jsonPayload.statusCode,jsonPayload.code,jsonPayload.err.message,jsonPayload.err.name,jsonPayload.err.stack,textPayload)'
