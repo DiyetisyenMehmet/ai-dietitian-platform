@@ -12,7 +12,7 @@ export const foodScanController = {
   analyze: asyncHandler(async (req: Request, res: Response) => {
     if (!req.user) throw ApiError.unauthorized("Authentication required.");
     if (!req.file?.buffer) {
-      throw ApiError.badRequest('\"file\" alanında bir görsel yüklemelisiniz.');
+      throw ApiError.badRequest('"file" alanında bir görsel yüklemelisiniz.');
     }
     const deterministic = await foodScanService.analyze(req.file.buffer);
     const analysis = await applyFoodNutritionFallback(deterministic);
