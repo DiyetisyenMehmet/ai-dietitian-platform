@@ -75,14 +75,17 @@ export const foodScanClient = {
   recalculate(
     ingredients: Array<{ name: string; grams: number; included: boolean }>,
     targetGrams?: number,
+    dishName?: string,
   ) {
-    return apiRequest<{
-      analysis: Pick<FoodScanResultDto, "ingredients" | "totals" | "estimatedGrams">;
-    }>({
+    return apiRequest<{ analysis: FoodScanResultDto }>({
       path: "/food-scan/recalculate",
       method: "POST",
       auth: true,
-      body: JSON.stringify({ ingredients, ...(targetGrams === undefined ? {} : { targetGrams }) }),
+      body: JSON.stringify({
+        ingredients,
+        ...(targetGrams === undefined ? {} : { targetGrams }),
+        ...(dishName ? { dishName } : {}),
+      }),
     });
   },
 

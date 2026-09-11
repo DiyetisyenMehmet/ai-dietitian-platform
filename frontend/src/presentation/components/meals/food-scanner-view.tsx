@@ -61,9 +61,47 @@ function defaultMealType(): MealTypeDto {
   return "SNACK";
 }
 
+function resolutionSummary(analysis: FoodScanResultDto): string {
+  const resolution = analysis.nutritionResolution;
+  if (!resolution) return "Besin değerlerinin kaynağı ve belirsizlik düzeyi aşağıda gösterilir.";
+  if (resolution.method === "AI_ESTIMATE") {
+    return `Diewish AI tahmini · güven yaklaşık %${Math.round(resolution.confidence * 100)}. ${resolution.note}`;
+  }
+  return resolution.note;
+}
+
+function analysisToast(analysis: FoodScanResultDto): string {
+  if (analysis.nutritionResolution?.method === "AI_ESTIMATE") {
+    return "Yemek tanındı; besin değerleri açıkça etiketlenmiş Diewish AI tahminiyle tamamlandı.";
+  }
+  if (analysis.nutritionResolution?.method === "UNAVAILABLE") {
+    return "Yemek tanındı; gıda adını ve porsiyonu doğrulayarak analizi tamamlayabilirsin.";
+  }
+  return "Yemek tanındı; besin değerleri güvenilir kaynaklar ve tarif bileşimiyle hesaplandı.";
+}
+
+function unmatchedIngredientLabel(analysis: FoodScanResultDto): string {
+  if (analysis.nutritionResolution?.method === "AI_ESTIMATE") return "AI tarif tahminine dahil";
+  if (analysis.nutritionResolution?.method === "UNAVAILABLE") return "Adını doğrulayarak geliştir";
+  return "Toplam hesap diğer kaynaklı bileşenlerden";
+}
+
+function unmatchedIngredientSource(analysis: FoodScanResultDto): string {
+  if (analysis.nutritionResolution?.method === "AI_ESTIMATE") {
+    return "Diewish AI tarif tahmini; doğrulanmış kaynak değildir";
+  }
+  if (analysis.nutritionResolution?.method === "UNAVAILABLE") {
+    return "Gıda adı/porsiyon doğrulamasıyla yeniden çözümlenebilir";
+  }
+  return "Bu bileşen için ayrı kaynak kullanılmadı; toplam yalnız kaynaklı bileşenlerden hesaplandı";
+}
+
 function coachHref(analysis: FoodScanResultDto): string {
   const grams = analysis.estimatedGrams ?? 100;
-  const prompt = `${grams} g ${analysis.dishName} hakkında doğrulanmış besin verilerini ve günlük hedeflerimi kullanarak benim için ne ifade ettiğini açıklar mısın? Fotoğraftaki tarif ve porsiyonun tahmini olduğunu dikkate al.`;
+  const sourceContext = analysis.nutritionResolution?.method === "AI_ESTIMATE"
+    ? "Besin değerlerinin Diewish AI tahmini olduğunu ve doğrulanmış kaynak olmadığını dikkate al."
+    : "Kullanılan besin verilerinin kaynak/provenance bilgisini dikkate al.";
+  const prompt = `${grams} g ${analysis.dishName} ve günlük hedeflerim açısından benim için ne ifade ediyor? Fotoğraftaki tarif ve porsiyonun tahmini olduğunu dikkate al. ${sourceContext}`;
   return `/ai?prompt=${encodeURIComponent(prompt)}`;
 }
 
@@ -164,7 +202,7 @@ export function FoodScannerView() {
       setAnalysis(result.analysis);
       syncEditable(result.analysis);
       void loadPersonalization(result.analysis);
-      toast.success("Yemek tanındı; besin değerleri güvenilir kaynaklardan hesaplandı.");
+      toast.success(analysisToast(result.analysis));
     } catch (error) {
       toast.error("Bu görsel analiz edilemedi", { description: friendlyError(error) });
     } finally {
@@ -176,7 +214,7 @@ export function FoodScannerView() {
     if (!analysis || recalculating) return;
     setRecalculating(true);
     try {
-      const result = await foodScanClient.recalculate(ingredients, targetGrams);
+      const result = await foodScanClient.recalculate(ingredients, targetGrams, analysis.dishName);
       const next: FoodScanResultDto = {
         ...analysis,
         ...result.analysis,
@@ -186,7 +224,7 @@ export function FoodScannerView() {
       syncEditable(next);
       setEditing(false);
       void loadPersonalization(next);
-      toast.success("Porsiyon ve malzemeler doğrultusunda besin değerleri yeniden hesaplandı.");
+      toast.success(analysisToast(next));
     } catch (error) {
       toast.error("Yeniden hesaplanamadı", { description: friendlyError(error) });
     } finally {
@@ -217,7 +255,7 @@ export function FoodScannerView() {
           <div>
             <h2 className="text-base font-bold">Fotoğrafla Tara</h2>
             <p className="mt-0.5 text-sm text-muted-foreground">
-              AI yalnızca yemeği, porsiyonu ve muhtemel malzemeleri tanır. Kalori ve makrolar doğrulanmış besin verilerinden sunucuda deterministik hesaplanır.
+              AI yemeği, porsiyonu ve muhtemel malzemeleri tanır. Diewish önce güvenilir besin kaynakları ve tarif bileşimiyle hesaplar; yeterli veri yoksa son çare AI tahmini açıkça etiketlenir.
             </p>
           </div>
         </div>
@@ -333,7 +371,7 @@ export function FoodScannerView() {
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-primary">2. Besin değerleri</p>
-                  <p className="text-xs text-muted-foreground">Dahil edilen ve güvenilir kaynağa eşleşen malzemelerden hesaplanır.</p>
+                  <p className="text-xs text-muted-foreground">{resolutionSummary(analysis)}</p>
                 </div>
                 <Button size="sm" variant="outline" onClick={() => setEditing((value) => !value)}>
                   <Pencil /> Malzemeleri Düzenle
@@ -399,6 +437,8 @@ export function FoodScannerView() {
                     </div>
                   );
                 }
+                const matched = Boolean(display?.matchedFood);
+                const estimated = analysis.nutritionResolution?.method === "AI_ESTIMATE";
                 return (
                   <div key={`${display?.name ?? index}`} className="flex items-center justify-between gap-3 rounded-xl border p-3 text-sm">
                     <div>
@@ -408,8 +448,8 @@ export function FoodScannerView() {
                         {display?.optional ? " · muhtemel" : ""}
                       </p>
                     </div>
-                    <span className={`text-xs font-semibold ${display?.matchedFood ? "text-emerald-600" : "text-amber-600"}`}>
-                      {display?.matchedFood ? `${display.matchedFood.provider} ile eşleşti` : "Kaynak eşleşmedi"}
+                    <span className={`text-xs font-semibold ${matched ? "text-emerald-600" : estimated ? "text-violet-600" : "text-muted-foreground"}`}>
+                      {display?.matchedFood ? `${display.matchedFood.provider} ile eşleşti` : unmatchedIngredientLabel(analysis)}
                     </span>
                   </div>
                 );
@@ -447,7 +487,7 @@ export function FoodScannerView() {
               )}
               {!personalizing && !personalization && (
                 <p className="mt-2 text-sm text-muted-foreground">
-                  Kişisel değerlendirme şu anda alınamadı; yukarıdaki deterministik besin değerleri bundan etkilenmez.
+                  Kişisel değerlendirme şu anda alınamadı; yukarıdaki besin çözümü bundan etkilenmez.
                 </p>
               )}
             </section>
@@ -464,6 +504,14 @@ export function FoodScannerView() {
 
             <section>
               <p className="text-xs font-semibold uppercase tracking-wide text-primary">5. Kaynak ve belirsizlik</p>
+              {analysis.nutritionResolution && (
+                <div className={`mt-2 rounded-xl border p-3 text-xs ${analysis.nutritionResolution.method === "AI_ESTIMATE" ? "border-violet-500/30 bg-violet-500/5" : "bg-muted/20"}`}>
+                  <p className="font-semibold">
+                    {analysis.nutritionResolution.method === "AI_ESTIMATE" ? "Diewish AI tahmini" : "Besin veri çözümü"}
+                  </p>
+                  <p className="mt-1 text-muted-foreground">{analysis.nutritionResolution.note}</p>
+                </div>
+              )}
               <div className="mt-2 space-y-2">
                 {analysis.ingredients.filter((item) => item.included).map((item) => (
                   <div key={`${item.name}-${item.matchedFood?.externalId ?? "unmatched"}`} className="rounded-xl border p-3 text-xs">
@@ -472,7 +520,7 @@ export function FoodScannerView() {
                       Görsel tahmini: %{Math.round(item.confidence)} · {item.optional ? "muhtemel içerik" : "ana içerik adayı"}
                     </p>
                     <p className="text-muted-foreground">
-                      Besin kaynağı: {item.matchedFood ? `${item.matchedFood.provider} (${item.matchedFood.displayNameTr})` : "eşleşmedi; nutrient uydurulmadı"}
+                      Besin çözümü: {item.matchedFood ? `${item.matchedFood.provider} (${item.matchedFood.displayNameTr})` : unmatchedIngredientSource(analysis)}
                     </p>
                   </div>
                 ))}

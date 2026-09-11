@@ -6,10 +6,21 @@ import {
   estimateFoodNutritionWithAi,
   type FoodNutritionEstimator,
 } from "./food-nutrition-estimator";
-import type { FoodScanResult, ResolvedFoodScanIngredient } from "./types";
+import type {
+  FoodScanRecalculationResult,
+  FoodScanResult,
+  ResolvedFoodScanIngredient,
+} from "./types";
 
-function hasUsableNutrition(nutrients: NutrientValues): boolean {
+function hasAnyNutrition(nutrients: NutrientValues): boolean {
   return Object.values(nutrients).some((value) => value !== null);
+}
+
+function hasCoreNutrition(nutrients: NutrientValues): boolean {
+  return nutrients.energyKcal !== null
+    && nutrients.proteinG !== null
+    && nutrients.carbohydratesG !== null
+    && nutrients.fatG !== null;
 }
 
 function boundedPortion(analysis: FoodScanResult): number {
@@ -20,10 +31,11 @@ function boundedPortion(analysis: FoodScanResult): number {
   return componentTotal > 0 ? Math.round(componentTotal * 10) / 10 : 100;
 }
 
-function verifiedResolution(analysis: FoodScanResult): FoodScanResult {
+function verifiedResolution(analysis: FoodScanResult, partial = false): FoodScanResult {
   const matched = analysis.ingredients.filter((item) => item.included && item.matchedFood && item.nutrients);
   const providers = [...new Set(matched.map((item) => item.matchedFood!.provider))] as NutritionProviderId[];
-  const directDishMatch = matched.length === 1 && matched[0]!.name.toLocaleLowerCase("tr-TR") === analysis.dishName.toLocaleLowerCase("tr-TR");
+  const directDishMatch = matched.length === 1
+    && matched[0]!.name.toLocaleLowerCase("tr-TR") === analysis.dishName.toLocaleLowerCase("tr-TR");
   const confidence = matched.length > 0
     ? Math.round(Math.min(...matched.map((item) => item.matchedFood!.confidence)) * 100) / 100
     : 0;
@@ -34,48 +46,57 @@ function verifiedResolution(analysis: FoodScanResult): FoodScanResult {
       providers,
       confidence,
       estimated: !directDishMatch,
-      note: directDishMatch
-        ? "Besin değerleri lisansı uygun yapılandırılmış bir kaynaktan eşleştirildi."
-        : "Besin değerleri eşleşen tarif bileşenlerinin güvenilir kaynak verileri kullanılarak hesaplandı.",
+      note: partial
+        ? "Mevcut güvenilir kaynak verileri korundu; temel makroların tamamı kaynakta olmadığı için bazı alanlar yaklaşık analiz dışında bırakıldı."
+        : directDishMatch
+          ? "Besin değerleri lisansı uygun yapılandırılmış bir kaynaktan eşleştirildi."
+          : "Besin değerleri eşleşen tarif bileşenlerinin güvenilir kaynak verileri kullanılarak hesaplandı.",
     },
   };
 }
 
+/**
+ * Resolution order is deliberate: complete deterministic core facts first,
+ * then a clearly-labelled AI estimate, then any partial deterministic facts.
+ * We never mix AI-generated nutrient numbers into verified provider totals.
+ */
 export async function applyFoodNutritionFallback(
   analysis: FoodScanResult,
   estimator: FoodNutritionEstimator = estimateFoodNutritionWithAi,
 ): Promise<FoodScanResult> {
-  if (hasUsableNutrition(analysis.totals)) return verifiedResolution(analysis);
+  if (hasCoreNutrition(analysis.totals)) return verifiedResolution(analysis);
 
   const estimate = await estimator(analysis);
-  if (!estimate) {
+  if (estimate) {
+    const portionGrams = boundedPortion(analysis);
     return {
       ...analysis,
+      estimatedGrams: analysis.estimatedGrams ?? portionGrams,
+      estimatedPortion: analysis.estimatedGrams
+        ? analysis.estimatedPortion
+        : `${analysis.estimatedPortion}; ${portionGrams} g referans porsiyon kullanıldı`,
+      totals: calculatePortion(estimate.per100g, portionGrams).nutrients,
+      disclaimer: "Bu besin değerleri, yeterli doğrulanmış kaynak verisi bulunamadığı için tanınan gıda ve porsiyon üzerinden Diewish AI tarafından tahmin edilmiştir. Gerçek değerler tarif ve miktara göre değişebilir.",
       nutritionResolution: {
-        method: "UNAVAILABLE",
+        method: "AI_ESTIMATE",
         providers: [],
-        confidence: 0,
+        confidence: estimate.confidence,
         estimated: true,
-        note: "Gıda tanındı; besin değerleri için adı veya porsiyonu kullanıcı tarafından doğrulanabilir.",
+        note: "Yeterli doğrulanmış kaynak verisi bulunamadı; değerler son çare Diewish AI tahminidir ve doğrulanmış kaynak olarak kaydedilmez.",
       },
     };
   }
 
-  const portionGrams = boundedPortion(analysis);
+  if (hasAnyNutrition(analysis.totals)) return verifiedResolution(analysis, true);
+
   return {
     ...analysis,
-    estimatedGrams: analysis.estimatedGrams ?? portionGrams,
-    estimatedPortion: analysis.estimatedGrams
-      ? analysis.estimatedPortion
-      : `${analysis.estimatedPortion}; ${portionGrams} g referans porsiyon kullanıldı`,
-    totals: calculatePortion(estimate.per100g, portionGrams).nutrients,
-    disclaimer: "Bu besin değerleri, doğrulanmış bir kaynak eşleşmesi bulunamadığı için tanınan gıda ve porsiyon üzerinden Diewish AI tarafından tahmin edilmiştir. Gerçek değerler tarif ve miktara göre değişebilir.",
     nutritionResolution: {
-      method: "AI_ESTIMATE",
+      method: "UNAVAILABLE",
       providers: [],
-      confidence: estimate.confidence,
+      confidence: 0,
       estimated: true,
-      note: "Doğrulanmış kaynak eşleşmesi bulunamadı; değerler son çare Diewish AI tahminidir ve doğrulanmış kaynak olarak kaydedilmez.",
+      note: "Gıda tanındı; gıda adını ve porsiyonu doğrulayarak analizi yeniden çalıştırabilirsin.",
     },
   };
 }
@@ -125,7 +146,27 @@ export async function analyzeConfirmedFoodName(
     estimatedGrams: grams,
     ingredients: [ingredient],
     totals: ingredient.nutrients ?? { ...EMPTY_NUTRIENTS },
-    disclaimer: "Gıda adı ve porsiyon kullanıcı tarafından doğrulandı; besin değerlerinin kaynağı aşağıda ayrıca belirtilir.",
+    disclaimer: "Gıda adı ve porsiyon kullanıcı tarafından doğrulandı; besin değerlerinin çözüm yöntemi aşağıda ayrıca belirtilir.",
+  };
+  return applyFoodNutritionFallback(base, estimator);
+}
+
+export async function finalizeFoodScanRecalculation(
+  dishNameInput: string,
+  recalculation: FoodScanRecalculationResult,
+  estimator: FoodNutritionEstimator = estimateFoodNutritionWithAi,
+): Promise<FoodScanResult> {
+  const dishName = dishNameInput.trim().slice(0, 120) || "Düzeltilmiş öğün";
+  const base: FoodScanResult = {
+    isFood: true,
+    confidence: 100,
+    reason: "Malzemeler ve porsiyon kullanıcı tarafından düzeltildi.",
+    dishName,
+    estimatedPortion: "Düzeltilmiş porsiyon",
+    estimatedGrams: recalculation.estimatedGrams,
+    ingredients: recalculation.ingredients,
+    totals: recalculation.totals,
+    disclaimer: "Malzemeler ve porsiyon kullanıcı tarafından düzeltildi; besin değerlerinin çözüm yöntemi aşağıda ayrıca belirtilir.",
   };
   return applyFoodNutritionFallback(base, estimator);
 }

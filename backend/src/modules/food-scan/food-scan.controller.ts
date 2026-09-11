@@ -4,7 +4,11 @@ import { ApiError } from "../../utils/api-error";
 import { sendSuccess } from "../../utils/api-response";
 import { asyncHandler } from "../../utils/async-handler";
 import { toPhotoScanResult } from "../nutrition-data/nutrition-scan-result";
-import { analyzeConfirmedFoodName, applyFoodNutritionFallback } from "./food-scan-fallback";
+import {
+  analyzeConfirmedFoodName,
+  applyFoodNutritionFallback,
+  finalizeFoodScanRecalculation,
+} from "./food-scan-fallback";
 import { foodScanService } from "./food-scan.service";
 import type { FoodScanIngredientCorrection } from "./types";
 
@@ -35,7 +39,7 @@ export const foodScanController = {
 
   recalculate: asyncHandler(async (req: Request, res: Response) => {
     if (!req.user) throw ApiError.unauthorized("Authentication required.");
-    const body = req.body as { ingredients?: unknown; targetGrams?: unknown } | undefined;
+    const body = req.body as { ingredients?: unknown; targetGrams?: unknown; dishName?: unknown } | undefined;
     if (!Array.isArray(body?.ingredients)) {
       throw ApiError.badRequest("ingredients bir dizi olmalıdır.");
     }
@@ -51,7 +55,15 @@ export const foodScanController = {
     if (targetGrams !== undefined && typeof targetGrams !== "number") {
       throw ApiError.badRequest("targetGrams number olmalıdır.");
     }
-    const analysis = await foodScanService.recalculate(corrections, targetGrams);
+    if (body.dishName !== undefined && (typeof body.dishName !== "string" || body.dishName.trim().length > 120)) {
+      throw ApiError.badRequest("dishName en fazla 120 karakter olmalıdır.");
+    }
+    const deterministic = await foodScanService.recalculate(corrections, targetGrams);
+    const fallbackName = corrections.filter((item) => item.included).map((item) => item.name.trim()).filter(Boolean).join(" + ").slice(0, 120);
+    const analysis = await finalizeFoodScanRecalculation(
+      typeof body.dishName === "string" && body.dishName.trim() ? body.dishName : fallbackName,
+      deterministic,
+    );
     sendSuccess(res, { analysis });
   }),
 };

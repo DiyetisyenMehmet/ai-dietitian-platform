@@ -185,6 +185,10 @@ jobs:
           retry "${FRONTEND_URL}/register" "frontend register"
           retry "${FRONTEND_URL}/api/health" "same-origin proxy"
 
+      - name: Verify food scan fallbacks end to end
+        shell: bash
+        run: bash scripts/staging-food-scan-e2e.sh "$FRONTEND_URL"
+
       - name: Verify blood-test PDF end to end
         shell: bash
         run: bash scripts/staging-blood-pdf-e2e.sh "$FRONTEND_URL"
@@ -199,6 +203,7 @@ jobs:
             echo "- Frontend: ${FRONTEND_URL}"
             echo "- Backend: ${BACKEND_URL}"
             echo "- Browser API: ${FRONTEND_URL}/api"
+            echo "- Food-scan E2E: Turkish aliases + component calculation + user-confirmed fallback + provenance passed"
             echo "- Blood-test PDF E2E: passed through same-origin staging proxy"
             echo "- APK: intentionally not built in this workflow"
           } >> "$GITHUB_STEP_SUMMARY"
