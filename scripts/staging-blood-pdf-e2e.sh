@@ -98,14 +98,41 @@ for TYPE in TERMS_OF_SERVICE MEDICAL_DISCLAIMER KVKK_EXPLICIT_CONSENT; do
     --data "{\"type\":\"${TYPE}\"}" >/dev/null
 done
 
-ANALYSIS_RESPONSE="$(curl --fail-with-body --silent --show-error --max-time 175 \
+# Do not use curl --fail here: on an expected diagnostic failure we need the
+# API's safe error envelope, while never printing the synthetic PDF or request.
+ANALYSIS_HTTP_STATUS="$(curl --silent --show-error --max-time 175 \
+  --output /tmp/blood-analysis-response.json \
+  --write-out '%{http_code}' \
   -X POST "${API_BASE}/blood-tests/analyze-upload" \
   -H "Authorization: Bearer ${TOKEN}" \
   -F "file=@/tmp/diewish-synthetic-lab.pdf;type=application/pdf" \
   -F "label=Staging synthetic PDF E2E" \
   -F "testDate=2026-09-11")"
 
-printf '%s' "$ANALYSIS_RESPONSE" > /tmp/blood-analysis-response.json
+if [[ ! "$ANALYSIS_HTTP_STATUS" =~ ^2 ]]; then
+  echo "blood-test PDF E2E analysis request failed: HTTP ${ANALYSIS_HTTP_STATUS}" >&2
+  jq -r '"api_code=" + (.error.code // "unknown") + " api_message=" + (.error.message // "unknown")' \
+    /tmp/blood-analysis-response.json >&2 || true
+
+  curl --silent --show-error --max-time 30 \
+    -H "Authorization: Bearer ${TOKEN}" \
+    "${API_BASE}/blood-tests/analyses" \
+    --output /tmp/blood-analysis-list.json || true
+  jq -r '
+    (.data.analyses // [])
+    | sort_by(.createdAt)
+    | last
+    | if . == null then "analysis_record=missing"
+      else "analysis_status=" + (.status // "unknown")
+        + " extraction_method=" + (.extractionMethod // "none")
+        + " provider=" + (.aiProvider // "none")
+        + " model=" + (.aiModel // "none")
+        + " processing_ms=" + ((.processingTimeMs // 0) | tostring)
+        + " error=" + (.errorMessage // "none")
+      end' /tmp/blood-analysis-list.json >&2 || true
+  exit 1
+fi
+
 jq -e '.success == true' /tmp/blood-analysis-response.json >/dev/null
 jq -e '.data.analysis.status == "COMPLETED"' /tmp/blood-analysis-response.json >/dev/null
 jq -e '(.data.analysis.normalizedValues | length) >= 6' /tmp/blood-analysis-response.json >/dev/null
