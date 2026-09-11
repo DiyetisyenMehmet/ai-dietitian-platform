@@ -22,8 +22,25 @@ function labelFlag(all: readonly string[], tag: string): boolean | null {
   if (all.includes(`en:non-${tag}`)) return false;
   return null;
 }
-function nutrient(n: Record<string, unknown>, key: string): number | null {
-  return num(n[`${key}_100g`]);
+function nutrient(n: Record<string, unknown>, key: string, basis: "100g" | "serving"): number | null {
+  return num(n[`${key}_${basis}`]);
+}
+function nutrientValues(n: Record<string, unknown>, basis: "100g" | "serving"): NutrientValues {
+  const sodiumG = nutrient(n, "sodium", basis);
+  return {
+    energyKcal: nutrient(n, "energy-kcal", basis),
+    proteinG: nutrient(n, "proteins", basis),
+    carbohydratesG: nutrient(n, "carbohydrates", basis),
+    fatG: nutrient(n, "fat", basis),
+    saturatedFatG: nutrient(n, "saturated-fat", basis),
+    sugarsG: nutrient(n, "sugars", basis),
+    fiberG: nutrient(n, "fiber", basis),
+    sodiumMg: sodiumG === null ? null : Math.round(sodiumG * 1000 * 100) / 100,
+    saltG: nutrient(n, "salt", basis),
+  };
+}
+function hasNutrientValues(values: NutrientValues): boolean {
+  return Object.values(values).some((value) => value !== null);
 }
 function providerUpdatedAt(product: Record<string, unknown>): string | null {
   const epochSeconds = num(product.last_modified_t);
@@ -41,19 +58,8 @@ export function normalizeOpenFoodFactsProduct(raw: unknown, barcodeHint?: string
   const name = text(product.product_name_tr) ?? text(product.product_name) ?? text(product.generic_name);
   if (!code || !name) return null;
   const nutriments = record(product.nutriments);
-  const sodiumG = nutrient(nutriments, "sodium");
-  const saltG = nutrient(nutriments, "salt");
-  const nutrientValues: NutrientValues = {
-    energyKcal: nutrient(nutriments, "energy-kcal"),
-    proteinG: nutrient(nutriments, "proteins"),
-    carbohydratesG: nutrient(nutriments, "carbohydrates"),
-    fatG: nutrient(nutriments, "fat"),
-    saturatedFatG: nutrient(nutriments, "saturated-fat"),
-    sugarsG: nutrient(nutriments, "sugars"),
-    fiberG: nutrient(nutriments, "fiber"),
-    sodiumMg: sodiumG === null ? null : Math.round(sodiumG * 1000 * 100) / 100,
-    saltG,
-  };
+  const nutrientsPer100g = nutrientValues(nutriments, "100g");
+  const perServing = nutrientValues(nutriments, "serving");
   const labelTags = tags(product.labels_tags);
   const allergenTags = tags(product.allergens_tags);
   const ingredientText = text(product.ingredients_text_tr) ?? text(product.ingredients_text);
@@ -71,7 +77,8 @@ export function normalizeOpenFoodFactsProduct(raw: unknown, barcodeHint?: string
     serving: servingQuantity !== null && servingQuantity > 0
       ? { amount: servingQuantity, unit: "g", gramWeight: servingQuantity, description: servingSize }
       : null,
-    nutrientsPer100g: nutrientValues,
+    nutrientsPer100g,
+    nutrientsPerServing: hasNutrientValues(perServing) ? perServing : null,
     ingredients: ingredientText?.split(/[,;]/).map((v) => v.trim()).filter(Boolean) ?? [],
     allergens: allergenTags.map(stripTag),
     additives: tags(product.additives_tags).map(stripTag),

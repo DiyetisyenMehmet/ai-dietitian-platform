@@ -61,6 +61,8 @@ export interface CanonicalFood {
   quantity: string | null;
   serving: FoodServing | null;
   nutrientsPer100g: NutrientValues;
+  /** Provider-declared per-serving values when supplied upstream; never inferred here. */
+  nutrientsPerServing?: NutrientValues | null;
   ingredients: string[];
   allergens: string[];
   additives: string[];
