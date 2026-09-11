@@ -29,6 +29,15 @@ foodScanRouter.post(
   foodScanController.analyze,
 );
 
+/** User-confirmed food name path when visual identity is uncertain. */
+foodScanRouter.post(
+  "/analyze-by-name",
+  authenticate,
+  requireConsent,
+  foodScanLimiter,
+  foodScanController.analyzeByName,
+);
+
 /** Stateless deterministic recalculation after the user corrects recipe ingredients. */
 foodScanRouter.post(
   "/recalculate",

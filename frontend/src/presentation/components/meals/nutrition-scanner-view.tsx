@@ -4,6 +4,7 @@ import * as React from "react";
 import { Camera, ScanBarcode } from "lucide-react";
 
 import { BarcodeScannerPanel } from "@/presentation/components/meals/barcode-scanner-panel";
+import { FoodNameFallbackPanel } from "@/presentation/components/meals/food-name-fallback-panel";
 import { FoodScannerView } from "@/presentation/components/meals/food-scanner-view";
 
 export function NutritionScannerView() {
@@ -32,7 +33,12 @@ export function NutritionScannerView() {
         </button>
       </div>
 
-      {mode === "photo" ? <FoodScannerView /> : <BarcodeScannerPanel />}
+      {mode === "photo" ? (
+        <div className="space-y-4">
+          <FoodScannerView />
+          <FoodNameFallbackPanel />
+        </div>
+      ) : <BarcodeScannerPanel />}
     </div>
   );
 }

@@ -32,6 +32,22 @@ export interface ResolvedFoodScanIngredient extends FoodVisionIngredientCandidat
   nutrients: NutrientValues | null;
 }
 
+export type FoodScanNutritionResolutionMethod =
+  | "VERIFIED_SOURCE"
+  | "COMPONENT_AGGREGATE"
+  | "AI_ESTIMATE"
+  | "UNAVAILABLE";
+
+export interface FoodScanNutritionResolution {
+  method: FoodScanNutritionResolutionMethod;
+  /** Verified upstream providers that contributed facts. Empty for AI estimates. */
+  providers: NutritionProviderId[];
+  /** 0..1 confidence for the nutrition resolution itself, not visual recognition. */
+  confidence: number;
+  estimated: boolean;
+  note: string;
+}
+
 export interface FoodScanResult {
   isFood: boolean;
   confidence: number;
@@ -42,6 +58,8 @@ export interface FoodScanResult {
   ingredients: ResolvedFoodScanIngredient[];
   totals: NutrientValues;
   disclaimer: string;
+  /** Added after deterministic resolution; AI_ESTIMATE is never a verified source. */
+  nutritionResolution?: FoodScanNutritionResolution;
 }
 
 export interface FoodScanIngredientCorrection {

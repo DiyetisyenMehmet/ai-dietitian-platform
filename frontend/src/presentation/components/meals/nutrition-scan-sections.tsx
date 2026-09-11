@@ -9,7 +9,7 @@ import type {
 } from "@/infrastructure/nutrition/nutrition-client";
 
 function value(value: number | null, unit: string): string {
-  return value === null ? "Bilgi yok" : `${Math.round(value * 10) / 10} ${unit}`;
+  return value === null ? "—" : `${Math.round(value * 10) / 10} ${unit}`;
 }
 
 function providerLabel(provider: NutritionProvenanceDto["provider"]): string {
@@ -80,7 +80,7 @@ export function NutritionAttentionSection({
   if (flags.length === 0 && (!warnings || warnings.length === 0)) {
     return (
       <p className="text-sm text-muted-foreground">
-        Mevcut doğrulanmış verilerle ayrıca işaretlenmesi gereken bir durum görünmüyor. Eksik besin değerleri değerlendirmeye alınmaz.
+        Mevcut değerlerle ayrıca işaretlenmesi gereken bir durum görünmüyor. Sayısal değeri olmayan alanlar değerlendirme dışında tutulur.
       </p>
     );
   }

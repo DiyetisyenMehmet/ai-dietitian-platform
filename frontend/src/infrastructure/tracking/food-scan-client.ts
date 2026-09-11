@@ -28,6 +28,14 @@ export interface FoodScanIngredientDto {
   nutrients: NutrientValuesDto | null;
 }
 
+export interface FoodScanNutritionResolutionDto {
+  method: "VERIFIED_SOURCE" | "COMPONENT_AGGREGATE" | "AI_ESTIMATE" | "UNAVAILABLE";
+  providers: Array<"USDA" | "OPEN_FOOD_FACTS" | "DIEWISH">;
+  confidence: number;
+  estimated: boolean;
+  note: string;
+}
+
 export interface FoodScanResultDto {
   isFood: boolean;
   confidence: number;
@@ -38,6 +46,7 @@ export interface FoodScanResultDto {
   ingredients: FoodScanIngredientDto[];
   totals: NutrientValuesDto;
   disclaimer: string;
+  nutritionResolution?: FoodScanNutritionResolutionDto;
 }
 
 export type MealTypeDto = "BREAKFAST" | "LUNCH" | "DINNER" | "SNACK";
@@ -51,6 +60,15 @@ export const foodScanClient = {
       method: "POST",
       auth: true,
       body: form,
+    });
+  },
+
+  analyzeByName(foodName: string, grams: number) {
+    return apiRequest<{ analysis: FoodScanResultDto; scan: NormalizedNutritionScanDto }>({
+      path: "/food-scan/analyze-by-name",
+      method: "POST",
+      auth: true,
+      body: JSON.stringify({ foodName, grams }),
     });
   },
 
