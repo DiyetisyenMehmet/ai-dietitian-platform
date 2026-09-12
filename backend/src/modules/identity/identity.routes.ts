@@ -1,9 +1,10 @@
 import { Router } from "express";
 
-import { authenticate } from "../../middleware/authenticate";
+import { authenticate, authenticateAny } from "../../middleware/authenticate";
 import { authRateLimiter } from "../../middleware/auth-rate-limit";
 import { validate } from "../../middleware/validate";
 import { loginSchema } from "../auth/auth.schemas";
+import { guestConversionSchema } from "./guest-conversion.schemas";
 import { identityController } from "./identity.controller";
 import { deactivateSchema, externalLoginSchema, sessionParamsSchema } from "./identity.schemas";
 
@@ -17,6 +18,14 @@ identityRouter.post(
 );
 
 identityRouter.post("/guest", authRateLimiter, identityController.guest);
+
+identityRouter.post(
+  "/guest/convert",
+  authRateLimiter,
+  authenticateAny,
+  validate({ body: guestConversionSchema }),
+  identityController.convertGuest,
+);
 
 identityRouter.post(
   "/reactivate",
