@@ -1,11 +1,14 @@
 import type { Logger } from "pino";
 import type { UserRole } from "@prisma/client";
 
-/** Authenticated principal attached by the `authenticate` middleware. */
+/** Authenticated principal attached by the authentication middleware. */
 export interface AuthenticatedUser {
   id: string;
   email: string;
   role: UserRole;
+  isGuest: boolean;
+  /** Access-token issued-at timestamp (seconds since epoch). */
+  authenticatedAt: number;
 }
 
 // Augment Express types with request-scoped context added by middleware.
@@ -16,7 +19,7 @@ declare global {
       id: string;
       /** Child logger bound with the request's correlation ID. */
       log: Logger;
-      /** Present only on routes protected by the `authenticate` middleware. */
+      /** Present only on routes protected by an authentication middleware. */
       user?: AuthenticatedUser;
       /**
        * Raw request body bytes, captured by the JSON body parser's `verify`
