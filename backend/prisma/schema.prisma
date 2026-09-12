@@ -745,6 +745,8 @@ enum ActivityType {
   CYCLING
   SWIMMING
   STRENGTH_TRAINING
+  PILATES
+  HOME_EXERCISE
   YOGA
   HIIT
   SPORTS
@@ -752,16 +754,18 @@ enum ActivityType {
 }
 
 model Activity {
-  id              String       @id @default(uuid())
-  userId          String
-  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type            ActivityType
-  name            String?
-  durationMinutes Int
-  caloriesBurned  Float?
-  note            String?
-  loggedAt        DateTime     @default(now())
-  createdAt       DateTime     @default(now())
+  id                 String       @id @default(uuid())
+  userId             String
+  user               User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type               ActivityType
+  name               String?
+  durationMinutes    Int
+  distanceKm         Float?
+  perceivedIntensity Int?
+  caloriesBurned     Float?
+  note               String?
+  loggedAt           DateTime     @default(now())
+  createdAt          DateTime     @default(now())
 
   @@index([userId, loggedAt])
   @@map("activities")

@@ -16,6 +16,8 @@ const ACTIVITY_OPTIONS: Array<{ value: ActivityType; label: string }> = [
   { value: "CYCLING", label: "Bisiklet" },
   { value: "SWIMMING", label: "Yüzme" },
   { value: "STRENGTH_TRAINING", label: "Kuvvet / ağırlık" },
+  { value: "PILATES", label: "Pilates" },
+  { value: "HOME_EXERCISE", label: "Ev egzersizi" },
   { value: "YOGA", label: "Yoga / esneme" },
   { value: "HIIT", label: "HIIT" },
   { value: "SPORTS", label: "Spor" },
@@ -47,11 +49,11 @@ const QUICK_TASKS: Array<{
     icon: Dumbbell,
   },
   {
-    id: "yoga-5",
-    title: "5 dk esneme",
-    description: "Hafif yoga / mobilite",
-    type: "YOGA",
-    minutes: 5,
+    id: "home-10",
+    title: "10 dk ev egzersizi",
+    description: "Ekipmansız kısa hareket serisi",
+    type: "HOME_EXERCISE",
+    minutes: 10,
     icon: Zap,
   },
 ];
@@ -69,16 +71,27 @@ function timeLabel(iso: string): string {
   );
 }
 
+function activityDetailText(activity: Activity): string {
+  const details = [`${activity.durationMinutes} dk`];
+  if (activity.distanceKm != null) details.push(`${activity.distanceKm.toLocaleString("tr-TR")} km`);
+  if (activity.perceivedIntensity != null) details.push(`yoğunluk ${activity.perceivedIntensity}/10`);
+  return details.join(" · ");
+}
+
 function savedActivityDescription(activity: Activity): string {
-  return activity.caloriesBurned != null
-    ? `${activity.durationMinutes} dk · yaklaşık ${Math.round(activity.caloriesBurned)} kcal`
-    : `${activity.durationMinutes} dk`;
+  const details = [activityDetailText(activity)];
+  if (activity.caloriesBurned != null) {
+    details.push(`yaklaşık ${Math.round(activity.caloriesBurned)} kcal`);
+  }
+  return details.join(" · ");
 }
 
 export function ActivityView() {
   const { activities, activeMinutes, estimatedCaloriesBurned } = useActivity();
   const [type, setType] = React.useState<ActivityType>("WALKING");
   const [duration, setDuration] = React.useState("10");
+  const [distance, setDistance] = React.useState("");
+  const [intensity, setIntensity] = React.useState("");
   const [name, setName] = React.useState("");
   const [saving, setSaving] = React.useState(false);
   const [quickSaving, setQuickSaving] = React.useState<string | null>(null);
@@ -117,6 +130,22 @@ export function ActivityView() {
       toast.error("Süreyi 1–1440 dakika arasında gir.");
       return;
     }
+
+    const distanceKm = distance.trim() === "" ? undefined : Number(distance);
+    if (distanceKm !== undefined && (!Number.isFinite(distanceKm) || distanceKm < 0 || distanceKm > 1000)) {
+      toast.error("Mesafeyi 0–1000 km arasında gir.");
+      return;
+    }
+
+    const perceivedIntensity = intensity.trim() === "" ? undefined : Number(intensity);
+    if (
+      perceivedIntensity !== undefined &&
+      (!Number.isInteger(perceivedIntensity) || perceivedIntensity < 1 || perceivedIntensity > 10)
+    ) {
+      toast.error("Yoğunluğu 1–10 arasında gir.");
+      return;
+    }
+
     if (type === "OTHER" && !name.trim()) {
       toast.error("Hareketin adını yaz.");
       return;
@@ -127,16 +156,20 @@ export function ActivityView() {
       const activity = await activityStore.logActivity({
         type,
         durationMinutes: minutes,
+        distanceKm,
+        perceivedIntensity,
         name: name.trim() || undefined,
       });
       showSavedToast("Hareket kaydedildi", activity);
       setName("");
+      setDistance("");
+      setIntensity("");
     } catch {
       toast.error("Hareket kaydedilemedi. Lütfen tekrar dene.");
     } finally {
       setSaving(false);
     }
-  }, [duration, name, showSavedToast, type]);
+  }, [distance, duration, intensity, name, showSavedToast, type]);
 
   const completeQuickTask = React.useCallback(
     async (task: (typeof QUICK_TASKS)[number]) => {
@@ -165,7 +198,7 @@ export function ActivityView() {
         <div>
           <h2 className="text-lg font-bold">Bugünkü hareketin</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Yürüyüşten kuvvet egzersizine kadar yaptığın hareketleri kaydet.
+            Yürüyüşten pilatese ve ev egzersizine kadar yaptığın hareketleri kaydet.
           </p>
         </div>
         <div className="grid grid-cols-2 gap-3">
@@ -191,8 +224,9 @@ export function ActivityView() {
           </Card>
         </div>
         <p className="text-xs leading-relaxed text-muted-foreground">
-          Yakılan enerji yaklaşık bir değerdir. Diewish bu değeri günlük yemek hedefini otomatik
-          artırmak için kullanmaz; böylece aktivitenin iki kez hesaplanması önlenir.
+          Bugün kaydettiğin her hareketin tahmini enerji harcaması bu toplama dahil edilir. Diewish
+          bu değeri günlük yemek hedefini otomatik artırmak için kullanmaz; böylece aktivitenin iki
+          kez hesaplanması önlenir.
         </p>
       </section>
 
@@ -239,7 +273,7 @@ export function ActivityView() {
           <div>
             <h2 className="text-base font-semibold">Hareket ekle</h2>
             <p className="mt-1 text-xs text-muted-foreground">
-              Örneğin “10 dakika yürüdüm” veya “5 dakika plank yaptım”.
+              Tür ve süre zorunlu; mesafe ile yoğunluk isteğe bağlıdır.
             </p>
           </div>
 
@@ -270,11 +304,41 @@ export function ActivityView() {
             />
           </label>
 
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block space-y-1.5 text-sm font-medium">
+              Mesafe, km <span className="font-normal text-muted-foreground">(isteğe bağlı)</span>
+              <Input
+                inputMode="decimal"
+                type="number"
+                min={0}
+                max={1000}
+                step="0.1"
+                placeholder="Örn. 3,5"
+                value={distance}
+                onChange={(event) => setDistance(event.target.value)}
+              />
+            </label>
+
+            <label className="block space-y-1.5 text-sm font-medium">
+              Yoğunluk, 1–10 <span className="font-normal text-muted-foreground">(isteğe bağlı)</span>
+              <Input
+                inputMode="numeric"
+                type="number"
+                min={1}
+                max={10}
+                step={1}
+                placeholder="Örn. 6"
+                value={intensity}
+                onChange={(event) => setIntensity(event.target.value)}
+              />
+            </label>
+          </div>
+
           <label className="block space-y-1.5 text-sm font-medium">
             Hareket adı <span className="font-normal text-muted-foreground">(isteğe bağlı)</span>
             <Input
               maxLength={200}
-              placeholder={type === "OTHER" ? "Örn. plank, merdiven, pilates" : "Örn. tempolu yürüyüş"}
+              placeholder={type === "OTHER" ? "Örn. plank veya merdiven" : "Örn. tempolu yürüyüş"}
               value={name}
               onChange={(event) => setName(event.target.value)}
             />
@@ -320,7 +384,7 @@ export function ActivityView() {
                         {activityLabel(activity.type, activity.name)}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {activity.durationMinutes} dk · {timeLabel(activity.loggedAt)}
+                        {activityDetailText(activity)} · {timeLabel(activity.loggedAt)}
                       </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-1.5">

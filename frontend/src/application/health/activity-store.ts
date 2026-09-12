@@ -81,6 +81,8 @@ export const activityStore = {
     type: ActivityType;
     durationMinutes: number;
     name?: string;
+    distanceKm?: number;
+    perceivedIntensity?: number;
     caloriesBurned?: number;
     note?: string;
   }): Promise<Activity> {
