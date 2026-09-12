@@ -365,7 +365,7 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
                         QueryProductDetailsParams.Product.newBuilder()
                             .setProductId(id)
                             .setProductType(BillingClient.ProductType.SUBS)
-                            .build();
+                            .build()
                     );
                 }
                 if (products.isEmpty()) {
