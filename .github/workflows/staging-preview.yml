@@ -16,6 +16,7 @@ concurrency:
 
 env:
   PROJECT_ID: project-a2e260c1-839d-4f1d-b90
+  PROJECT_NUMBER: "730419163638"
   REGION: europe-west1
   WIF_PROVIDER: projects/730419163638/locations/global/workloadIdentityPools/github-actions/providers/diewish-staging
   DEPLOY_SERVICE_ACCOUNT: diewish-staging-deployer@project-a2e260c1-839d-4f1d-b90.iam.gserviceaccount.com
@@ -195,52 +196,49 @@ jobs:
             sleep 2
           done
 
-          for attempt in {1..30}; do
-            if curl --fail --silent --show-error "${FRONTEND_URL}/register" >/dev/null; then
-              break
-            fi
-            if [[ "$attempt" == "30" ]]; then
-              echo "Staging frontend health check failed."
-              exit 1
-            fi
-            sleep 2
+          for frontend_origin in "$FRONTEND_URL" "$CANONICAL_FRONTEND_URL"; do
+            for path in /login /phone-auth /api/health; do
+              for attempt in {1..30}; do
+                if curl --fail --silent --show-error "${frontend_origin}${path}" >/dev/null; then
+                  break
+                fi
+                if [[ "$attempt" == "30" ]]; then
+                  echo "Staging frontend runtime check failed: ${frontend_origin}${path}" >&2
+                  exit 1
+                fi
+                sleep 2
+              done
+            done
           done
 
-          for attempt in {1..30}; do
-            if curl --fail --silent --show-error "${FRONTEND_URL}/api/health" >/dev/null; then
-              break
-            fi
-            if [[ "$attempt" == "30" ]]; then
-              echo "Staging same-origin API proxy health check failed."
+          for frontend_origin in "$FRONTEND_URL" "$CANONICAL_FRONTEND_URL"; do
+            auth_config=""
+            for attempt in {1..30}; do
+              auth_config="$(curl --fail --silent --show-error "${frontend_origin}/api/identity/firebase-config" || true)"
+              if jq -e '.success == true and .data.configured == true and (.data.config.apiKey | length > 0) and (.data.config.authDomain | length > 0) and (.data.config.appId | length > 0)' >/dev/null 2>&1 <<<"$auth_config"; then
+                break
+              fi
+              if [[ "$attempt" == "30" ]]; then
+                echo "Staging Firebase runtime config is not active for ${frontend_origin}." >&2
+                exit 1
+              fi
+              sleep 2
+            done
+
+            probe_body="$(jq -cn \
+              --arg identifier 'staging-auth-probe@diewish.invalid' \
+              --arg continueUri "${frontend_origin}/login" \
+              '{identifier:$identifier,continueUri:$continueUri}')"
+            auth_uri_probe="$(curl --silent --show-error \
+              -H 'Content-Type: application/json' \
+              -X POST \
+              -d "$probe_body" \
+              "https://identitytoolkit.googleapis.com/v1/accounts:createAuthUri?key=${FIREBASE_WEB_API_KEY}" || true)"
+            if jq -e '.error' >/dev/null 2>&1 <<<"$auth_uri_probe"; then
+              echo "Firebase rejected staging OAuth origin ${frontend_origin}: $(jq -r '.error.message // "unknown error"' <<<"$auth_uri_probe")" >&2
               exit 1
             fi
-            sleep 2
           done
-
-          auth_config=""
-          for attempt in {1..30}; do
-            auth_config="$(curl --fail --silent --show-error "${FRONTEND_URL}/api/identity/firebase-config" || true)"
-            if jq -e '.success == true and .data.configured == true and (.data.config.apiKey | length > 0) and (.data.config.authDomain | length > 0) and (.data.config.appId | length > 0)' >/dev/null 2>&1 <<<"$auth_config"; then
-              break
-            fi
-            if [[ "$attempt" == "30" ]]; then
-              echo "Staging Firebase runtime config is not active." >&2
-              exit 1
-            fi
-            sleep 2
-          done
-
-          login_html="$(curl --fail --silent --show-error "${FRONTEND_URL}/login")"
-          grep -q 'Google ile devam et' <<<"$login_html"
-          grep -q 'Telefon numarası ile devam et' <<<"$login_html"
-          if grep -q 'Misafir olarak devam et' <<<"$login_html"; then
-            echo "Guest entry point unexpectedly returned on staging login." >&2
-            exit 1
-          fi
-          if grep -q 'Hesabı yeniden etkinleştir' <<<"$login_html"; then
-            echo "Frozen-account reactivation entry point unexpectedly returned on staging login." >&2
-            exit 1
-          fi
 
       - name: Set up JDK 17 for staging APK
         uses: actions/setup-java@v4
@@ -275,6 +273,7 @@ jobs:
           commit=${GITHUB_SHA}
           environment=staging
           frontend=${FRONTEND_URL}
+          canonical_frontend=${CANONICAL_FRONTEND_URL}
           backend=${BACKEND_URL}
           api_base=/api
           auth=google+phone
@@ -297,10 +296,11 @@ jobs:
             echo "## Diewish staging preview"
             echo ""
             echo "- Commit: \`${GITHUB_SHA}\`"
-            echo "- Frontend: ${FRONTEND_URL}"
+            echo "- Frontend status URL: ${FRONTEND_URL}"
+            echo "- Frontend canonical URL: ${CANONICAL_FRONTEND_URL}"
             echo "- Backend: ${BACKEND_URL}"
             echo "- Browser API: same-origin ${FRONTEND_URL}/api"
-            echo "- Authentication: Google + phone enabled; anonymous disabled"
+            echo "- Authentication: Google + phone enabled; anonymous disabled; both Cloud Run origins authorized"
             echo "- SMS regions: ${DIEWISH_STAGING_SMS_REGIONS}"
             echo "- Database: isolated Diewish Staging Neon project"
             echo "- Migration: direct Neon endpoint via Cloud Build"

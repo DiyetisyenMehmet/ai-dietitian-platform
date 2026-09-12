@@ -213,9 +213,9 @@ jobs:
           done
           cat /tmp/diewish-frontend.log
           exit 1
-      - name: Run browser onboarding smoke
+      - name: Run browser smoke
         working-directory: frontend
-        run: npx playwright test e2e/onboarding-flow.spec.js --workers=1 --reporter=line
+        run: npx playwright test e2e/onboarding-flow.spec.js e2e/auth-entry-points.spec.js --workers=1 --reporter=line
       - name: Print service logs on failure
         if: failure()
         run: |

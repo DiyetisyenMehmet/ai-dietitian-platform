@@ -2,6 +2,9 @@
 set -euo pipefail
 
 PROJECT_ID="${PROJECT_ID:-project-a2e260c1-839d-4f1d-b90}"
+PROJECT_NUMBER="${PROJECT_NUMBER:-}"
+REGION="${REGION:-europe-west1}"
+FRONTEND_SERVICE="${FRONTEND_SERVICE:-diewish-frontend-staging}"
 FRONTEND_URL="${FRONTEND_URL:-}"
 WEB_APP_DISPLAY_NAME="Diewish Staging Web"
 SMS_REGIONS="${DIEWISH_STAGING_SMS_REGIONS:-TR}"
@@ -35,6 +38,19 @@ if [[ -z "$frontend_host" ]]; then
   echo "Could not resolve staging frontend host." >&2
   exit 1
 fi
+
+if [[ -z "$PROJECT_NUMBER" ]]; then
+  PROJECT_NUMBER="$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)' 2>/dev/null || true)"
+fi
+if [[ -z "$PROJECT_NUMBER" || ! "$PROJECT_NUMBER" =~ ^[0-9]+$ ]]; then
+  echo "Could not resolve staging Google Cloud project number." >&2
+  exit 1
+fi
+
+# Cloud Run exposes both status.url (...a.run.app) and the stable service URL
+# (<service>-<projectNumber>.<region>.run.app). Browser users can reach either,
+# and Firebase Auth must authorize every origin that may initiate OAuth/reCAPTCHA.
+canonical_frontend_host="${FRONTEND_SERVICE}-${PROJECT_NUMBER}.${REGION}.run.app"
 
 access_token() {
   gcloud auth print-access-token
@@ -115,7 +131,8 @@ authorized_domains="$(jq -cn \
   --argjson current "$existing_domains" \
   --arg firebase "$firebase_auth_domain" \
   --arg frontend "$frontend_host" \
-  '$current + [$firebase,$frontend] | map(select(length>0)) | unique')"
+  --arg canonical "$canonical_frontend_host" \
+  '$current + [$firebase,$frontend,$canonical] | map(select(length>0)) | unique')"
 
 IFS=',' read -r -a region_array <<<"$SMS_REGIONS"
 region_json="$(printf '%s\n' "${region_array[@]}" | sed 's/^ *//;s/ *$//' | jq -R 'select(length>0)' | jq -s '.')"
@@ -169,9 +186,10 @@ fi
 phone_enabled="$(jq -r '.signIn.phoneNumber.enabled // false' "$verify_file")"
 anonymous_enabled="$(jq -r '.signIn.anonymous.enabled // false' "$verify_file")"
 frontend_authorized="$(jq -r --arg host "$frontend_host" '(.authorizedDomains // []) | index($host) != null' "$verify_file")"
+canonical_authorized="$(jq -r --arg host "$canonical_frontend_host" '(.authorizedDomains // []) | index($host) != null' "$verify_file")"
 rm -f "$verify_file"
 
-if [[ "$phone_enabled" != "true" || "$anonymous_enabled" != "false" || "$frontend_authorized" != "true" ]]; then
+if [[ "$phone_enabled" != "true" || "$anonymous_enabled" != "false" || "$frontend_authorized" != "true" || "$canonical_authorized" != "true" ]]; then
   echo "Staging auth contract verification failed after update." >&2
   exit 1
 fi
@@ -185,6 +203,7 @@ fi
   echo "FIREBASE_WEB_API_KEY=${firebase_api_key}"
   echo "FIREBASE_AUTH_DOMAIN=${firebase_auth_domain}"
   echo "FIREBASE_WEB_APP_ID=${firebase_app_id}"
+  echo "CANONICAL_FRONTEND_URL=https://${canonical_frontend_host}"
 } >> "$GITHUB_ENV"
 
-echo "Staging Authentication contract verified: Google enabled, phone enabled, anonymous disabled, staging domain authorized, SMS allowlist enforced."
+echo "Staging Authentication contract verified: Google enabled, phone enabled, anonymous disabled, both Cloud Run frontend domains authorized, SMS allowlist enforced."

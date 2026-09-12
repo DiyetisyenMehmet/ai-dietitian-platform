@@ -30,12 +30,14 @@ jobs:
           script=scripts/bootstrap-staging-gcp.sh
           auth_bootstrap=scripts/bootstrap-staging-auth-gcp.sh
           auth_runtime=scripts/configure-staging-auth.sh
+          auth_alternatives=frontend/src/presentation/components/auth/auth-alternatives.tsx
           android_host=android/app/src/main/java/com/diewish/app/MainActivity.java
           next_config=frontend/next.config.ts
           frontend_build=.github/cloudbuild/frontend-staging.yaml
 
           grep -q 'BACKEND_SERVICE: diewish-backend-staging' "$workflow"
           grep -q 'FRONTEND_SERVICE: diewish-frontend-staging' "$workflow"
+          grep -q 'PROJECT_NUMBER: "730419163638"' "$workflow"
           grep -q 'DATABASE_SECRET_NAME: diewish-staging-database-url' "$workflow"
           grep -q 'DIRECT_DATABASE_SECRET_NAME: diewish-staging-direct-database-url' "$workflow"
           grep -q 'Diewish Staging Neon DATABASE_URL' "$script"
@@ -93,17 +95,33 @@ jobs:
           fi
 
           # Every real staging deployment must fail closed unless Google/phone
-          # provider state and the public Firebase Web App config are valid.
+          # provider state, both Cloud Run browser origins, and public Firebase
+          # Web App config are valid.
           grep -q 'bash scripts/configure-staging-auth.sh' "$workflow"
           grep -q 'FIREBASE_WEB_API_KEY=${FIREBASE_WEB_API_KEY}' "$workflow"
           grep -q 'FIREBASE_AUTH_DOMAIN=${FIREBASE_AUTH_DOMAIN}' "$workflow"
           grep -q 'FIREBASE_WEB_APP_ID=${FIREBASE_WEB_APP_ID}' "$workflow"
+          grep -q 'CANONICAL_FRONTEND_URL' "$workflow"
           grep -q '/api/identity/firebase-config' "$workflow"
           grep -q '.configured == true' "$workflow"
-          grep -q 'Google ile devam et' "$workflow"
-          grep -q 'Telefon numarası ile devam et' "$workflow"
-          grep -q 'Misafir olarak devam et' "$workflow"
-          grep -q 'Hesabı yeniden etkinleştir' "$workflow"
+          grep -q 'accounts:createAuthUri' "$workflow"
+          grep -q '/phone-auth' "$workflow"
+
+          # The visible identity entry points live in the client component, not
+          # in server-rendered raw HTML. Assert the source contract here while
+          # browser E2E verifies the real click/navigation behavior.
+          grep -q 'Google ile devam et' "$auth_alternatives"
+          grep -q 'Telefon numarası ile devam et' "$auth_alternatives"
+          grep -q 'google-brand-icon' "$auth_alternatives"
+          grep -Fq 'router.push("/phone-auth")' "$auth_alternatives"
+          if grep -q 'Misafir olarak devam et' "$auth_alternatives"; then
+            echo 'Guest entry point unexpectedly present in auth alternatives.' >&2
+            exit 1
+          fi
+          if grep -q 'Hesabı yeniden etkinleştir' "$auth_alternatives"; then
+            echo 'Frozen-account reactivation entry point unexpectedly present in auth alternatives.' >&2
+            exit 1
+          fi
 
           grep -q 'identitytoolkit.googleapis.com' "$auth_runtime"
           grep -q 'firebase.googleapis.com' "$auth_runtime"
@@ -111,6 +129,8 @@ jobs:
           grep -q 'signIn.anonymous.enabled' "$auth_runtime"
           grep -q 'smsRegionConfig' "$auth_runtime"
           grep -q 'defaultSupportedIdpConfigs/google.com' "$auth_runtime"
+          grep -q 'canonical_frontend_host=' "$auth_runtime"
+          grep -q 'canonical_authorized=' "$auth_runtime"
           grep -q 'FIREBASE_WEB_API_KEY=' "$auth_runtime"
           grep -q 'FIREBASE_AUTH_DOMAIN=' "$auth_runtime"
           grep -q 'FIREBASE_WEB_APP_ID=' "$auth_runtime"
