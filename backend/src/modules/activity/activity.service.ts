@@ -12,6 +12,8 @@ export interface CreateActivityInput {
   type: ActivityType;
   name?: string;
   durationMinutes: number;
+  distanceKm?: number;
+  perceivedIntensity?: number;
   caloriesBurned?: number;
   note?: string;
   loggedAt?: string;
@@ -36,6 +38,8 @@ const MET_BY_ACTIVITY: Record<ActivityType, number> = {
   CYCLING: 6.8,
   SWIMMING: 6,
   STRENGTH_TRAINING: 5,
+  PILATES: 3,
+  HOME_EXERCISE: 4.5,
   YOGA: 2.5,
   HIIT: 8,
   SPORTS: 6,
@@ -71,6 +75,8 @@ export const activityService = {
       type: input.type,
       name: input.name,
       durationMinutes: input.durationMinutes,
+      distanceKm: input.distanceKm,
+      perceivedIntensity: input.perceivedIntensity,
       caloriesBurned,
       note: input.note,
       loggedAt: toDate(input.loggedAt),
