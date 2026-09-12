@@ -35,6 +35,20 @@ export const identityClient = {
     });
   },
 
+  async convertGuest(input: {
+    email: string;
+    password: string;
+    fullName?: string;
+  }): Promise<AuthSession> {
+    const session = await apiRequest<AuthSession>({
+      path: "/identity/guest/convert",
+      method: "POST",
+      auth: true,
+      body: JSON.stringify(input),
+    });
+    return sanitizeSession(session);
+  },
+
   async reactivate(email: string, password: string): Promise<AuthSession> {
     const session = await apiRequest<AuthSession>({
       path: "/identity/reactivate",
