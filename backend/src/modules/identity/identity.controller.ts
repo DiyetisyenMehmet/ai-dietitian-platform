@@ -44,6 +44,20 @@ function userId(req: Request): string {
 }
 
 export const identityController = {
+  firebaseConfig: asyncHandler(async (_req: Request, res: Response) => {
+    const apiKey = env.FIREBASE_WEB_API_KEY.trim();
+    const projectId = env.GOOGLE_CLOUD_PROJECT.trim();
+    const appId = process.env.FIREBASE_WEB_APP_ID?.trim() ?? "";
+    const authDomain =
+      process.env.FIREBASE_AUTH_DOMAIN?.trim() || (projectId ? `${projectId}.firebaseapp.com` : "");
+    const configured = Boolean(apiKey && projectId && appId && authDomain);
+
+    sendSuccess(res, {
+      configured,
+      config: configured ? { apiKey, authDomain, projectId, appId } : null,
+    });
+  }),
+
   externalLogin: asyncHandler(async (req: Request, res: Response) => {
     const { idToken } = req.body as ExternalLoginInput;
     const result = await externalLoginService.login(idToken, context(req));

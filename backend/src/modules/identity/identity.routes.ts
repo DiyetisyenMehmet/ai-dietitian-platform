@@ -10,6 +10,8 @@ import { deactivateSchema, externalLoginSchema, sessionParamsSchema } from "./id
 
 export const identityRouter = Router();
 
+identityRouter.get("/firebase-config", identityController.firebaseConfig);
+
 identityRouter.post(
   "/external",
   authRateLimiter,

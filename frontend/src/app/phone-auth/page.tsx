@@ -1,16 +1,12 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { authStore } from "@/application/auth/auth-store";
 import { identityClient } from "@/infrastructure/identity/identity-client";
-import {
-  isExternalAuthConfigured,
-  startPhoneVerification,
-} from "@/infrastructure/identity/firebase-browser";
+import { startPhoneVerification } from "@/infrastructure/identity/firebase-browser";
 import { AuthLayout } from "@/presentation/components/layout/auth-layout";
 import { Button } from "@/presentation/components/ui/button";
 import { FormField } from "@/presentation/components/ui/form-field";
@@ -69,19 +65,6 @@ export default function PhoneAuthPage() {
       setBusy(false);
     }
   };
-
-  if (!isExternalAuthConfigured()) {
-    return (
-      <AuthLayout title="Telefon ile giriş" subtitle="Kimlik doğrulama servisi henüz yapılandırılmadı">
-        <div className="space-y-4 rounded-2xl border border-border p-5 text-center text-sm text-muted-foreground">
-          <p>Telefon doğrulaması staging ortamında Firebase Authentication yapılandırıldığında etkinleşir.</p>
-          <Button asChild variant="outline" className="w-full">
-            <Link href="/login">Giriş ekranına dön</Link>
-          </Button>
-        </div>
-      </AuthLayout>
-    );
-  }
 
   return (
     <AuthLayout title="Telefon ile devam et" subtitle="Numaranızı SMS doğrulamasıyla güvenli biçimde onaylayın">
