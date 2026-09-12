@@ -102,7 +102,7 @@ async function issueRefreshToken(
   return prepared;
 }
 
-async function issueTokens(user: User, context: SessionContext): Promise<AuthResult> {
+export async function issueAuthSession(user: User, context: SessionContext): Promise<AuthResult> {
   const accessToken = signAccessToken({ userId: user.id, email: user.email, role: user.role });
   const refresh = await issueRefreshToken(user.id, context);
   return {
@@ -161,7 +161,7 @@ export const authService = {
     }
 
     logger.info({ userId: user.id }, "New user registered");
-    return issueTokens(user, context);
+    return issueAuthSession(user, context);
   },
 
   async login(input: LoginInput, context: SessionContext): Promise<AuthResult> {
@@ -179,7 +179,7 @@ export const authService = {
 
     await authRepository.updateLastLogin(user.id);
     logger.info({ userId: user.id }, "User logged in");
-    return issueTokens(user, context);
+    return issueAuthSession(user, context);
   },
 
   async refresh(refreshTokenRaw: string, context: SessionContext): Promise<AuthResult> {
