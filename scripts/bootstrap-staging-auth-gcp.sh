@@ -21,6 +21,13 @@ for command_name in gcloud curl jq node npm; do
   require_command "$command_name"
 done
 
+# User credentials in Cloud Shell may otherwise charge/authorize API requests
+# against the Cloud Shell consumer project. Pin all direct Google REST calls to
+# the isolated Diewish staging project.
+curl() {
+  command curl -H "x-goog-user-project: ${PROJECT_ID}" "$@"
+}
+
 ACTIVE_ACCOUNT="$(gcloud auth list --filter=status:ACTIVE --format='value(account)' | head -n 1)"
 if [[ -z "${ACTIVE_ACCOUNT}" ]]; then
   echo "No active gcloud account. Run: gcloud auth login" >&2
@@ -183,6 +190,8 @@ if ! gcloud auth application-default print-access-token >/dev/null 2>&1; then
   echo "Application Default Credentials are required once to provision Google Sign-In."
   gcloud auth application-default login --project "${PROJECT_ID}"
 fi
+# Pin ADC quota accounting to the same isolated staging project when supported.
+gcloud auth application-default set-quota-project "${PROJECT_ID}" >/dev/null 2>&1 || true
 
 firebase_config="$(mktemp)"
 cat >"$firebase_config" <<EOF
@@ -193,10 +202,7 @@ cat >"$firebase_config" <<EOF
       "emailPassword": true,
       "googleSignIn": {
         "oAuthBrandDisplayName": "Diewish",
-        "supportEmail": "${SUPPORT_EMAIL}",
-        "authorizedRedirectUris": [
-          "https://${PROJECT_ID}.firebaseapp.com/__/auth/handler"
-        ]
+        "supportEmail": "${SUPPORT_EMAIL}"
       }
     }
   }
