@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Leaf } from "lucide-react";
 
 import { APP_CONFIG } from "@/shared/constants/app";
+import { AuthAlternatives } from "@/presentation/components/auth/auth-alternatives";
 import { ThemeToggle } from "@/presentation/components/layout/theme-toggle";
 
 interface AuthLayoutProps {
@@ -41,6 +42,7 @@ export function AuthLayout({ title, subtitle, footer, children }: AuthLayoutProp
             {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
           </div>
           {children}
+          <AuthAlternatives />
           {footer && <div className="mt-6 text-center text-sm text-muted-foreground">{footer}</div>}
         </div>
       </main>

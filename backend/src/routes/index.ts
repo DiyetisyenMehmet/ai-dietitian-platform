@@ -2,6 +2,7 @@ import { Router } from "express";
 
 import { accountRouter } from "../modules/account/account.routes";
 import { authRouter } from "../modules/auth/auth.routes";
+import { identityRouter } from "../modules/identity/identity.routes";
 import { bloodTestRouter } from "../modules/blood-test/blood-test.routes";
 import { bloodTestAnalysisModule } from "../modules/blood-test-analysis/blood-test-analysis.module";
 import { nutritionPlanModule } from "../modules/nutrition-plan/nutrition-plan.module";
@@ -28,6 +29,7 @@ export const apiRouter = Router();
 
 apiRouter.use("/health", healthRouter);
 apiRouter.use("/auth", authRouter);
+apiRouter.use("/identity", identityRouter);
 apiRouter.use("/account", accountRouter);
 apiRouter.use("/onboarding", onboardingRouter);
 apiRouter.use("/food-scan", foodScanRouter);
