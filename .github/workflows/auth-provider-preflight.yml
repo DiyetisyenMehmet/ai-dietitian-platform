@@ -1,0 +1,67 @@
+name: Auth Provider Preflight
+
+on:
+  push:
+    branches:
+      - feature/staging-preview
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PROJECT_ID: project-a2e260c1-839d-4f1d-b90
+  WIF_PROVIDER: projects/730419163638/locations/global/workloadIdentityPools/github-actions/providers/diewish-staging
+  DEPLOY_SERVICE_ACCOUNT: diewish-staging-deployer@project-a2e260c1-839d-4f1d-b90.iam.gserviceaccount.com
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud with OIDC
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Inspect identity provider state
+        shell: bash
+        run: |
+          set -euo pipefail
+          token="$(gcloud auth print-access-token)"
+
+          config_file="$(mktemp)"
+          config_code="$(curl -sS -o "$config_file" -w '%{http_code}' -H "Authorization: Bearer ${token}" "https://identitytoolkit.googleapis.com/admin/v2/projects/${PROJECT_ID}/config")"
+          echo "identity_config_http=${config_code}"
+          if [[ "$config_code" == "200" ]]; then
+            jq '{phoneEnabled:(.signIn.phoneNumber.enabled // false),anonymousEnabled:(.signIn.anonymous.enabled // false),authorizedDomainCount:((.authorizedDomains // [])|length)}' "$config_file"
+          fi
+
+          google_file="$(mktemp)"
+          google_code="$(curl -sS -o "$google_file" -w '%{http_code}' -H "Authorization: Bearer ${token}" "https://identitytoolkit.googleapis.com/admin/v2/projects/${PROJECT_ID}/defaultSupportedIdpConfigs/google.com")"
+          echo "google_provider_http=${google_code}"
+          if [[ "$google_code" == "200" ]]; then
+            jq '{enabled:(.enabled // false),hasClientId:((.clientId // "")|length>0),hasClientSecret:((.clientSecret // "")|length>0)}' "$google_file"
+          fi
+
+          firebase_file="$(mktemp)"
+          firebase_code="$(curl -sS -o "$firebase_file" -w '%{http_code}' -H "Authorization: Bearer ${token}" "https://firebase.googleapis.com/v1beta1/projects/${PROJECT_ID}")"
+          echo "firebase_project_http=${firebase_code}"
+
+          apps_file="$(mktemp)"
+          apps_code="$(curl -sS -o "$apps_file" -w '%{http_code}' -H "Authorization: Bearer ${token}" "https://firebase.googleapis.com/v1beta1/projects/${PROJECT_ID}/webApps")"
+          echo "firebase_webapps_http=${apps_code}"
+          if [[ "$apps_code" == "200" ]]; then
+            jq '{webAppCount:((.apps // [])|length)}' "$apps_file"
+          fi
+
+          echo "api_key_count=$(gcloud services api-keys list --project "$PROJECT_ID" --format='value(name)' 2>/dev/null | wc -l | tr -d ' ')"
