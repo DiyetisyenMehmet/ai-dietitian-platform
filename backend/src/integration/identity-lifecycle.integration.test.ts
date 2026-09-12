@@ -99,7 +99,8 @@ test("account freeze invalidates access immediately and password reactivation re
   assert.equal(restored.status, 200);
 });
 
-test("guest mode receives an access-only session and cannot enter private account APIs", async (t) => {
+test("guest mode is isolated and converts in place without changing the user id", async (t) => {
+  const convertedEmail = `guest.converted.${Date.now()}@example.com`;
   const { server, baseUrl } = await startServer();
   let guestId: string | null = null;
   t.after(async () => {
@@ -108,6 +109,7 @@ test("guest mode receives an access-only session and cannot enter private accoun
       server.close((error) => (error ? reject(error) : resolve()));
     });
     if (guestId) await prisma.user.deleteMany({ where: { id: guestId } });
+    await prisma.user.deleteMany({ where: { email: convertedEmail } });
     await prisma.$disconnect();
   });
 
@@ -121,8 +123,36 @@ test("guest mode receives an access-only session and cannot enter private accoun
   assert.equal(guestBody.data.user.isGuest, true);
   assert.equal(guest.headers.get("set-cookie"), null);
 
+  const guestAccessToken = guestBody.data.tokens.accessToken;
   const privateApi = await fetch(`${baseUrl}/api/identity/sessions`, {
-    headers: { authorization: `Bearer ${guestBody.data.tokens.accessToken}` },
+    headers: { authorization: `Bearer ${guestAccessToken}` },
   });
   assert.equal(privateApi.status, 403);
+
+  const conversion = await fetch(`${baseUrl}/api/identity/guest/convert`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${guestAccessToken}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      email: convertedEmail,
+      password: "ConvertedPass123",
+      fullName: "Converted Guest",
+    }),
+  });
+  assert.equal(conversion.status, 200);
+  const conversionBody = await json<SessionPayload>(conversion);
+  assert.equal(conversionBody.success, true);
+  if (!conversionBody.success) return;
+  assert.equal(conversionBody.data.user.id, guestId);
+  assert.equal(conversionBody.data.user.email, convertedEmail);
+
+  const convertedRow = await prisma.user.findUnique({ where: { id: guestId } });
+  assert.equal(convertedRow?.email, convertedEmail);
+
+  const convertedPrivateApi = await fetch(`${baseUrl}/api/identity/sessions`, {
+    headers: { authorization: `Bearer ${conversionBody.data.tokens.accessToken}` },
+  });
+  assert.equal(convertedPrivateApi.status, 200);
 });
