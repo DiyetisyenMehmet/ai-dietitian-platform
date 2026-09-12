@@ -113,4 +113,38 @@ export const trackingRepository = {
       orderBy: { loggedAt: "desc" },
     });
   },
+
+  deleteWaterLogForUser(id: string, userId: string): Promise<{ count: number }> {
+    return prisma.waterLog.deleteMany({ where: { id, userId } });
+  },
+
+  getWaterProfile(userId: string): Promise<{
+    dailyWaterGoalMl: number;
+    currentWeightKg: number;
+    activityLevel: string;
+  } | null> {
+    return prisma.userProfile.findUnique({
+      where: { userId },
+      select: {
+        dailyWaterGoalMl: true,
+        currentWeightKg: true,
+        activityLevel: true,
+      },
+    });
+  },
+
+  async updateWaterGoalForUser(
+    userId: string,
+    dailyWaterGoalMl: number,
+  ): Promise<{ dailyWaterGoalMl: number } | null> {
+    const updated = await prisma.userProfile.updateMany({
+      where: { userId },
+      data: { dailyWaterGoalMl },
+    });
+    if (updated.count === 0) return null;
+    return prisma.userProfile.findUnique({
+      where: { userId },
+      select: { dailyWaterGoalMl: true },
+    });
+  },
 };
