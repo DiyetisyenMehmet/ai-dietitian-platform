@@ -1,3 +1,5 @@
+import { apiRequest } from "@/infrastructure/api/http-client";
+
 const FIREBASE_CDN_VERSION = "10.14.1";
 
 interface FirebaseUserLike {
@@ -44,6 +46,11 @@ interface FirebaseNamespaceLike {
   auth: FirebaseAuthFactory;
 }
 
+interface PublicFirebaseConfigResponse {
+  configured: boolean;
+  config: Record<string, string> | null;
+}
+
 declare global {
   interface Window {
     firebase?: FirebaseNamespaceLike;
@@ -51,14 +58,31 @@ declare global {
 }
 
 let loadPromise: Promise<FirebaseNamespaceLike> | null = null;
+let runtimeConfigPromise: Promise<Record<string, string> | null> | null = null;
 
-function config(): Record<string, string> | null {
+function buildTimeConfig(): Record<string, string> | null {
   const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY?.trim();
   const authDomain = process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN?.trim();
   const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID?.trim();
   const appId = process.env.NEXT_PUBLIC_FIREBASE_APP_ID?.trim();
   if (!apiKey || !authDomain || !projectId || !appId) return null;
   return { apiKey, authDomain, projectId, appId };
+}
+
+async function config(): Promise<Record<string, string> | null> {
+  const compiled = buildTimeConfig();
+  if (compiled) return compiled;
+
+  if (!runtimeConfigPromise) {
+    runtimeConfigPromise = apiRequest<PublicFirebaseConfigResponse>({
+      path: "/identity/firebase-config",
+      method: "GET",
+      retryOnUnauthorized: false,
+    })
+      .then((result) => (result.configured ? result.config : null))
+      .catch(() => null);
+  }
+  return runtimeConfigPromise;
 }
 
 function loadScript(id: string, src: string): Promise<void> {
@@ -84,8 +108,10 @@ function loadScript(id: string, src: string): Promise<void> {
 async function firebase(): Promise<FirebaseNamespaceLike> {
   if (loadPromise) return loadPromise;
   loadPromise = (async () => {
-    const firebaseConfig = config();
-    if (!firebaseConfig) throw new Error("Kimlik doğrulama servisi henüz yapılandırılmadı.");
+    const firebaseConfig = await config();
+    if (!firebaseConfig) {
+      throw new Error("Google ve telefon doğrulaması için staging kimlik sağlayıcısı henüz yapılandırılmadı.");
+    }
     await loadScript(
       "diewish-firebase-app",
       `https://www.gstatic.com/firebasejs/${FIREBASE_CDN_VERSION}/firebase-app-compat.js`,
@@ -109,10 +135,6 @@ async function firebase(): Promise<FirebaseNamespaceLike> {
 
 async function tokenFromCredential(credential: FirebaseUserCredentialLike): Promise<string> {
   return credential.user.getIdToken(true);
-}
-
-export function isExternalAuthConfigured(): boolean {
-  return config() !== null;
 }
 
 export async function signInWithGoogle(): Promise<string> {
