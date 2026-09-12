@@ -1,44 +1,42 @@
 import { apiRequest } from "@/infrastructure/api/http-client";
 import { ACTIVITY_ENDPOINTS } from "@/infrastructure/auth/endpoints";
 
-/**
- * Activity type enum matching the backend ActivityType (Sprint 22).
- */
+/** Activity type enum matching the backend ActivityType. */
 export type ActivityType =
   | "WALKING"
   | "RUNNING"
   | "CYCLING"
   | "SWIMMING"
   | "STRENGTH_TRAINING"
+  | "PILATES"
+  | "HOME_EXERCISE"
   | "YOGA"
   | "HIIT"
   | "SPORTS"
   | "OTHER";
 
-/**
- * A persisted activity log entry, as returned by the backend activity module
- * (Sprint 22). The backend is the single source of truth; the frontend caches
- * today's records for responsive totals and undo interactions.
- */
+/** A persisted activity log entry returned by the owner-scoped activity API. */
 export interface Activity {
   id: string;
   userId: string;
   type: ActivityType;
   name: string | null;
   durationMinutes: number;
+  distanceKm: number | null;
+  perceivedIntensity: number | null;
   caloriesBurned: number | null;
   note: string | null;
   loggedAt: string;
   createdAt: string;
 }
 
-/**
- * Input for logging a new activity. Maps to the backend createActivitySchema.
- */
+/** Input for logging a new activity. */
 export interface LogActivityInput {
   type: ActivityType;
   name?: string;
   durationMinutes: number;
+  distanceKm?: number;
+  perceivedIntensity?: number;
   caloriesBurned?: number;
   note?: string;
   loggedAt?: string;
