@@ -23,6 +23,7 @@ const AUTH_ROUTES = new Set<string>([
   "/forgot-password",
   "/reset-password",
   "/verify-email",
+  "/phone-auth",
 ]);
 
 function isMarketing(pathname: string): boolean {
