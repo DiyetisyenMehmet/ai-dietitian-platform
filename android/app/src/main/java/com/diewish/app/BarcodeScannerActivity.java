@@ -41,8 +41,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * First-party Diewish retail barcode scanner.
  *
- * Frames stay on-device. ML Kit decodes only common retail EAN/UPC formats and
- * this Activity returns the numeric identifier to the trusted WebView host.
+ * Frames stay on-device. ML Kit decodes common retail EAN/UPC and ITF formats
+ * and this Activity returns the numeric identifier to the trusted WebView host.
  * No barcode camera frame is uploaded to Diewish or a nutrition provider.
  */
 public final class BarcodeScannerActivity extends ComponentActivity {
@@ -83,7 +83,8 @@ public final class BarcodeScannerActivity extends ComponentActivity {
                 Barcode.FORMAT_EAN_13,
                 Barcode.FORMAT_EAN_8,
                 Barcode.FORMAT_UPC_A,
-                Barcode.FORMAT_UPC_E
+                Barcode.FORMAT_UPC_E,
+                Barcode.FORMAT_ITF
             )
             .build();
         barcodeScanner = BarcodeScanning.getClient(options);
@@ -228,7 +229,7 @@ public final class BarcodeScannerActivity extends ComponentActivity {
             if (value == null) continue;
             String normalized = value.replaceAll("\\D", "");
             int length = normalized.length();
-            if (length != 8 && length != 12 && length != 13) continue;
+            if (length != 8 && length != 12 && length != 13 && length != 14) continue;
             if (!delivered.compareAndSet(false, true)) return;
             runOnUiThread(() -> returnBarcode(normalized));
             return;

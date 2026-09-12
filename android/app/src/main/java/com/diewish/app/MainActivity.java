@@ -365,7 +365,7 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
                         QueryProductDetailsParams.Product.newBuilder()
                             .setProductId(id)
                             .setProductType(BillingClient.ProductType.SUBS)
-                            .build()
+                            .build();
                     );
                 }
                 if (products.isEmpty()) {
@@ -787,7 +787,7 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
         if (requestCode == BARCODE_SCAN_REQUEST) {
             if (resultCode == RESULT_OK && data != null) {
                 String barcode = data.getStringExtra(BarcodeScannerActivity.EXTRA_BARCODE);
-                if (barcode != null && barcode.matches("\\d{8}|\\d{12}|\\d{13}")) {
+                if (barcode != null && barcode.matches("\\d{8}|\\d{12}|\\d{13}|\\d{14}")) {
                     emitEvent("diewish:barcode-result", jsonObject("barcode", barcode));
                     return;
                 }
