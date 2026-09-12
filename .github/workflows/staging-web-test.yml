@@ -37,6 +37,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
       - name: Validate staging-only target
         shell: bash
         run: |
@@ -45,73 +46,157 @@ jobs:
           [[ "$FRONTEND_SERVICE" == *-staging ]]
           [[ "$DEPLOY_SERVICE_ACCOUNT" == diewish-staging-deployer@* ]]
           [[ "$RUNTIME_SERVICE_ACCOUNT" == diewish-staging-runtime@* ]]
+
       - name: Authenticate to Google Cloud with OIDC
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ env.WIF_PROVIDER }}
           service_account: ${{ env.DEPLOY_SERVICE_ACCOUNT }}
+
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: ${{ env.PROJECT_ID }}
+
       - name: Verify staging resources
         shell: bash
         run: |
           set -euo pipefail
-          gcloud artifacts repositories describe "$ARTIFACT_REPOSITORY" --project "$PROJECT_ID" --location "$REGION" >/dev/null
-          gcloud iam service-accounts describe "$RUNTIME_SERVICE_ACCOUNT" --project "$PROJECT_ID" >/dev/null
+          gcloud artifacts repositories describe "$ARTIFACT_REPOSITORY" \
+            --project "$PROJECT_ID" \
+            --location "$REGION" >/dev/null
+          gcloud iam service-accounts describe "$RUNTIME_SERVICE_ACCOUNT" \
+            --project "$PROJECT_ID" >/dev/null
+
       - name: Migrate staging database and build backend image
         shell: bash
         run: |
           set -euo pipefail
           BACKEND_IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPOSITORY}/backend:${GITHUB_SHA}"
           echo "BACKEND_IMAGE=${BACKEND_IMAGE}" >> "$GITHUB_ENV"
-          gcloud builds submit --no-source --project "$PROJECT_ID" --config .github/cloudbuild/backend-staging.yaml --substitutions "_IMAGE=${BACKEND_IMAGE},_GIT_SHA=${GITHUB_SHA}" --quiet
+          gcloud builds submit \
+            --no-source \
+            --project "$PROJECT_ID" \
+            --config .github/cloudbuild/backend-staging.yaml \
+            --substitutions "_IMAGE=${BACKEND_IMAGE},_GIT_SHA=${GITHUB_SHA}" \
+            --quiet
+
       - name: Deploy backend web preview
         shell: bash
         run: |
           set -euo pipefail
-          gcloud run deploy "$BACKEND_SERVICE" --project "$PROJECT_ID" --region "$REGION" --platform managed --image "$BACKEND_IMAGE" --service-account "$RUNTIME_SERVICE_ACCOUNT" --command=npm --args=start --no-invoker-iam-check --cpu 1 --memory 1Gi --concurrency 40 --timeout 120 --min 0 --max 2 --set-env-vars "API_PREFIX=/api,CORS_ORIGIN=https://staging.invalid,TRUST_PROXY_HOPS=1,ENABLE_API_DOCS=false,LOG_LEVEL=info,JWT_ISSUER=diewish-staging,REFRESH_COOKIE_NAME=diewish_staging_refresh,REFRESH_COOKIE_SAME_SITE=lax,APP_WEB_URL=https://staging.invalid,STORAGE_PROVIDER=local,AI_PROVIDER=vertex,GOOGLE_CLOUD_PROJECT=${PROJECT_ID},VERTEX_AI_LOCATION=global,VERTEX_AI_MODEL=gemini-3.5-flash,USDA_FDC_API_KEY=DEMO_KEY,OPEN_FOOD_FACTS_USER_AGENT=Diewish-Staging/0.1" --set-secrets "DATABASE_URL=${DATABASE_SECRET_NAME}:latest,JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET_NAME}:latest,JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET_NAME}:latest" --quiet
-          BACKEND_URL="$(gcloud run services describe "$BACKEND_SERVICE" --project "$PROJECT_ID" --region "$REGION" --format='value(status.url)')"
+          gcloud run deploy "$BACKEND_SERVICE" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --platform managed \
+            --image "$BACKEND_IMAGE" \
+            --service-account "$RUNTIME_SERVICE_ACCOUNT" \
+            --command=npm \
+            --args=start \
+            --no-invoker-iam-check \
+            --cpu 1 \
+            --memory 1Gi \
+            --concurrency 40 \
+            --timeout 120 \
+            --min 0 \
+            --max 2 \
+            --set-env-vars "API_PREFIX=/api,CORS_ORIGIN=https://staging.invalid,TRUST_PROXY_HOPS=1,ENABLE_API_DOCS=false,LOG_LEVEL=info,JWT_ISSUER=diewish-staging,REFRESH_COOKIE_NAME=diewish_staging_refresh,REFRESH_COOKIE_SAME_SITE=lax,APP_WEB_URL=https://staging.invalid,STORAGE_PROVIDER=local,AI_PROVIDER=vertex,GOOGLE_CLOUD_PROJECT=${PROJECT_ID},VERTEX_AI_LOCATION=global,VERTEX_AI_MODEL=gemini-3.5-flash,USDA_FDC_API_KEY=DEMO_KEY,OPEN_FOOD_FACTS_USER_AGENT=Diewish-Staging/0.1" \
+            --set-secrets "DATABASE_URL=${DATABASE_SECRET_NAME}:latest,JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET_NAME}:latest,JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET_NAME}:latest" \
+            --quiet
+
+          BACKEND_URL="$(gcloud run services describe "$BACKEND_SERVICE" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --format='value(status.url)')"
           test -n "$BACKEND_URL"
           echo "BACKEND_URL=$BACKEND_URL" >> "$GITHUB_ENV"
+
       - name: Build frontend image against staging backend
         shell: bash
         run: |
           set -euo pipefail
           FRONTEND_IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPOSITORY}/frontend:${GITHUB_SHA}"
           echo "FRONTEND_IMAGE=${FRONTEND_IMAGE}" >> "$GITHUB_ENV"
-          gcloud builds submit --no-source --project "$PROJECT_ID" --config .github/cloudbuild/frontend-staging.yaml --substitutions "_IMAGE=${FRONTEND_IMAGE},_GIT_SHA=${GITHUB_SHA},_API_BASE_URL=/api,_API_PROXY_TARGET=${BACKEND_URL},_SITE_URL=https://staging.invalid" --quiet
+          gcloud builds submit \
+            --no-source \
+            --project "$PROJECT_ID" \
+            --config .github/cloudbuild/frontend-staging.yaml \
+            --substitutions "_IMAGE=${FRONTEND_IMAGE},_GIT_SHA=${GITHUB_SHA},_API_BASE_URL=/api,_API_PROXY_TARGET=${BACKEND_URL},_SITE_URL=https://staging.invalid" \
+            --quiet
+
       - name: Deploy frontend web preview
         shell: bash
         run: |
           set -euo pipefail
-          gcloud run deploy "$FRONTEND_SERVICE" --project "$PROJECT_ID" --region "$REGION" --platform managed --image "$FRONTEND_IMAGE" --no-invoker-iam-check --cpu 1 --memory 512Mi --concurrency 80 --timeout 180 --min 0 --max 2 --quiet
-          FRONTEND_URL="$(gcloud run services describe "$FRONTEND_SERVICE" --project "$PROJECT_ID" --region "$REGION" --format='value(status.url)')"
+          # Keep the same-origin proxy alive longer than the backend's
+          # synchronous 120-second blood-test analysis request.
+          gcloud run deploy "$FRONTEND_SERVICE" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --platform managed \
+            --image "$FRONTEND_IMAGE" \
+            --no-invoker-iam-check \
+            --cpu 1 \
+            --memory 512Mi \
+            --concurrency 80 \
+            --timeout 180 \
+            --min 0 \
+            --max 2 \
+            --quiet
+
+          FRONTEND_URL="$(gcloud run services describe "$FRONTEND_SERVICE" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --format='value(status.url)')"
           test -n "$FRONTEND_URL"
           echo "FRONTEND_URL=$FRONTEND_URL" >> "$GITHUB_ENV"
+
       - name: Bind backend to staging frontend
         shell: bash
         run: |
           set -euo pipefail
-          gcloud run services update "$BACKEND_SERVICE" --project "$PROJECT_ID" --region "$REGION" --update-env-vars "CORS_ORIGIN=${FRONTEND_URL},APP_WEB_URL=${FRONTEND_URL}" --no-invoker-iam-check --quiet
+          gcloud run services update "$BACKEND_SERVICE" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --update-env-vars "CORS_ORIGIN=${FRONTEND_URL},APP_WEB_URL=${FRONTEND_URL}" \
+            --no-invoker-iam-check \
+            --quiet
+
       - name: Verify browser web preview
         shell: bash
         run: |
           set -euo pipefail
-          retry() { local url="$1"; local label="$2"; for attempt in {1..30}; do if curl --fail --silent --show-error "$url" >/dev/null; then echo "$label OK: $url"; return 0; fi; sleep 2; done; echo "$label failed: $url"; return 1; }
+
+          retry() {
+            local url="$1"
+            local label="$2"
+            for attempt in {1..30}; do
+              if curl --fail --silent --show-error "$url" >/dev/null; then
+                echo "$label OK: $url"
+                return 0
+              fi
+              sleep 2
+            done
+            echo "$label failed: $url"
+            return 1
+          }
+
           retry "${BACKEND_URL}/api/health" "backend health"
           retry "${FRONTEND_URL}/register" "frontend register"
           retry "${FRONTEND_URL}/api/health" "same-origin proxy"
+
       - name: Verify food scan fallbacks end to end
         shell: bash
         run: bash scripts/staging-food-scan-e2e.sh "$FRONTEND_URL"
+
       - name: Verify barcode recovery end to end
         shell: bash
         run: bash scripts/staging-barcode-recovery-e2e.sh "$FRONTEND_URL"
+
       - name: Verify blood-test PDF end to end
         shell: bash
         run: bash scripts/staging-blood-pdf-e2e.sh "$FRONTEND_URL"
+
       - name: Web preview summary
         shell: bash
         run: |
