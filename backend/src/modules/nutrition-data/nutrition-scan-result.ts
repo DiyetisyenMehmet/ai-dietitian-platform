@@ -70,55 +70,42 @@ export interface PhotoScanLike {
   }>;
 }
 
+function productBlock(food: CanonicalFood) {
+  return {
+    quantity: food.quantity,
+    allergens: food.allergens,
+    additives: food.additives,
+    labels: food.labels,
+    vegan: food.vegan,
+    vegetarian: food.vegetarian,
+    glutenFree: food.glutenFree,
+    nutriScore: food.nutriScore,
+    novaGroup: food.novaGroup,
+  };
+}
+
 export function toBarcodeScanResult(food: CanonicalFood): NormalizedNutritionScanResult {
-  const servingGrams = food.serving?.gramWeight && food.serving.gramWeight > 0
-    ? food.serving.gramWeight
-    : 100;
-  // Preserve provider-declared serving values when available. Only derive from
-  // per-100g data when the upstream product does not publish a serving basis.
-  const perServing = food.nutrientsPerServing
-    ?? calculatePortion(food.nutrientsPer100g, servingGrams).nutrients;
+  const servingGrams = food.serving?.gramWeight && food.serving.gramWeight > 0 ? food.serving.gramWeight : 100;
+  const perServing = food.nutrientsPerServing ?? calculatePortion(food.nutrientsPer100g, servingGrams).nutrients;
   return {
     scanType: "BARCODE",
-    identity: {
-      name: food.displayNameTr || food.name,
-      brand: food.brand,
-      barcode: food.barcode,
-      imageUrl: food.imageUrl,
-    },
-    serving: {
-      description: food.serving?.description ?? (servingGrams === 100 ? "100 g" : `${servingGrams} g`),
-      grams: servingGrams,
-      confidence: 1,
-    },
-    nutrients: {
-      per100g: food.nutrientsPer100g,
-      perServing,
-      estimated: false,
-    },
-    ingredients: food.ingredients.map((name) => ({
-      name,
-      grams: null,
-      included: true,
-      confidence: 1,
-      optional: false,
-      nutritionSource: null,
-    })),
+    identity: { name: food.displayNameTr || food.name, brand: food.brand, barcode: food.barcode, imageUrl: food.imageUrl },
+    serving: { description: food.serving?.description ?? (servingGrams === 100 ? "100 g" : `${servingGrams} g`), grams: servingGrams, confidence: 1 },
+    nutrients: { per100g: food.nutrientsPer100g, perServing, estimated: false },
+    ingredients: food.ingredients.map((name) => ({ name, grams: null, included: true, confidence: 1, optional: false, nutritionSource: null })),
     provenance: { nutrition: [food.provenance], recognition: "BARCODE_EXACT" },
-    product: {
-      quantity: food.quantity,
-      allergens: food.allergens,
-      additives: food.additives,
-      labels: food.labels,
-      vegan: food.vegan,
-      vegetarian: food.vegetarian,
-      glutenFree: food.glutenFree,
-      nutriScore: food.nutriScore,
-      novaGroup: food.novaGroup,
-    },
-    disclaimer: food.provenance.stale
-      ? "Ürün kaynağı geçici olarak doğrulanamadığı için son bilinen önbellek verisi gösteriliyor."
-      : null,
+    product: productBlock(food),
+    disclaimer: food.provenance.stale ? "Ürün kaynağı geçici olarak doğrulanamadığı için son bilinen önbellek verisi gösteriliyor." : null,
+  };
+}
+
+export function toNutritionLabelScanResult(food: CanonicalFood): NormalizedNutritionScanResult {
+  const result = toBarcodeScanResult(food);
+  return {
+    ...result,
+    scanType: "NUTRITION_LABEL",
+    provenance: { nutrition: [food.provenance], recognition: "OCR_ESTIMATED" },
+    disclaimer: "Besin etiketi görselden okunmuş ve kullanıcı tarafından doğrulanmıştır. Bu kayıt yalnız bu kullanıcı için saklanır; global doğrulanmış ürün verisi olarak paylaşılmaz.",
   };
 }
 
@@ -135,11 +122,7 @@ export function toPhotoScanResult(scan: PhotoScanLike): NormalizedNutritionScanR
   return {
     scanType: "PHOTO",
     identity: { name: scan.dishName, brand: null, barcode: null, imageUrl: null },
-    serving: {
-      description: scan.estimatedPortion,
-      grams: scan.estimatedGrams,
-      confidence: Math.max(0, Math.min(1, scan.confidence / 100)),
-    },
+    serving: { description: scan.estimatedPortion, grams: scan.estimatedGrams, confidence: Math.max(0, Math.min(1, scan.confidence / 100)) },
     nutrients: { per100g: null, perServing: scan.totals, estimated: true },
     ingredients: scan.ingredients.map((item) => ({
       name: item.name,

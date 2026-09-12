@@ -1,5 +1,6 @@
-const SUPPORTED_LENGTHS = new Set([8, 12, 13]);
+const SUPPORTED_LENGTHS = new Set([8, 12, 13, 14]);
 
+/** GS1 Mod-10 check digit used by GTIN-8/12/13/14. */
 function gtinChecksumValid(digits: string): boolean {
   if (!/^\d+$/.test(digits) || digits.length < 2) return false;
   const body = digits.slice(0, -1);
@@ -38,8 +39,9 @@ function expandUpcE(code: string): string | null {
   return `${ns}${manufacturer}${product}${check}`;
 }
 
+/** Accepts GTIN-8/12/13/14. UPC-E is canonicalized to UPC-A when required. */
 export function normalizeBarcode(input: string): string | null {
-  const digits = input.replace(/[\s-]/g, "");
+  const digits = input.trim().replace(/[\s-]/g, "");
   if (!SUPPORTED_LENGTHS.has(digits.length) || !/^\d+$/.test(digits)) return null;
   if (gtinChecksumValid(digits)) return digits;
   if (digits.length === 8) {

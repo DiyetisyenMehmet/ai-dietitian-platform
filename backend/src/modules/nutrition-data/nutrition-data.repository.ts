@@ -74,6 +74,22 @@ export const nutritionDataRepository = {
     return rows[0] ? hydrateFood(rows[0], false) : null;
   },
 
+  /** User-confirmed package labels are deliberately user-scoped and never enter the global source cache. */
+  async getUserConfirmedBarcode(userId: string, barcode: string): Promise<CanonicalFood | null> {
+    const rows = await prisma.$queryRaw<Array<{ payload: unknown }>>`
+      SELECT payload
+      FROM nutrition_barcode_scans
+      WHERE user_id = ${userId}
+        AND barcode = ${barcode}
+        AND provider = 'DIEWISH'
+        AND payload IS NOT NULL
+        AND payload->'provenance'->>'sourceReference' = 'USER_CONFIRMED_PACKAGE_LABEL'
+      ORDER BY scanned_at DESC
+      LIMIT 1
+    `;
+    return rows[0] ? asFood(rows[0].payload) : null;
+  },
+
   /** Most recently validated expired record, used only when live providers fail. */
   async getStaleBarcode(barcode: string, now = new Date()): Promise<CanonicalFood | null> {
     const rows = await prisma.$queryRaw<FoodRow[]>`

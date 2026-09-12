@@ -30,9 +30,7 @@ function providerError(message: string, details?: unknown): ApiError {
 }
 
 function ttlHoursFor(food: CanonicalFood): number {
-  return food.provider === "OPEN_FOOD_FACTS"
-    ? env.OPEN_FOOD_FACTS_CACHE_TTL_HOURS
-    : env.USDA_CACHE_TTL_HOURS;
+  return food.provider === "OPEN_FOOD_FACTS" ? env.OPEN_FOOD_FACTS_CACHE_TTL_HOURS : env.USDA_CACHE_TTL_HOURS;
 }
 
 function expiresAt(food: CanonicalFood): Date {
@@ -75,9 +73,7 @@ export class NutritionDataService {
 
   async search(queryInput: string, limit = 10): Promise<CanonicalFood[]> {
     const query = queryInput.trim();
-    if (query.length < 2 || query.length > 120) {
-      throw ApiError.badRequest("Besin araması 2-120 karakter olmalıdır.");
-    }
+    if (query.length < 2 || query.length > 120) throw ApiError.badRequest("Besin araması 2-120 karakter olmalıdır.");
     const boundedLimit = Math.min(Math.max(Math.trunc(limit) || 10, 1), 25);
     const key = `search:${query.toLocaleLowerCase("tr-TR")}:${boundedLimit}`;
     const cached = this.searchCache.lookup(key);
@@ -92,9 +88,7 @@ export class NutritionDataService {
     }
 
     if (!this.providers.usda.isConfigured()) {
-      throw new ApiError(503, "USDA FoodData Central sunucuda yapılandırılmamış.", {
-        code: "NUTRITION_PROVIDER_NOT_CONFIGURED",
-      });
+      throw new ApiError(503, "USDA FoodData Central sunucuda yapılandırılmamış.", { code: "NUTRITION_PROVIDER_NOT_CONFIGURED" });
     }
 
     try {
@@ -108,25 +102,32 @@ export class NutritionDataService {
       }
       const foods = uniqueFoods(collected, boundedLimit);
       this.searchCache.set(key, foods, env.USDA_CACHE_TTL_HOURS * 60 * 60 * 1000);
-      if (this.persistence) {
-        await Promise.all(foods.map((food) => this.persistence!.upsertFood(food, expiresAt(food))));
-      }
+      if (this.persistence) await Promise.all(foods.map((food) => this.persistence!.upsertFood(food, expiresAt(food))));
       return foods;
     } catch (error) {
       throw providerError("Besin veri kaynağına şu anda ulaşılamıyor.", String(error));
     }
   }
 
-  async getByBarcode(input: string): Promise<CanonicalFood | null> {
+  private async userConfirmedFallback(userId: string | undefined, barcode: string): Promise<CanonicalFood | null> {
+    if (!userId || !this.persistence) return null;
+    const food = await this.persistence.getUserConfirmedBarcode(userId, barcode);
+    if (food) logger.info({ event: "barcode_user_label_hit", barcodeLength: barcode.length }, "User-confirmed package label hit");
+    return food;
+  }
+
+  /**
+   * Global verified providers always win. A user-confirmed package label is a
+   * final user-scoped fallback and is never inserted into the shared cache.
+   */
+  async getByBarcode(input: string, userId?: string): Promise<CanonicalFood | null> {
     const barcode = normalizeBarcode(input);
-    if (!barcode) {
-      throw new ApiError(400, "Geçersiz veya desteklenmeyen barkod.", { code: "INVALID_BARCODE" });
-    }
+    if (!barcode) throw new ApiError(400, "Geçersiz veya desteklenmeyen barkod.", { code: "INVALID_BARCODE" });
     const key = `barcode:${barcode}`;
     const cached = this.foodCache.lookup(key);
     if (cached.hit) {
       logger.info({ event: "barcode_cache_hit", layer: "memory", barcodeLength: barcode.length }, "Barcode cache hit");
-      return cached.value;
+      return cached.value ?? this.userConfirmedFallback(userId, barcode);
     }
 
     let stale: CanonicalFood | null = null;
@@ -148,7 +149,6 @@ export class NutritionDataService {
     } catch (error) {
       offError = error;
     }
-
     if (offFood) {
       this.foodCache.set(key, offFood, env.OPEN_FOOD_FACTS_CACHE_TTL_HOURS * 60 * 60 * 1000);
       if (this.persistence) await this.persistence.upsertFood(offFood, expiresAt(offFood));
@@ -166,13 +166,9 @@ export class NutritionDataService {
       }
     }
 
-    const selected = selectPreferredFood(
-      [offFood, usdaFood].filter((value): value is CanonicalFood => value !== null),
-      "BARCODE",
-    );
+    const selected = selectPreferredFood([offFood, usdaFood].filter((value): value is CanonicalFood => value !== null), "BARCODE");
     if (selected) {
-      const ttlHours = ttlHoursFor(selected);
-      this.foodCache.set(key, selected, ttlHours * 60 * 60 * 1000);
+      this.foodCache.set(key, selected, ttlHoursFor(selected) * 60 * 60 * 1000);
       if (this.persistence) await this.persistence.upsertFood(selected, expiresAt(selected));
       logger.info({ event: "barcode_lookup_success", provider: selected.provider, barcodeLength: barcode.length }, "Barcode lookup succeeded");
       return selected;
@@ -180,25 +176,31 @@ export class NutritionDataService {
 
     const providerFailed = Boolean(offError || usdaError);
     if (providerFailed && stale) {
-      const staleFood: CanonicalFood = {
-        ...stale,
-        provenance: { ...stale.provenance, stale: true },
-      };
+      const staleFood: CanonicalFood = { ...stale, provenance: { ...stale.provenance, stale: true } };
       this.foodCache.set(key, staleFood, 5 * 60 * 1000);
       logger.warn({ event: "barcode_stale_fallback", provider: staleFood.provider, barcodeLength: barcode.length }, "Serving bounded stale barcode data after provider failure");
       return staleFood;
     }
 
+    const confirmed = await this.userConfirmedFallback(userId, barcode);
+    if (confirmed) return confirmed;
+
     if (offError && (usdaError || !this.providers.usda.isConfigured())) {
-      throw providerError(
-        "Barkod veri kaynaklarına şu anda ulaşılamıyor.",
-        `${String(offError)}${usdaError ? `; ${String(usdaError)}` : ""}`,
-      );
+      throw providerError("Barkod veri kaynaklarına şu anda ulaşılamıyor.", `${String(offError)}${usdaError ? `; ${String(usdaError)}` : ""}`);
     }
 
     logger.info({ event: "barcode_lookup_miss", barcodeLength: barcode.length }, "Barcode lookup returned no product");
     this.foodCache.set(key, null, 10 * 60 * 1000);
     return null;
+  }
+
+  async saveUserConfirmedBarcode(userId: string, input: string, food: CanonicalFood): Promise<void> {
+    const barcode = normalizeBarcode(input);
+    if (!barcode || food.barcode !== barcode || food.provider !== "DIEWISH" || food.provenance.sourceReference !== "USER_CONFIRMED_PACKAGE_LABEL") {
+      throw ApiError.badRequest("Kullanıcı doğrulamalı barkod kaydı geçersiz.");
+    }
+    if (!this.persistence) throw new ApiError(503, "Barkod geçmişi kullanılamıyor.", { code: "NUTRITION_PERSISTENCE_UNAVAILABLE" });
+    await this.persistence.recordBarcodeScan(userId, barcode, food);
   }
 
   async recordBarcodeScan(userId: string, input: string, food: CanonicalFood | null): Promise<void> {
@@ -221,19 +223,14 @@ export class NutritionDataService {
   async setFavorite(userId: string, input: string, favorite: boolean): Promise<CanonicalFood | null> {
     const barcode = normalizeBarcode(input);
     if (!barcode) throw new ApiError(400, "Geçersiz barkod.", { code: "INVALID_BARCODE" });
-    const food = favorite ? await this.getByBarcode(barcode) : null;
-    if (favorite && !food) {
-      throw new ApiError(404, "Ürün bulunamadı.", { code: "BARCODE_NOT_FOUND" });
-    }
+    const food = favorite ? await this.getByBarcode(barcode, userId) : null;
+    if (favorite && !food) throw new ApiError(404, "Ürün bulunamadı.", { code: "BARCODE_NOT_FOUND" });
     if (this.persistence) await this.persistence.setFavorite(userId, barcode, food, favorite);
     return food;
   }
 }
 
 export const nutritionDataService = new NutritionDataService(
-  {
-    usda: usdaFoodDataCentralProvider,
-    openFoodFacts: openFoodFactsProvider,
-  },
+  { usda: usdaFoodDataCentralProvider, openFoodFacts: openFoodFactsProvider },
   nutritionDataRepository,
 );
