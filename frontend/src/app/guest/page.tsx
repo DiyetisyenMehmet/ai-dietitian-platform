@@ -51,9 +51,15 @@ export default function GuestPage() {
       </Card>
 
       <div className="space-y-2">
-        <Button type="button" className="w-full" onClick={() => leaveGuest("/register")}>
-          Ücretsiz hesap oluştur
-        </Button>
+        {auth.status === "authenticated" && auth.user?.isGuest ? (
+          <Button asChild className="w-full">
+            <Link href="/guest/convert">Misafir hesabımı kalıcı hesaba dönüştür</Link>
+          </Button>
+        ) : (
+          <Button type="button" className="w-full" onClick={() => leaveGuest("/register")}>
+            Ücretsiz hesap oluştur
+          </Button>
+        )}
         <Button type="button" variant="outline" className="w-full" onClick={() => leaveGuest("/login")}>
           Mevcut hesaba giriş yap
         </Button>
