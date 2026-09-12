@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { Footprints, Plus, Utensils } from "lucide-react";
+import { Footprints, Moon, Plus, Utensils } from "lucide-react";
 
 import { Card, CardContent } from "@/presentation/components/ui/card";
 
-/** The dashboard's compact action launcher for meal and movement entry. */
+/** The dashboard's compact action launcher for daily health entries. */
 export function TodayActionsSection() {
   return (
     <section className="space-y-3" aria-labelledby="today-actions-heading">
@@ -18,7 +18,7 @@ export function TodayActionsSection() {
         </p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-3">
         <Link href="/meals/add" className="group block">
           <Card className="h-full transition-colors group-hover:border-primary/40 group-hover:bg-primary/[0.03]">
             <CardContent className="flex items-center gap-3 p-4 lg:flex-col lg:items-start">
@@ -43,6 +43,21 @@ export function TodayActionsSection() {
               <div>
                 <p className="text-sm font-semibold">Hareketini kaydet</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">Yürüyüş veya egzersiz ekle</p>
+              </div>
+              <Plus className="ml-auto size-4 text-muted-foreground lg:hidden" aria-hidden="true" />
+            </CardContent>
+          </Card>
+        </Link>
+
+        <Link href="/sleep" className="group block">
+          <Card className="h-full transition-colors group-hover:border-primary/40 group-hover:bg-primary/[0.03]">
+            <CardContent className="flex items-center gap-3 p-4 lg:flex-col lg:items-start">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <Moon className="size-5" aria-hidden="true" />
+              </span>
+              <div>
+                <p className="text-sm font-semibold">Uykunu kaydet</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">Süre ve kaliteyi ekle</p>
               </div>
               <Plus className="ml-auto size-4 text-muted-foreground lg:hidden" aria-hidden="true" />
             </CardContent>

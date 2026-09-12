@@ -36,6 +36,14 @@ export const ACTIVITY_ENDPOINTS = {
   base: "/activity",
 } as const;
 
+export const SLEEP_ENDPOINTS = {
+  /** Owner-scoped FR-012 sleep tracking and analysis. */
+  base: "/sleep",
+  dailyAssessment: "/sleep/daily-assessment",
+  weeklyAnalysis: "/sleep/weekly-analysis",
+  aiComment: "/sleep/ai-comment",
+} as const;
+
 export const BLOOD_TEST_ENDPOINTS = {
   /** GET the authenticated user's blood-test analyses (newest first). */
   analyses: "/blood-tests/analyses",
