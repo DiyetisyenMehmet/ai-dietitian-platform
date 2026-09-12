@@ -27,6 +27,7 @@ env:
   DIRECT_DATABASE_SECRET_NAME: diewish-staging-direct-database-url
   JWT_ACCESS_SECRET_NAME: diewish-staging-jwt-access
   JWT_REFRESH_SECRET_NAME: diewish-staging-jwt-refresh
+  DIEWISH_STAGING_SMS_REGIONS: TR
 
 jobs:
   deploy-staging:
@@ -165,17 +166,21 @@ jobs:
           test -n "$FRONTEND_URL"
           echo "FRONTEND_URL=${FRONTEND_URL}" >> "$GITHUB_ENV"
 
-      - name: Bind backend CORS to the staging frontend only
+      - name: Configure and verify staging Authentication providers
+        shell: bash
+        run: bash scripts/configure-staging-auth.sh
+
+      - name: Bind backend to staging frontend and Firebase Auth
         shell: bash
         run: |
           set -euo pipefail
           gcloud run services update "$BACKEND_SERVICE" \
             --project "$PROJECT_ID" \
             --region "$REGION" \
-            --update-env-vars "CORS_ORIGIN=${FRONTEND_URL},APP_WEB_URL=${FRONTEND_URL}" \
+            --update-env-vars "CORS_ORIGIN=${FRONTEND_URL},APP_WEB_URL=${FRONTEND_URL},FIREBASE_WEB_API_KEY=${FIREBASE_WEB_API_KEY},FIREBASE_AUTH_DOMAIN=${FIREBASE_AUTH_DOMAIN},FIREBASE_WEB_APP_ID=${FIREBASE_WEB_APP_ID}" \
             --quiet
 
-      - name: Verify staging health
+      - name: Verify staging health and Authentication runtime
         shell: bash
         run: |
           set -euo pipefail
@@ -212,6 +217,31 @@ jobs:
             sleep 2
           done
 
+          auth_config=""
+          for attempt in {1..30}; do
+            auth_config="$(curl --fail --silent --show-error "${FRONTEND_URL}/api/identity/firebase-config" || true)"
+            if jq -e '.configured == true and (.apiKey | length > 0) and (.authDomain | length > 0) and (.appId | length > 0)' >/dev/null 2>&1 <<<"$auth_config"; then
+              break
+            fi
+            if [[ "$attempt" == "30" ]]; then
+              echo "Staging Firebase runtime config is not active." >&2
+              exit 1
+            fi
+            sleep 2
+          done
+
+          login_html="$(curl --fail --silent --show-error "${FRONTEND_URL}/login")"
+          grep -q 'Google ile devam et' <<<"$login_html"
+          grep -q 'Telefon numarası ile devam et' <<<"$login_html"
+          if grep -q 'Misafir olarak devam et' <<<"$login_html"; then
+            echo "Guest entry point unexpectedly returned on staging login." >&2
+            exit 1
+          fi
+          if grep -q 'Hesabı yeniden etkinleştir' <<<"$login_html"; then
+            echo "Frozen-account reactivation entry point unexpectedly returned on staging login." >&2
+            exit 1
+          fi
+
       - name: Set up JDK 17 for staging APK
         uses: actions/setup-java@v4
         with:
@@ -247,6 +277,8 @@ jobs:
           frontend=${FRONTEND_URL}
           backend=${BACKEND_URL}
           api_base=/api
+          auth=google+phone
+          sms_regions=${DIEWISH_STAGING_SMS_REGIONS}
           database_project=shiny-hill-56015697
           EOF
 
@@ -268,6 +300,8 @@ jobs:
             echo "- Frontend: ${FRONTEND_URL}"
             echo "- Backend: ${BACKEND_URL}"
             echo "- Browser API: same-origin ${FRONTEND_URL}/api"
+            echo "- Authentication: Google + phone enabled; anonymous disabled"
+            echo "- SMS regions: ${DIEWISH_STAGING_SMS_REGIONS}"
             echo "- Database: isolated Diewish Staging Neon project"
             echo "- Migration: direct Neon endpoint via Cloud Build"
             echo "- USDA: official low-limit DEMO_KEY (staging only)"
