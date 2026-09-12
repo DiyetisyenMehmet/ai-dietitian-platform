@@ -13,6 +13,8 @@ export const activityRepository = {
     type: ActivityType;
     name?: string;
     durationMinutes: number;
+    distanceKm?: number;
+    perceivedIntensity?: number;
     caloriesBurned?: number;
     note?: string;
     loggedAt?: Date;
