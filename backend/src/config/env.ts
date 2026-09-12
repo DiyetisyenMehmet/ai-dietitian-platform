@@ -38,6 +38,10 @@ const envSchema = z.object({
   EMAIL_VERIFICATION_TTL_HOURS: z.coerce.number().int().positive().default(24),
   PASSWORD_RESET_TTL_MINUTES: z.coerce.number().int().positive().default(60),
   ACCOUNT_DELETION_GRACE_DAYS: z.coerce.number().int().nonnegative().default(30),
+  // Firebase Authentication / Google Identity Platform verifies Google, Apple
+  // and phone identities. This is a server-side lookup key, not a service-account secret.
+  FIREBASE_WEB_API_KEY: z.string().default(""),
+  FIREBASE_AUTH_API_BASE_URL: z.string().url().default("https://identitytoolkit.googleapis.com/v1"),
   STORAGE_PROVIDER: z.enum(["local", "gcs"]).default("local"),
   STORAGE_LOCAL_ROOT: z.string().default("./storage/uploads"),
   STORAGE_GCS_BUCKET: z.string().default(""),
