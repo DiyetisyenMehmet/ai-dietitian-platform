@@ -175,10 +175,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # CORS_ORIGIN itself is comma-separated, so use a custom gcloud flag
+          # delimiter to preserve both Cloud Run browser origins as one value.
           gcloud run services update "$BACKEND_SERVICE" \
             --project "$PROJECT_ID" \
             --region "$REGION" \
-            --update-env-vars "CORS_ORIGIN=${FRONTEND_URL},APP_WEB_URL=${FRONTEND_URL},FIREBASE_WEB_API_KEY=${FIREBASE_WEB_API_KEY},FIREBASE_AUTH_DOMAIN=${FIREBASE_AUTH_DOMAIN},FIREBASE_WEB_APP_ID=${FIREBASE_WEB_APP_ID}" \
+            --update-env-vars "^|^CORS_ORIGIN=${FRONTEND_URL},${CANONICAL_FRONTEND_URL}|APP_WEB_URL=${CANONICAL_FRONTEND_URL}|FIREBASE_WEB_API_KEY=${FIREBASE_WEB_API_KEY}|FIREBASE_AUTH_DOMAIN=${FIREBASE_AUTH_DOMAIN}|FIREBASE_WEB_APP_ID=${FIREBASE_WEB_APP_ID}" \
             --quiet
 
       - name: Verify staging health and Authentication runtime
@@ -194,6 +196,18 @@ jobs:
               exit 1
             fi
             sleep 2
+          done
+
+          # The browser can legitimately use either Cloud Run hostname. Verify
+          # the backend CORS response explicitly for both before auth testing.
+          for frontend_origin in "$FRONTEND_URL" "$CANONICAL_FRONTEND_URL"; do
+            cors_headers="$(curl --silent --show-error --dump-header - --output /dev/null \
+              -H "Origin: ${frontend_origin}" \
+              "${BACKEND_URL}/api/health" | tr -d '\r')"
+            if ! grep -Fqi "access-control-allow-origin: ${frontend_origin}" <<<"$cors_headers"; then
+              echo "Backend CORS rejected staging origin ${frontend_origin}." >&2
+              exit 1
+            fi
           done
 
           for frontend_origin in "$FRONTEND_URL" "$CANONICAL_FRONTEND_URL"; do

@@ -70,6 +70,11 @@ jobs:
           grep -q 'build-arg=DIEWISH_API_PROXY_TARGET=' "$frontend_build"
           grep -q 'setAcceptThirdPartyCookies(webView, false)' "$android_host"
 
+          # Both legitimate Cloud Run frontend hostnames must remain usable for
+          # proxied API calls after Google/phone Authentication completes.
+          grep -Fq 'CORS_ORIGIN=${FRONTEND_URL},${CANONICAL_FRONTEND_URL}' "$workflow"
+          grep -q 'access-control-allow-origin:' "$workflow"
+
           # Authentication bootstrap is intentionally separate from the original
           # staging bootstrap so adding Firebase never rotates DB/JWT secrets.
           grep -q 'firebase.googleapis.com' "$auth_bootstrap"
