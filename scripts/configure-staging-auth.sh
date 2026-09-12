@@ -17,6 +17,12 @@ for command_name in gcloud curl jq; do
   require_command "$command_name"
 done
 
+# Keep Google management API quota/consumer accounting bound to the isolated
+# staging project for both user credentials and workload-identity credentials.
+curl() {
+  command curl -H "x-goog-user-project: ${PROJECT_ID}" "$@"
+}
+
 if [[ -z "$FRONTEND_URL" || "$FRONTEND_URL" != https://* ]]; then
   echo "FRONTEND_URL must be the HTTPS URL of the isolated staging frontend." >&2
   exit 1
