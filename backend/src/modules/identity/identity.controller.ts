@@ -7,6 +7,8 @@ import { asyncHandler } from "../../utils/async-handler";
 import type { LoginInput } from "../auth/auth.schemas";
 import type { SessionContext } from "../auth/auth.service";
 import { externalLoginService } from "./external-login.service";
+import type { GuestConversionInput } from "./guest-conversion.schemas";
+import { guestConversionService } from "./guest-conversion.service";
 import { guestService } from "./guest.service";
 import type { ExternalLoginInput } from "./identity.schemas";
 import { lifecycleService } from "./lifecycle.service";
@@ -52,6 +54,16 @@ export const identityController = {
   guest: asyncHandler(async (req: Request, res: Response) => {
     const result = await guestService.create(context(req));
     sendCreated(res, { user: result.user, tokens: result.tokens });
+  }),
+
+  convertGuest: asyncHandler(async (req: Request, res: Response) => {
+    const result = await guestConversionService.convert(
+      userId(req),
+      req.body as GuestConversionInput,
+      context(req),
+    );
+    writeRefreshCookie(res, result.refreshToken, result.refreshExpiresAt);
+    sendSuccess(res, { user: result.user, tokens: result.tokens });
   }),
 
   deactivate: asyncHandler(async (req: Request, res: Response) => {
