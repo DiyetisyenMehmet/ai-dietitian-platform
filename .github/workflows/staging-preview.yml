@@ -220,7 +220,7 @@ jobs:
           auth_config=""
           for attempt in {1..30}; do
             auth_config="$(curl --fail --silent --show-error "${FRONTEND_URL}/api/identity/firebase-config" || true)"
-            if jq -e '.configured == true and (.apiKey | length > 0) and (.authDomain | length > 0) and (.appId | length > 0)' >/dev/null 2>&1 <<<"$auth_config"; then
+            if jq -e '.success == true and .data.configured == true and (.data.config.apiKey | length > 0) and (.data.config.authDomain | length > 0) and (.data.config.appId | length > 0)' >/dev/null 2>&1 <<<"$auth_config"; then
               break
             fi
             if [[ "$attempt" == "30" ]]; then
