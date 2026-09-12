@@ -1,22 +1,16 @@
 "use client";
 
 import * as React from "react";
-import { toast } from "sonner";
-import { Droplets, Plus, Target } from "lucide-react";
+import { Target } from "lucide-react";
 
 import { cn } from "@/shared/lib/utils";
 import { Card, CardContent } from "@/presentation/components/ui/card";
-import { Button } from "@/presentation/components/ui/button";
 import { CircularProgress } from "@/presentation/components/ui/circular-progress";
 import { ProgressBar } from "@/presentation/components/ui/progress-bar";
+import { WaterSection } from "@/presentation/components/dashboard/water-section";
 import { formatNumber, toPercent } from "@/shared/lib/format";
 import { useMeals, computeTotals } from "@/application/meals/meals-store";
 import { useNutritionPlan } from "@/application/health/nutrition-plan-store";
-import {
-  dailyTrackingStore,
-  useDailyTracking,
-  WATER_GLASS_ML,
-} from "@/application/health/daily-tracking-store";
 
 const MACROS = [
   { id: "protein" as const, label: "Protein", goalKey: "proteinGrams" as const, bar: "bg-emerald-500" },
@@ -24,37 +18,21 @@ const MACROS = [
   { id: "fat" as const, label: "Yağ", goalKey: "fatGrams" as const, bar: "bg-sky-500" },
 ] as const;
 
-/**
- * Today's persisted nutrition/water progress. Energy and macro targets are shown
- * only when a real completed nutrition plan exists — never from hard-coded demo
- * numbers. Water uses the user's persisted onboarding/profile goal.
- */
+/** Today's persisted nutrition and water progress. */
 export function TodayProgressSection() {
   const meals = useMeals();
   const { activePlan, hydrated: planHydrated } = useNutritionPlan();
-  const { waterMl, waterGoalMl } = useDailyTracking();
 
   const totals = React.useMemo(() => computeTotals(meals), [meals]);
   const consumed = Math.round(totals.calories);
   const calorieGoal = activePlan?.dailyCalories ?? 0;
   const caloriePercent = calorieGoal > 0 ? toPercent(consumed, calorieGoal) : 0;
   const remaining = calorieGoal > 0 ? Math.max(0, calorieGoal - consumed) : null;
-  const waterPercent = waterGoalMl > 0 ? toPercent(waterMl, waterGoalMl) : 0;
-
-  const addWater = async () => {
-    try {
-      await dailyTrackingStore.addWater();
-      toast.success("Su eklendi", { description: `+${WATER_GLASS_ML} ml` });
-    } catch {
-      toast.error("Su eklenemedi. Lütfen tekrar deneyin.");
-    }
-  };
 
   return (
     <section className="space-y-3">
       <h3 className="text-base font-semibold">Bugünkü İlerlemen</h3>
 
-      {/* Calories + macros */}
       <Card className="shadow-soft">
         <CardContent className="p-5">
           {!planHydrated ? (
@@ -111,34 +89,7 @@ export function TodayProgressSection() {
         </CardContent>
       </Card>
 
-      {/* Water */}
-      <Card>
-        <CardContent className="space-y-3 p-5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <span className="flex size-10 items-center justify-center rounded-xl bg-sky-500/10">
-                <Droplets className="size-5 text-sky-500" aria-hidden="true" />
-              </span>
-              <div>
-                <p className="text-sm font-semibold">Su Takibi</p>
-                <p className="text-xs text-muted-foreground">
-                  {waterGoalMl > 0
-                    ? `${formatNumber(waterMl)} / ${formatNumber(waterGoalMl)} ml`
-                    : `${formatNumber(waterMl)} ml · hedef ayarlanmamış`}
-                </p>
-              </div>
-            </div>
-            {waterGoalMl > 0 && (
-              <span className="text-2xl font-bold tabular-nums text-sky-500">%{waterPercent}</span>
-            )}
-          </div>
-          {waterGoalMl > 0 && <ProgressBar value={waterPercent} indicatorClassName="bg-sky-500" />}
-          <Button variant="outline" className="w-full" onClick={() => void addWater()}>
-            <Plus aria-hidden="true" />
-            {WATER_GLASS_ML} ml ekle
-          </Button>
-        </CardContent>
-      </Card>
+      <WaterSection />
     </section>
   );
 }

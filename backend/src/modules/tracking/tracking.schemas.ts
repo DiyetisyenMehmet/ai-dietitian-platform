@@ -66,7 +66,21 @@ export const createWaterLogSchema = z.object({
   loggedAt: optionalLoggedAt,
 });
 
+export const waterLogIdParamsSchema = z.object({
+  id: z.string().uuid("id must be a valid UUID."),
+});
+
+export const updateWaterGoalSchema = z.object({
+  dailyWaterGoalMl: z.number().int().min(500).max(10000),
+});
+
+export const scheduleWaterReminderSchema = z.object({
+  minutesFromNow: z.number().int().min(15).max(720),
+});
+
 export type CreateWeightLogInput = z.infer<typeof createWeightLogSchema>;
 export type CreateMealLogInput = z.infer<typeof createMealLogSchema>;
 export type UpdateMealLogInput = z.infer<typeof updateMealLogSchema>;
 export type CreateWaterLogInput = z.infer<typeof createWaterLogSchema>;
+export type UpdateWaterGoalInput = z.infer<typeof updateWaterGoalSchema>;
+export type ScheduleWaterReminderInput = z.infer<typeof scheduleWaterReminderSchema>;

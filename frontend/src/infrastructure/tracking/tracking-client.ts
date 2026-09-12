@@ -3,8 +3,7 @@ import { TRACKING_ENDPOINTS } from "@/infrastructure/auth/endpoints";
 
 /**
  * A persisted water-intake log entry, as returned by the backend tracking
- * module (Sprint 19). The backend is the single source of truth; the frontend
- * daily-tracking store is a cache hydrated from these records.
+ * module. The backend is the single source of truth.
  */
 export interface WaterLog {
   id: string;
@@ -14,9 +13,24 @@ export interface WaterLog {
   createdAt: string;
 }
 
+export interface WaterRecommendation {
+  text: string;
+  source: "AI" | "RULE_BASED_FALLBACK";
+  todayMl: number;
+  dailyGoalMl: number;
+  sevenDayAverageMl: number;
+  generatedAt: string;
+}
+
+export interface WaterReminder {
+  id: string;
+  scheduledFor: string;
+  type: "WATER_REMINDER";
+}
+
 /**
  * A persisted weight-measurement log entry, as returned by the backend tracking
- * module (Sprint 19). The backend is the single source of truth.
+ * module. The backend is the single source of truth.
  */
 export interface WeightLog {
   id: string;
@@ -36,12 +50,8 @@ export interface WeightCheckInStatus {
   overdueDays: number;
 }
 
-/**
- * Infrastructure-level tracking client. Authenticated (the HTTP client attaches
- * the access token). No UI or cache logic lives here.
- */
+/** Infrastructure-level tracking client. Authenticated requests only. */
 export const trackingClient = {
-  /** Lists water logs, optionally only those logged on/after `since`. */
   listWater(since?: Date) {
     const query = since ? `?since=${encodeURIComponent(since.toISOString())}` : "";
     return apiRequest<{ logs: WaterLog[] }>({
@@ -51,7 +61,6 @@ export const trackingClient = {
     });
   },
 
-  /** Persists a new water log (amount in millilitres) and returns it. */
   logWater(amountMl: number) {
     return apiRequest<{ log: WaterLog }>({
       path: TRACKING_ENDPOINTS.water,
@@ -61,7 +70,48 @@ export const trackingClient = {
     });
   },
 
-  /** Lists weight logs, optionally only those logged on/after `since`. */
+  deleteWater(id: string) {
+    return apiRequest<void>({
+      path: `${TRACKING_ENDPOINTS.water}/${encodeURIComponent(id)}`,
+      method: "DELETE",
+      auth: true,
+    });
+  },
+
+  getWaterGoal() {
+    return apiRequest<{ dailyWaterGoalMl: number }>({
+      path: `${TRACKING_ENDPOINTS.water}/goal`,
+      method: "GET",
+      auth: true,
+    });
+  },
+
+  updateWaterGoal(dailyWaterGoalMl: number) {
+    return apiRequest<{ dailyWaterGoalMl: number }>({
+      path: `${TRACKING_ENDPOINTS.water}/goal`,
+      method: "PATCH",
+      auth: true,
+      body: JSON.stringify({ dailyWaterGoalMl }),
+    });
+  },
+
+  scheduleWaterReminder(minutesFromNow: number) {
+    return apiRequest<{ notification: WaterReminder }>({
+      path: `${TRACKING_ENDPOINTS.water}/reminders`,
+      method: "POST",
+      auth: true,
+      body: JSON.stringify({ minutesFromNow }),
+    });
+  },
+
+  getWaterRecommendation() {
+    return apiRequest<{ recommendation: WaterRecommendation }>({
+      path: `${TRACKING_ENDPOINTS.water}/recommendation`,
+      method: "GET",
+      auth: true,
+    });
+  },
+
   listWeight(since?: Date) {
     const query = since ? `?since=${encodeURIComponent(since.toISOString())}` : "";
     return apiRequest<{ logs: WeightLog[] }>({
@@ -79,7 +129,6 @@ export const trackingClient = {
     });
   },
 
-  /** Persists a weight measurement and returns the authoritative record. */
   logWeight(weightKg: number, note?: string, loggedAt?: Date) {
     return apiRequest<{ log: WeightLog }>({
       path: TRACKING_ENDPOINTS.weight,

@@ -8,7 +8,9 @@ import type {
   CreateMealLogInput,
   CreateWaterLogInput,
   CreateWeightLogInput,
+  ScheduleWaterReminderInput,
   UpdateMealLogInput,
+  UpdateWaterGoalInput,
 } from "./tracking.schemas";
 
 /** Resolves the authenticated user id or throws 401. */
@@ -85,5 +87,37 @@ export const trackingController = {
     const userId = requireUserId(req);
     const logs = await trackingService.listWater(userId, parseSince(req));
     sendSuccess(res, { logs });
+  }),
+
+  deleteWater: asyncHandler(async (req: Request, res: Response) => {
+    const userId = requireUserId(req);
+    await trackingService.deleteWater(userId, req.params.id);
+    sendNoContent(res);
+  }),
+
+  getWaterGoal: asyncHandler(async (req: Request, res: Response) => {
+    const dailyWaterGoalMl = await trackingService.getWaterGoal(requireUserId(req));
+    sendSuccess(res, { dailyWaterGoalMl });
+  }),
+
+  updateWaterGoal: asyncHandler(async (req: Request, res: Response) => {
+    const dailyWaterGoalMl = await trackingService.updateWaterGoal(
+      requireUserId(req),
+      req.body as UpdateWaterGoalInput,
+    );
+    sendSuccess(res, { dailyWaterGoalMl });
+  }),
+
+  scheduleWaterReminder: asyncHandler(async (req: Request, res: Response) => {
+    const notification = await trackingService.scheduleWaterReminder(
+      requireUserId(req),
+      req.body as ScheduleWaterReminderInput,
+    );
+    sendCreated(res, { notification });
+  }),
+
+  getWaterRecommendation: asyncHandler(async (req: Request, res: Response) => {
+    const recommendation = await trackingService.getWaterRecommendation(requireUserId(req));
+    sendSuccess(res, { recommendation });
   }),
 };

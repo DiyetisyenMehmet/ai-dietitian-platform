@@ -9,7 +9,10 @@ import {
   createWaterLogSchema,
   createWeightLogSchema,
   mealLogIdParamsSchema,
+  scheduleWaterReminderSchema,
   updateMealLogSchema,
+  updateWaterGoalSchema,
+  waterLogIdParamsSchema,
 } from "./tracking.schemas";
 
 /**
@@ -57,7 +60,28 @@ trackingRouter.delete(
   trackingController.deleteMeal,
 );
 
-/** Water time-series. */
+/** Water tracking, personal goal, reminders and hydration guidance. */
+trackingRouter.get("/water/goal", authenticate, trackingController.getWaterGoal);
+trackingRouter.patch(
+  "/water/goal",
+  authenticate,
+  requireConsent,
+  validate({ body: updateWaterGoalSchema }),
+  trackingController.updateWaterGoal,
+);
+trackingRouter.post(
+  "/water/reminders",
+  authenticate,
+  requireConsent,
+  validate({ body: scheduleWaterReminderSchema }),
+  trackingController.scheduleWaterReminder,
+);
+trackingRouter.get(
+  "/water/recommendation",
+  authenticate,
+  requireConsent,
+  trackingController.getWaterRecommendation,
+);
 trackingRouter.post(
   "/water",
   authenticate,
@@ -66,3 +90,9 @@ trackingRouter.post(
   trackingController.createWater,
 );
 trackingRouter.get("/water", authenticate, trackingController.listWater);
+trackingRouter.delete(
+  "/water/:id",
+  authenticate,
+  validate({ params: waterLogIdParamsSchema }),
+  trackingController.deleteWater,
+);
