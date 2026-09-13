@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { authStore } from "@/application/auth/auth-store";
 import { identityClient } from "@/infrastructure/identity/identity-client";
 import { startPhoneVerification } from "@/infrastructure/identity/firebase-browser";
+import { authErrorMessage, normalizeTurkishPhone } from "@/infrastructure/identity/auth-feedback";
 import { AuthLayout } from "@/presentation/components/layout/auth-layout";
 import { Button } from "@/presentation/components/ui/button";
 import { FormField } from "@/presentation/components/ui/form-field";
@@ -23,33 +24,46 @@ export default function PhoneAuthPage() {
   const [code, setCode] = React.useState("");
   const [confirmation, setConfirmation] = React.useState<PhoneConfirmation | null>(null);
   const [busy, setBusy] = React.useState(false);
+  const inFlight = React.useRef(false);
+  const [feedback, setFeedback] = React.useState("");
 
   React.useEffect(() => () => confirmation?.clear(), [confirmation]);
 
   const requestCode = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!/^\+[1-9]\d{7,14}$/.test(phoneNumber.trim())) {
-      toast.error("Telefon numarasını ülke koduyla girin. Örnek: +905551112233");
+    if (inFlight.current) return;
+    const normalized = normalizeTurkishPhone(phoneNumber);
+    if (!normalized) {
+      setFeedback("Geçerli bir Türkiye cep telefonu numarası girin. Örnek: 05xx xxx xx xx.");
       return;
     }
+    inFlight.current = true;
     setBusy(true);
+    setFeedback("Güvenlik doğrulaması yapılıyor, SMS kodu isteniyor...");
     try {
-      const next = await startPhoneVerification(phoneNumber.trim(), "diewish-phone-recaptcha");
+      const next = await startPhoneVerification(normalized, "diewish-phone-recaptcha");
+      setPhoneNumber(normalized);
       setConfirmation(next);
+      setFeedback("Doğrulama kodu gönderildi. SMS ile gelen altı haneli kodu girin.");
       toast.success("Doğrulama kodu gönderildi.");
     } catch (error) {
-      toast.error("Doğrulama kodu gönderilemedi.", {
-        description: error instanceof Error ? error.message : "Lütfen tekrar deneyin.",
-      });
+      setFeedback(authErrorMessage(error));
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   };
 
   const confirmCode = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!confirmation || code.trim().length < 4) return;
+    if (inFlight.current || !confirmation) return;
+    if (!/^\d{6}$/.test(code.trim())) {
+      setFeedback("SMS ile gelen altı haneli kodu girin.");
+      return;
+    }
+    inFlight.current = true;
     setBusy(true);
+    setFeedback("Kod doğrulanıyor...");
     try {
       const firebaseToken = await confirmation.confirm(code.trim());
       const session = await identityClient.external(firebaseToken);
@@ -58,10 +72,9 @@ export default function PhoneAuthPage() {
       setConfirmation(null);
       router.replace(session.user.onboardingCompleted ? "/dashboard" : "/consent");
     } catch (error) {
-      toast.error("Telefon doğrulanamadı.", {
-        description: error instanceof Error ? error.message : "Kod hatalı veya süresi dolmuş olabilir.",
-      });
+      setFeedback(authErrorMessage(error));
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   };
@@ -69,6 +82,7 @@ export default function PhoneAuthPage() {
   return (
     <AuthLayout title="Telefon ile devam et" subtitle="Numaranızı SMS doğrulamasıyla güvenli biçimde onaylayın">
       <div id="diewish-phone-recaptcha" />
+      <p role="status" aria-live="polite" className="mb-4 text-sm">{feedback}</p>
       {!confirmation ? (
         <form onSubmit={requestCode} className="space-y-4">
           <FormField id="phoneNumber" label="Telefon numarası">
@@ -79,15 +93,15 @@ export default function PhoneAuthPage() {
               autoComplete="tel"
               value={phoneNumber}
               onChange={(event) => setPhoneNumber(event.target.value)}
-              placeholder="+905551112233"
+              placeholder="05xx xxx xx xx"
               disabled={busy}
             />
           </FormField>
           <p className="text-xs text-muted-foreground">
-            Numaranızı ülke koduyla birlikte yazın. Yeni numaralar doğrulama sonrası otomatik hesap oluşturur.
+            Türkiye cep telefonu numaranızı 05xx xxx xx xx veya +905xx xxx xx xx biçiminde yazın. Yeni numaralar doğrulama sonrası hesap oluşturur.
           </p>
           <Button type="submit" className="w-full" isLoading={busy}>
-            SMS kodu gönder
+            {busy ? "SMS kodu isteniyor..." : "SMS kodu gönder"}
           </Button>
         </form>
       ) : (
@@ -97,6 +111,7 @@ export default function PhoneAuthPage() {
               id="phoneCode"
               inputMode="numeric"
               autoComplete="one-time-code"
+              maxLength={6}
               value={code}
               onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))}
               placeholder="123456"
@@ -104,7 +119,7 @@ export default function PhoneAuthPage() {
             />
           </FormField>
           <Button type="submit" className="w-full" isLoading={busy}>
-            Telefonu doğrula ve devam et
+            {busy ? "Doğrulanıyor..." : "Telefonu doğrula ve devam et"}
           </Button>
           <Button
             type="button"
@@ -115,6 +130,7 @@ export default function PhoneAuthPage() {
               confirmation.clear();
               setConfirmation(null);
               setCode("");
+              setFeedback("");
             }}
           >
             Numarayı değiştir

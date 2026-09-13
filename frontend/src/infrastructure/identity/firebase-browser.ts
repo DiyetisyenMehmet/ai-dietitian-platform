@@ -1,4 +1,5 @@
 import { apiRequest } from "@/infrastructure/api/http-client";
+import { isApiConfigured } from "@/application/config/env";
 
 const FIREBASE_CDN_VERSION = "10.14.1";
 
@@ -70,17 +71,30 @@ function buildTimeConfig(): Record<string, string> | null {
 }
 
 async function config(): Promise<Record<string, string> | null> {
-  const compiled = buildTimeConfig();
-  if (compiled) return compiled;
+  // A configured backend owns identity settings; stale compiled values must
+  // never silently select another Firebase project, even on a network failure.
+  if (!isApiConfigured()) return buildTimeConfig();
 
   if (!runtimeConfigPromise) {
     runtimeConfigPromise = apiRequest<PublicFirebaseConfigResponse>({
       path: "/identity/firebase-config",
       method: "GET",
+      cache: "no-store",
       retryOnUnauthorized: false,
     })
-      .then((result) => (result.configured ? result.config : null))
-      .catch(() => null);
+      .then((result) => {
+        const value = result?.configured ? result.config : null;
+        if (!value || !["apiKey", "authDomain", "projectId", "appId"].every((key) => value[key]?.trim())) {
+          throw Object.assign(new Error("Identity configuration unavailable"), {
+            code: "auth/configuration-unavailable",
+          });
+        }
+        return value;
+      })
+      .catch((error: unknown) => {
+        runtimeConfigPromise = null;
+        throw error;
+      });
   }
   return runtimeConfigPromise;
 }
@@ -100,7 +114,10 @@ function loadScript(id: string, src: string): Promise<void> {
       script.dataset.loaded = "true";
       resolve();
     };
-    script.onerror = () => reject(new Error("Kimlik doğrulama servisi yüklenemedi."));
+    script.onerror = () => {
+      script.remove();
+      reject(Object.assign(new Error("Identity script unavailable"), { code: "auth/network-request-failed" }));
+    };
     if (!existing) document.head.appendChild(script);
   });
 }

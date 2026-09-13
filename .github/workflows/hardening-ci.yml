@@ -80,6 +80,8 @@ jobs:
       - run: npm ci
       - name: Reject high-severity dependency advisories
         run: npm audit --audit-level=high
+      - name: Test identity runtime and error recovery
+        run: node --test tests/identity.test.cjs
       - run: npm run type-check
       - run: npm run build
         env:
