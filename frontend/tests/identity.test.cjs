@@ -33,12 +33,12 @@ test('Firebase failures have safe Turkish feedback and code-only diagnostics', (
     const message = authErrorMessage({ code: `auth/${code}`, message: 'upstream secret' });
     assert.notEqual(message, fallback);
     assert.doesNotMatch(message, /upstream|Firebase|auth\//);
-    assert.equal(logs.at(-1)[1].code, `auth/${code}`);
+    assert.equal(logs.at(-1)[0], `[identity] authentication failed code=auth/${code}`);
   }
   assert.doesNotMatch(JSON.stringify(logs), /upstream secret/);
 });
 
-function harness(responses, { scriptFailure = false, phoneFailure = false } = {}) {
+function harness(responses, { scriptFailure = false, phoneFailure = false, clearFailure = false } = {}) {
   const state = { requests: 0, initialized: [], cleared: 0, phoneCalls: 0, scriptAttempts: 0 };
   const scripts = new Map();
   const credential = { user: { getIdToken: async () => 'test-id-token' } };
@@ -51,7 +51,12 @@ function harness(responses, { scriptFailure = false, phoneFailure = false } = {}
     },
   });
   auth.GoogleAuthProvider = class {};
-  auth.RecaptchaVerifier = class { clear() { state.cleared++; } };
+  auth.RecaptchaVerifier = class {
+    clear() {
+      state.cleared++;
+      if (clearFailure) throw new Error('cleanup failed');
+    }
+  };
   const sdk = { apps: [], initializeApp: config => state.initialized.push(config), auth };
   const module = load('firebase-browser.ts', {
     process: { env: {
@@ -119,5 +124,13 @@ test('phone failure cleans up reCAPTCHA and confirmed code returns an upstream t
   const confirmation = await h.startPhoneVerification('+905551112233', 'recaptcha');
   assert.equal(await confirmation.confirm('123456'), 'test-id-token');
   confirmation.clear();
+  assert.equal(h.state.cleared, 1);
+});
+
+test('reCAPTCHA cleanup failure never masks the original phone error', async () => {
+  const h = harness([configured], { phoneFailure: true, clearFailure: true });
+  await assert.rejects(h.startPhoneVerification('+905551112233', 'recaptcha'), {
+    code: 'auth/captcha-check-failed',
+  });
   assert.equal(h.state.cleared, 1);
 });

@@ -23,6 +23,15 @@ interface FirebaseRecaptchaLike {
   clear(): void;
 }
 
+function clearRecaptcha(verifier: FirebaseRecaptchaLike): void {
+  try {
+    verifier.clear();
+  } catch {
+    // Cleanup must never replace the Firebase error that explains why SMS
+    // verification failed. A fresh verifier is created for every attempt.
+  }
+}
+
 interface FirebaseAuthLike {
   signInWithPopup(provider: FirebaseProviderLike): Promise<FirebaseUserCredentialLike>;
   signInWithPhoneNumber(
@@ -181,11 +190,11 @@ export async function startPhoneVerification(
         return tokenFromCredential(await confirmation.confirm(code));
       },
       clear() {
-        verifier.clear();
+        clearRecaptcha(verifier);
       },
     };
   } catch (error) {
-    verifier.clear();
+    clearRecaptcha(verifier);
     throw error;
   }
 }

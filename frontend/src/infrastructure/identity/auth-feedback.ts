@@ -12,6 +12,11 @@ const messages: Record<string, string> = {
   "auth/code-expired": "SMS kodunun süresi doldu. Yeni bir kod isteyin.",
   "auth/session-expired": "Doğrulama süresi doldu. Yeni bir SMS kodu isteyin.",
   "auth/captcha-check-failed": "Güvenlik doğrulaması tamamlanamadı. Lütfen tekrar deneyin.",
+  "auth/invalid-app-credential": "Güvenlik doğrulaması geçersiz oldu. Lütfen sayfayı yenileyip tekrar deneyin.",
+  "auth/missing-app-credential": "Güvenlik doğrulaması başlatılamadı. Lütfen sayfayı yenileyip tekrar deneyin.",
+  "auth/app-not-authorized": "Bu adres için telefonla giriş henüz etkin değil. Lütfen destek ekibine bildirin.",
+  "auth/billing-not-enabled": "SMS hizmeti proje yapılandırması nedeniyle kullanılamıyor. Lütfen destek ekibine bildirin.",
+  "auth/internal-error": "SMS hizmetinde geçici bir sorun oluştu. Lütfen daha sonra tekrar deneyin.",
   "auth/too-many-requests": "Çok fazla deneme yapıldı. Bir süre bekleyip tekrar deneyin.",
   "auth/quota-exceeded": "SMS hizmeti şu anda kullanılamıyor. Lütfen daha sonra tekrar deneyin.",
   "auth/configuration-unavailable": "Giriş hizmeti şu anda hazır değil. Lütfen daha sonra tekrar deneyin.",
@@ -24,7 +29,9 @@ export function authErrorMessage(error: unknown): string {
   const code = error && typeof error === "object" && "code" in error
     && typeof error.code === "string" ? error.code : "unknown";
   // Preserve diagnostic codes, never tokens, phone numbers or upstream messages.
-  console.warn("[identity] authentication failed", { code });
+  // A primitive string stays readable in browser/Cloud diagnostics while
+  // keeping phone numbers, tokens and upstream error messages out of logs.
+  console.warn(`[identity] authentication failed code=${code}`);
   return messages[code] ?? "Giriş işlemi tamamlanamadı. Lütfen tekrar deneyin.";
 }
 
