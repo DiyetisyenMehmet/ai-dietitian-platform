@@ -29,7 +29,7 @@ test('Firebase failures have safe Turkish feedback and code-only diagnostics', (
   const logs = [];
   const { authErrorMessage } = load('auth-feedback.ts', { console: { warn: (...args) => logs.push(args) } });
   const fallback = authErrorMessage(new Error('upstream secret'));
-  for (const code of ['unauthorized-domain', 'popup-closed-by-user', 'popup-blocked', 'operation-not-allowed', 'invalid-api-key', 'invalid-credential', 'network-request-failed', 'invalid-verification-code', 'captcha-check-failed', 'code-expired', 'too-many-requests', 'quota-exceeded']) {
+  for (const code of ['unauthorized-domain', 'popup-closed-by-user', 'popup-blocked', 'operation-not-allowed', 'invalid-api-key', 'invalid-credential', 'network-request-failed', 'invalid-verification-code', 'captcha-check-failed', 'code-expired', 'too-many-requests', 'quota-exceeded', 'error-code:-39']) {
     const message = authErrorMessage({ code: `auth/${code}`, message: 'upstream secret' });
     assert.notEqual(message, fallback);
     assert.doesNotMatch(message, /upstream|Firebase|auth\//);
