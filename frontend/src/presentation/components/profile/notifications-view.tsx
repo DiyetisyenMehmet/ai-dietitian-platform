@@ -37,17 +37,28 @@ const TIME_FIELDS: Partial<Record<TimedKey, keyof NotificationPreferences>> = {
 
 function nativeBridge(): NativeReminderBridge | undefined {
   if (typeof window === "undefined") return undefined;
-  const bridge = (window as typeof window & { DiewishReminders?: NativeReminderBridge })
-    .DiewishReminders;
-  if (
-    !bridge ||
-    typeof bridge.replaceWellnessSchedule !== "function" ||
-    typeof bridge.cancelWellness !== "function" ||
-    typeof bridge.showTestNotification !== "function"
-  ) {
+  try {
+    // Android WebView exposes JavaScriptInterface objects through a proxy. Older
+    // Diewish APKs do not contain the wellness methods and may throw while an
+    // unknown method is inspected, so capability detection itself must be safe.
+    const bridge = (
+      window as typeof window & { DiewishReminders?: Partial<NativeReminderBridge> }
+    ).DiewishReminders;
+    if (
+      !bridge ||
+      typeof bridge.isAvailable !== "function" ||
+      typeof bridge.permissionStatus !== "function" ||
+      typeof bridge.requestPermission !== "function" ||
+      typeof bridge.replaceWellnessSchedule !== "function" ||
+      typeof bridge.cancelWellness !== "function" ||
+      typeof bridge.showTestNotification !== "function"
+    ) {
+      return undefined;
+    }
+    return bridge as NativeReminderBridge;
+  } catch {
     return undefined;
   }
-  return bridge;
 }
 
 function dateAt(base: Date, time: string): Date {
@@ -92,18 +103,27 @@ export function NotificationsView() {
   const [permission, setPermission] = React.useState("unavailable");
 
   const syncNative = React.useCallback((next: NotificationPreferences) => {
-    const bridge = nativeBridge();
-    if (!bridge?.isAvailable()) return;
-    const entries = buildSchedule(next);
-    if (entries.length === 0) bridge.cancelWellness();
-    else bridge.replaceWellnessSchedule(JSON.stringify(entries));
+    try {
+      const bridge = nativeBridge();
+      if (!bridge || !bridge.isAvailable()) return;
+      const entries = buildSchedule(next);
+      if (entries.length === 0) bridge.cancelWellness();
+      else bridge.replaceWellnessSchedule(JSON.stringify(entries));
+    } catch {
+      // A stale/partial Android bridge must never crash the web settings page.
+    }
   }, []);
 
   const refreshPermission = React.useCallback(() => {
-    const bridge = nativeBridge();
-    const available = Boolean(bridge?.isAvailable());
-    setNativeAvailable(available);
-    setPermission(available ? (bridge?.permissionStatus() ?? "denied") : "unavailable");
+    try {
+      const bridge = nativeBridge();
+      const available = Boolean(bridge && bridge.isAvailable());
+      setNativeAvailable(available);
+      setPermission(available && bridge ? bridge.permissionStatus() : "unavailable");
+    } catch {
+      setNativeAvailable(false);
+      setPermission("unavailable");
+    }
   }, []);
 
   React.useEffect(() => {
