@@ -44,6 +44,11 @@ export const SLEEP_ENDPOINTS = {
   aiComment: "/sleep/ai-comment",
 } as const;
 
+export const NOTIFICATION_ENDPOINTS = {
+  preferences: "/notifications/preferences",
+  scheduled: "/notifications/scheduled",
+} as const;
+
 export const BLOOD_TEST_ENDPOINTS = {
   /** GET the authenticated user's blood-test analyses (newest first). */
   analyses: "/blood-tests/analyses",

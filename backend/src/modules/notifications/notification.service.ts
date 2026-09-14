@@ -1,8 +1,31 @@
-import type { Notification, NotificationType, Prisma } from "@prisma/client";
+import type {
+  Notification,
+  NotificationPreference,
+  NotificationType,
+  Prisma,
+} from "@prisma/client";
 
 import { logger } from "../../lib/logger";
 import { prisma } from "../../lib/prisma";
 import { getNotificationProvider } from "./notification.provider";
+import type { UpdateNotificationPreferencesInput } from "./notification.schemas";
+
+const DEFAULT_PREFERENCES = {
+  mealReminders: false,
+  waterReminders: false,
+  activityReminders: false,
+  sleepReminders: false,
+  weeklySummary: false,
+  coachTips: false,
+  bloodTestReminders: false,
+  productUpdates: false,
+  waterReminderTime: "10:00",
+  activityReminderTime: "18:00",
+  sleepReminderTime: "22:30",
+  weeklySummaryDay: 0,
+  weeklySummaryTime: "10:00",
+  timezoneOffsetMinutes: 0,
+} as const;
 
 /**
  * Notification scheduling service (Sprint 19, Section 9).
@@ -13,6 +36,26 @@ import { getNotificationProvider } from "./notification.provider";
  * integration plugs into — no other module needs to change.
  */
 export const notificationService = {
+  async getPreferences(
+    userId: string,
+  ): Promise<NotificationPreference | typeof DEFAULT_PREFERENCES> {
+    return (
+      (await prisma.notificationPreference.findUnique({ where: { userId } })) ??
+      DEFAULT_PREFERENCES
+    );
+  },
+
+  async updatePreferences(
+    userId: string,
+    input: UpdateNotificationPreferencesInput,
+  ): Promise<NotificationPreference> {
+    return prisma.notificationPreference.upsert({
+      where: { userId },
+      create: { userId, ...DEFAULT_PREFERENCES, ...input },
+      update: input,
+    });
+  },
+
   /** Schedules a notification for future delivery. */
   scheduleNotification(
     userId: string,

@@ -128,6 +128,7 @@ Aşağıdaki maddeler değerlidir ancak **7 kritik boyuttan hiçbirini bloke etm
 | F7 | Multi-tenant / Organization | Platform |
 | F8 | Web push | Notifications |
 | F9 | Ek ödeme sağlayıcıları (Stripe vb. — modüler katman sayesinde) | Payments |
+| F10 | FR-012B — açık izin sonrası cihaz üzerinde telefon kullanımının bırakılması ve sağlık verilerinden tahmini uyku başlangıcı; sabah kullanıcı onayıyla kaydetme | Sleep / Native |
 
 ---
 

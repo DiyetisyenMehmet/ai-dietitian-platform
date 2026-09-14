@@ -30,6 +30,9 @@
             android:name=".NutritionReminderReceiver"
             android:exported="false" />
         <receiver
+            android:name=".WellnessReminderReceiver"
+            android:exported="false" />
+        <receiver
             android:name=".NutritionReminderBootReceiver"
             android:enabled="true"
             android:exported="false">

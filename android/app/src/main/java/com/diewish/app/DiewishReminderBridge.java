@@ -58,5 +58,34 @@ public final class DiewishReminderBridge {
     public void cancelAll() {
         if (!trustedPage.getAsBoolean()) return;
         NutritionReminderScheduler.cancelAll(activity.getApplicationContext());
+        WellnessReminderScheduler.cancelAll(activity.getApplicationContext());
+    }
+
+    @JavascriptInterface
+    public void cancelNutrition() {
+        if (!trustedPage.getAsBoolean()) return;
+        NutritionReminderScheduler.cancelAll(activity.getApplicationContext());
+    }
+
+    @JavascriptInterface
+    public int replaceWellnessSchedule(String scheduleJson) {
+        if (!trustedPage.getAsBoolean()) return 0;
+        try {
+            return WellnessReminderScheduler.replace(activity.getApplicationContext(), scheduleJson);
+        } catch (JSONException | RuntimeException ignored) {
+            return 0;
+        }
+    }
+
+    @JavascriptInterface
+    public void cancelWellness() {
+        if (!trustedPage.getAsBoolean()) return;
+        WellnessReminderScheduler.cancelAll(activity.getApplicationContext());
+    }
+
+    @JavascriptInterface
+    public boolean showTestNotification() {
+        if (!trustedPage.getAsBoolean()) return false;
+        return WellnessReminderReceiver.show(activity.getApplicationContext(), "test", "wellness-test");
     }
 }

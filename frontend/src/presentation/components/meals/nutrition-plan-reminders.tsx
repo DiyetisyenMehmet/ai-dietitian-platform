@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { useAuth } from "@/application/auth/auth-store";
 import { useSubscription } from "@/application/payments/subscription-store";
+import { notificationClient } from "@/infrastructure/notifications/notification-client";
 import { Button } from "@/presentation/components/ui/button";
 
 interface NativeReminderBridge {
@@ -13,6 +14,7 @@ interface NativeReminderBridge {
   permissionStatus(): "granted" | "denied" | "unavailable" | string;
   requestPermission(): void;
   replaceSchedule(scheduleJson: string): number;
+  cancelNutrition?(): void;
   cancelAll(): void;
 }
 
@@ -27,29 +29,14 @@ export interface NutritionReminderEntry {
   at: number;
 }
 
+function cancelNutrition(bridge: NativeReminderBridge): void {
+  if (bridge.cancelNutrition) bridge.cancelNutrition();
+  else bridge.cancelAll();
+}
+
 interface NutritionPlanRemindersProps {
   entries: NutritionReminderEntry[];
   completed: boolean;
-}
-
-function storageKey(userId: string): string {
-  return `diewish:nutrition-reminders:${userId}`;
-}
-
-function readPreference(userId: string): boolean {
-  try {
-    return window.localStorage.getItem(storageKey(userId)) === "1";
-  } catch {
-    return false;
-  }
-}
-
-function writePreference(userId: string, enabled: boolean): void {
-  try {
-    window.localStorage.setItem(storageKey(userId), enabled ? "1" : "0");
-  } catch {
-    // Reminder preference can still work for the current session if storage is unavailable.
-  }
 }
 
 export function NutritionPlanReminders({ entries, completed }: NutritionPlanRemindersProps) {
@@ -57,6 +44,7 @@ export function NutritionPlanReminders({ entries, completed }: NutritionPlanRemi
   const { subscription, loading: subscriptionLoading } = useSubscription();
   const [available, setAvailable] = React.useState(false);
   const [enabled, setEnabled] = React.useState(false);
+  const [preferenceLoading, setPreferenceLoading] = React.useState(true);
   const [permission, setPermission] = React.useState<string>("unavailable");
   const paid = subscription.tier === "PREMIUM" || subscription.tier === "PREMIUM_PLUS";
   const userId = user?.id ?? "";
@@ -76,8 +64,12 @@ export function NutritionPlanReminders({ entries, completed }: NutritionPlanRemi
 
   React.useEffect(() => {
     if (!userId) return;
-    setEnabled(readPreference(userId));
     syncPermission();
+    void notificationClient
+      .getPreferences()
+      .then(({ preferences }) => setEnabled(preferences.mealReminders))
+      .catch(() => toast.error("Öğün bildirim tercihi yüklenemedi."))
+      .finally(() => setPreferenceLoading(false));
   }, [syncPermission, userId]);
 
   React.useEffect(() => {
@@ -89,7 +81,7 @@ export function NutritionPlanReminders({ entries, completed }: NutritionPlanRemi
     // local reminders, also fail closed on the client so a FREE session cannot
     // retain alarms scheduled by a previous paid session/account.
     if (!paid || completed) {
-      bridge.cancelAll();
+      cancelNutrition(bridge);
       return;
     }
 
@@ -113,7 +105,7 @@ export function NutritionPlanReminders({ entries, completed }: NutritionPlanRemi
     };
   }, [available, enabled, permission, syncPermission]);
 
-  if (subscriptionLoading) return null;
+  if (subscriptionLoading || preferenceLoading) return null;
 
   if (!available) {
     return (
@@ -147,19 +139,30 @@ export function NutritionPlanReminders({ entries, completed }: NutritionPlanRemi
     );
   }
 
-  const toggle = () => {
+  const toggle = async () => {
     const bridge = window.DiewishReminders;
     if (!bridge || !userId) return;
     if (enabled) {
       setEnabled(false);
-      writePreference(userId, false);
-      bridge.cancelAll();
-      toast.success("Öğün hatırlatmaları kapatıldı");
+      cancelNutrition(bridge);
+      try {
+        await notificationClient.updatePreferences({ mealReminders: false });
+        toast.success("Öğün hatırlatmaları kapatıldı");
+      } catch {
+        setEnabled(true);
+        toast.error("Öğün bildirimi tercihi kaydedilemedi.");
+      }
       return;
     }
 
     setEnabled(true);
-    writePreference(userId, true);
+    try {
+      await notificationClient.updatePreferences({ mealReminders: true });
+    } catch {
+      setEnabled(false);
+      toast.error("Öğün bildirimi tercihi kaydedilemedi.");
+      return;
+    }
     const status = syncPermission();
     if (status !== "granted") {
       bridge.requestPermission();
@@ -197,7 +200,7 @@ export function NutritionPlanReminders({ entries, completed }: NutritionPlanRemi
           size="sm"
           disabled={completed}
           aria-pressed={enabled}
-          onClick={toggle}
+          onClick={() => void toggle()}
         >
           {enabled ? "Kapat" : "Aç"}
         </Button>

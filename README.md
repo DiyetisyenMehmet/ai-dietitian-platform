@@ -147,7 +147,7 @@ Sprint 19 ile eklenen yeni API endpoint'leri:
   - `POST /api/ai-coach/weekly-review/generate` — haftalık rapor oluştur
   - `GET /api/ai-coach/monthly-review` — aylık değerlendirme (premium)
   - `POST /api/ai-coach/monthly-review/generate` — aylık rapor oluştur (premium)
-- **Notifications:** `GET /api/notifications/scheduled` — zamanlanmış bildirimler
+- **Notifications:** `GET|PATCH /api/notifications/preferences` — hesapla senkron, izinli hatırlatma tercihleri; `GET /api/notifications/scheduled` — zamanlanmış bildirimler
 
 Tüm AI coach özellikleri Türkçe; sistem asla tıbbi teşhis koymaz, yalnızca koçluk rehberliği sunar.
 

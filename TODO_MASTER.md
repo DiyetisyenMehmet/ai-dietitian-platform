@@ -135,6 +135,7 @@ Durum simgeleri: `[x]` tamam · `[~]` kısmen · `[ ]` beklemede
 - [x] Monthly Review: `MonthlyReview` modeli, `MonthlyReviewService` (generateMonthlyReview), aylık 1. gün 08:00 cron, GET + POST endpoints, premium-only — **(High)**
 - [x] Premium AI Experience: `requirePremium` middleware, free vs premium hafıza derinliği/yanıt uzunluğu/rapor detayı ayrımı, 402 PREMIUM_REQUIRED — **(High)**
 - [x] Notification Preparation: `Notification` modeli, `NotificationService` (schedule, getScheduled, markDelivered, dispatchDue), `NotificationProvider` interface + `LoggingNotificationProvider` stub, GET /api/notifications/scheduled — **(Medium)**
+- [x] Granular Reminders: hesap bazlı öğün/su/aktivite/uyku/haftalık özet tercihleri, kullanıcı saatleri, Android yerel alarm teslimi, yeniden başlatma sonrası geri yükleme ve test bildirimi — **(High)**
 - [x] Scheduler: `coach-scheduler.ts` (custom setInterval, Turkey UTC+3, runOncePerDay, tüm cron job'lar), `coach-jobs.ts` (batch işlemler) — **(Critical)**
 - [x] Prisma migration: `20260722000000_sprint19_ai_health_coach_intelligence` (5 enum, 9 tablo, 9 FK, 13 index) — **(Critical)**
 - [x] Doğrulama: tsc --noEmit ✓, eslint ✓, prisma validate ✓, prisma generate ✓ — **(Critical)**

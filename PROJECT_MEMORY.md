@@ -135,6 +135,10 @@ ai-dietitian-platform/
 2. **E-posta sağlayıcısı (Medium):** `mailer` soyutlaması mevcut ama gerçek e-posta servisi (SendGrid/AWS SES) entegre değil; production öncesi gerekli.
 3. **Bildirim push (Low):** `NotificationProvider` stub olarak `LoggingNotificationProvider` kullanıyor; Firebase/APNs entegrasyonu post-launch.
 
+### 14 Eylül 2026 Devir Notları
+- **Granüler yerel hatırlatmalar:** Hesap bazlı öğün, su, aktivite, uyku hazırlığı ve haftalık özet tercihleri Android uygulamasında yerel alarm olarak çalışır. Tercihler varsayılan kapalıdır; kullanıcı izni gerekir ve bildirim gövdesinde özel sağlık verisi bulunmaz. Firebase/APNs tabanlı uzaktan push ayrı post-launch kapsamıdır.
+- **İleri güncelleme — FR-012B Akıllı Uyku Tahmini:** Kullanıcının açık izinlerinden sonra mobil uygulama; akşam telefon kullanımının bırakılması, cihaz sinyalleri ve varsa Health Connect/HealthKit uyku verilerinden tahmini uyku başlangıcı üretir. Kesin uyku kaydı sayılmaz; sabah kullanıcıya doğrulatılır/düzelttirilir. İşleme mümkün olduğunca cihaz üzerinde yapılır ve yalnız türetilmiş zaman/güven bilgisi saklanır.
+
 ### Sprint 19'da Alınan Kararlar
 - **Express (NestJS değil):** Mevcut backend Express tabanlı; zamanlanmış görevler için custom scheduler uygulandı (harici kütüphane yok).
 - **Turkey Saati (UTC+3):** Tüm scheduler ve metrik hesaplamaları yerel Türkiye saati kullanır.

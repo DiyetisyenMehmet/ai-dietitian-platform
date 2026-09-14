@@ -1,7 +1,10 @@
 import { Router } from "express";
 
 import { authenticate } from "../../middleware/authenticate";
+import { requireConsent } from "../../middleware/require-consent";
+import { validate } from "../../middleware/validate";
 import { notificationController } from "./notification.controller";
+import { updateNotificationPreferencesSchema } from "./notification.schemas";
 
 /**
  * Notifications router (mounted at /api/notifications). Owner-scoped; requires a
@@ -13,6 +16,15 @@ import { notificationController } from "./notification.controller";
  *     description: Scheduled push-notification layer (Sprint 19).
  */
 export const notificationRouter = Router();
+
+notificationRouter.get("/preferences", authenticate, notificationController.getPreferences);
+notificationRouter.patch(
+  "/preferences",
+  authenticate,
+  requireConsent,
+  validate({ body: updateNotificationPreferencesSchema }),
+  notificationController.updatePreferences,
+);
 
 /**
  * @openapi

@@ -10,6 +10,7 @@ public final class NutritionReminderBootReceiver extends BroadcastReceiver {
     public void onReceive(Context context, Intent intent) {
         if (Intent.ACTION_BOOT_COMPLETED.equals(intent.getAction())) {
             NutritionReminderScheduler.rescheduleStored(context);
+            WellnessReminderScheduler.rescheduleStored(context);
         }
     }
 }

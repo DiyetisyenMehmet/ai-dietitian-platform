@@ -58,6 +58,7 @@ model User {
   weeklyReviews           WeeklyReview[]
   monthlyReviews          MonthlyReview[]
   notifications           Notification[]
+  notificationPreference  NotificationPreference?
   activities              Activity[]
 
   @@map("users")
@@ -737,6 +738,30 @@ model Notification {
   @@index([userId, scheduledFor])
   @@index([deliveredAt])
   @@map("notifications")
+}
+
+model NotificationPreference {
+  id                    String   @id @default(uuid())
+  userId                String   @unique
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mealReminders         Boolean  @default(false)
+  waterReminders        Boolean  @default(false)
+  activityReminders     Boolean  @default(false)
+  sleepReminders        Boolean  @default(false)
+  weeklySummary         Boolean  @default(false)
+  coachTips             Boolean  @default(false)
+  bloodTestReminders    Boolean  @default(false)
+  productUpdates        Boolean  @default(false)
+  waterReminderTime     String   @default("10:00")
+  activityReminderTime  String   @default("18:00")
+  sleepReminderTime     String   @default("22:30")
+  weeklySummaryDay      Int      @default(0)
+  weeklySummaryTime     String   @default("10:00")
+  timezoneOffsetMinutes Int      @default(0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@map("notification_preferences")
 }
 
 enum ActivityType {
