@@ -139,6 +139,8 @@ jobs:
           grep -q 'canonical_frontend_host=' "$auth_runtime"
           grep -q 'canonical_authorized=' "$auth_runtime"
           grep -q 'custom_authorized=' "$auth_runtime"
+          grep -q 'sms_allowed_regions=' "$auth_runtime"
+          grep -q 'expected_sms_regions=' "$auth_runtime"
           grep -q 'CUSTOM_FRONTEND_URL=' "$auth_runtime"
           grep -q 'FIREBASE_WEB_API_KEY=' "$auth_runtime"
           grep -q 'FIREBASE_AUTH_DOMAIN=' "$auth_runtime"

@@ -203,9 +203,11 @@ anonymous_enabled="$(jq -r '.signIn.anonymous.enabled // false' "$verify_file")"
 frontend_authorized="$(jq -r --arg host "$frontend_host" '(.authorizedDomains // []) | index($host) != null' "$verify_file")"
 canonical_authorized="$(jq -r --arg host "$canonical_frontend_host" '(.authorizedDomains // []) | index($host) != null' "$verify_file")"
 custom_authorized="$(jq -r --arg host "$custom_frontend_host" '(.authorizedDomains // []) | index($host) != null' "$verify_file")"
+sms_allowed_regions="$(jq -c '(.smsRegionConfig.allowlistOnly.allowedRegions // []) | sort | unique' "$verify_file")"
+expected_sms_regions="$(jq -c 'sort | unique' <<<"$region_json")"
 rm -f "$verify_file"
 
-if [[ "$phone_enabled" != "true" || "$anonymous_enabled" != "false" || "$frontend_authorized" != "true" || "$canonical_authorized" != "true" || "$custom_authorized" != "true" ]]; then
+if [[ "$phone_enabled" != "true" || "$anonymous_enabled" != "false" || "$frontend_authorized" != "true" || "$canonical_authorized" != "true" || "$custom_authorized" != "true" || "$sms_allowed_regions" != "$expected_sms_regions" ]]; then
   echo "Staging auth contract verification failed after update." >&2
   exit 1
 fi
