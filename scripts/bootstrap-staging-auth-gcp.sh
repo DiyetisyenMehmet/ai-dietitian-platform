@@ -6,6 +6,7 @@ PROJECT_NUMBER="730419163638"
 REGION="europe-west1"
 DEPLOY_SA="diewish-staging-deployer@${PROJECT_ID}.iam.gserviceaccount.com"
 FRONTEND_SERVICE="diewish-frontend-staging"
+CUSTOM_FRONTEND_HOST="${DIEWISH_STAGING_CUSTOM_HOST:-staging.diewish.com}"
 WEB_APP_DISPLAY_NAME="Diewish Staging Web"
 FIREBASE_TOOLS_VERSION="15.30.0"
 SMS_REGIONS="${DIEWISH_STAGING_SMS_REGIONS:-TR}"
@@ -238,7 +239,8 @@ authorized_domains="$(jq -cn \
   --argjson current "$existing_domains" \
   --arg firebase "${PROJECT_ID}.firebaseapp.com" \
   --arg frontend "$frontend_host" \
-  '$current + [$firebase] + (if $frontend == "" then [] else [$frontend] end) | unique')"
+  --arg custom "$CUSTOM_FRONTEND_HOST" \
+  '$current + [$firebase,$custom] + (if $frontend == "" then [] else [$frontend] end) | unique')"
 
 patch_body="$(jq -cn \
   --argjson domains "$authorized_domains" \
@@ -277,13 +279,14 @@ google_code="$(curl -sS -o "$google_file" -w '%{http_code}' \
 
 phone_enabled="$(jq -r '.signIn.phoneNumber.enabled // false' <<<"$config_response")"
 anonymous_enabled="$(jq -r '.signIn.anonymous.enabled // false' <<<"$config_response")"
+custom_authorized="$(jq -r --arg host "$CUSTOM_FRONTEND_HOST" '(.authorizedDomains // []) | index($host) != null' <<<"$config_response")"
 google_enabled="false"
 if [[ "$google_code" == "200" ]]; then
   google_enabled="$(jq -r '.enabled // false' "$google_file")"
 fi
 rm -f "$google_file"
 
-if [[ "$phone_enabled" != "true" || "$anonymous_enabled" != "false" || "$google_enabled" != "true" ]]; then
+if [[ "$phone_enabled" != "true" || "$anonymous_enabled" != "false" || "$google_enabled" != "true" || "$custom_authorized" != "true" ]]; then
   echo "Authentication bootstrap assertions failed (phone/google/anonymous state)." >&2
   exit 1
 fi
@@ -296,6 +299,7 @@ Staging Authentication bootstrap complete.
 - Google Sign-In: enabled
 - Phone Sign-In: enabled
 - Anonymous Sign-In: disabled
+- Custom staging domain: ${CUSTOM_FRONTEND_HOST} authorized
 - SMS region allowlist: ${SMS_REGIONS}
 - Protected staging deployer: least-privilege auth/config read-write access granted
 

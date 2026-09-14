@@ -6,6 +6,7 @@ PROJECT_NUMBER="${PROJECT_NUMBER:-}"
 REGION="${REGION:-europe-west1}"
 FRONTEND_SERVICE="${FRONTEND_SERVICE:-diewish-frontend-staging}"
 FRONTEND_URL="${FRONTEND_URL:-}"
+CUSTOM_FRONTEND_URL="${CUSTOM_FRONTEND_URL:-https://staging.diewish.com}"
 WEB_APP_DISPLAY_NAME="Diewish Staging Web"
 SMS_REGIONS="${DIEWISH_STAGING_SMS_REGIONS:-TR}"
 
@@ -31,11 +32,24 @@ if [[ -z "$FRONTEND_URL" || "$FRONTEND_URL" != https://* ]]; then
   exit 1
 fi
 
+if [[ -z "$CUSTOM_FRONTEND_URL" || "$CUSTOM_FRONTEND_URL" != https://* ]]; then
+  echo "CUSTOM_FRONTEND_URL must be the HTTPS URL of the custom staging frontend." >&2
+  exit 1
+fi
+
 frontend_host="${FRONTEND_URL#https://}"
 frontend_host="${frontend_host%%/*}"
 frontend_host="${frontend_host%%:*}"
 if [[ -z "$frontend_host" ]]; then
   echo "Could not resolve staging frontend host." >&2
+  exit 1
+fi
+
+custom_frontend_host="${CUSTOM_FRONTEND_URL#https://}"
+custom_frontend_host="${custom_frontend_host%%/*}"
+custom_frontend_host="${custom_frontend_host%%:*}"
+if [[ -z "$custom_frontend_host" ]]; then
+  echo "Could not resolve custom staging frontend host." >&2
   exit 1
 fi
 
@@ -132,7 +146,8 @@ authorized_domains="$(jq -cn \
   --arg firebase "$firebase_auth_domain" \
   --arg frontend "$frontend_host" \
   --arg canonical "$canonical_frontend_host" \
-  '$current + [$firebase,$frontend,$canonical] | map(select(length>0)) | unique')"
+  --arg custom "$custom_frontend_host" \
+  '$current + [$firebase,$frontend,$canonical,$custom] | map(select(length>0)) | unique')"
 
 IFS=',' read -r -a region_array <<<"$SMS_REGIONS"
 region_json="$(printf '%s\n' "${region_array[@]}" | sed 's/^ *//;s/ *$//' | jq -R 'select(length>0)' | jq -s '.')"
@@ -187,9 +202,10 @@ phone_enabled="$(jq -r '.signIn.phoneNumber.enabled // false' "$verify_file")"
 anonymous_enabled="$(jq -r '.signIn.anonymous.enabled // false' "$verify_file")"
 frontend_authorized="$(jq -r --arg host "$frontend_host" '(.authorizedDomains // []) | index($host) != null' "$verify_file")"
 canonical_authorized="$(jq -r --arg host "$canonical_frontend_host" '(.authorizedDomains // []) | index($host) != null' "$verify_file")"
+custom_authorized="$(jq -r --arg host "$custom_frontend_host" '(.authorizedDomains // []) | index($host) != null' "$verify_file")"
 rm -f "$verify_file"
 
-if [[ "$phone_enabled" != "true" || "$anonymous_enabled" != "false" || "$frontend_authorized" != "true" || "$canonical_authorized" != "true" ]]; then
+if [[ "$phone_enabled" != "true" || "$anonymous_enabled" != "false" || "$frontend_authorized" != "true" || "$canonical_authorized" != "true" || "$custom_authorized" != "true" ]]; then
   echo "Staging auth contract verification failed after update." >&2
   exit 1
 fi
@@ -204,6 +220,7 @@ fi
   echo "FIREBASE_AUTH_DOMAIN=${firebase_auth_domain}"
   echo "FIREBASE_WEB_APP_ID=${firebase_app_id}"
   echo "CANONICAL_FRONTEND_URL=https://${canonical_frontend_host}"
+  echo "CUSTOM_FRONTEND_URL=https://${custom_frontend_host}"
 } >> "$GITHUB_ENV"
 
-echo "Staging Authentication contract verified: Google enabled, phone enabled, anonymous disabled, both Cloud Run frontend domains authorized, SMS allowlist enforced."
+echo "Staging Authentication contract verified: Google enabled, phone enabled, anonymous disabled, Cloud Run and custom staging frontend domains authorized, SMS allowlist enforced."

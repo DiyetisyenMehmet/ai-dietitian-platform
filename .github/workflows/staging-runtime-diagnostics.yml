@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 env:
-  STAGING_FRONTEND_URL: https://diewish-frontend-staging-730419163638.europe-west1.run.app
+  STAGING_FRONTEND_URL: https://staging.diewish.com
 
 jobs:
   runtime-diagnostics:

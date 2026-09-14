@@ -70,9 +70,11 @@ jobs:
           grep -q 'build-arg=DIEWISH_API_PROXY_TARGET=' "$frontend_build"
           grep -q 'setAcceptThirdPartyCookies(webView, false)' "$android_host"
 
-          # Both legitimate Cloud Run frontend hostnames must remain usable for
-          # proxied API calls after Google/phone Authentication completes.
-          grep -Fq 'CORS_ORIGIN=${FRONTEND_URL},${CANONICAL_FRONTEND_URL}' "$workflow"
+          # Cloud Run hostnames and the stable custom staging hostname must
+          # remain usable after Google/phone Authentication completes.
+          grep -q 'CUSTOM_FRONTEND_URL: https://staging.diewish.com' "$workflow"
+          grep -Fq 'CORS_ORIGIN=${FRONTEND_URL},${CANONICAL_FRONTEND_URL},${CUSTOM_FRONTEND_URL}' "$workflow"
+          grep -Fq 'APP_WEB_URL=${CUSTOM_FRONTEND_URL}' "$workflow"
           grep -q 'access-control-allow-origin:' "$workflow"
 
           # Authentication bootstrap is intentionally separate from the original
@@ -136,6 +138,8 @@ jobs:
           grep -q 'defaultSupportedIdpConfigs/google.com' "$auth_runtime"
           grep -q 'canonical_frontend_host=' "$auth_runtime"
           grep -q 'canonical_authorized=' "$auth_runtime"
+          grep -q 'custom_authorized=' "$auth_runtime"
+          grep -q 'CUSTOM_FRONTEND_URL=' "$auth_runtime"
           grep -q 'FIREBASE_WEB_API_KEY=' "$auth_runtime"
           grep -q 'FIREBASE_AUTH_DOMAIN=' "$auth_runtime"
           grep -q 'FIREBASE_WEB_APP_ID=' "$auth_runtime"
