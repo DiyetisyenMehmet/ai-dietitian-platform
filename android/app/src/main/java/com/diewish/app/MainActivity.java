@@ -177,6 +177,15 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
         webView.setWebChromeClient(new DiewishChromeClient());
     }
 
+    /** Forces HttpOnly session-cookie writes to durable WebView storage. */
+    private void persistSessionCookies() {
+        try {
+            CookieManager.getInstance().flush();
+        } catch (RuntimeException ignored) {
+            // Session recovery will safely fall back to the login screen.
+        }
+    }
+
     private boolean isTrustedPage() {
         String current = webView == null ? null : webView.getUrl();
         if (current == null) return false;
@@ -641,6 +650,7 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
         @Override
         public void onPageFinished(WebView view, String url) {
             super.onPageFinished(view, url);
+            persistSessionCookies();
             if (isTrustedPage()) {
                 view.evaluateJavascript(
                     "window.__DIEWISH_ANDROID_APP__ = true;"
@@ -843,7 +853,20 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
     }
 
     @Override
+    protected void onPause() {
+        persistSessionCookies();
+        super.onPause();
+    }
+
+    @Override
+    protected void onStop() {
+        persistSessionCookies();
+        super.onStop();
+    }
+
+    @Override
     protected void onDestroy() {
+        persistSessionCookies();
         if (billingClient != null) billingClient.endConnection();
 
         if (pendingWebCameraRequest != null) {
