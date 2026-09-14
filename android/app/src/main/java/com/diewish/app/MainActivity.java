@@ -2,7 +2,7 @@ package com.diewish.app;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
-import android.app.Activity;
+import android.content.res.Configuration;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -22,6 +22,8 @@ import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 
 import androidx.core.graphics.Insets;
+import androidx.activity.ComponentActivity;
+import androidx.activity.OnBackPressedCallback;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -56,7 +58,7 @@ import java.util.Map;
  * Android-only capabilities such as system insets, camera permissions, native
  * food/barcode scanning and Google Play Billing are owned by the native host.
  */
-public final class MainActivity extends Activity implements PurchasesUpdatedListener {
+public final class MainActivity extends ComponentActivity implements PurchasesUpdatedListener {
     private static final int FILE_CHOOSER_REQUEST = 4102;
     private static final int CAMERA_PERMISSION_REQUEST = 4103;
     private static final int BARCODE_SCAN_REQUEST = 4104;
@@ -65,6 +67,7 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
     private static final String SHARE_BRIDGE = "DiewishShare";
     private static final String SCANNER_BRIDGE = "DiewishScanner";
     private static final String FOOD_SCAN_PATH = "/meals/scan";
+    private static final String UI_BRIDGE = "DiewishSystemUi";
 
     private WebView webView;
     private FrameLayout rootView;
@@ -87,12 +90,22 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
         configureBilling();
         configureWebView();
         configureRootView();
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                handleBackNavigation();
+            }
+        });
         webView.loadUrl(BuildConfig.WEB_BASE_URL + "/dashboard");
     }
 
     private void configureRootView() {
         rootView = new FrameLayout(this);
         rootView.setBackgroundColor(Color.WHITE);
+        applySystemBarTheme(
+            (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK)
+                == Configuration.UI_MODE_NIGHT_YES
+        );
         rootView.addView(
             webView,
             new FrameLayout.LayoutParams(
@@ -173,6 +186,7 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
             SHARE_BRIDGE
         );
         webView.addJavascriptInterface(new ScannerBridge(), SCANNER_BRIDGE);
+        webView.addJavascriptInterface(new SystemUiBridge(), UI_BRIDGE);
         webView.setWebViewClient(new TrustedWebViewClient());
         webView.setWebChromeClient(new DiewishChromeClient());
     }
@@ -183,6 +197,28 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
             CookieManager.getInstance().flush();
         } catch (RuntimeException ignored) {
             // Session recovery will safely fall back to the login screen.
+        }
+    }
+
+    @SuppressWarnings("deprecation")
+    private void applySystemBarTheme(boolean dark) {
+        int background = dark ? Color.rgb(15, 20, 18) : Color.WHITE;
+        if (rootView != null) rootView.setBackgroundColor(background);
+        getWindow().setStatusBarColor(Color.TRANSPARENT);
+        getWindow().setNavigationBarColor(Color.TRANSPARENT);
+        // The root paints the inset regions on edge-to-edge Android versions.
+        WindowCompat.getInsetsController(getWindow(), webView)
+            .setAppearanceLightStatusBars(!dark);
+        WindowCompat.getInsetsController(getWindow(), webView)
+            .setAppearanceLightNavigationBars(!dark);
+    }
+
+    public final class SystemUiBridge {
+        @JavascriptInterface
+        public void setDarkTheme(boolean dark) {
+            runOnUiThread(() -> {
+                if (isTrustedPage()) applySystemBarTheme(dark);
+            });
         }
     }
 
@@ -656,7 +692,15 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
                     "window.__DIEWISH_ANDROID_APP__ = true;"
                         + "window.__DIEWISH_ANDROID_BUILD_REVISION__ = "
                         + JSONObject.quote(BuildConfig.BUILD_REVISION)
-                        + ";document.documentElement.classList.add('diewish-android');",
+                        + ";document.documentElement.classList.add('diewish-android');"
+                        + "(function(){"
+                        + "if(window.__diewishThemeObserver)window.__diewishThemeObserver.disconnect();"
+                        + "function sync(){window.DiewishSystemUi.setDarkTheme("
+                        + "document.documentElement.classList.contains('dark'));}"
+                        + "window.__diewishThemeObserver=new MutationObserver(sync);"
+                        + "window.__diewishThemeObserver.observe(document.documentElement,"
+                        + "{attributes:true,attributeFilter:['class']});sync();"
+                        + "})();",
                     null
                 );
                 emitEvent(
@@ -844,12 +888,9 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
             }
         }
 
-        finish();
-    }
-
-    @Override
-    public void onBackPressed() {
-        handleBackNavigation();
+        // At the root, background the task instead of destroying the WebView.
+        persistSessionCookies();
+        moveTaskToBack(true);
     }
 
     @Override
@@ -883,6 +924,7 @@ public final class MainActivity extends Activity implements PurchasesUpdatedList
             webView.removeJavascriptInterface(REMINDER_BRIDGE);
             webView.removeJavascriptInterface(SHARE_BRIDGE);
             webView.removeJavascriptInterface(SCANNER_BRIDGE);
+            webView.removeJavascriptInterface(UI_BRIDGE);
             webView.destroy();
         }
         super.onDestroy();
