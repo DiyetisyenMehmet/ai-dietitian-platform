@@ -4,17 +4,13 @@ import { authenticate } from "../../middleware/authenticate";
 import { requireConsent } from "../../middleware/require-consent";
 import { validate } from "../../middleware/validate";
 import { notificationController } from "./notification.controller";
-import { updateNotificationPreferencesSchema } from "./notification.schemas";
+import {
+  registerNotificationDeviceSchema,
+  unregisterNotificationDeviceSchema,
+  updateNotificationPreferencesSchema,
+} from "./notification.schemas";
 
-/**
- * Notifications router (mounted at /api/notifications). Owner-scoped; requires a
- * valid access token.
- *
- * @openapi
- * tags:
- *   - name: Notifications
- *     description: Scheduled push-notification layer (Sprint 19).
- */
+/** Notifications router (mounted at /api/notifications). */
 export const notificationRouter = Router();
 
 notificationRouter.get("/preferences", authenticate, notificationController.getPreferences);
@@ -26,15 +22,18 @@ notificationRouter.patch(
   notificationController.updatePreferences,
 );
 
-/**
- * @openapi
- * /api/notifications/scheduled:
- *   get:
- *     tags: [Notifications]
- *     summary: List the caller's scheduled (undelivered) notifications
- *     security: [{ bearerAuth: [] }]
- *     responses:
- *       200: { description: Scheduled notifications, soonest first. }
- *       401: { description: Missing or invalid access token. }
- */
 notificationRouter.get("/scheduled", authenticate, notificationController.listScheduled);
+
+notificationRouter.post(
+  "/devices",
+  authenticate,
+  requireConsent,
+  validate({ body: registerNotificationDeviceSchema }),
+  notificationController.registerDevice,
+);
+notificationRouter.post(
+  "/devices/unregister",
+  authenticate,
+  validate({ body: unregisterNotificationDeviceSchema }),
+  notificationController.unregisterDevice,
+);

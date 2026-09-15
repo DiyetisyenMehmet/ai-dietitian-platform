@@ -1,6 +1,12 @@
 import { z } from "zod";
 
 const localTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Expected a 24-hour HH:MM time.");
+const pushToken = z
+  .string()
+  .trim()
+  .min(20)
+  .max(4096)
+  .regex(/^\S+$/, "Push token cannot contain whitespace.");
 
 export const updateNotificationPreferencesSchema = z
   .object({
@@ -21,6 +27,18 @@ export const updateNotificationPreferencesSchema = z
   })
   .refine((value) => Object.keys(value).length > 0, "At least one preference must be supplied.");
 
+export const registerNotificationDeviceSchema = z.object({
+  token: pushToken,
+  platform: z.literal("android").default("android"),
+  appVersion: z.string().trim().min(1).max(64).optional(),
+});
+
+export const unregisterNotificationDeviceSchema = z.object({
+  token: pushToken,
+});
+
 export type UpdateNotificationPreferencesInput = z.infer<
   typeof updateNotificationPreferencesSchema
 >;
+export type RegisterNotificationDeviceInput = z.infer<typeof registerNotificationDeviceSchema>;
+export type UnregisterNotificationDeviceInput = z.infer<typeof unregisterNotificationDeviceSchema>;

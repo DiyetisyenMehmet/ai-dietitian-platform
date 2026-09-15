@@ -27,14 +27,24 @@ const DEFAULT_PREFERENCES = {
   timezoneOffsetMinutes: 0,
 } as const;
 
-/**
- * Notification scheduling service (Sprint 19, Section 9).
- *
- * Persists notifications to be delivered at a future time and exposes them to
- * clients. Actual delivery is delegated to a pluggable NotificationProvider
- * (a logging stub today). This is the single seam a future Firebase/APNs
- * integration plugs into — no other module needs to change.
- */
+type PreferenceLike = NotificationPreference | typeof DEFAULT_PREFERENCES;
+
+function remotePushAllowed(type: NotificationType, preferences: PreferenceLike): boolean {
+  switch (type) {
+    case "WEEKLY_REVIEW":
+    case "MONTHLY_REVIEW":
+      return preferences.weeklySummary;
+    case "PROACTIVE_MESSAGE":
+    case "RISK_ALERT":
+    case "GOAL_REMINDER":
+      return preferences.coachTips;
+    case "WATER_REMINDER":
+      return preferences.waterReminders;
+    default:
+      return false;
+  }
+}
+
 export const notificationService = {
   async getPreferences(
     userId: string,
@@ -56,7 +66,6 @@ export const notificationService = {
     });
   },
 
-  /** Schedules a notification for future delivery. */
   scheduleNotification(
     userId: string,
     type: NotificationType,
@@ -77,11 +86,6 @@ export const notificationService = {
     });
   },
 
-  /**
-   * Returns the user's upcoming (not-yet-delivered) notifications, soonest
-   * first. Past-due undelivered notifications are included so a client can
-   * flush them.
-   */
   getScheduledNotifications(userId: string): Promise<Notification[]> {
     return prisma.notification.findMany({
       where: { userId, deliveredAt: null },
@@ -89,7 +93,6 @@ export const notificationService = {
     });
   },
 
-  /** Marks a notification delivered (idempotent). */
   async markDelivered(notificationId: string): Promise<Notification | null> {
     const existing = await prisma.notification.findUnique({ where: { id: notificationId } });
     if (!existing) return null;
@@ -101,8 +104,9 @@ export const notificationService = {
   },
 
   /**
-   * Dispatches all due, undelivered notifications through the active provider and
-   * marks the successfully sent ones delivered. Invoked by the scheduler.
+   * Dispatches due notifications only when the matching account preference is
+   * enabled. A successful provider send is the only path that marks a push as
+   * delivered; missing devices/provider failures remain retryable.
    */
   async dispatchDue(now: Date = new Date()): Promise<number> {
     const due = await prisma.notification.findMany({
@@ -111,9 +115,21 @@ export const notificationService = {
       take: 500,
     });
     const provider = getNotificationProvider();
+    const preferenceCache = new Map<string, PreferenceLike>();
     let delivered = 0;
+
     for (const notification of due) {
       try {
+        let preferences = preferenceCache.get(notification.userId);
+        if (!preferences) {
+          preferences = await this.getPreferences(notification.userId);
+          preferenceCache.set(notification.userId, preferences);
+        }
+        if (!remotePushAllowed(notification.type, preferences)) {
+          await this.markDelivered(notification.id);
+          continue;
+        }
+
         const ok = await provider.send(notification);
         if (ok) {
           await this.markDelivered(notification.id);
