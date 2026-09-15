@@ -9,6 +9,7 @@ import urllib.parse
 import urllib.request
 
 PROJECT = "project-a2e260c1-839d-4f1d-b90"
+PROJECT_NUMBER = "730419163638"
 ORIGIN = "https://staging.diewish.com"
 
 
@@ -36,6 +37,18 @@ def main():
     def report(label, value):
         print(json.dumps({"check": label, **value}, sort_keys=True))
 
+    def collection(label, url, key, params):
+        items = []
+        for _ in range(10):
+            page = get(label, url + "?" + urllib.parse.urlencode(params))
+            if page is None:
+                return items, False
+            items.extend(page.get(key, []))
+            if not page.get("nextPageToken"):
+                return items, True
+            params = {**params, "pageToken": page["nextPageToken"]}
+        return items, False
+
     report("context", {"project": PROJECT, "at": datetime.datetime.now(datetime.timezone.utc).isoformat(), "sha": os.environ.get("GITHUB_SHA")})
     config = get("identity-config", f"https://identitytoolkit.googleapis.com/admin/v2/projects/{PROJECT}/config")
     if config is not None:
@@ -58,6 +71,29 @@ def main():
         settings = data.get("config") or {}
         report("runtime", {"configured": data.get("configured"), "projectMatches": settings.get("projectId") == PROJECT, "authDomain": settings.get("authDomain"), "requiredFieldsPresent": all(settings.get(key) for key in ("apiKey", "appId", "authDomain", "projectId"))})
 
+    # Consumer-visible limits cannot reveal Google's private per-phone or abuse
+    # restrictions. Preserve absent/partial data rather than declaring no limit.
+    quotas, complete = collection(
+        "identity-quotas",
+        f"https://serviceusage.googleapis.com/v1beta1/projects/{PROJECT_NUMBER}/services/identitytoolkit.googleapis.com/consumerQuotaMetrics",
+        "metrics", {"view": "FULL", "pageSize": 200},
+    )
+    report("identity-quotas", {
+        "state": "DATA" if quotas else "NO_DATA" if complete else "UNKNOWN",
+        "partial": not complete,
+        "limits": [{
+            "metric": metric.get("metric"), "displayName": metric.get("displayName"),
+            "unit": limit.get("unit"),
+            "buckets": [{
+                "defaultLimit": bucket.get("defaultLimit"),
+                "effectiveLimit": bucket.get("effectiveLimit"),
+                "consumerOverride": bucket.get("consumerOverride", {}).get("overrideValue"),
+                "adminOverride": bucket.get("adminOverride", {}).get("overrideValue"),
+                "region": bucket.get("dimensions", {}).get("region"),
+            } for bucket in limit.get("quotaBuckets", [])],
+        } for metric in quotas for limit in metric.get("consumerQuotaLimits", [])],
+    })
+
     end = datetime.datetime.now(datetime.timezone.utc)
     start = end - datetime.timedelta(hours=24)
     for label, metric in (
@@ -73,6 +109,38 @@ def main():
                 "windowHours": 24, "state": "DATA" if series else "NO_DATA", "partial": bool(metrics.get("nextPageToken")),
                 "series": [{"region": item.get("metric", {}).get("labels", {}).get("region_code"), "total": sum(float(point.get("value", {}).get("int64Value", point.get("value", {}).get("doubleValue", 0))) for point in item.get("points", []))} for item in series],
             })
+
+    for label, metric, resource in (
+        ("identity-api-requests", "serviceruntime.googleapis.com/api/request_count", "consumed_api"),
+        ("identity-quota-exceeded", "serviceruntime.googleapis.com/quota/exceeded", "consumer_quota"),
+    ):
+        series, complete = collection(
+            label, f"https://monitoring.googleapis.com/v3/projects/{PROJECT}/timeSeries", "timeSeries", {
+                "filter": f'metric.type="{metric}" AND resource.type="{resource}" AND resource.labels.service="identitytoolkit.googleapis.com"',
+                "interval.startTime": start.isoformat(), "interval.endTime": end.isoformat(),
+                "view": "FULL", "pageSize": 1000,
+            },
+        )
+        # Never print full labels: consumed_api includes a credential_id label.
+        # quota/exceeded is a BOOL gauge, not a count of rejected SMS messages.
+        summaries = []
+        for item in series:
+            labels = item.get("metric", {}).get("labels", {})
+            if label == "identity-api-requests":
+                summaries.append({
+                    "method": item.get("resource", {}).get("labels", {}).get("method"),
+                    "responseCode": labels.get("response_code"),
+                    "total": sum(int(point["value"]["int64Value"]) for point in item.get("points", [])),
+                })
+            else:
+                summaries.append({
+                    "quotaMetric": labels.get("quota_metric"), "limitName": labels.get("limit_name"),
+                    "exceededObserved": any(point["value"].get("boolValue") is True for point in item.get("points", [])),
+                })
+        report(label, {
+            "windowHours": 24, "state": "DATA" if series else "NO_DATA" if complete else "UNKNOWN",
+            "partial": not complete, "series": summaries,
+        })
 
 
 if __name__ == "__main__":
