@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronRight, FlaskConical, ScanBarcode, ScanLine, TrendingUp, type LucideIcon } from "lucide-react";
+import { ChevronRight, FlaskConical, ScanLine, TrendingUp, type LucideIcon } from "lucide-react";
 
 interface FeatureLink {
   title: string;
@@ -14,24 +14,14 @@ interface FeatureLink {
 
 const FEATURES: FeatureLink[] = [
   {
-    title: "Besin Tarayıcı",
-    description: "Yemeğini fotoğrafla tara ve besin değerlerini öğren.",
+    title: "Besin ve Barkod Tarayıcı",
+    description: "Yemeğini fotoğrafla veya paketli ürünü barkodla tara.",
     href: "/meals/scan",
     icon: ScanLine,
     iconWrap: "bg-emerald-500/10",
     iconColor: "text-emerald-500",
     imageUrl: "https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=480&q=82",
-    imageAlt: "Renkli ve dengeli bir salata tabağı",
-  },
-  {
-    title: "Barkod Tara",
-    description: "Paketli ürünlerin besin değerlerini görüntüle.",
-    href: "/meals/scan?mode=barcode",
-    icon: ScanBarcode,
-    iconWrap: "bg-slate-500/10",
-    iconColor: "text-slate-500 dark:text-slate-300",
-    imageUrl: "https://images.unsplash.com/photo-1607082349566-187342175e2f?auto=format&fit=crop&w=480&q=82",
-    imageAlt: "Paketli market ürünleri",
+    imageAlt: "Besin tarama için renkli ve dengeli bir yemek",
   },
   {
     title: "Kan Tahlili Analizi",
