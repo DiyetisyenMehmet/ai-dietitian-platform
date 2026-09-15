@@ -1,5 +1,6 @@
 import { apiRequest } from "@/infrastructure/api/http-client";
 import { isApiConfigured } from "@/application/config/env";
+import { startPhoneDiagnostic, type PhoneAuthDiagnostic } from "./phone-auth-diagnostics";
 
 const FIREBASE_CDN_VERSION = "12.19.0";
 
@@ -47,7 +48,7 @@ interface FirebaseAuthFactory {
   OAuthProvider: new (providerId: string) => FirebaseProviderLike;
   RecaptchaVerifier: new (
     container: string,
-    parameters?: { size?: "invisible" | "normal" },
+    parameters?: { size?: "invisible" | "normal"; callback?: () => void },
   ) => FirebaseRecaptchaLike;
 }
 
@@ -181,23 +182,35 @@ export async function signInWithApple(): Promise<string> {
 export async function startPhoneVerification(
   phoneNumber: string,
   containerId: string,
+  onDiagnostic?: (value: PhoneAuthDiagnostic) => void,
 ): Promise<{ confirm(code: string): Promise<string>; clear(): void }> {
-  const sdk = await firebase();
-  const auth = sdk.auth();
-  auth.languageCode = "tr";
-  const verifier = new sdk.auth.RecaptchaVerifier(containerId, { size: "invisible" });
+  const diagnostic = startPhoneDiagnostic(FIREBASE_CDN_VERSION, onDiagnostic);
+  let verifier: FirebaseRecaptchaLike | undefined;
   try {
+    const sdk = await firebase();
+    const auth = sdk.auth();
+    auth.languageCode = "tr";
+    diagnostic.stage("recaptcha-create");
+    const activeVerifier = new sdk.auth.RecaptchaVerifier(containerId, {
+      size: "invisible", callback: () => diagnostic.recaptchaCompleted(),
+    });
+    verifier = activeVerifier;
+    diagnostic.stage("phone-request");
     const confirmation = await auth.signInWithPhoneNumber(phoneNumber, verifier);
+    diagnostic.stage("sms-accepted");
     return {
       async confirm(code: string) {
         return tokenFromCredential(await confirmation.confirm(code));
       },
       clear() {
-        clearRecaptcha(verifier);
+        clearRecaptcha(activeVerifier);
       },
     };
   } catch (error) {
-    clearRecaptcha(verifier);
+    diagnostic.fail(error);
+    if (verifier) clearRecaptcha(verifier);
     throw error;
+  } finally {
+    diagnostic.stop();
   }
 }

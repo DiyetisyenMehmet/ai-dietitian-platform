@@ -1,0 +1,35 @@
+name: Staging Auth Diagnostics
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/staging-preview]
+    paths:
+      - .github/workflows/staging-auth-diagnostics.yml
+      - scripts/diagnose-staging-auth.py
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  diagnose:
+    if: github.ref == 'refs/heads/feature/staging-preview'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: staging
+    env:
+      PROJECT_ID: project-a2e260c1-839d-4f1d-b90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/730419163638/locations/global/workloadIdentityPools/github-actions/providers/diewish-staging
+          service_account: diewish-staging-deployer@project-a2e260c1-839d-4f1d-b90.iam.gserviceaccount.com
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+      # GET requests only. No provider, region, billing, IAM, API, quota or
+      # database changes. Unreadable metrics remain UNKNOWN, never zero.
+      - name: Read live staging phone configuration and SMS metrics
+        run: python3 scripts/diagnose-staging-auth.py

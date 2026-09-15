@@ -8,6 +8,7 @@ import type { CountryCode } from "libphonenumber-js";
 import { authStore } from "@/application/auth/auth-store";
 import { identityClient } from "@/infrastructure/identity/identity-client";
 import { startPhoneVerification } from "@/infrastructure/identity/firebase-browser";
+import { isStagingPhoneDiagnostics, type PhoneAuthDiagnostic } from "@/infrastructure/identity/phone-auth-diagnostics";
 import { authErrorMessage } from "@/infrastructure/identity/auth-feedback";
 import { formatPhoneInput, normalizePhoneNumber } from "@/infrastructure/identity/phone-number";
 import { PhoneCountrySelect } from "@/presentation/components/auth/phone-country-select";
@@ -30,6 +31,7 @@ export default function PhoneAuthPage() {
   const [busy, setBusy] = React.useState(false);
   const inFlight = React.useRef(false);
   const [feedback, setFeedback] = React.useState("");
+  const [diagnostic, setDiagnostic] = React.useState<PhoneAuthDiagnostic | null>(null);
 
   React.useEffect(() => () => confirmation?.clear(), [confirmation]);
 
@@ -43,9 +45,10 @@ export default function PhoneAuthPage() {
     }
     inFlight.current = true;
     setBusy(true);
+    setDiagnostic(null);
     setFeedback("Güvenlik doğrulaması yapılıyor, SMS kodu isteniyor...");
     try {
-      const next = await startPhoneVerification(normalized, "diewish-phone-request");
+      const next = await startPhoneVerification(normalized, "diewish-phone-request", setDiagnostic);
       setPhoneNumber(normalized);
       setConfirmation(next);
       setFeedback("Doğrulama kodu gönderildi. SMS ile gelen altı haneli kodu girin.");
@@ -86,6 +89,13 @@ export default function PhoneAuthPage() {
   return (
     <AuthLayout title="Telefon ile devam et" subtitle="Numaranızı SMS doğrulamasıyla güvenli biçimde onaylayın">
       <p role="status" aria-live="polite" className="mb-4 text-sm">{feedback}</p>
+      {diagnostic?.failure && isStagingPhoneDiagnostics() && (
+        <details className="mb-4 rounded-xl border p-3 text-xs">
+          <summary className="cursor-pointer">Sorun ayrıntıları</summary>
+          <p className="my-2">Destek incelemesi için bu ayrıntıları paylaşabilirsiniz. Telefon numarası ve doğrulama kodu içermez.</p>
+          <pre className="whitespace-pre-wrap break-all">{JSON.stringify(diagnostic, null, 2)}</pre>
+        </details>
+      )}
       {!confirmation ? (
         <form onSubmit={requestCode} className="space-y-4">
           <FormField id="phoneCountry" label="Ülke veya bölge">

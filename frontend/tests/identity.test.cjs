@@ -92,7 +92,9 @@ function harness(responses, { scriptFailure = false, phoneFailure = false, clear
         if (response instanceof Error) throw response;
         return response;
       },
-    } : { isApiConfigured: () => true },
+    } : name.includes('phone-auth-diagnostics') ? load('phone-auth-diagnostics.ts', {
+      console: { warn() {} },
+    }) : { isApiConfigured: () => true },
     window: { firebase: sdk },
     document: {
       getElementById: id => scripts.get(id),
@@ -158,4 +160,52 @@ test('reCAPTCHA cleanup failure never masks the original phone error', async () 
     code: 'auth/captcha-check-failed',
   });
   assert.equal(h.state.cleared, 1);
+});
+
+test('phone diagnostics expose the failed stage without replacing the Firebase error', async () => {
+  const events = [];
+  const h = harness([configured], { phoneFailure: true });
+  await assert.rejects(h.startPhoneVerification('+905551112233', 'recaptcha', event => events.push(event)), {
+    code: 'auth/captcha-check-failed',
+  });
+  assert.equal(events.at(-1).stage, 'phone-request');
+  assert.equal(events.at(-1).failure.code, 'auth/captcha-check-failed');
+  assert.doesNotMatch(JSON.stringify(events), /905551112233|test-id-token|runtime-key/);
+});
+
+test('staging network diagnostics keep only endpoint, HTTP status and bounded server code', async () => {
+  const logs = [];
+  const calls = [];
+  const upstream = { status: 400, ok: false, clone: () => ({ json: async () => ({ error: {
+    message: 'TOO_MANY_ATTEMPTS_TRY_LATER : private details', phone: 'private-phone', token: 'private-token',
+  } }) }) };
+  const original = async (...args) => { calls.push(args); return upstream; };
+  const browser = { location: { hostname: 'staging.diewish.com', origin: 'https://staging.diewish.com' }, fetch: original };
+  const { startPhoneDiagnostic } = load('phone-auth-diagnostics.ts', { window: browser, URL, console: { warn: value => logs.push(value) } });
+  const events = [];
+  const d = startPhoneDiagnostic('12.19.0', event => events.push(event));
+  const url = 'https://identitytoolkit.googleapis.com/v1/accounts:sendVerificationCode?key=private-key';
+  const init = { method: 'POST', body: 'private-phone-and-captcha' };
+  assert.equal(await browser.fetch(url, init), upstream);
+  assert.equal(calls[0][0], url);
+  assert.equal(calls[0][1], init);
+  d.fail({ name: 'FirebaseError', code: 'auth/too-many-requests', message: 'private-phone private-token' });
+  assert.equal(events.at(-1).requests[0].error, 'TOO_MANY_ATTEMPTS_TRY_LATER');
+  assert.equal(events.at(-1).requests[0].status, 400);
+  assert.doesNotMatch(JSON.stringify([events, logs]), /private-|\?key=|body/);
+  d.stop();
+  assert.equal(browser.fetch, original);
+});
+
+test('phone diagnostics do not observe production traffic and redact unknown exceptions', () => {
+  const browser = { location: { hostname: 'diewish.com' }, fetch: async () => {} };
+  const original = browser.fetch;
+  const { startPhoneDiagnostic, safePhoneFailure } = load('phone-auth-diagnostics.ts', { window: browser });
+  const d = startPhoneDiagnostic('12.19.0');
+  assert.equal(browser.fetch, original);
+  const failure = safePhoneFailure({ name: 'TypeError', code: 'phone +905551112233', message: 'private-token' });
+  assert.equal(failure.name, 'TypeError');
+  assert.equal(failure.code, 'unknown');
+  assert.doesNotMatch(JSON.stringify(failure), /private-|905551112233/);
+  d.stop();
 });
