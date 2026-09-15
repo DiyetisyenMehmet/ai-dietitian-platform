@@ -21,6 +21,7 @@ import { MealSearch } from "./meal-search";
 
 interface AddMealFormProps {
   initialSlot?: MealSlot;
+  cancelHref?: string;
 }
 
 const DEFAULT_TIME: Record<MealSlot, string> = {
@@ -36,7 +37,7 @@ const TIME_SELECT_CLASS =
   "h-11 w-full rounded-xl border border-input bg-background px-3 text-base tabular-nums outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring";
 
 /** Add Meal form: search + manual entry, meal type, time, validation and toasts. */
-export function AddMealForm({ initialSlot = "breakfast" }: AddMealFormProps) {
+export function AddMealForm({ initialSlot = "breakfast", cancelHref = "/meals" }: AddMealFormProps) {
   const router = useRouter();
   const {
     register,
@@ -232,7 +233,7 @@ export function AddMealForm({ initialSlot = "breakfast" }: AddMealFormProps) {
             type="button"
             variant="outline"
             className="flex-1"
-            onClick={() => router.push("/meals")}
+            onClick={() => router.push(cancelHref)}
             disabled={isSubmitting}
           >
             İptal
