@@ -6,11 +6,14 @@ import android.content.pm.PackageManager;
 import android.os.Build;
 import android.webkit.JavascriptInterface;
 
+import com.google.firebase.FirebaseApp;
+import com.google.firebase.messaging.FirebaseMessaging;
+
 import org.json.JSONException;
 
 import java.util.function.BooleanSupplier;
 
-/** Narrow trusted-origin bridge for scheduling local, privacy-minimal reminders. */
+/** Narrow trusted-origin bridge for scheduling local reminders and syncing push registration. */
 public final class DiewishReminderBridge {
     private static final int NOTIFICATION_PERMISSION_REQUEST = 4207;
 
@@ -25,6 +28,25 @@ public final class DiewishReminderBridge {
     @JavascriptInterface
     public boolean isAvailable() {
         return trustedPage.getAsBoolean();
+    }
+
+    @JavascriptInterface
+    public String appVersion() {
+        return trustedPage.getAsBoolean() ? BuildConfig.VERSION_NAME : "";
+    }
+
+    @JavascriptInterface
+    public String pushToken() {
+        if (!trustedPage.getAsBoolean()) return "";
+        return DiewishPushTokenStore.get(activity.getApplicationContext());
+    }
+
+    @JavascriptInterface
+    public void ensurePushToken() {
+        if (!trustedPage.getAsBoolean() || FirebaseApp.getApps(activity).isEmpty()) return;
+        FirebaseMessaging.getInstance().getToken().addOnSuccessListener(
+            token -> DiewishPushTokenStore.save(activity.getApplicationContext(), token)
+        );
     }
 
     @JavascriptInterface

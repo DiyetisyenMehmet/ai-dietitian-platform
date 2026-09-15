@@ -8,6 +8,7 @@
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
 
     <application
+        android:name=".DiewishApplication"
         android:allowBackup="false"
         android:enableOnBackInvokedCallback="true"
         android:icon="@drawable/ic_launcher"
@@ -25,6 +26,14 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/diewish_share_paths" />
         </provider>
+
+        <service
+            android:name=".DiewishMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
 
         <receiver
             android:name=".NutritionReminderReceiver"

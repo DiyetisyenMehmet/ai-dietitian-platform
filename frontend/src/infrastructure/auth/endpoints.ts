@@ -47,6 +47,8 @@ export const SLEEP_ENDPOINTS = {
 export const NOTIFICATION_ENDPOINTS = {
   preferences: "/notifications/preferences",
   scheduled: "/notifications/scheduled",
+  devices: "/notifications/devices",
+  unregisterDevice: "/notifications/devices/unregister",
 } as const;
 
 export const BLOOD_TEST_ENDPOINTS = {

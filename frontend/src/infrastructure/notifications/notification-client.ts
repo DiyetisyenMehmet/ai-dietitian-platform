@@ -21,4 +21,22 @@ export const notificationClient = {
       body: JSON.stringify(input),
     });
   },
+
+  registerDevice(input: { token: string; platform: "android"; appVersion?: string }) {
+    return apiRequest<{ registered: true }>({
+      path: NOTIFICATION_ENDPOINTS.devices,
+      method: "POST",
+      auth: true,
+      body: JSON.stringify(input),
+    });
+  },
+
+  unregisterDevice(token: string) {
+    return apiRequest<{ registered: false }>({
+      path: NOTIFICATION_ENDPOINTS.unregisterDevice,
+      method: "POST",
+      auth: true,
+      body: JSON.stringify({ token }),
+    });
+  },
 } as const;

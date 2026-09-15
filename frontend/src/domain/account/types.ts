@@ -1,7 +1,6 @@
 /**
- * Account-management domain types: local user preferences that live on the
- * client (avatar + notification toggles). These are UX-layer settings backed by
- * localStorage in V1; the shapes are backend-ready for a future settings API.
+ * Account-management domain types: persisted notification preferences and
+ * client-side account presentation state.
  */
 
 /** Toggleable notification/reminder preferences. */
@@ -39,7 +38,7 @@ export interface NotificationPreferenceMeta {
   description: string;
 }
 
-/** Default notification preferences (opt-in to the helpful ones). */
+/** Default notification preferences: every channel requires explicit opt-in. */
 export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   mealReminders: false,
   waterReminders: false,
@@ -83,5 +82,10 @@ export const NOTIFICATION_PREFERENCES: readonly NotificationPreferenceMeta[] = [
     key: "weeklySummary",
     label: "Haftalık özet",
     description: "Her hafta ilerlemeni ve koç yorumunu özetleyelim.",
+  },
+  {
+    key: "coachTips",
+    label: "Diewish koç bildirimleri",
+    description: "Seçtiğin hedeflere göre önemli koç önerilerini telefona bildirelim.",
   },
 ] as const;
