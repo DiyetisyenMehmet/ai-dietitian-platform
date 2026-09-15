@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Droplets, Footprints, Scale, Utensils } from "lucide-react";
+import { Droplets, Footprints, Scale, Utensils, type LucideIcon } from "lucide-react";
 
 import { activityStore, useActivity } from "@/application/health/activity-store";
 import {
@@ -27,7 +27,7 @@ interface MetricRingProps {
   value: string;
   unit?: string;
   percent: number;
-  icon: React.ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
+  icon: LucideIcon;
   trackClassName: string;
   progressClassName: string;
   iconClassName: string;
