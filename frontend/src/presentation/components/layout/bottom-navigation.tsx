@@ -29,6 +29,7 @@ export function BottomNavigation() {
             <li key={item.id} className="flex-1">
               <Link
                 href={item.href}
+                replace
                 aria-current={active ? "page" : undefined}
                 className={cn(
                   "flex flex-col items-center gap-1 px-1 py-2.5 text-[11px] font-medium transition-colors",

@@ -869,26 +869,55 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
         callback.onReceiveValue(results);
     }
 
+    private boolean isExactAppPath(String path, String expected) {
+        return expected.equals(path) || (expected + "/").equals(path);
+    }
+
+    private boolean isPrimaryNavigationPath(String path) {
+        return isExactAppPath(path, "/dashboard")
+            || isExactAppPath(path, "/meals")
+            || isExactAppPath(path, "/ai")
+            || isExactAppPath(path, "/progress")
+            || isExactAppPath(path, "/profile");
+    }
+
+    private void replaceWithDashboard() {
+        String dashboardUrl = BuildConfig.WEB_BASE_URL + "/dashboard";
+        webView.evaluateJavascript(
+            "window.location.replace(" + JSONObject.quote(dashboardUrl) + ");",
+            null
+        );
+    }
+
     private void handleBackNavigation() {
+        if (webView != null && isTrustedPage()) {
+            Uri current = Uri.parse(webView.getUrl());
+            String path = current.getPath();
+
+            // Primary tabs are sibling destinations, not a stack of pages.
+            if (isPrimaryNavigationPath(path)) {
+                if (!isExactAppPath(path, "/dashboard")) {
+                    replaceWithDashboard();
+                    return;
+                }
+
+                persistSessionCookies();
+                moveTaskToBack(true);
+                return;
+            }
+        }
+
+        // Detail pages keep normal WebView history semantics.
         if (webView != null && webView.canGoBack()) {
             webView.goBack();
             return;
         }
 
         if (webView != null && isTrustedPage()) {
-            Uri current = Uri.parse(webView.getUrl());
-            String path = current.getPath();
-            if (
-                path != null
-                    && !"/dashboard".equals(path)
-                    && !"/dashboard/".equals(path)
-            ) {
-                webView.loadUrl(BuildConfig.WEB_BASE_URL + "/dashboard");
-                return;
-            }
+            replaceWithDashboard();
+            return;
         }
 
-        // At the root, background the task instead of destroying the WebView.
         persistSessionCookies();
         moveTaskToBack(true);
     }
