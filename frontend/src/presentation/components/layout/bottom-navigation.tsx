@@ -1,7 +1,8 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 import { cn } from "@/shared/lib/utils";
 import { PRIMARY_NAVIGATION } from "@/shared/constants/navigation";
@@ -13,8 +14,26 @@ function isActiveRoute(pathname: string, href: string): boolean {
 }
 
 /** Fixed bottom navigation bar for primary destinations (mobile-first). */
+declare global {
+  interface Window {
+    __DIEWISH_NAVIGATE_HOME__?: () => void;
+  }
+}
+
 export function BottomNavigation() {
   const pathname = usePathname();
+  const router = useRouter();
+
+  useEffect(() => {
+    const navigateHome = () => router.replace("/dashboard");
+    window.__DIEWISH_NAVIGATE_HOME__ = navigateHome;
+
+    return () => {
+      if (window.__DIEWISH_NAVIGATE_HOME__ === navigateHome) {
+        delete window.__DIEWISH_NAVIGATE_HOME__;
+      }
+    };
+  }, [router]);
 
   return (
     <nav

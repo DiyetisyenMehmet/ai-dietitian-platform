@@ -884,7 +884,11 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
     private void replaceWithDashboard() {
         String dashboardUrl = BuildConfig.WEB_BASE_URL + "/dashboard";
         webView.evaluateJavascript(
-            "window.location.replace(" + JSONObject.quote(dashboardUrl) + ");",
+            "(function(){"
+                + "var navigate=window.__DIEWISH_NAVIGATE_HOME__;"
+                + "if(typeof navigate==='function'){navigate();}"
+                + "else{window.location.replace(" + JSONObject.quote(dashboardUrl) + ");}"
+                + "})();",
             null
         );
     }
