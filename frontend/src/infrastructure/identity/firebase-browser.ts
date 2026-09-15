@@ -1,7 +1,7 @@
 import { apiRequest } from "@/infrastructure/api/http-client";
 import { isApiConfigured } from "@/application/config/env";
 
-const FIREBASE_CDN_VERSION = "10.14.1";
+const FIREBASE_CDN_VERSION = "12.19.0";
 
 interface FirebaseUserLike {
   getIdToken(forceRefresh?: boolean): Promise<string>;
@@ -33,6 +33,7 @@ function clearRecaptcha(verifier: FirebaseRecaptchaLike): void {
 }
 
 interface FirebaseAuthLike {
+  languageCode: string | null;
   signInWithPopup(provider: FirebaseProviderLike): Promise<FirebaseUserCredentialLike>;
   signInWithPhoneNumber(
     phoneNumber: string,
@@ -182,9 +183,11 @@ export async function startPhoneVerification(
   containerId: string,
 ): Promise<{ confirm(code: string): Promise<string>; clear(): void }> {
   const sdk = await firebase();
+  const auth = sdk.auth();
+  auth.languageCode = "tr";
   const verifier = new sdk.auth.RecaptchaVerifier(containerId, { size: "invisible" });
   try {
-    const confirmation = await sdk.auth().signInWithPhoneNumber(phoneNumber, verifier);
+    const confirmation = await auth.signInWithPhoneNumber(phoneNumber, verifier);
     return {
       async confirm(code: string) {
         return tokenFromCredential(await confirmation.confirm(code));

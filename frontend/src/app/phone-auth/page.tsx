@@ -3,11 +3,14 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import type { CountryCode } from "libphonenumber-js";
 
 import { authStore } from "@/application/auth/auth-store";
 import { identityClient } from "@/infrastructure/identity/identity-client";
 import { startPhoneVerification } from "@/infrastructure/identity/firebase-browser";
-import { authErrorMessage, normalizeTurkishPhone } from "@/infrastructure/identity/auth-feedback";
+import { authErrorMessage } from "@/infrastructure/identity/auth-feedback";
+import { formatPhoneInput, normalizePhoneNumber } from "@/infrastructure/identity/phone-number";
+import { PhoneCountrySelect } from "@/presentation/components/auth/phone-country-select";
 import { AuthLayout } from "@/presentation/components/layout/auth-layout";
 import { Button } from "@/presentation/components/ui/button";
 import { FormField } from "@/presentation/components/ui/form-field";
@@ -20,7 +23,8 @@ interface PhoneConfirmation {
 
 export default function PhoneAuthPage() {
   const router = useRouter();
-  const [phoneNumber, setPhoneNumber] = React.useState("+90");
+  const [country, setCountry] = React.useState<CountryCode>("TR");
+  const [phoneNumber, setPhoneNumber] = React.useState("");
   const [code, setCode] = React.useState("");
   const [confirmation, setConfirmation] = React.useState<PhoneConfirmation | null>(null);
   const [busy, setBusy] = React.useState(false);
@@ -32,16 +36,16 @@ export default function PhoneAuthPage() {
   const requestCode = async (event: React.FormEvent) => {
     event.preventDefault();
     if (inFlight.current) return;
-    const normalized = normalizeTurkishPhone(phoneNumber);
+    const normalized = normalizePhoneNumber(phoneNumber, country);
     if (!normalized) {
-      setFeedback("Geçerli bir Türkiye cep telefonu numarası girin. Örnek: 05xx xxx xx xx.");
+      setFeedback("Seçtiğiniz ülke için geçerli, SMS alabilen bir cep telefonu numarası girin.");
       return;
     }
     inFlight.current = true;
     setBusy(true);
     setFeedback("Güvenlik doğrulaması yapılıyor, SMS kodu isteniyor...");
     try {
-      const next = await startPhoneVerification(normalized, "diewish-phone-recaptcha");
+      const next = await startPhoneVerification(normalized, "diewish-phone-request");
       setPhoneNumber(normalized);
       setConfirmation(next);
       setFeedback("Doğrulama kodu gönderildi. SMS ile gelen altı haneli kodu girin.");
@@ -81,10 +85,20 @@ export default function PhoneAuthPage() {
 
   return (
     <AuthLayout title="Telefon ile devam et" subtitle="Numaranızı SMS doğrulamasıyla güvenli biçimde onaylayın">
-      <div id="diewish-phone-recaptcha" />
       <p role="status" aria-live="polite" className="mb-4 text-sm">{feedback}</p>
       {!confirmation ? (
         <form onSubmit={requestCode} className="space-y-4">
+          <FormField id="phoneCountry" label="Ülke veya bölge">
+            <PhoneCountrySelect
+              value={country}
+              onChange={(nextCountry) => {
+                setCountry(nextCountry);
+                setPhoneNumber("");
+                setFeedback("");
+              }}
+              disabled={busy}
+            />
+          </FormField>
           <FormField id="phoneNumber" label="Telefon numarası">
             <Input
               id="phoneNumber"
@@ -92,15 +106,15 @@ export default function PhoneAuthPage() {
               inputMode="tel"
               autoComplete="tel"
               value={phoneNumber}
-              onChange={(event) => setPhoneNumber(event.target.value)}
-              placeholder="05xx xxx xx xx"
+              onChange={(event) => setPhoneNumber(formatPhoneInput(event.target.value, country))}
+              placeholder={country === "TR" ? "05xx xxx xx xx" : "Telefon numaranız"}
               disabled={busy}
             />
           </FormField>
           <p className="text-xs text-muted-foreground">
-            Türkiye cep telefonu numaranızı 05xx xxx xx xx veya +905xx xxx xx xx biçiminde yazın. Yeni numaralar doğrulama sonrası hesap oluşturur.
+            Türkiye varsayılan ülkedir. Farklı bir ülkedeyseniz yukarıdan ülkenizi seçin. Yeni numaralar yalnız SMS doğrulamasından sonra hesap oluşturur.
           </p>
-          <Button type="submit" className="w-full" isLoading={busy}>
+          <Button id="diewish-phone-request" type="submit" className="w-full" isLoading={busy}>
             {busy ? "SMS kodu isteniyor..." : "SMS kodu gönder"}
           </Button>
         </form>

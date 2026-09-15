@@ -140,6 +140,8 @@ if [[ "$config_code" != "200" ]]; then
 fi
 
 existing_domains="$(jq -c '.authorizedDomains // []' "$config_file")"
+recaptcha_phone_enforcement="$(jq -r '.recaptchaConfig.phoneEnforcementState // "OFF"' "$config_file")"
+recaptcha_sms_bot_score="$(jq -r '.recaptchaConfig.useSmsBotScore // false' "$config_file")"
 rm -f "$config_file"
 authorized_domains="$(jq -cn \
   --argjson current "$existing_domains" \
@@ -226,3 +228,4 @@ fi
 } >> "$GITHUB_ENV"
 
 echo "Staging Authentication contract verified: Google enabled, phone enabled, anonymous disabled, Cloud Run and custom staging frontend domains authorized, SMS allowlist enforced."
+echo "Staging phone reCAPTCHA diagnostic: enforcement=${recaptcha_phone_enforcement}, smsBotScore=${recaptcha_sms_bot_score}."

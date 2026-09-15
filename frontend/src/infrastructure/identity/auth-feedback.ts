@@ -7,7 +7,7 @@ const messages: Record<string, string> = {
   "auth/invalid-api-key": "Giriş hizmeti yapılandırılamadı. Lütfen destek ekibine bildirin.",
   "auth/invalid-credential": "Kimlik doğrulanamadı. Lütfen giriş işlemini yeniden başlatın.",
   "auth/network-request-failed": "Giriş hizmetine ulaşılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.",
-  "auth/invalid-phone-number": "Geçerli bir Türkiye cep telefonu numarası girin. Örnek: 05xx xxx xx xx.",
+  "auth/invalid-phone-number": "Seçtiğiniz ülke için geçerli, SMS alabilen bir cep telefonu numarası girin.",
   "auth/invalid-verification-code": "SMS kodu hatalı. Altı haneli kodu kontrol edin.",
   "auth/code-expired": "SMS kodunun süresi doldu. Yeni bir kod isteyin.",
   "auth/session-expired": "Doğrulama süresi doldu. Yeni bir SMS kodu isteyin.",
@@ -34,13 +34,4 @@ export function authErrorMessage(error: unknown): string {
   // keeping phone numbers, tokens and upstream error messages out of logs.
   console.warn(`[identity] authentication failed code=${code}`);
   return messages[code] ?? "Giriş işlemi tamamlanamadı. Lütfen tekrar deneyin.";
-}
-
-export function normalizeTurkishPhone(input: string): string | null {
-  const value = input.trim().replace(/[\s().-]/g, "");
-  if (/^05\d{9}$/.test(value)) return `+90${value.slice(1)}`;
-  if (/^5\d{9}$/.test(value)) return `+90${value}`;
-  if (/^905\d{9}$/.test(value)) return `+${value}`;
-  if (/^00905\d{9}$/.test(value)) return `+${value.slice(2)}`;
-  return /^\+905\d{9}$/.test(value) ? value : null;
 }

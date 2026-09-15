@@ -11,18 +11,38 @@ function load(file, globals = {}) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
   }).outputText;
   const exports = {};
-  vm.runInNewContext(code, { exports, console, ...globals });
+  vm.runInNewContext(code, { exports, console, require, ...globals });
   return exports;
 }
 
-test('TR mobile formats normalize without accepting malformed or foreign numbers', () => {
-  const { normalizeTurkishPhone } = load('auth-feedback.ts');
+test('TR is the default-compatible country and mobile formats normalize to E.164', () => {
+  const { normalizePhoneNumber } = load('phone-number.ts');
   for (const value of ['0555 111 22 33', '5551112233', '90 (555) 111-22-33', '+90 555 111 22 33', '00905551112233']) {
-    assert.equal(normalizeTurkishPhone(value), '+905551112233');
+    assert.equal(normalizePhoneNumber(value, 'TR'), '+905551112233');
   }
-  for (const value of ['', '+90', '0555111223', '055511122334', '+441234567890', '02121112233', 'abc05551112233', '++905551112233']) {
-    assert.equal(normalizeTurkishPhone(value), null);
+  for (const value of ['', '+90', '0555111223', '055511122334', '02121112233', 'abc05551112233', '++905551112233']) {
+    assert.equal(normalizePhoneNumber(value, 'TR'), null);
   }
+});
+
+test('international mobile numbers use the selected country without handwritten rules', () => {
+  const { getPhoneCountries, normalizePhoneNumber } = load('phone-number.ts');
+  const countries = getPhoneCountries('tr');
+  const turkey = countries.find(country => country.code === 'TR');
+  assert.equal(turkey.callingCode, '+90');
+  assert.match(turkey.name, /Türkiye/);
+  assert.ok(countries.length > 200);
+
+  for (const [country, local, expected] of [
+    ['US', '(202) 555-0123', '+12025550123'],
+    ['GB', '07400 123456', '+447400123456'],
+    ['DE', '01512 3456789', '+4915123456789'],
+    ['FR', '06 12 34 56 78', '+33612345678'],
+    ['AZ', '050 123 45 67', '+994501234567'],
+  ]) {
+    assert.equal(normalizePhoneNumber(local, country), expected);
+  }
+  assert.equal(normalizePhoneNumber('+44 7400 123456', 'TR'), '+447400123456');
 });
 
 test('Firebase failures have safe Turkish feedback and code-only diagnostics', () => {
@@ -39,10 +59,12 @@ test('Firebase failures have safe Turkish feedback and code-only diagnostics', (
 });
 
 function harness(responses, { scriptFailure = false, phoneFailure = false, clearFailure = false } = {}) {
-  const state = { requests: 0, initialized: [], cleared: 0, phoneCalls: 0, scriptAttempts: 0 };
+  const state = { requests: 0, initialized: [], cleared: 0, phoneCalls: 0, scriptAttempts: 0, authLanguage: null, scriptSources: [] };
   const scripts = new Map();
   const credential = { user: { getIdToken: async () => 'test-id-token' } };
   const auth = () => ({
+    get languageCode() { return state.authLanguage; },
+    set languageCode(value) { state.authLanguage = value; },
     signInWithPopup: async () => credential,
     signInWithPhoneNumber: async () => {
       state.phoneCalls++;
@@ -77,6 +99,7 @@ function harness(responses, { scriptFailure = false, phoneFailure = false, clear
       createElement: () => ({ dataset: {}, remove() { scripts.delete(this.id); } }),
       head: { appendChild: script => {
         scripts.set(script.id, script);
+        state.scriptSources.push(script.src);
         queueMicrotask(() => {
           state.scriptAttempts++;
           if (scriptFailure && state.scriptAttempts === 1) script.onerror();
@@ -98,6 +121,7 @@ test('runtime settings override stale build values and concurrent callers share 
   assert.equal(h.state.requests, 1);
   assert.equal(h.state.initialized.length, 1);
   assert.equal(h.state.initialized[0].projectId, 'runtime-project');
+  assert.ok(h.state.scriptSources.every(source => source.includes('/firebasejs/12.19.0/')));
 });
 
 test('failed or disabled runtime config never falls back to another project and can retry', async () => {
@@ -122,6 +146,7 @@ test('phone failure cleans up reCAPTCHA and confirmed code returns an upstream t
   assert.equal(failed.state.cleared, 1);
   const h = harness([configured]);
   const confirmation = await h.startPhoneVerification('+905551112233', 'recaptcha');
+  assert.equal(h.state.authLanguage, 'tr');
   assert.equal(await confirmation.confirm('123456'), 'test-id-token');
   confirmation.clear();
   assert.equal(h.state.cleared, 1);
