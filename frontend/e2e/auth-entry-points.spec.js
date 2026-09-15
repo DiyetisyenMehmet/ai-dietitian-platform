@@ -15,6 +15,12 @@ test("login identity entry points are branded and phone navigation is actionable
 
   await expect(page).toHaveURL(/\/phone-auth$/);
   await expect(page.getByRole("heading", { name: "Telefon ile devam et" })).toBeVisible();
-  await expect(page.getByLabel("Telefon numarası")).toHaveValue("+90");
+  await expect(page.getByRole("button", { name: /Seçili ülke Türkiye, \+90/ })).toBeVisible();
+  await expect(page.getByLabel("Telefon numarası")).toHaveValue("");
   await expect(page.getByRole("button", { name: "SMS kodu gönder" })).toBeVisible();
+
+  await page.getByRole("button", { name: /Seçili ülke Türkiye, \+90/ }).click();
+  await page.getByLabel("Ülke ara").fill("Almanya");
+  await page.getByRole("option", { name: /Almanya.*\+49/ }).click();
+  await expect(page.getByRole("button", { name: /Seçili ülke Almanya, \+49/ })).toBeVisible();
 });
