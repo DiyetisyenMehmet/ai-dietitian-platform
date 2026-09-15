@@ -8,7 +8,8 @@ interface FeatureLink {
   icon: LucideIcon;
   iconWrap: string;
   iconColor: string;
-  preview: string;
+  imageUrl: string;
+  imageAlt: string;
 }
 
 const FEATURES: FeatureLink[] = [
@@ -19,7 +20,8 @@ const FEATURES: FeatureLink[] = [
     icon: ScanLine,
     iconWrap: "bg-emerald-500/10",
     iconColor: "text-emerald-500",
-    preview: "from-emerald-500/5 to-teal-500/15",
+    imageUrl: "https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=480&q=82",
+    imageAlt: "Renkli ve dengeli bir salata tabağı",
   },
   {
     title: "Barkod Tara",
@@ -28,7 +30,8 @@ const FEATURES: FeatureLink[] = [
     icon: ScanBarcode,
     iconWrap: "bg-slate-500/10",
     iconColor: "text-slate-500 dark:text-slate-300",
-    preview: "from-slate-500/5 to-slate-500/15",
+    imageUrl: "https://images.unsplash.com/photo-1607082349566-187342175e2f?auto=format&fit=crop&w=480&q=82",
+    imageAlt: "Paketli market ürünleri",
   },
   {
     title: "Kan Tahlili Analizi",
@@ -37,7 +40,8 @@ const FEATURES: FeatureLink[] = [
     icon: FlaskConical,
     iconWrap: "bg-rose-500/10",
     iconColor: "text-rose-500",
-    preview: "from-rose-500/5 to-orange-500/10",
+    imageUrl: "https://images.unsplash.com/photo-1579154204601-01588f351e67?auto=format&fit=crop&w=480&q=82",
+    imageAlt: "Laboratuvar ortamında kan örneği analizi",
   },
   {
     title: "İlerlememi Gör",
@@ -46,7 +50,8 @@ const FEATURES: FeatureLink[] = [
     icon: TrendingUp,
     iconWrap: "bg-teal-500/10",
     iconColor: "text-teal-500",
-    preview: "from-teal-500/5 to-emerald-500/15",
+    imageUrl: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=480&q=82",
+    imageAlt: "İlerleme ve analiz grafikleri",
   },
 ];
 
@@ -73,8 +78,16 @@ export function DashboardFeatureLinks() {
               </p>
             </div>
 
-            <span className={`hidden h-20 w-24 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br sm:flex ${feature.preview}`} aria-hidden="true">
-              <Icon className={`size-10 opacity-70 ${feature.iconColor}`} />
+            <span className="relative h-20 w-[88px] shrink-0 overflow-hidden rounded-2xl border border-border/50 bg-muted sm:w-28">
+              <img
+                src={feature.imageUrl}
+                alt={feature.imageAlt}
+                loading="lazy"
+                decoding="async"
+                referrerPolicy="no-referrer"
+                className="size-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
+              />
+              <span className="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent" aria-hidden="true" />
             </span>
             <ChevronRight className="size-5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary" aria-hidden="true" />
           </Link>
