@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 
 export default function DashboardPage() {
   return (
-    <AppShell title="Ana Sayfa">
+    <AppShell title="Ana Sayfa" hideHeader>
       <DashboardView />
     </AppShell>
   );

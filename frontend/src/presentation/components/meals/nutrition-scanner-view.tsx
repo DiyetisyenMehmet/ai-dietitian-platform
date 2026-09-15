@@ -10,6 +10,11 @@ import { FoodScannerView } from "@/presentation/components/meals/food-scanner-vi
 export function NutritionScannerView() {
   const [mode, setMode] = React.useState<"photo" | "barcode">("photo");
 
+  React.useEffect(() => {
+    const requestedMode = new URLSearchParams(window.location.search).get("mode");
+    if (requestedMode === "barcode") setMode("barcode");
+  }, []);
+
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-2 rounded-2xl bg-muted/50 p-1" role="tablist" aria-label="Besin tarama modu">
