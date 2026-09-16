@@ -25,8 +25,15 @@ const optionalWeightLoggedAt = z
   })
   .optional();
 
+/** Canonical V1 weight contract shared by tracking and profile/onboarding writes. */
+export const weightKgSchema = z
+  .number()
+  .min(25, "Weight seems too low")
+  .max(400, "Weight seems too high")
+  .multipleOf(0.1, "Weight must use 0.1 kg precision");
+
 export const createWeightLogSchema = z.object({
-  weightKg: z.number().positive().max(500),
+  weightKg: weightKgSchema,
   note: z.string().trim().max(280).optional(),
   loggedAt: optionalWeightLoggedAt,
 });

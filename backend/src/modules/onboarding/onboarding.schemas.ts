@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { weightKgSchema } from "../tracking/tracking.schemas";
+
 /**
  * Zod schemas and derived DTO types for the onboarding module. Single source of
  * truth for the mandatory profile payload; the `validate` middleware parses
@@ -80,16 +82,8 @@ export const onboardingSchema = z.object({
   dateOfBirth: dateOfBirthSchema,
   gender: z.enum(GENDERS),
   heightCm: z.number().positive().min(80, "Height seems too low").max(260, "Height seems too high"),
-  currentWeightKg: z
-    .number()
-    .positive()
-    .min(25, "Weight seems too low")
-    .max(400, "Weight seems too high"),
-  targetWeightKg: z
-    .number()
-    .positive()
-    .min(25, "Target weight seems too low")
-    .max(400, "Target weight seems too high"),
+  currentWeightKg: weightKgSchema,
+  targetWeightKg: weightKgSchema,
   activityLevel: z.enum(ACTIVITY_LEVELS),
   healthConditions: stringList,
   allergies: stringList,

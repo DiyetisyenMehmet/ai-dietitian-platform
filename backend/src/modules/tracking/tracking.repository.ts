@@ -1,6 +1,11 @@
 import type { MealLog, WaterLog, WeightLog } from "@prisma/client";
 
 import { prisma } from "../../lib/prisma";
+import {
+  createWeightLogAndSyncCurrent,
+  lockUserWeightMutation,
+  weightLogOrderBy,
+} from "./weight-persistence";
 
 /**
  * Data access for tracking logs. All reads/writes/deletes are owner-scoped by
@@ -9,8 +14,7 @@ import { prisma } from "../../lib/prisma";
 export const trackingRepository = {
   /**
    * Persists a weight measurement and synchronizes the profile's current weight
-   * in one transaction. This keeps the time-series source and the scalar profile
-   * consumed by AI/nutrition calculations from drifting apart.
+   * from the chronologically latest WeightLog in the same transaction.
    */
   createWeightLog(data: {
     userId: string;
@@ -19,19 +23,15 @@ export const trackingRepository = {
     loggedAt?: Date;
   }): Promise<WeightLog> {
     return prisma.$transaction(async (tx) => {
-      const log = await tx.weightLog.create({ data });
-      await tx.userProfile.updateMany({
-        where: { userId: data.userId },
-        data: { currentWeightKg: data.weightKg },
-      });
-      return log;
+      await lockUserWeightMutation(tx, data.userId);
+      return createWeightLogAndSyncCurrent(tx, data);
     });
   },
 
   listWeightLogs(userId: string, since?: Date): Promise<WeightLog[]> {
     return prisma.weightLog.findMany({
       where: { userId, ...(since ? { loggedAt: { gte: since } } : {}) },
-      orderBy: { loggedAt: "desc" },
+      orderBy: weightLogOrderBy(),
     });
   },
 
@@ -44,7 +44,7 @@ export const trackingRepository = {
       select: {
         onboardingCompleted: true,
         weightLogs: {
-          orderBy: { loggedAt: "desc" },
+          orderBy: weightLogOrderBy(),
           take: 1,
           select: { loggedAt: true },
         },

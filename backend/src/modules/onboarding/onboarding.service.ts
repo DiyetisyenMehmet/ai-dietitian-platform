@@ -1,6 +1,7 @@
 import type { UserProfile } from "@prisma/client";
 
 import { logger } from "../../lib/logger";
+import { nutritionAdaptationService } from "../ai-coach/nutrition-adaptation.service";
 import { onboardingRepository } from "./onboarding.repository";
 import type { OnboardingInput } from "./onboarding.schemas";
 
@@ -72,11 +73,21 @@ export const onboardingService = {
   ): Promise<{ onboardingCompleted: boolean; fullName: string; profile: PublicProfile }> {
     const { fullName, dateOfBirth, ...rest } = input;
 
-    const { user, profile } = await onboardingRepository.completeOnboarding(userId, fullName, {
-      ...rest,
-      // Store as a midnight-UTC calendar date; the column is `@db.Date`.
-      dateOfBirth: new Date(`${dateOfBirth}T00:00:00.000Z`),
-    });
+    const { user, profile, weightChanged } = await onboardingRepository.completeOnboarding(
+      userId,
+      fullName,
+      {
+        ...rest,
+        // Store as a midnight-UTC calendar date; the column is `@db.Date`.
+        dateOfBirth: new Date(`${dateOfBirth}T00:00:00.000Z`),
+      },
+    );
+
+    if (weightChanged) {
+      void nutritionAdaptationService.analyzeAndAdapt(userId).catch((error: unknown) => {
+        logger.warn({ err: error, userId }, "Nutrition adaptation after profile weight update failed");
+      });
+    }
 
     logger.info({ userId }, "User completed onboarding");
 
