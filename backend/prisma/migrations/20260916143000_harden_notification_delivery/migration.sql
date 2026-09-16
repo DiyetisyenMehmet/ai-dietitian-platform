@@ -7,7 +7,7 @@ CREATE TABLE "notification_delivery_state" (
     "nextAttemptAt" TIMESTAMP(3),
     "failedAt" TIMESTAMP(3),
     "lastError" VARCHAR(120),
-    "deliveredDeviceKeys" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    "deliveredDeviceKeys" JSONB NOT NULL DEFAULT '[]'::jsonb,
     "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "notification_delivery_state_pkey" PRIMARY KEY ("notificationId"),
