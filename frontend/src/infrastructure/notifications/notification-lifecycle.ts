@@ -11,6 +11,55 @@ const SAFE_NOTIFICATION_TARGETS = new Set([
   "/profile/notifications",
 ]);
 
+export interface WellnessPreferenceLike {
+  waterReminders: boolean;
+  activityReminders: boolean;
+  sleepReminders: boolean;
+  waterReminderTime: string;
+  activityReminderTime: string;
+  sleepReminderTime: string;
+}
+
+export interface WellnessReminderEntry {
+  id: string;
+  at: number;
+  type: "water" | "activity" | "sleep";
+}
+
+function dateAt(base: Date, time: string): Date {
+  const [hour, minute] = time.split(":").map(Number);
+  const result = new Date(base);
+  result.setHours(hour, minute, 0, 0);
+  return result;
+}
+
+/** Builds a 30-day local schedule. Weekly summaries are intentionally remote-only. */
+export function buildWellnessReminderSchedule(
+  preferences: WellnessPreferenceLike,
+  now: Date = new Date(),
+): WellnessReminderEntry[] {
+  const schedule: WellnessReminderEntry[] = [];
+  for (let day = 0; day < 30; day += 1) {
+    const date = new Date(now);
+    date.setDate(now.getDate() + day);
+    const add = (
+      enabled: boolean,
+      time: string,
+      type: WellnessReminderEntry["type"],
+    ) => {
+      if (!enabled) return;
+      const at = dateAt(date, time);
+      if (at.getTime() > now.getTime()) {
+        schedule.push({ id: `${type}-${at.toISOString()}`, at: at.getTime(), type });
+      }
+    };
+    add(preferences.waterReminders, preferences.waterReminderTime, "water");
+    add(preferences.activityReminders, preferences.activityReminderTime, "activity");
+    add(preferences.sleepReminders, preferences.sleepReminderTime, "sleep");
+  }
+  return schedule;
+}
+
 /** Stable idempotency key: any token rotation or account switch changes it. */
 export function notificationRegistrationKey(userId: string, token: string): string {
   const cleanUserId = userId.trim();
