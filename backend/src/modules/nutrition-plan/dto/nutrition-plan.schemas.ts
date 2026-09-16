@@ -108,6 +108,26 @@ export const NUTRITION_PLAN_DEVIATION_TYPES = [
   "PORTION_CHANGED",
 ] as const;
 
+const actualNutritionSchema = z
+  .object({
+    calories: z.number().min(0).max(20_000).optional(),
+    proteinG: z.number().min(0).max(2_000).optional(),
+    carbsG: z.number().min(0).max(2_000).optional(),
+    fatG: z.number().min(0).max(2_000).optional(),
+  })
+  .strict()
+  .refine((value) => Object.values(value).some((entry) => entry !== undefined), {
+    message: "At least one actual nutrition value must be provided.",
+  });
+
+function hasPositivePortion(value: string | undefined): boolean {
+  if (!value) return false;
+  const match = value.trim().match(/^(\d+(?:[.,]\d+)?)(?:\s|$)/);
+  if (!match) return false;
+  const amount = Number(match[1].replace(",", "."));
+  return Number.isFinite(amount) && amount > 0;
+}
+
 /**
  * Body for recording a user-reported "Kaçamak". Planned item names/portions are
  * deliberately not accepted from the client; the service derives them from the
@@ -120,8 +140,10 @@ export const createDeviationSchema = z
     foodIndex: z.number().int().min(0).max(50).optional(),
     scope: z.enum(NUTRITION_PLAN_DEVIATION_SCOPES),
     type: z.enum(NUTRITION_PLAN_DEVIATION_TYPES),
+    localDate: planStartDateSchema,
     actualItemName: z.string().trim().min(1).max(120).optional(),
     actualPortion: z.string().trim().min(1).max(80).optional(),
+    actualNutrition: actualNutritionSchema.optional(),
     note: z.string().trim().max(240).optional(),
   })
   .strict()
@@ -166,21 +188,21 @@ export const createDeviationSchema = z
           message: "Portion changes must target a planned food.",
         });
       }
-      if (!value.actualPortion) {
+      if (!hasPositivePortion(value.actualPortion)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["actualPortion"],
-          message: "The actual portion is required for a portion change.",
+          message: "The actual portion must start with a positive numeric amount.",
         });
       }
     }
 
     if (value.type === "REPLACED") {
-      if (value.scope === "DAY") {
+      if (value.scope !== "FOOD") {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["scope"],
-          message: "A replacement must target a planned food or meal.",
+          message: "A replacement must target one planned food.",
         });
       }
       if (!value.actualItemName) {
@@ -197,6 +219,14 @@ export const createDeviationSchema = z
         code: z.ZodIssueCode.custom,
         path: ["actualItemName"],
         message: "The extra item is required.",
+      });
+    }
+
+    if (value.type === "SKIPPED" && value.actualNutrition) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["actualNutrition"],
+        message: "Skipped items cannot include actual nutrition values.",
       });
     }
   });
