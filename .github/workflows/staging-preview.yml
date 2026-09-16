@@ -258,7 +258,7 @@ jobs:
             fi
           done
 
-      - name: Resolve staging Android Firebase config
+      - name: Resolve optional staging Android Firebase config
         shell: bash
         run: |
           set -euo pipefail
@@ -277,8 +277,15 @@ jobs:
           android_app_name="$(jq -r --arg package "$package_name" '(.apps // [])[] | select(.packageName == $package) | .name' "$apps_file" | head -n 1)"
           rm -f "$apps_file"
           if [[ -z "$android_app_name" ]]; then
-            echo "Staging Firebase Android app ${package_name} is missing; refusing to build an unbound FCM APK." >&2
-            exit 1
+            echo "Staging Firebase Android app ${package_name} is not provisioned; building the staging preview APK with push disabled."
+            {
+              echo "DIEWISH_FIREBASE_PROJECT_ID="
+              echo "DIEWISH_FIREBASE_APP_ID="
+              echo "DIEWISH_FIREBASE_API_KEY="
+              echo "DIEWISH_FIREBASE_SENDER_ID="
+              echo "DIEWISH_ANDROID_FCM_STATUS=disabled"
+            } >> "$GITHUB_ENV"
+            exit 0
           fi
 
           config_file="$(mktemp)"
@@ -328,6 +335,7 @@ jobs:
             echo "DIEWISH_FIREBASE_APP_ID=${firebase_app_id}"
             echo "DIEWISH_FIREBASE_API_KEY=${firebase_api_key}"
             echo "DIEWISH_FIREBASE_SENDER_ID=${firebase_sender_id}"
+            echo "DIEWISH_ANDROID_FCM_STATUS=verified"
           } >> "$GITHUB_ENV"
 
       - name: Set up JDK 17 for staging APK
@@ -353,20 +361,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for value in \
-            "$DIEWISH_FIREBASE_PROJECT_ID" \
-            "$DIEWISH_FIREBASE_APP_ID" \
-            "$DIEWISH_FIREBASE_API_KEY" \
-            "$DIEWISH_FIREBASE_SENDER_ID"; do
-            test -n "$value"
-          done
+          test "$CUSTOM_FRONTEND_URL" = "https://staging.diewish.com"
+          test "${DIEWISH_ANDROID_FCM_STATUS:-disabled}" = "disabled" || test "${DIEWISH_ANDROID_FCM_STATUS}" = "verified"
 
           gradle --no-daemon -p android :app:testDebugUnitTest :app:assembleDebug \
             -PDIEWISH_WEB_BASE_URL="${CUSTOM_FRONTEND_URL}" \
-            -PDIEWISH_FIREBASE_PROJECT_ID="${DIEWISH_FIREBASE_PROJECT_ID}" \
-            -PDIEWISH_FIREBASE_APP_ID="${DIEWISH_FIREBASE_APP_ID}" \
-            -PDIEWISH_FIREBASE_API_KEY="${DIEWISH_FIREBASE_API_KEY}" \
-            -PDIEWISH_FIREBASE_SENDER_ID="${DIEWISH_FIREBASE_SENDER_ID}"
+            -PDIEWISH_FIREBASE_PROJECT_ID="${DIEWISH_FIREBASE_PROJECT_ID:-}" \
+            -PDIEWISH_FIREBASE_APP_ID="${DIEWISH_FIREBASE_APP_ID:-}" \
+            -PDIEWISH_FIREBASE_API_KEY="${DIEWISH_FIREBASE_API_KEY:-}" \
+            -PDIEWISH_FIREBASE_SENDER_ID="${DIEWISH_FIREBASE_SENDER_ID:-}"
 
           short_sha="${GITHUB_SHA::7}"
           mkdir -p android/app/build/staging-apk
@@ -382,7 +385,8 @@ jobs:
           backend=${BACKEND_URL}
           api_base=/api
           auth=google+phone
-          fcm_project=${DIEWISH_FIREBASE_PROJECT_ID}
+          fcm_status=${DIEWISH_ANDROID_FCM_STATUS:-disabled}
+          fcm_project=${DIEWISH_FIREBASE_PROJECT_ID:-}
           sms_regions=${DIEWISH_STAGING_SMS_REGIONS}
           database_project=shiny-hill-56015697
           EOF
@@ -408,7 +412,7 @@ jobs:
             echo "- Backend: ${BACKEND_URL}"
             echo "- Browser API: same-origin ${FRONTEND_URL}/api"
             echo "- Authentication: Google + phone enabled; anonymous disabled; Cloud Run and custom staging origins authorized"
-            echo "- Android FCM: staging Firebase Android client config verified"
+            echo "- Android FCM: ${DIEWISH_ANDROID_FCM_STATUS:-disabled} (separate notification infrastructure; not required for Body/Weight preview APK)"
             echo "- SMS regions: ${DIEWISH_STAGING_SMS_REGIONS}"
             echo "- Database: isolated Diewish Staging Neon project"
             echo "- Migration: direct Neon endpoint via Cloud Build"
