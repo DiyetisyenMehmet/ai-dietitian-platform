@@ -87,7 +87,7 @@ function ReferenceFeatureCard({ feature }: { feature: FeatureLink }) {
       style={{ aspectRatio }}
     >
       <span
-        className="absolute inset-y-0 right-[4.5%] w-[53%] bg-cover bg-center bg-no-repeat"
+        className="absolute inset-y-0 right-0 w-[51.5%] bg-cover bg-center bg-no-repeat"
         style={{ backgroundImage: `url(${imageUrl})` }}
         aria-hidden="true"
       />
@@ -129,7 +129,7 @@ function ReferenceFeatureCard({ feature }: { feature: FeatureLink }) {
       </span>
 
       <ChevronRight
-        className="absolute right-[1.5%] top-1/2 z-20 size-[18px] -translate-y-1/2 text-slate-700 transition-transform group-hover:translate-x-0.5 dark:text-slate-300"
+        className="absolute right-[2.2%] top-1/2 z-20 size-[18px] -translate-y-1/2 text-slate-700 drop-shadow-[0_1px_2px_rgba(255,255,255,0.9)] transition-transform group-hover:translate-x-0.5 dark:text-slate-200"
         aria-hidden="true"
       />
     </Link>
