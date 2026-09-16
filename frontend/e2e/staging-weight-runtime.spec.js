@@ -52,6 +52,12 @@ async function expectVisibleWeight(page, kg) {
   await expect(page.getByText(new RegExp(`${escaped}\\s*kg`, "i")).first()).toBeVisible();
 }
 
+async function expectProfileWeight(page, label, kg) {
+  const card = page.getByText(label, { exact: true }).locator("..");
+  await expect(card).toBeVisible();
+  await expect(card).toContainText(new RegExp(String(kg).replace(".", "[,.]")));
+}
+
 test("staging Body & Weight acceptance: chronology, CRUD, isolation, graph and shared current weight", async ({
   page,
   request,
@@ -205,10 +211,8 @@ test("staging Body & Weight acceptance: chronology, CRUD, isolation, graph and s
   await expect(graph.locator("desc")).toContainText(/son ölçüm 79[,.]7 kg/i);
 
   await page.goto(`${WEB_BASE_URL}/profile`);
-  await expect(page.getByText("Güncel Kilo", { exact: true })).toBeVisible();
-  await expectVisibleWeight(page, 79.7);
-  await expect(page.getByText("Hedef Kilo", { exact: true })).toBeVisible();
-  await expectVisibleWeight(page, 64.5);
+  await expectProfileWeight(page, "Güncel kg", 79.7);
+  await expectProfileWeight(page, "Hedef kg", 64.5);
 
   await page.goto(`${WEB_BASE_URL}/dashboard`);
   await expectVisibleWeight(page, 79.7);
@@ -277,7 +281,7 @@ test("staging Body & Weight acceptance: chronology, CRUD, isolation, graph and s
   await expect(page.getByRole("img", { name: "Kilo değişim grafiği" })).toBeVisible();
 
   await page.goto(`${WEB_BASE_URL}/profile`);
-  await expectVisibleWeight(page, 79.6);
+  await expectProfileWeight(page, "Güncel kg", 79.6);
   await page.goto(`${WEB_BASE_URL}/dashboard`);
   await expectVisibleWeight(page, 79.6);
 });
