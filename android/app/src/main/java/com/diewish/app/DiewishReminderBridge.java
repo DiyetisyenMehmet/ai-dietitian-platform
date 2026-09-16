@@ -50,6 +50,26 @@ public final class DiewishReminderBridge {
     }
 
     @JavascriptInterface
+    public void deletePushToken() {
+        if (!trustedPage.getAsBoolean()) return;
+        DiewishPushTokenStore.clear(activity.getApplicationContext());
+        if (FirebaseApp.getApps(activity).isEmpty()) return;
+        FirebaseMessaging.getInstance().deleteToken();
+    }
+
+    @JavascriptInterface
+    public String pendingNotificationPath() {
+        if (!trustedPage.getAsBoolean()) return "";
+        return DiewishNotificationTargetStore.get(activity.getApplicationContext());
+    }
+
+    @JavascriptInterface
+    public void clearPendingNotificationPath() {
+        if (!trustedPage.getAsBoolean()) return;
+        DiewishNotificationTargetStore.clear(activity.getApplicationContext());
+    }
+
+    @JavascriptInterface
     public String permissionStatus() {
         if (!trustedPage.getAsBoolean()) return "unavailable";
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return "granted";
