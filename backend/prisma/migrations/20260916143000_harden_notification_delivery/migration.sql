@@ -8,6 +8,8 @@ CREATE TABLE "notification_delivery_state" (
     "failedAt" TIMESTAMP(3),
     "lastError" VARCHAR(120),
     "deliveredDeviceKeys" JSONB NOT NULL DEFAULT '[]'::jsonb,
+    "claimId" VARCHAR(64),
+    "claimedUntil" TIMESTAMP(3),
     "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "notification_delivery_state_pkey" PRIMARY KEY ("notificationId"),
@@ -17,7 +19,7 @@ CREATE TABLE "notification_delivery_state" (
 );
 
 CREATE INDEX "notification_delivery_state_retry_idx"
-  ON "notification_delivery_state"("failedAt", "nextAttemptAt");
+  ON "notification_delivery_state"("failedAt", "nextAttemptAt", "claimedUntil");
 
 -- Process-local scheduler memory is insufficient on multi-instance Cloud Run.
 -- A unique slot/day claim makes recurring coach jobs single-owner per day.
