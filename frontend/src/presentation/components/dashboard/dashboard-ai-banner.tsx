@@ -41,7 +41,11 @@ export function DashboardAiBanner() {
           height={116}
           unoptimized
           draggable={false}
-          className="pointer-events-none absolute left-[2.2%] top-[3%] h-[92%] w-[14.5%] select-none object-contain"
+          className="pointer-events-none absolute left-[1.6%] top-[3%] h-[92%] w-[16%] select-none object-contain"
+          style={{
+            WebkitMaskImage: "linear-gradient(to right, black 0%, black 82%, transparent 100%)",
+            maskImage: "linear-gradient(to right, black 0%, black 82%, transparent 100%)",
+          }}
         />
 
         <div className="absolute left-[19%] top-[19%] min-w-0 pr-[31%]">
