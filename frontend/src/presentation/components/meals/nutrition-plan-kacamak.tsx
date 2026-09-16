@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { ApiError } from "@/infrastructure/api/http-client";
 import {
   nutritionPlanClient,
+  type ActualNutritionInput,
   type CreateNutritionPlanDeviationInput,
   type NutritionPlanDeviationRecord,
   type NutritionPlanDeviationType,
@@ -17,10 +18,7 @@ import { Input } from "@/presentation/components/ui/input";
 
 const WHOLE_MEAL_VALUE = "__WHOLE_MEAL__";
 
-const OPTION_COPY: Record<
-  NutritionPlanDeviationType,
-  { label: string; help: string }
-> = {
+const OPTION_COPY: Record<NutritionPlanDeviationType, { label: string; help: string }> = {
   SKIPPED: {
     label: "Yemedim",
     help: "Planlanan tek bir besini veya öğünün tamamını tüketmediğini belirtir.",
@@ -50,7 +48,10 @@ function kacamakError(error: unknown): string {
   if (error instanceof ApiError && error.code === "SUBSCRIPTION_REQUIRED") {
     return "Kaçamak özelliği Premium ve Premium Plus kullanıcıları içindir.";
   }
-  return "Kaçamak kaydedilemedi. Lütfen tekrar dene.";
+  if (error instanceof ApiError && error.code === "CONFLICT") {
+    return "Bu öğün veya besin için çelişen bir Kaçamak kaydı var. Önce mevcut kaydı geri al.";
+  }
+  return "Kaçamak kaydedilemedi. Bilgileri kontrol edip tekrar dene.";
 }
 
 function recordText(record: NutritionPlanDeviationRecord): string {
@@ -65,6 +66,19 @@ function recordText(record: NutritionPlanDeviationRecord): string {
     return `${label}: ${record.plannedItemName ?? "besin"} → ${record.actualPortion ?? "farklı porsiyon"}`;
   }
   return `${label}: ${record.plannedItemName ?? "besin"}`;
+}
+
+function positivePortion(value: string): boolean {
+  const match = value.trim().match(/^(\d+(?:[.,]\d+)?)(?:\s|$)/);
+  if (!match) return false;
+  const amount = Number(match[1].replace(",", "."));
+  return Number.isFinite(amount) && amount > 0;
+}
+
+function optionalNumber(value: string): number | undefined {
+  if (!value.trim()) return undefined;
+  const parsed = Number(value.replace(",", "."));
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
 }
 
 export function useNutritionPlanDeviations(planId: string | null) {
@@ -148,6 +162,10 @@ export function NutritionPlanKacamak({
   const [foodIndex, setFoodIndex] = React.useState("");
   const [actualItemName, setActualItemName] = React.useState("");
   const [actualPortion, setActualPortion] = React.useState("");
+  const [calories, setCalories] = React.useState("");
+  const [proteinG, setProteinG] = React.useState("");
+  const [carbsG, setCarbsG] = React.useState("");
+  const [fatG, setFatG] = React.useState("");
   const [note, setNote] = React.useState("");
   const [saving, setSaving] = React.useState(false);
   const [deletingId, setDeletingId] = React.useState<string | null>(null);
@@ -161,15 +179,16 @@ export function NutritionPlanKacamak({
     setFoodIndex("");
     setActualItemName("");
     setActualPortion("");
+    setCalories("");
+    setProteinG("");
+    setCarbsG("");
+    setFatG("");
     setNote("");
   }, []);
 
   const selectType = (type: NutritionPlanDeviationType) => {
+    resetForm();
     setSelectedType(type);
-    setFoodIndex("");
-    setActualItemName("");
-    setActualPortion("");
-    setNote("");
   };
 
   const wholeMealSkipped = selectedType === "SKIPPED" && foodIndex === WHOLE_MEAL_VALUE;
@@ -177,12 +196,13 @@ export function NutritionPlanKacamak({
   const parsedFoodIndex =
     foodIndex === "" || foodIndex === WHOLE_MEAL_VALUE ? undefined : Number(foodIndex);
   const hasPlannedTarget = !needsPlannedFood || wholeMealSkipped || parsedFoodIndex !== undefined;
+  const validPortion = selectedType !== "PORTION_CHANGED" || positivePortion(actualPortion);
   const canSubmit =
     selectedType !== null &&
     hasPlannedTarget &&
+    validPortion &&
     (selectedType !== "REPLACED" || actualItemName.trim().length > 0) &&
-    (selectedType !== "EXTRA" || actualItemName.trim().length > 0) &&
-    (selectedType !== "PORTION_CHANGED" || actualPortion.trim().length > 0);
+    (selectedType !== "EXTRA" || actualItemName.trim().length > 0);
 
   const save = async () => {
     if (!selectedType || !canSubmit || saving) return;
@@ -199,6 +219,18 @@ export function NutritionPlanKacamak({
     if (actualItemName.trim()) input.actualItemName = actualItemName.trim();
     if (actualPortion.trim()) input.actualPortion = actualPortion.trim();
     if (note.trim()) input.note = note.trim();
+
+    if (selectedType !== "SKIPPED") {
+      const actualNutrition: ActualNutritionInput = {
+        calories: optionalNumber(calories),
+        proteinG: optionalNumber(proteinG),
+        carbsG: optionalNumber(carbsG),
+        fatG: optionalNumber(fatG),
+      };
+      if (Object.values(actualNutrition).some((value) => value !== undefined)) {
+        input.actualNutrition = actualNutrition;
+      }
+    }
 
     setSaving(true);
     try {
@@ -253,16 +285,19 @@ export function NutritionPlanKacamak({
           {mealDeviations.map((record) => (
             <div
               key={record.id}
-              className="flex items-center justify-between gap-3 rounded-xl bg-muted/50 px-3 py-2"
+              className="flex items-start justify-between gap-3 rounded-xl bg-muted/50 px-3 py-2"
             >
-              <div className="min-w-0">
-                <p className="truncate text-xs font-medium">{recordText(record)}</p>
-                {record.note && <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{record.note}</p>}
+              <div className="min-w-0 flex-1">
+                <p className="break-words text-xs font-medium">{recordText(record)}</p>
+                {record.note && (
+                  <p className="mt-0.5 break-words text-[11px] text-muted-foreground">{record.note}</p>
+                )}
               </div>
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
+                className="shrink-0"
                 disabled={deletingId === record.id}
                 onClick={() => void remove(record.id)}
               >
@@ -366,7 +401,25 @@ export function NutritionPlanKacamak({
                     placeholder="Örn. 2 dilim, 150 g"
                     onChange={(event) => setActualPortion(event.target.value)}
                   />
+                  {selectedType === "PORTION_CHANGED" && actualPortion && !positivePortion(actualPortion) && (
+                    <span className="mt-1 block text-[11px] text-destructive">Miktar pozitif bir sayı ile başlamalıdır.</span>
+                  )}
                 </label>
+              )}
+
+              {selectedType !== "SKIPPED" && (
+                <div className="rounded-xl border border-border/70 bg-background p-3">
+                  <p className="text-xs font-medium">Gerçek besin değerleri</p>
+                  <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                    Biliyorsan gir. Boş bırakılan değerler uydurulmaz; günlük toplamda yalnız güvenilir değerler kullanılır.
+                  </p>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <Input aria-label="Gerçek kalori" type="number" min="0" inputMode="decimal" placeholder="kcal" value={calories} onChange={(event) => setCalories(event.target.value)} />
+                    <Input aria-label="Gerçek protein" type="number" min="0" inputMode="decimal" placeholder="Protein g" value={proteinG} onChange={(event) => setProteinG(event.target.value)} />
+                    <Input aria-label="Gerçek karbonhidrat" type="number" min="0" inputMode="decimal" placeholder="Karbonhidrat g" value={carbsG} onChange={(event) => setCarbsG(event.target.value)} />
+                    <Input aria-label="Gerçek yağ" type="number" min="0" inputMode="decimal" placeholder="Yağ g" value={fatG} onChange={(event) => setFatG(event.target.value)} />
+                  </div>
+                </div>
               )}
 
               <label className="block text-xs font-medium">
@@ -380,11 +433,11 @@ export function NutritionPlanKacamak({
                 />
               </label>
 
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-[11px] leading-relaxed text-muted-foreground">
-                  Kaçamak kaydı planındaki öğünleri değiştirmez; yalnızca uyum geçmişine eklenir.
+                  Kaçamak kaydı planındaki öğünleri değiştirmez; gerçekleşen tüketim ayrı kaydedilir.
                 </p>
-                <Button type="button" size="sm" disabled={!canSubmit || saving} onClick={() => void save()}>
+                <Button type="button" size="sm" className="shrink-0" disabled={!canSubmit || saving} onClick={() => void save()}>
                   {saving ? "Kaydediliyor" : "Kaydet"}
                 </Button>
               </div>
