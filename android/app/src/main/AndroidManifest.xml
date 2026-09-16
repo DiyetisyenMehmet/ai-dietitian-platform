@@ -36,6 +36,9 @@
         </service>
 
         <receiver
+            android:name=".NotificationTapReceiver"
+            android:exported="false" />
+        <receiver
             android:name=".NutritionReminderReceiver"
             android:exported="false" />
         <receiver
