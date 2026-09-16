@@ -17,7 +17,11 @@ public final class WellnessReminderReceiver extends BroadcastReceiver {
 
     @Override
     public void onReceive(Context context, Intent intent) {
-        show(context, intent.getStringExtra("reminderType"), intent.getStringExtra("reminderId"));
+        show(
+            context,
+            intent == null ? null : intent.getStringExtra("reminderType"),
+            intent == null ? null : intent.getStringExtra("reminderId")
+        );
     }
 
     public static boolean show(Context context, String type, String id) {
@@ -46,11 +50,15 @@ public final class WellnessReminderReceiver extends BroadcastReceiver {
             title = "Diewish bildirimi"; body = "Bildirimlerin başarıyla çalışıyor.";
         }
 
-        Intent openApp = new Intent(context, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        PendingIntent contentIntent = PendingIntent.getActivity(context, 1, openApp, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        int requestCode = id == null ? 73 : id.hashCode();
+        PendingIntent contentIntent = NotificationTapReceiver.pendingIntent(
+            context,
+            requestCode,
+            NotificationRoutes.forWellnessType(type)
+        );
         Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O ? new Notification.Builder(context, CHANNEL_ID) : new Notification.Builder(context);
         Notification notification = builder.setSmallIcon(R.drawable.ic_launcher).setContentTitle(title).setContentText(body).setContentIntent(contentIntent).setAutoCancel(true).build();
-        manager.notify(id == null ? 73 : id.hashCode(), notification);
+        manager.notify(requestCode, notification);
         return true;
     }
 }
