@@ -31,5 +31,6 @@ jobs:
           project_id: ${{ env.PROJECT_ID }}
       # GET requests only. No provider, region, billing, IAM, API, quota or
       # database changes. Unreadable metrics remain UNKNOWN, never zero.
+      # This workflow is safe to re-run when refreshing staging SMS diagnostics.
       - name: Read live staging phone configuration and SMS metrics
         run: python3 scripts/diagnose-staging-auth.py
