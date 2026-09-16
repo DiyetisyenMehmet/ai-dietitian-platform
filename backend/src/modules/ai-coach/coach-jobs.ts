@@ -1,7 +1,10 @@
 import { logger } from "../../lib/logger";
 import { prisma } from "../../lib/prisma";
 import { legalService } from "../legal/legal.service";
-import { notificationService } from "../notifications/notification.service";
+import {
+  nextWeeklySummaryAt,
+  notificationService,
+} from "../notifications/notification.service";
 import { aiMemoryService } from "./ai-memory.service";
 import { monthlyReviewService } from "./monthly-review.service";
 import { proactiveAiService } from "./proactive-ai.service";
@@ -76,17 +79,20 @@ export const coachJobs = {
     logger.info(result, "Coach job: daily proactive generation finished");
   },
 
-  /** Weekly (Sunday): generate the weekly review for consented users. */
+  /** Weekly: generate review now, but notify only at the user's chosen local slot. */
   async runWeeklyReviews(): Promise<void> {
     logger.info("Coach job: weekly reviews started");
     const result = await forEachUser(async (user) => {
       const review = await weeklyReviewService.generateWeeklyReview(user.id);
+      const preferences = await notificationService.getPreferences(user.id);
+      if (!preferences.weeklySummary) return;
+
       await notificationService.scheduleNotification(
         user.id,
         "WEEKLY_REVIEW",
         "Haftalık değerlendirmen hazır",
-        `Bu haftaki puanın ${review.score}/100. Detayları görmek için uygulamayı aç.`,
-        new Date(),
+        "Haftalık değerlendirmen hazır. Detayları görmek için uygulamayı aç.",
+        nextWeeklySummaryAt(preferences),
         { weekNumber: review.weekNumber, year: review.year },
       );
     });
@@ -97,11 +103,8 @@ export const coachJobs = {
   async runMonthlyReviews(): Promise<void> {
     logger.info("Coach job: monthly reviews started");
     const result = await forEachUser(async (user) => {
-      // Resolve effective paid-through state instead of trusting a possibly
-      // stale denormalized User.subscriptionTier value.
       if (!(await isUserPremium(user.id))) return;
       const now = new Date();
-      // Summarize the month that just ended.
       const prevMonthDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
       const month = prevMonthDate.getUTCMonth() + 1;
       const year = prevMonthDate.getUTCFullYear();
