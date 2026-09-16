@@ -46,9 +46,29 @@ const OPTION_ORDER: NutritionPlanDeviationType[] = [
   "PORTION_CHANGED",
 ];
 
+function meaningfulPortion(value: string): boolean {
+  const normalized = value.trim().toLocaleLowerCase("tr-TR");
+  if (!normalized) return false;
+  if (/\b(?:nan|infinity|sonsuz)\b/i.test(normalized)) return false;
+  const leadingNumber = normalized.match(/^([+-]?\d+(?:[.,]\d+)?)(?:\s|$)/);
+  if (leadingNumber) {
+    const parsed = Number(leadingNumber[1].replace(",", "."));
+    if (!Number.isFinite(parsed) || parsed <= 0) return false;
+  }
+  return /[\p{L}\d]/u.test(normalized);
+}
+
 function kacamakError(error: unknown): string {
-  if (error instanceof ApiError && error.code === "SUBSCRIPTION_REQUIRED") {
-    return "Kaçamak özelliği Premium ve Premium Plus kullanıcıları içindir.";
+  if (error instanceof ApiError) {
+    if (error.code === "SUBSCRIPTION_REQUIRED") {
+      return "Kaçamak özelliği Premium ve Premium Plus kullanıcıları içindir.";
+    }
+    if (error.code === "NUTRITION_PLAN_DAY_NOT_STARTED") {
+      return "Bu plan günü henüz başlamadı.";
+    }
+    if (error.code === "NUTRITION_PLAN_DEVIATION_CONFLICT") {
+      return "Bu besin veya öğün için çakışan bir Kaçamak kaydı zaten var. Önce mevcut kaydı geri alabilirsin.";
+    }
   }
   return "Kaçamak kaydedilemedi. Lütfen tekrar dene.";
 }
@@ -182,7 +202,8 @@ export function NutritionPlanKacamak({
     hasPlannedTarget &&
     (selectedType !== "REPLACED" || actualItemName.trim().length > 0) &&
     (selectedType !== "EXTRA" || actualItemName.trim().length > 0) &&
-    (selectedType !== "PORTION_CHANGED" || actualPortion.trim().length > 0);
+    (selectedType !== "PORTION_CHANGED" || meaningfulPortion(actualPortion)) &&
+    (!actualPortion.trim() || meaningfulPortion(actualPortion));
 
   const save = async () => {
     if (!selectedType || !canSubmit || saving) return;
@@ -218,7 +239,7 @@ export function NutritionPlanKacamak({
     setDeletingId(deviationId);
     try {
       await onDelete(deviationId);
-      toast.success("Kaçamak kaydı kaldırıldı");
+      toast.success("Kaçamak kaydı kaldırıldı.");
     } catch {
       toast.error("Kaçamak kaydı kaldırılamadı. Lütfen tekrar dene.");
     } finally {
@@ -253,16 +274,21 @@ export function NutritionPlanKacamak({
           {mealDeviations.map((record) => (
             <div
               key={record.id}
-              className="flex items-center justify-between gap-3 rounded-xl bg-muted/50 px-3 py-2"
+              className="flex items-start justify-between gap-3 rounded-xl bg-muted/50 px-3 py-2"
             >
-              <div className="min-w-0">
-                <p className="truncate text-xs font-medium">{recordText(record)}</p>
-                {record.note && <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{record.note}</p>}
+              <div className="min-w-0 flex-1">
+                <p className="break-words text-xs font-medium leading-relaxed">{recordText(record)}</p>
+                {record.note && (
+                  <p className="mt-0.5 break-words text-[11px] leading-relaxed text-muted-foreground">
+                    {record.note}
+                  </p>
+                )}
               </div>
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
+                className="shrink-0"
                 disabled={deletingId === record.id}
                 onClick={() => void remove(record.id)}
               >
@@ -363,9 +389,15 @@ export function NutritionPlanKacamak({
                     className="mt-1.5"
                     value={actualPortion}
                     maxLength={80}
+                    aria-invalid={actualPortion.trim().length > 0 && !meaningfulPortion(actualPortion)}
                     placeholder="Örn. 2 dilim, 150 g"
                     onChange={(event) => setActualPortion(event.target.value)}
                   />
+                  {actualPortion.trim().length > 0 && !meaningfulPortion(actualPortion) && (
+                    <span className="mt-1 block text-[11px] text-destructive">
+                      Miktar pozitif ve anlamlı olmalı.
+                    </span>
+                  )}
                 </label>
               )}
 
@@ -380,11 +412,11 @@ export function NutritionPlanKacamak({
                 />
               </label>
 
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-[11px] leading-relaxed text-muted-foreground">
-                  Kaçamak kaydı planındaki öğünleri değiştirmez; yalnızca uyum geçmişine eklenir.
+                  Kaçamak kaydı planındaki öğünleri değiştirmez; yalnızca gerçekleşen farkı uyum geçmişine ekler.
                 </p>
-                <Button type="button" size="sm" disabled={!canSubmit || saving} onClick={() => void save()}>
+                <Button type="button" size="sm" className="shrink-0" disabled={!canSubmit || saving} onClick={() => void save()}>
                   {saving ? "Kaydediliyor" : "Kaydet"}
                 </Button>
               </div>
