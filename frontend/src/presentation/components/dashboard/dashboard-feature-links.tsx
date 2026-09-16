@@ -189,7 +189,7 @@ function ProgressVisual() {
 /** High-value feature shortcuts. Scanner and blood-test cards follow the approved mobile reference composition. */
 export function DashboardFeatureLinks() {
   return (
-    <section id="diewish-tools" className="space-y-2" aria-label="Diewish araçları">
+    <section id="diewish-tools" className="space-y-3" aria-label="Diewish araçları">
       {FEATURES.map((feature) => {
         if (feature.visual === "scanner" || feature.visual === "blood") {
           return <ReferenceFeatureCard key={feature.title} feature={feature} />;
