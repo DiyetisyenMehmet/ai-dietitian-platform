@@ -73,60 +73,77 @@ function ReferenceFeatureCard({ feature }: { feature: FeatureLink }) {
   const imageUrl = isScanner
     ? "/images/dashboard/food-barcode-card.webp"
     : "/images/dashboard/blood-test-card.webp";
+  const aspectRatio = isScanner ? "4.56 / 1" : "4.16 / 1";
 
   return (
     <Link
       href={feature.href}
       aria-label={`${feature.title}. ${feature.description}`}
-      className={`group relative flex min-h-[94px] w-full items-center overflow-hidden rounded-[24px] border border-border/55 shadow-sm transition-shadow hover:shadow-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-[106px] ${
+      className={`group relative block w-full overflow-hidden rounded-[18px] border border-border/50 shadow-sm transition-shadow hover:shadow-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
         isScanner
           ? "bg-card"
-          : "bg-gradient-to-r from-card via-card to-sky-50/70 dark:to-sky-950/20"
+          : "bg-gradient-to-r from-card via-card to-sky-50/65 dark:to-sky-950/20"
       }`}
+      style={{ aspectRatio }}
     >
+      {/*
+       * Keep the photograph in its own right-side visual layer. The background is scaled by
+       * card height instead of `cover`, so the source crop is not zoomed into the text zone.
+       */}
       <span
-        className="absolute inset-y-0 right-0 w-[45%] bg-cover bg-center bg-no-repeat"
-        style={{ backgroundImage: `url(${imageUrl})` }}
+        className="absolute inset-y-0 right-0 z-0 w-[52%] bg-right bg-no-repeat"
+        style={{
+          backgroundImage: `url(${imageUrl})`,
+          backgroundSize: "auto 112%",
+        }}
         aria-hidden="true"
       />
 
+      {/* Soft reference-style handoff from the white copy area into the image. */}
       <span
-        className="absolute inset-y-0 left-[49%] z-[5] w-[18%] bg-gradient-to-r from-card via-card/90 to-transparent"
+        className={`absolute inset-y-0 left-[47%] z-10 w-[20%] bg-gradient-to-r ${
+          isScanner
+            ? "from-card via-card/95 to-transparent"
+            : "from-card via-sky-50/90 to-transparent dark:via-sky-950/15"
+        }`}
         aria-hidden="true"
       />
 
-      <span
-        className={`relative z-20 ml-[3%] flex size-11 shrink-0 items-center justify-center rounded-2xl sm:size-12 ${feature.iconWrap}`}
-        aria-hidden="true"
-      >
-        {isScanner ? (
-          <ScanLine className={`size-6 sm:size-7 ${feature.iconColor}`} />
-        ) : (
-          <BloodDropIcon />
-        )}
-      </span>
-
-      <span className="relative z-20 ml-3 w-[44%] min-w-0 sm:ml-4">
-        <span className="block whitespace-nowrap text-[12px] font-bold leading-[1.2] tracking-[-0.01em] text-foreground sm:text-sm">
-          {feature.title}
-        </span>
-        <span className="mt-1 block text-[10.5px] leading-[1.35] text-muted-foreground sm:text-xs">
+      {/* Copy is isolated from the visible image area; it no longer shares the photo layer. */}
+      <span className="absolute inset-y-0 left-0 z-20 flex w-[60%] items-center pl-[3%]">
+        <span
+          className={`flex size-10 shrink-0 items-center justify-center rounded-2xl sm:size-11 ${feature.iconWrap}`}
+          aria-hidden="true"
+        >
           {isScanner ? (
-            <>
-              <span className="block whitespace-nowrap">Yemeğini fotoğrafla veya</span>
-              <span className="block whitespace-nowrap">paketli ürünü barkodla tara.</span>
-            </>
+            <ScanLine className={`size-6 ${feature.iconColor}`} />
           ) : (
-            <>
-              <span className="block whitespace-nowrap">Tahlil sonuçlarını yükle,</span>
-              <span className="block whitespace-nowrap">anlaşılır şekilde değerlendir.</span>
-            </>
+            <BloodDropIcon />
           )}
+        </span>
+
+        <span className="ml-3 min-w-0 sm:ml-4">
+          <span className="block whitespace-nowrap text-[12px] font-bold leading-[1.15] tracking-[-0.025em] text-foreground sm:text-sm">
+            {feature.title}
+          </span>
+          <span className="mt-1 block text-[10.5px] leading-[1.3] text-muted-foreground sm:text-xs">
+            {isScanner ? (
+              <>
+                <span className="block whitespace-nowrap">Yemeğini fotoğrafla veya</span>
+                <span className="block whitespace-nowrap">paketli ürünü barkodla tara.</span>
+              </>
+            ) : (
+              <>
+                <span className="block whitespace-nowrap">Tahlil sonuçlarını yükle,</span>
+                <span className="block whitespace-nowrap">anlaşılır şekilde değerlendir.</span>
+              </>
+            )}
+          </span>
         </span>
       </span>
 
       <ChevronRight
-        className="absolute right-[2.8%] top-1/2 z-30 size-[18px] -translate-y-1/2 text-slate-700/90 drop-shadow-[0_1px_2px_rgba(255,255,255,0.95)] transition-transform group-hover:translate-x-0.5 dark:text-slate-200"
+        className="absolute right-[2.4%] top-1/2 z-30 size-[18px] -translate-y-1/2 text-slate-700/90 drop-shadow-[0_1px_2px_rgba(255,255,255,0.95)] transition-transform group-hover:translate-x-0.5 dark:text-slate-200"
         aria-hidden="true"
       />
     </Link>
