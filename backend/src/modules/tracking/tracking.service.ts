@@ -1,6 +1,7 @@
 import type { MealLog, WaterLog, WeightLog } from "@prisma/client";
 
 import { logger } from "../../lib/logger";
+import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/api-error";
 import { nutritionAdaptationService } from "../ai-coach/nutrition-adaptation.service";
 import { getAIAdapter } from "../blood-test-analysis/ai-adapter/ai-adapter.factory";
@@ -48,6 +49,18 @@ function fallbackHydrationText(todayMl: number, goalMl: number, sevenDayAverageM
     return `Günlük su hedefine yaklaşıyorsun. Kalan yaklaşık ${Math.max(0, goalMl - todayMl)} ml'yi gün içine yayarak tamamlayabilirsin. Son 7 günlük ortalaman ${sevenDayAverageMl} ml.`;
   }
   return `Bugünkü su hedefini karşıladın. Susama, aktivite ve hava koşullarını izlemeye devam et; gereksiz şekilde hedefin çok üzerine çıkmaya çalışma. Son 7 günlük ortalaman ${sevenDayAverageMl} ml.`;
+}
+
+async function assertMealLogIsIndependent(userId: string, id: string): Promise<void> {
+  const linkedDeviation = await prisma.nutritionPlanDeviation.findFirst({
+    where: { id, userId },
+    select: { id: true },
+  });
+  if (linkedDeviation) {
+    throw ApiError.conflict(
+      "Bu tüketim bir Kaçamak kaydına bağlıdır. Düzenlemek veya kaldırmak için Kaçamak kaydını geri al.",
+    );
+  }
 }
 
 /**
@@ -116,6 +129,7 @@ export const trackingService = {
   },
 
   async updateMeal(userId: string, id: string, input: UpdateMealLogInput): Promise<MealLog> {
+    await assertMealLogIsIndependent(userId, id);
     const updated = await trackingRepository.updateMealLogForUser(id, userId, input);
     if (!updated) {
       throw ApiError.notFound("Meal log not found.");
@@ -124,6 +138,7 @@ export const trackingService = {
   },
 
   async deleteMeal(userId: string, id: string): Promise<void> {
+    await assertMealLogIsIndependent(userId, id);
     const deleted = await trackingRepository.deleteMealLogForUser(id, userId);
     if (deleted.count === 0) {
       throw ApiError.notFound("Meal log not found.");
