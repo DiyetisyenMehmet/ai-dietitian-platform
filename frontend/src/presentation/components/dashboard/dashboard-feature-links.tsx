@@ -164,7 +164,21 @@ export function DashboardFeatureLinks() {
                   {feature.title}
                 </span>
                 <span className="mt-[clamp(0.12rem,0.6vw,0.32rem)] block max-w-[20rem] text-[clamp(0.54rem,2.35vw,0.81rem)] font-medium leading-[1.2] text-slate-600">
-                  {feature.description}
+                  {feature.tone === "scanner" ? (
+                    <>
+                      Yemeğini fotoğrafla veya
+                      <br />
+                      paketli ürünü barkodla tara.
+                    </>
+                  ) : feature.tone === "blood" ? (
+                    <>
+                      Tahlil sonuçlarını yükle,
+                      <br />
+                      anlaşılır şekilde değerlendir.
+                    </>
+                  ) : (
+                    feature.description
+                  )}
                 </span>
               </span>
             </span>
