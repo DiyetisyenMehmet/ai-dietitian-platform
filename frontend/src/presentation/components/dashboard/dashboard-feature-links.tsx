@@ -95,17 +95,11 @@ function ReferenceFeatureCard({ feature }: { feature: FeatureLink }) {
         style={{
           backgroundImage: `url(${imageUrl})`,
           backgroundSize: "auto 112%",
+          maskImage:
+            "linear-gradient(to right, transparent, rgba(0,0,0,0.15) 12%, rgba(0,0,0,0.65) 30%, black 48%)",
+          WebkitMaskImage:
+            "linear-gradient(to right, transparent, rgba(0,0,0,0.15) 12%, rgba(0,0,0,0.65) 30%, black 48%)",
         }}
-        aria-hidden="true"
-      />
-
-      {/* Soft reference-style handoff from the white copy area into the image. */}
-      <span
-        className={`absolute inset-y-0 left-[47%] z-10 w-[20%] bg-gradient-to-r ${
-          isScanner
-            ? "from-card via-card/95 to-transparent"
-            : "from-card via-sky-50/90 to-transparent dark:via-sky-950/15"
-        }`}
         aria-hidden="true"
       />
 
@@ -153,7 +147,11 @@ function ReferenceFeatureCard({ feature }: { feature: FeatureLink }) {
 function ProgressVisual() {
   return (
     <span
-      className="relative h-20 w-[40%] min-w-[118px] max-w-[220px] shrink-0 overflow-hidden bg-gradient-to-r from-transparent via-emerald-50/55 to-emerald-100/70 dark:via-emerald-950/20 dark:to-emerald-950/35 sm:h-24"
+      className="relative h-20 w-[40%] min-w-[118px] max-w-[220px] shrink-0 overflow-hidden sm:h-24"
+      style={{
+        maskImage: "linear-gradient(to right, transparent, black 18%)",
+        WebkitMaskImage: "linear-gradient(to right, transparent, black 18%)",
+      }}
       aria-hidden="true"
     >
       <span className="absolute bottom-2 left-[18%] right-3 flex h-[55%] items-end gap-1.5 sm:gap-2">
@@ -214,8 +212,13 @@ export function DashboardFeatureLinks() {
           <Link
             key={feature.title}
             href={feature.href}
-            className="group flex min-h-28 items-center gap-3 overflow-hidden rounded-3xl border border-border/70 bg-card p-3 shadow-sm transition hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:p-4"
+            className="group relative isolate flex min-h-28 items-center gap-3 overflow-hidden rounded-3xl border border-border/70 bg-card p-3 shadow-sm transition hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:p-4"
           >
+            {/* The shared card clip owns every outer corner; no inset visual panel. */}
+            <span
+              className="pointer-events-none absolute inset-0 -z-10 rounded-[inherit] bg-gradient-to-r from-transparent from-50% via-emerald-50/55 via-75% to-emerald-100/70 dark:via-emerald-950/20 dark:to-emerald-950/35"
+              aria-hidden="true"
+            />
             <span
               className={`flex size-12 shrink-0 items-center justify-center rounded-2xl sm:size-14 ${feature.iconWrap}`}
             >
