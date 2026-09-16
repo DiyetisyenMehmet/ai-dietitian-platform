@@ -6,11 +6,16 @@ import com.google.firebase.FirebaseApp;
 import com.google.firebase.FirebaseOptions;
 import com.google.firebase.messaging.FirebaseMessaging;
 
-/** Initializes the public Firebase Android client configuration when supplied. */
+/** Initializes local reminders and public Firebase Android client configuration. */
 public final class DiewishApplication extends Application {
     @Override
     public void onCreate() {
         super.onCreate();
+
+        // Re-sanitize persisted wellness alarms on every app start. This removes
+        // the legacy local weekly-summary alarm while preserving water/activity/sleep.
+        WellnessReminderScheduler.rescheduleStored(this);
+
         if (!hasFirebaseConfig()) return;
 
         if (FirebaseApp.getApps(this).isEmpty()) {
