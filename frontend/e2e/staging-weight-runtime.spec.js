@@ -49,7 +49,9 @@ async function getHistory(request, token) {
 
 async function expectVisibleWeight(page, kg) {
   const escaped = String(kg).replace(".", "[,.]");
-  await expect(page.getByText(new RegExp(`${escaped}\\s*kg`, "i")).first()).toBeVisible();
+  const metric = page.getByText("Kilo", { exact: true }).locator("..");
+  await expect(metric).toBeVisible();
+  await expect(metric).toContainText(new RegExp(`${escaped}\\s*kg`, "i"));
 }
 
 async function expectProfileWeight(page, label, kg) {
