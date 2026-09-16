@@ -15,18 +15,20 @@ import androidx.core.app.NotificationCompat;
 import com.google.firebase.messaging.FirebaseMessagingService;
 import com.google.firebase.messaging.RemoteMessage;
 
+import org.json.JSONArray;
+import org.json.JSONException;
+
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /** Receives data-only Diewish FCM messages without exposing tokens or payloads in logs. */
 public final class DiewishMessagingService extends FirebaseMessagingService {
     public static final String EXTRA_DIEWISH_PATH = "diewish_path";
     private static final String CHANNEL_ID = "diewish_remote_updates";
     private static final String PREFS = "diewish_push_delivery";
-    private static final String LAST_ID = "last_notification_id";
-    private static final Set<String> ALLOWED_PATHS = Set.of(
-        "/dashboard", "/ai", "/insights", "/goals"
-    );
+    private static final String SHOWN_IDS = "shown_notification_ids";
+    private static final int MAX_SHOWN_IDS = 64;
 
     @Override
     public void onNewToken(String token) {
@@ -37,14 +39,16 @@ public final class DiewishMessagingService extends FirebaseMessagingService {
     public void onMessageReceived(RemoteMessage message) {
         Map<String, String> data = message.getData();
         String id = clean(data.get("notificationId"), 120);
+        String type = clean(data.get("type"), 64);
         String title = clean(data.get("title"), 120);
         String body = clean(data.get("body"), 500);
-        String path = allowedPath(data.get("path"));
+        String path = NotificationRoutes.forRemoteType(type);
         if (id.isEmpty() || title.isEmpty() || body.isEmpty()) return;
         if (alreadyShown(id)) return;
         if (!canPostNotifications()) return;
 
         NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        if (manager == null) return;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel channel = new NotificationChannel(
                 CHANNEL_ID,
@@ -83,15 +87,33 @@ public final class DiewishMessagingService extends FirebaseMessagingService {
     }
 
     private boolean alreadyShown(String id) {
-        return id.equals(getSharedPreferences(PREFS, MODE_PRIVATE).getString(LAST_ID, ""));
+        return readShownIds().contains(id);
+    }
+
+    private List<String> readShownIds() {
+        String raw = getSharedPreferences(PREFS, MODE_PRIVATE).getString(SHOWN_IDS, "[]");
+        List<String> ids = new ArrayList<>();
+        try {
+            JSONArray values = new JSONArray(raw);
+            for (int index = 0; index < values.length(); index++) {
+                String value = values.optString(index, "");
+                if (!value.isEmpty()) ids.add(value);
+            }
+        } catch (JSONException ignored) {
+            // Corrupt local dedupe state is non-fatal; the next write replaces it.
+        }
+        return ids;
     }
 
     private void remember(String id) {
-        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(LAST_ID, id).apply();
-    }
+        List<String> ids = readShownIds();
+        ids.remove(id);
+        ids.add(id);
+        while (ids.size() > MAX_SHOWN_IDS) ids.remove(0);
 
-    private static String allowedPath(String value) {
-        return value != null && ALLOWED_PATHS.contains(value) ? value : "/dashboard";
+        JSONArray values = new JSONArray();
+        for (String value : ids) values.put(value);
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(SHOWN_IDS, values.toString()).apply();
     }
 
     private static String clean(String value, int maxLength) {
