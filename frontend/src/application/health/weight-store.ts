@@ -3,53 +3,51 @@
 import * as React from "react";
 
 import type { WeightEntry } from "@/domain/health/types";
+import { onboardingClient } from "@/infrastructure/onboarding/onboarding-client";
 import {
   trackingClient,
   type WeightCheckInStatus,
   type WeightLog,
 } from "@/infrastructure/tracking/tracking-client";
+import {
+  calendarDaySpan,
+  dateKeyToLocalNoon,
+  isValidWeightKg,
+  localDateKey,
+  localDateKeyFromIso,
+  sortWeightEntries,
+  type WeightEntryTiming,
+} from "./weight-utils";
 import { healthProfileStore } from "./health-profile-store";
 
 export const WEIGH_IN_INTERVAL_DAYS = 7;
 const BASELINE_NOTE = "Başlangıç";
 
-function isoToday(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function toEntry(log: WeightLog): WeightEntry {
+function toEntry(log: WeightLog): WeightEntry & WeightEntryTiming {
   return {
     id: log.id,
-    date: log.loggedAt.slice(0, 10),
+    date: localDateKeyFromIso(log.loggedAt),
     weightKg: log.weightKg,
+    loggedAt: log.loggedAt,
+    createdAt: log.createdAt,
     ...(log.note ? { note: log.note } : {}),
   };
 }
 
-/**
- * Keep one latest ordinary measurement per day, but never collapse away the
- * persisted onboarding baseline when a user weighs in again on that same day.
- */
-function collapseToLatestPerDay(logs: WeightLog[]): WeightEntry[] {
-  const baseline = logs
-    .filter((log) => log.note === BASELINE_NOTE)
-    .sort((a, b) => new Date(a.loggedAt).getTime() - new Date(b.loggedAt).getTime())[0];
-  const latestByDay = new Map<string, WeightLog>();
-
-  for (const log of logs) {
-    if (baseline && log.id === baseline.id) continue;
-    const day = log.loggedAt.slice(0, 10);
-    const existing = latestByDay.get(day);
-    if (!existing || new Date(log.loggedAt).getTime() > new Date(existing.loggedAt).getTime()) {
-      latestByDay.set(day, log);
-    }
-  }
-
-  return [...(baseline ? [toEntry(baseline)] : []), ...[...latestByDay.values()].map(toEntry)];
+function fallbackBaseline(weightKg: number): WeightEntry & WeightEntryTiming {
+  const today = localDateKey();
+  return {
+    id: "profile-baseline",
+    date: today,
+    weightKg,
+    loggedAt: dateKeyToLocalNoon(today)?.toISOString(),
+    note: BASELINE_NOTE,
+  };
 }
 
 let entries: WeightEntry[] = [];
 let checkInStatus: WeightCheckInStatus | null = null;
+let addInFlight: Promise<WeightAddResult> | null = null;
 const listeners = new Set<() => void>();
 const checkInListeners = new Set<() => void>();
 
@@ -80,23 +78,10 @@ function getCheckInSnapshot() {
   return checkInStatus;
 }
 
-/** Stable chronological order; the explicit baseline always wins ties. */
-function sorted(list: WeightEntry[]): WeightEntry[] {
-  return [...list].sort((a, b) => {
-    const byDate = a.date.localeCompare(b.date);
-    if (byDate !== 0) return byDate;
-    if (a.note === BASELINE_NOTE && b.note !== BASELINE_NOTE) return -1;
-    if (b.note === BASELINE_NOTE && a.note !== BASELINE_NOTE) return 1;
-    return 0;
-  });
-}
-
-function syncProfileWeights(): void {
-  const list = sorted(entries);
-  const first = list[0];
-  const latest = list.at(-1);
-  if (first) healthProfileStore.setStartWeight(first.weightKg);
-  if (latest) healthProfileStore.setCurrentWeight(latest.weightKg);
+function syncStartingWeight(): void {
+  const list = sortWeightEntries(entries);
+  const baseline = list.find((entry) => entry.note === BASELINE_NOTE) ?? list[0];
+  if (baseline) healthProfileStore.setStartWeight(baseline.weightKg);
 }
 
 async function refreshCheckInStatus(): Promise<WeightCheckInStatus | null> {
@@ -110,37 +95,74 @@ async function refreshCheckInStatus(): Promise<WeightCheckInStatus | null> {
   return checkInStatus;
 }
 
+export interface WeightAddResult {
+  profileSynced: boolean;
+  historySynced: boolean;
+}
+
+async function performAdd(weightKg: number, note?: string, dateKey?: string): Promise<WeightAddResult> {
+  if (!isValidWeightKg(weightKg)) {
+    throw new Error("INVALID_WEIGHT");
+  }
+
+  const loggedAt = dateKey ? dateKeyToLocalNoon(dateKey) : undefined;
+  if (dateKey && !loggedAt) {
+    throw new Error("INVALID_WEIGHT_DATE");
+  }
+
+  const { log } = await trackingClient.logWeight(weightKg, note, loggedAt ?? undefined);
+  const committedEntry = toEntry(log);
+
+  // Refresh history and authoritative profile independently. The POST has already
+  // committed, so a secondary refresh failure must not be reported as a failed save.
+  const [historyResult, profileResult] = await Promise.allSettled([
+    trackingClient.listWeight(),
+    onboardingClient.getProfile(),
+  ]);
+
+  let historySynced = false;
+  if (historyResult.status === "fulfilled") {
+    entries = sortWeightEntries(historyResult.value.logs.map(toEntry));
+    historySynced = true;
+  } else {
+    entries = sortWeightEntries([
+      ...entries.filter((entry) => entry.id !== committedEntry.id),
+      committedEntry,
+    ]);
+  }
+  emit();
+  syncStartingWeight();
+
+  let profileSynced = false;
+  if (profileResult.status === "fulfilled" && profileResult.value.profile) {
+    // currentWeightKg is authoritative on UserProfile. Never infer it from a
+    // backdated history insertion on the client.
+    healthProfileStore.setCurrentWeight(profileResult.value.profile.currentWeightKg);
+    profileSynced = true;
+  }
+
+  await refreshCheckInStatus();
+  return { profileSynced, historySynced };
+}
+
 export const weightStore = {
   async hydrateWeightFromBackend(profileBaselineKg?: number): Promise<void> {
     try {
       const { logs } = await trackingClient.listWeight();
-      entries = collapseToLatestPerDay(logs);
-      if (entries.length === 0 && profileBaselineKg && profileBaselineKg > 0) {
-        entries = [
-          {
-            id: "profile-baseline",
-            date: isoToday(),
-            weightKg: profileBaselineKg,
-            note: BASELINE_NOTE,
-          },
-        ];
+      entries = sortWeightEntries(logs.map(toEntry));
+      if (entries.length === 0 && profileBaselineKg && isValidWeightKg(profileBaselineKg)) {
+        entries = [fallbackBaseline(profileBaselineKg)];
       }
       emit();
-      syncProfileWeights();
+      syncStartingWeight();
     } catch {
-      entries =
-        profileBaselineKg && profileBaselineKg > 0
-          ? [
-              {
-                id: "profile-baseline",
-                date: isoToday(),
-                weightKg: profileBaselineKg,
-                note: BASELINE_NOTE,
-              },
-            ]
-          : [];
-      emit();
-      syncProfileWeights();
+      // Do not make already-loaded history disappear during a transient network
+      // failure. Use the profile baseline only for a genuinely empty cache.
+      if (entries.length === 0 && profileBaselineKg && isValidWeightKg(profileBaselineKg)) {
+        entries = [fallbackBaseline(profileBaselineKg)];
+        emit();
+        syncStartingWeight();
+      }
     }
     await refreshCheckInStatus();
   },
@@ -149,23 +171,20 @@ export const weightStore = {
     return refreshCheckInStatus();
   },
 
-  async add(weightKg: number, note?: string): Promise<void> {
-    const { log } = await trackingClient.logWeight(weightKg, note);
-    const entry = toEntry(log);
-    entries = [
-      ...entries.filter(
-        (existing) => existing.note === BASELINE_NOTE || existing.date !== entry.date,
-      ),
-      entry,
-    ];
-    emit();
-    syncProfileWeights();
-    await refreshCheckInStatus();
+  add(weightKg: number, note?: string, dateKey?: string): Promise<WeightAddResult> {
+    if (addInFlight) return addInFlight;
+    const operation = performAdd(weightKg, note, dateKey);
+    addInFlight = operation;
+    void operation.finally(() => {
+      if (addInFlight === operation) addInFlight = null;
+    });
+    return operation;
   },
 
   clear() {
     entries = [];
     checkInStatus = null;
+    addInFlight = null;
     emit();
     emitCheckIn();
   },
@@ -173,7 +192,7 @@ export const weightStore = {
 
 export function useWeightEntries(): WeightEntry[] {
   const raw = React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
-  return React.useMemo(() => sorted(raw), [raw]);
+  return React.useMemo(() => sortWeightEntries(raw), [raw]);
 }
 
 export function useWeightCheckInStatus(): WeightCheckInStatus | null {
@@ -196,29 +215,30 @@ export interface WeightAnalysis {
 }
 
 export function analyzeWeight(entries: WeightEntry[], targetKg: number): WeightAnalysis {
-  const list = sorted(entries);
-  const first = list[0] ?? null;
+  const list = sortWeightEntries(entries);
+  const start = list.find((entry) => entry.note === BASELINE_NOTE) ?? list[0] ?? null;
   const latest = list.at(-1) ?? null;
+  const distinctDaySpan = start && latest ? calendarDaySpan(start, latest) : 0;
 
-  if (!first || !latest || targetKg <= 0 || list.length < 2) {
+  if (!start || !latest || targetKg <= 0 || list.length < 2 || distinctDaySpan < 1) {
     return {
       direction: "maintain",
       latestKg: latest?.weightKg ?? null,
-      startKg: first?.weightKg ?? null,
+      startKg: start?.weightKg ?? null,
       targetKg,
       changeKg: 0,
       progressPercent: 0,
       isWeighInDue: true,
       daysSinceLast: latest
-        ? Math.max(0, Math.round((Date.now() - new Date(latest.date).getTime()) / 86_400_000))
+        ? Math.max(0, calendarDaySpan(latest, { ...latest, date: localDateKey() }))
         : null,
       status: "no-data",
       message:
-        "İlerleme yüzdesi için en az iki farklı kilo ölçümü gerekir. Düzenli ölçüm yaptıkça eğilimin burada görünecek.",
+        "İlerleme yüzdesi için farklı günlerde en az iki kilo ölçümü gerekir. Düzenli ölçüm yaptıkça eğilimin burada görünecek.",
     };
   }
 
-  const startKg = first.weightKg;
+  const startKg = start.weightKg;
   const latestKg = latest.weightKg;
   const direction: WeightDirection =
     targetKg < startKg ? "lose" : targetKg > startKg ? "gain" : "maintain";
@@ -238,12 +258,8 @@ export function analyzeWeight(entries: WeightEntry[], targetKg: number): WeightA
         : 0
       : Math.min(100, Math.max(0, Math.round((achievedDelta / totalDelta) * 100)));
 
-  const today = new Date(isoToday());
-  const lastDate = new Date(latest.date);
-  const daysSinceLast = Math.max(
-    0,
-    Math.round((today.getTime() - lastDate.getTime()) / 86_400_000),
-  );
+  const todayEntry: WeightEntry = { ...latest, date: localDateKey() };
+  const daysSinceLast = calendarDaySpan(latest, todayEntry);
   const isWeighInDue = daysSinceLast >= WEIGH_IN_INTERVAL_DAYS;
 
   const reached =
@@ -251,10 +267,7 @@ export function analyzeWeight(entries: WeightEntry[], targetKg: number): WeightA
     (direction === "gain" && latestKg >= targetKg) ||
     (direction === "maintain" && Math.abs(latestKg - targetKg) < 0.3);
 
-  const daysElapsed = Math.max(
-    1,
-    Math.round((today.getTime() - new Date(first.date).getTime()) / 86_400_000),
-  );
+  const daysElapsed = Math.max(1, calendarDaySpan(start, latest));
   const expectedProgress = Math.min(100, Math.round((daysElapsed / 90) * 100));
 
   let status: WeightAnalysis["status"];

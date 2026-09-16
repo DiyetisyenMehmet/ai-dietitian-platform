@@ -21,9 +21,14 @@ import {
   useWeightEntries,
   weightStore,
 } from "@/application/health/weight-store";
+import {
+  formatWeightNumber,
+  localDateKey,
+  parseWeightInput,
+} from "@/application/health/weight-utils";
 import { useActivity } from "@/application/health/activity-store";
 import { journeyStore, useJourneyEvents } from "@/application/health/journey-store";
-import type { JourneyEventType, WeightEntry } from "@/domain/health/types";
+import type { JourneyEventType } from "@/domain/health/types";
 
 const STATUS_TONE: Record<
   ReturnType<typeof analyzeWeight>["status"],
@@ -72,30 +77,41 @@ const HISTORY_ICON: Record<JourneyEventType, Parameters<typeof healthIcon>[0]> =
 
 function WeighInForm() {
   const [value, setValue] = React.useState("");
+  const [date, setDate] = React.useState(() => localDateKey());
   const [saving, setSaving] = React.useState(false);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (saving) return;
 
-    const kg = Number(value.replace(",", "."));
-    if (!Number.isFinite(kg) || kg <= 0 || kg > 400) {
-      toast.error("Geçerli bir kilo gir", { description: "Örn. 78.4" });
+    const kg = parseWeightInput(value);
+    if (kg === null) {
+      toast.error("Geçerli bir kilo gir", { description: "25-400 kg arasında, en fazla 1 ondalık kullan." });
+      return;
+    }
+    if (!date || date > localDateKey()) {
+      toast.error("Geçerli bir ölçüm tarihi seç");
       return;
     }
 
-    const rounded = Number(kg.toFixed(1));
     setSaving(true);
     try {
-      await weightStore.add(rounded);
+      const result = await weightStore.add(kg, undefined, date);
       await journeyStore.hydrateJourneyFromBackend();
-      toast.success("Kilon kaydedildi", {
-        description: `${rounded.toLocaleString("tr-TR")} kg`,
-      });
+      if (result.profileSynced) {
+        toast.success("Kilon kaydedildi", {
+          description: `${formatWeightNumber(kg)} kg`,
+        });
+      } else {
+        toast.warning("Kilon kaydedildi", {
+          description: "Güncel kilo özeti şu anda yenilenemedi; kayıt geçmişinde korundu.",
+        });
+      }
       setValue("");
+      setDate(localDateKey());
     } catch {
       toast.error("Kilo kaydedilemedi", {
-        description: "Bağlantını kontrol edip tekrar deneyebilirsin.",
+        description: "Bağlantını kontrol edip tekrar deneyebilirsin. Girdiğin değer korunuyor.",
       });
     } finally {
       setSaving(false);
@@ -103,21 +119,42 @@ function WeighInForm() {
   };
 
   return (
-    <form onSubmit={submit} className="flex items-end gap-3">
-      <div className="flex-1">
-        <label htmlFor="weigh-in" className="mb-1.5 block text-xs text-muted-foreground">
-          Bugünkü kilon (kg)
-        </label>
-        <Input
-          id="weigh-in"
-          inputMode="decimal"
-          placeholder="78.4"
-          value={value}
-          onChange={(event) => setValue(event.target.value)}
-          disabled={saving}
-        />
+    <form onSubmit={submit} className="space-y-3 sm:flex sm:items-end sm:gap-3 sm:space-y-0">
+      <div className="grid flex-1 grid-cols-1 gap-3 sm:grid-cols-2">
+        <div>
+          <label htmlFor="weigh-in" className="mb-1.5 block text-xs text-muted-foreground">
+            Kilo (kg)
+          </label>
+          <Input
+            id="weigh-in"
+            type="text"
+            inputMode="decimal"
+            autoComplete="off"
+            placeholder="78,4"
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+            disabled={saving}
+            aria-describedby="weigh-in-help"
+          />
+          <span id="weigh-in-help" className="sr-only">
+            25 ile 400 kilogram arasında, en fazla bir ondalık basamak girin.
+          </span>
+        </div>
+        <div>
+          <label htmlFor="weigh-in-date" className="mb-1.5 block text-xs text-muted-foreground">
+            Ölçüm tarihi
+          </label>
+          <Input
+            id="weigh-in-date"
+            type="date"
+            max={localDateKey()}
+            value={date}
+            onChange={(event) => setDate(event.target.value)}
+            disabled={saving}
+          />
+        </div>
       </div>
-      <Button type="submit" disabled={saving}>
+      <Button type="submit" disabled={saving} className="w-full sm:w-auto">
         <Plus className="size-4" aria-hidden="true" />
         {saving ? "Kaydediliyor…" : "Kaydet"}
       </Button>
@@ -125,13 +162,6 @@ function WeighInForm() {
   );
 }
 
-/**
- * Progress has one job: show how the user's recorded data changes over time.
- * The former independent demo "Goals" system is intentionally absent; weight
- * target comes from the real profile, activity from real tracking, and events
- * from persisted history so the user does not have to learn overlapping Goal /
- * Journey / Progress concepts.
- */
 export function ProgressView() {
   const profile = useHealthProfile();
   const entries = useWeightEntries();
@@ -148,7 +178,7 @@ export function ProgressView() {
     [entries, profile.targetWeightKg],
   );
   const tone = STATUS_TONE[analysis.status];
-  const latest: WeightEntry | undefined = entries.at(-1);
+  const currentWeight = profile.currentWeightKg > 0 ? profile.currentWeightKg : analysis.latestKg;
 
   return (
     <div className="space-y-5">
@@ -163,16 +193,20 @@ export function ProgressView() {
           <>
             <div className="mb-4 grid grid-cols-3 gap-3 text-center">
               <div>
-                <p className="text-lg font-bold">{analysis.startKg?.toFixed(1)}</p>
+                <p className="text-lg font-bold">
+                  {analysis.startKg !== null ? formatWeightNumber(analysis.startKg) : "—"}
+                </p>
                 <p className="text-[11px] text-muted-foreground">Başlangıç</p>
               </div>
               <div>
-                <p className="text-lg font-bold text-primary">{latest?.weightKg.toFixed(1)}</p>
+                <p className="text-lg font-bold text-primary">
+                  {currentWeight !== null ? formatWeightNumber(currentWeight) : "—"}
+                </p>
                 <p className="text-[11px] text-muted-foreground">Güncel</p>
               </div>
               <div>
                 <p className="text-lg font-bold">
-                  {analysis.targetKg > 0 ? analysis.targetKg.toFixed(1) : "—"}
+                  {analysis.targetKg > 0 ? formatWeightNumber(analysis.targetKg) : "—"}
                 </p>
                 <p className="text-[11px] text-muted-foreground">Hedef</p>
               </div>
@@ -197,12 +231,7 @@ export function ProgressView() {
             </span>
             <div className="flex flex-col">
               <h3 className="text-sm font-semibold">İlerleme Analizi</h3>
-              <span
-                className={cn(
-                  "mt-0.5 inline-flex w-fit rounded-full px-2 py-0.5 text-[11px] font-medium",
-                  tone.badge,
-                )}
-              >
+              <span className={cn("mt-0.5 inline-flex w-fit rounded-full px-2 py-0.5 text-[11px] font-medium", tone.badge)}>
                 {tone.label}
               </span>
             </div>
@@ -273,10 +302,7 @@ export function ProgressView() {
           />
         ) : (
           <ol className="relative space-y-5 pl-8">
-            <span
-              className="absolute bottom-1.5 left-[13px] top-1.5 w-px bg-border"
-              aria-hidden="true"
-            />
+            <span className="absolute bottom-1.5 left-[13px] top-1.5 w-px bg-border" aria-hidden="true" />
             {history.map((event) => {
               const Icon = healthIcon(HISTORY_ICON[event.type]);
               return (

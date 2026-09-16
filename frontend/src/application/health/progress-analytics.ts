@@ -4,56 +4,52 @@ import * as React from "react";
 
 import type { WeightEntry } from "@/domain/health/types";
 import { analyzeWeight, type WeightDirection } from "./weight-store";
-
-/**
- * Deeper progress analytics for the Progress screen: weekly & monthly deltas,
- * average weekly change, an estimated target date, goal-completion percentage
- * and a plain-language AI interpretation. Pure functions over the weight
- * history so they can be unit-tested and reused without React.
- */
+import {
+  calendarDaySpan,
+  dateKeyToLocalNoon,
+  localDateKey,
+  sortWeightEntries,
+} from "./weight-utils";
 
 export interface ProgressStats {
   direction: WeightDirection;
-  /** Signed change over the last ~7 days (kg). Negative = lost. */
   weeklyChangeKg: number | null;
-  /** Signed change over the last ~30 days (kg). */
   monthlyChangeKg: number | null;
-  /** Average signed change per week across the whole history (kg). */
   avgWeeklyChangeKg: number | null;
-  /** 0..100 completion toward the target. */
   completionPercent: number;
-  /** Remaining kg to the target (absolute). */
   remainingKg: number;
-  /** Estimated ISO date the target is reached, or null if not projectable. */
   estimatedTargetDate: string | null;
-  /** Human-readable ETA label (Turkish), or null. */
   estimatedTargetLabel: string | null;
-  /** Plain-language interpretation of the trend (Turkish). */
   interpretation: string;
-}
-
-function sorted(list: WeightEntry[]): WeightEntry[] {
-  return [...list].sort((a, b) => a.date.localeCompare(b.date));
 }
 
 /** Change between the latest entry and the last entry on/before `daysAgo`. */
 function changeOverDays(list: WeightEntry[], daysAgo: number): number | null {
   if (list.length < 2) return null;
   const latest = list[list.length - 1];
-  const cutoff = new Date(latest.date);
+  if (calendarDaySpan(list[0], latest) < 1) return null;
+
+  const latestDate = dateKeyToLocalNoon(latest.date);
+  if (!latestDate) return null;
+  const cutoff = new Date(latestDate);
   cutoff.setDate(cutoff.getDate() - daysAgo);
-  // Find the entry closest to (but not after) the cutoff; fall back to the first.
-  let baseline = list[0];
-  for (const e of list) {
-    if (new Date(e.date) <= cutoff) baseline = e;
+  const cutoffKey = localDateKey(cutoff);
+
+  let baseline: WeightEntry | null = null;
+  for (const entry of list) {
+    if (entry.date <= cutoffKey) baseline = entry;
     else break;
   }
-  if (baseline.id === latest.id) return null;
+
+  // With less than the requested window of history, use the earliest different
+  // calendar day rather than pretending two same-day measurements form a trend.
+  baseline ??= list.find((entry) => entry.date !== latest.date) ?? null;
+  if (!baseline || baseline.id === latest.id) return null;
   return Number((latest.weightKg - baseline.weightKg).toFixed(1));
 }
 
 export function analyzeProgressStats(entries: WeightEntry[], targetKg: number): ProgressStats {
-  const list = sorted(entries);
+  const list = sortWeightEntries(entries);
   const base = analyzeWeight(list, targetKg);
 
   if (list.length < 2 || base.startKg === null || base.latestKg === null) {
@@ -73,39 +69,37 @@ export function analyzeProgressStats(entries: WeightEntry[], targetKg: number): 
 
   const first = list[0];
   const latest = list[list.length - 1];
-  const totalDays = Math.max(
-    1,
-    Math.round((new Date(latest.date).getTime() - new Date(first.date).getTime()) / 86_400_000),
-  );
+  const totalDays = calendarDaySpan(first, latest);
   const totalChange = latest.weightKg - first.weightKg;
-  const avgWeeklyChangeKg = Number(((totalChange / totalDays) * 7).toFixed(2));
+  const avgWeeklyChangeKg =
+    totalDays >= 1 ? Number(((totalChange / totalDays) * 7).toFixed(2)) : null;
 
   const weeklyChangeKg = changeOverDays(list, 7);
   const monthlyChangeKg = changeOverDays(list, 30);
-
   const remainingKg = Number(Math.abs(targetKg - latest.weightKg).toFixed(1));
 
-  // Project the target date from the average weekly pace, but only when the
-  // pace is meaningfully moving toward the goal.
   const movingTowardGoal =
-    (base.direction === "lose" && avgWeeklyChangeKg < -0.05) ||
-    (base.direction === "gain" && avgWeeklyChangeKg > 0.05);
+    avgWeeklyChangeKg !== null &&
+    ((base.direction === "lose" && avgWeeklyChangeKg < -0.05) ||
+      (base.direction === "gain" && avgWeeklyChangeKg > 0.05));
 
   let estimatedTargetDate: string | null = null;
   let estimatedTargetLabel: string | null = null;
   if (base.status === "reached") {
     estimatedTargetLabel = "Hedefe ulaşıldı 🎉";
-  } else if (movingTowardGoal && remainingKg > 0) {
+  } else if (movingTowardGoal && avgWeeklyChangeKg !== null && remainingKg > 0) {
     const weeksNeeded = remainingKg / Math.abs(avgWeeklyChangeKg);
     const daysNeeded = Math.round(weeksNeeded * 7);
-    const eta = new Date(latest.date);
-    eta.setDate(eta.getDate() + daysNeeded);
-    estimatedTargetDate = eta.toISOString().slice(0, 10);
-    estimatedTargetLabel = eta.toLocaleDateString("tr-TR", {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    });
+    const eta = dateKeyToLocalNoon(latest.date);
+    if (eta && Number.isFinite(daysNeeded) && daysNeeded >= 0) {
+      eta.setDate(eta.getDate() + daysNeeded);
+      estimatedTargetDate = localDateKey(eta);
+      estimatedTargetLabel = eta.toLocaleDateString("tr-TR", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      });
+    }
   }
 
   const interpretation = buildInterpretation({
@@ -132,7 +126,7 @@ export function analyzeProgressStats(entries: WeightEntry[], targetKg: number): 
 
 function buildInterpretation(p: {
   direction: WeightDirection;
-  avgWeeklyChangeKg: number;
+  avgWeeklyChangeKg: number | null;
   weeklyChangeKg: number | null;
   remainingKg: number;
   reached: boolean;
@@ -141,15 +135,20 @@ function buildInterpretation(p: {
   if (p.reached) {
     return "Hedefine ulaştın! 🎉 Artık odak, bu dengeyi korumakta. Kilonu haftada bir kontrol etmen yeterli.";
   }
+  if (p.avgWeeklyChangeKg === null) {
+    return "Farklı günlerde yeterli ölçüm oluştuğunda haftalık değişim ve hedef tahmini burada gösterilecek. Bunlar tıbbi teşhis değil; verilerine dayalı rehberliktir.";
+  }
+
   const absWeekly = Math.abs(p.avgWeeklyChangeKg);
   const parts: string[] = [];
 
   if (absWeekly < 0.05) {
     parts.push(
-      "Kilon son dönemde oldukça sabit seyrediyor. Bu bir plato olabilir; öğün dağılımını ya da aktiviteni birlikte gözden geçirebiliriz.",
+      "Kilon son dönemde oldukça sabit seyrediyor. Daha uzun süreli kayıt oluştuğunda eğilim daha anlamlı hale gelecek.",
     );
   } else {
-    const paceWord = absWeekly >= 0.7 ? "hızlı" : absWeekly >= 0.25 ? "sağlıklı ve dengeli" : "yavaş ama istikrarlı";
+    const paceWord =
+      absWeekly >= 0.7 ? "hızlı" : absWeekly >= 0.25 ? "dengeli" : "yavaş ama istikrarlı";
     const dirWord = p.avgWeeklyChangeKg < 0 ? "veriyorsun" : "alıyorsun";
     parts.push(
       `Ortalama haftada ${absWeekly.toLocaleString("tr-TR")} kg ${dirWord} — ${paceWord} bir tempo.`,
@@ -157,16 +156,15 @@ function buildInterpretation(p: {
   }
 
   if (p.estimatedTargetLabel) {
-    parts.push(`Bu tempoyu korursan hedefine tahmini ${p.estimatedTargetLabel} tarihinde ulaşırsın.`);
+    parts.push(`Bu tempo sürerse tahmini hedef tarihi ${p.estimatedTargetLabel}.`);
   } else if (absWeekly >= 0.05) {
     parts.push(`Hedefe ${p.remainingKg.toLocaleString("tr-TR")} kg kaldı.`);
   }
 
-  parts.push("Bunlar tıbbi teşhis değil; verilerine dayalı güvenli bir rehberliktir.");
+  parts.push("Bunlar tıbbi teşhis değil; verilerine dayalı rehberliktir.");
   return parts.join(" ");
 }
 
-/** Reactive hook wrapping {@link analyzeProgressStats}. */
 export function useProgressStats(entries: WeightEntry[], targetKg: number): ProgressStats {
   return React.useMemo(() => analyzeProgressStats(entries, targetKg), [entries, targetKg]);
 }
