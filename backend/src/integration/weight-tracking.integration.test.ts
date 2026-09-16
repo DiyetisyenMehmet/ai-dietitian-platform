@@ -233,15 +233,13 @@ test("weight history keeps profile current weight chronological and owner-scoped
   assert.equal(sameDayLate.status, 201);
   expectSuccess(sameDayEarly.body);
   expectSuccess(sameDayLate.body);
+  const sameDayEarlyId = sameDayEarly.body.data.log.id;
+  const sameDayLateId = sameDayLate.body.data.log.id;
 
   const orderedHistory = await apiRequest<WeightListData>(baseUrl, "/api/tracking/weight", { token });
   expectSuccess(orderedHistory.body);
-  const earlyIndex = orderedHistory.body.data.logs.findIndex(
-    (log) => log.id === sameDayEarly.body.data.log.id,
-  );
-  const lateIndex = orderedHistory.body.data.logs.findIndex(
-    (log) => log.id === sameDayLate.body.data.log.id,
-  );
+  const earlyIndex = orderedHistory.body.data.logs.findIndex((log) => log.id === sameDayEarlyId);
+  const lateIndex = orderedHistory.body.data.logs.findIndex((log) => log.id === sameDayLateId);
   assert.ok(earlyIndex >= 0 && lateIndex >= 0);
   assert.ok(lateIndex < earlyIndex, "same-day logs must be newest-first deterministically");
 
