@@ -109,6 +109,24 @@ export const NUTRITION_PLAN_DEVIATION_TYPES = [
 ] as const;
 
 /**
+ * Keeps human-friendly portions such as "yarım kase" valid while rejecting
+ * values that explicitly encode zero, negatives, NaN or Infinity.
+ */
+export function isMeaningfulDeviationPortion(value: string): boolean {
+  const normalized = value.trim().toLocaleLowerCase("tr-TR");
+  if (!normalized) return false;
+  if (/\b(?:nan|infinity|sonsuz)\b/i.test(normalized)) return false;
+
+  const leadingNumber = normalized.match(/^([+-]?\d+(?:[.,]\d+)?)(?:\s|$)/);
+  if (leadingNumber) {
+    const parsed = Number(leadingNumber[1].replace(",", "."));
+    if (!Number.isFinite(parsed) || parsed <= 0) return false;
+  }
+
+  return /[\p{L}\d]/u.test(normalized);
+}
+
+/**
  * Body for recording a user-reported "Kaçamak". Planned item names/portions are
  * deliberately not accepted from the client; the service derives them from the
  * immutable plan snapshot to prevent inconsistent adherence history.
@@ -123,6 +141,8 @@ export const createDeviationSchema = z
     actualItemName: z.string().trim().min(1).max(120).optional(),
     actualPortion: z.string().trim().min(1).max(80).optional(),
     note: z.string().trim().max(240).optional(),
+    /** Browser-local date, matching the established plan shift/hunger contract. */
+    localDate: planStartDateSchema,
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -176,11 +196,11 @@ export const createDeviationSchema = z
     }
 
     if (value.type === "REPLACED") {
-      if (value.scope === "DAY") {
+      if (value.scope !== "FOOD") {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["scope"],
-          message: "A replacement must target a planned food or meal.",
+          message: "A replacement must target one planned food.",
         });
       }
       if (!value.actualItemName) {
@@ -197,6 +217,14 @@ export const createDeviationSchema = z
         code: z.ZodIssueCode.custom,
         path: ["actualItemName"],
         message: "The extra item is required.",
+      });
+    }
+
+    if (value.actualPortion && !isMeaningfulDeviationPortion(value.actualPortion)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["actualPortion"],
+        message: "Actual portion must describe a positive, meaningful amount.",
       });
     }
   });
