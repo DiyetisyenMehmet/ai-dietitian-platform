@@ -324,9 +324,9 @@ test("register -> consent -> onboarding -> scanner -> same-day weigh-in preserve
   await expect(page.getByText("Kilo İlerlemen")).toBeVisible();
   await page.getByLabel("Kilo (kg)").fill("68.5");
   await page.getByRole("button", { name: "Kaydet", exact: true }).click();
-  await expect(page.getByText("68.5", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("70.0", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("65.0", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("68,5", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("70,0", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("65,0", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Hedefe 3,5 kg kaldı", { exact: true })).toBeVisible();
 
   const weightResponse = await request.get(`${API_BASE_URL}/tracking/weight`, { headers: authHeaders });
