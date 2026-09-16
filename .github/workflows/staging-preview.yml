@@ -258,6 +258,78 @@ jobs:
             fi
           done
 
+      - name: Resolve staging Android Firebase config
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_name="com.diewish.app"
+          auth_header="Authorization: Bearer $(gcloud auth print-access-token)"
+          apps_file="$(mktemp)"
+          apps_code="$(curl --silent --show-error -o "$apps_file" -w '%{http_code}' \
+            -H "$auth_header" \
+            -H "x-goog-user-project: ${PROJECT_ID}" \
+            "https://firebase.googleapis.com/v1beta1/projects/${PROJECT_ID}/androidApps")"
+          if [[ "$apps_code" != "200" ]]; then
+            echo "Could not read isolated staging Firebase Android apps (HTTP ${apps_code})." >&2
+            exit 1
+          fi
+
+          android_app_name="$(jq -r --arg package "$package_name" '(.apps // [])[] | select(.packageName == $package) | .name' "$apps_file" | head -n 1)"
+          rm -f "$apps_file"
+          if [[ -z "$android_app_name" ]]; then
+            echo "Staging Firebase Android app ${package_name} is missing; refusing to build an unbound FCM APK." >&2
+            exit 1
+          fi
+
+          config_file="$(mktemp)"
+          config_code="$(curl --silent --show-error -o "$config_file" -w '%{http_code}' \
+            -H "$auth_header" \
+            -H "x-goog-user-project: ${PROJECT_ID}" \
+            "https://firebase.googleapis.com/v1beta1/${android_app_name}/config")"
+          if [[ "$config_code" != "200" ]]; then
+            echo "Could not read staging Firebase Android client config (HTTP ${config_code})." >&2
+            exit 1
+          fi
+
+          config_b64="$(jq -r '.configFileContents // empty' "$config_file")"
+          rm -f "$config_file"
+          if [[ -z "$config_b64" ]]; then
+            echo "Staging Firebase Android config payload is empty." >&2
+            exit 1
+          fi
+
+          decoded_config="$(mktemp)"
+          printf '%s' "$config_b64" | base64 --decode > "$decoded_config"
+          client_json="$(jq -c --arg package "$package_name" '.client[] | select(.client_info.android_client_info.package_name == $package)' "$decoded_config" | head -n 1)"
+          firebase_project_id="$(jq -r '.project_info.project_id // empty' "$decoded_config")"
+          firebase_sender_id="$(jq -r '.project_info.project_number // empty' "$decoded_config")"
+          rm -f "$decoded_config"
+
+          if [[ -z "$client_json" ]]; then
+            echo "Staging Firebase Android config does not contain ${package_name}." >&2
+            exit 1
+          fi
+          firebase_app_id="$(jq -r '.client_info.mobilesdk_app_id // empty' <<<"$client_json")"
+          firebase_api_key="$(jq -r '.api_key[0].current_key // empty' <<<"$client_json")"
+
+          if [[ "$firebase_project_id" != "$PROJECT_ID" || "$firebase_sender_id" != "$PROJECT_NUMBER" ]]; then
+            echo "Refusing APK build: staging Firebase project identity mismatch." >&2
+            exit 1
+          fi
+          if [[ -z "$firebase_app_id" || -z "$firebase_api_key" ]]; then
+            echo "Staging Firebase Android client config is incomplete." >&2
+            exit 1
+          fi
+
+          echo "::add-mask::${firebase_app_id}"
+          echo "::add-mask::${firebase_api_key}"
+          {
+            echo "DIEWISH_FIREBASE_PROJECT_ID=${firebase_project_id}"
+            echo "DIEWISH_FIREBASE_APP_ID=${firebase_app_id}"
+            echo "DIEWISH_FIREBASE_API_KEY=${firebase_api_key}"
+            echo "DIEWISH_FIREBASE_SENDER_ID=${firebase_sender_id}"
+          } >> "$GITHUB_ENV"
+
       - name: Set up JDK 17 for staging APK
         uses: actions/setup-java@v4
         with:
@@ -277,12 +349,24 @@ jobs:
         with:
           gradle-version: "9.6.0"
 
-      - name: Build staging-bound Android APK
+      - name: Build and test staging-bound Android APK
         shell: bash
         run: |
           set -euo pipefail
-          gradle --no-daemon -p android :app:assembleDebug \
-            -PDIEWISH_WEB_BASE_URL="${CUSTOM_FRONTEND_URL}"
+          for value in \
+            "$DIEWISH_FIREBASE_PROJECT_ID" \
+            "$DIEWISH_FIREBASE_APP_ID" \
+            "$DIEWISH_FIREBASE_API_KEY" \
+            "$DIEWISH_FIREBASE_SENDER_ID"; do
+            test -n "$value"
+          done
+
+          gradle --no-daemon -p android :app:testDebugUnitTest :app:assembleDebug \
+            -PDIEWISH_WEB_BASE_URL="${CUSTOM_FRONTEND_URL}" \
+            -PDIEWISH_FIREBASE_PROJECT_ID="${DIEWISH_FIREBASE_PROJECT_ID}" \
+            -PDIEWISH_FIREBASE_APP_ID="${DIEWISH_FIREBASE_APP_ID}" \
+            -PDIEWISH_FIREBASE_API_KEY="${DIEWISH_FIREBASE_API_KEY}" \
+            -PDIEWISH_FIREBASE_SENDER_ID="${DIEWISH_FIREBASE_SENDER_ID}"
 
           short_sha="${GITHUB_SHA::7}"
           mkdir -p android/app/build/staging-apk
@@ -298,6 +382,7 @@ jobs:
           backend=${BACKEND_URL}
           api_base=/api
           auth=google+phone
+          fcm_project=${DIEWISH_FIREBASE_PROJECT_ID}
           sms_regions=${DIEWISH_STAGING_SMS_REGIONS}
           database_project=shiny-hill-56015697
           EOF
@@ -323,6 +408,7 @@ jobs:
             echo "- Backend: ${BACKEND_URL}"
             echo "- Browser API: same-origin ${FRONTEND_URL}/api"
             echo "- Authentication: Google + phone enabled; anonymous disabled; Cloud Run and custom staging origins authorized"
+            echo "- Android FCM: staging Firebase Android client config verified"
             echo "- SMS regions: ${DIEWISH_STAGING_SMS_REGIONS}"
             echo "- Database: isolated Diewish Staging Neon project"
             echo "- Migration: direct Neon endpoint via Cloud Build"
