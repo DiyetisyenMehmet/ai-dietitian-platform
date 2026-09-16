@@ -37,6 +37,12 @@ const FEATURES = [
   },
 ] as const;
 
+const LIGHT_TEXT_COVERS = [
+  "linear-gradient(to right, rgba(255,255,255,0.995) 0%, rgba(255,255,255,0.995) 84%, rgba(255,255,255,0) 100%)",
+  "linear-gradient(to right, rgba(250,253,255,0.995) 0%, rgba(250,253,255,0.995) 84%, rgba(250,253,255,0) 100%)",
+  "linear-gradient(to right, rgba(251,255,253,0.995) 0%, rgba(251,255,253,0.995) 84%, rgba(251,255,253,0) 100%)",
+] as const;
+
 /** Approved reference artwork in light mode, with the existing dark-mode layer preserved. */
 export function DashboardFeatureLinks() {
   return (
@@ -61,12 +67,13 @@ export function DashboardFeatureLinks() {
           }}
         />
 
-        {/* Light mode: hit areas now span the visible card width after gutter crop. */}
-        {FEATURES.map((feature) => (
+        {/* Light mode: keep the reference artwork for icons/photos/charts, but
+            replace only its rasterized labels with crisp native text. */}
+        {FEATURES.map((feature, index) => (
           <Link
             key={`light-${feature.href}`}
             href={feature.href}
-            className="absolute left-0 block w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+            className="absolute left-0 block w-full overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
             style={{
               top: `${(feature.top / REFERENCE_HEIGHT) * 100}%`,
               height: `${(feature.height / REFERENCE_HEIGHT) * 100}%`,
@@ -74,6 +81,22 @@ export function DashboardFeatureLinks() {
             }}
             aria-label={`${feature.title}. ${feature.description}`}
           >
+            <span
+              className="pointer-events-none absolute left-[16.4%] top-[9%] z-10 h-[82%] w-[45%]"
+              style={{ background: LIGHT_TEXT_COVERS[index] }}
+              aria-hidden="true"
+            />
+            <span
+              className="pointer-events-none absolute left-[18.2%] top-1/2 z-20 w-[40.5%] -translate-y-1/2 text-left"
+              aria-hidden="true"
+            >
+              <span className="block whitespace-nowrap text-[clamp(0.7rem,3.45vw,0.98rem)] font-extrabold leading-[1.08] tracking-[-0.025em] text-slate-950">
+                {feature.title}
+              </span>
+              <span className="mt-[clamp(0.12rem,0.65vw,0.28rem)] block text-[clamp(0.59rem,2.85vw,0.79rem)] font-medium leading-[1.18] text-slate-600">
+                {feature.description}
+              </span>
+            </span>
             <span className="sr-only">
               {feature.title}. {feature.description}
             </span>
