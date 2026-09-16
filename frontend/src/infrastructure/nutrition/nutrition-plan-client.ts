@@ -308,7 +308,7 @@ export const nutritionPlanClient = {
       path: `/nutrition-plans/${encodeURIComponent(planId)}/deviations`,
       method: "POST",
       auth: true,
-      body: JSON.stringify(input),
+      body: JSON.stringify({ ...input, localDate: localDateYmd() }),
     });
   },
 
