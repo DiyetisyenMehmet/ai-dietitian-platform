@@ -3,67 +3,108 @@ import Link from "next/link";
 
 const REFERENCE_WIDTH = 1536;
 const REFERENCE_HEIGHT = 1054;
-const REFERENCE_CARD_LEFT = 54;
-const REFERENCE_CARD_WIDTH = 1430;
 
 const FEATURES = [
   {
     title: "Besin ve Barkod Tarayıcı",
     description: "Yemeğini fotoğrafla veya paketli ürünü barkodla tara.",
-    descriptionLines: ["Yemeğini fotoğrafla veya", "paketli ürünü barkodla tara."],
     href: "/meals/scan",
     top: 21,
     height: 312,
     visual: "/images/dashboard/food-barcode-card.webp",
     tone: "scanner",
+    lightAspect: "1595 / 392",
   },
   {
     title: "Kan Tahlili Analizi",
     description: "Tahlil sonuçlarını yükle, anlaşılır şekilde değerlendir.",
-    descriptionLines: ["Tahlil sonuçlarını yükle,", "anlaşılır şekilde değerlendir."],
     href: "/profile/blood-tests",
     top: 361,
     height: 348,
     visual: "/images/dashboard/blood-test-card.webp",
     tone: "blood",
+    lightAspect: "1606 / 455",
   },
   {
     title: "İlerlememi Gör",
     description: "Kilo, beslenme, su ve hareket verilerini incele.",
-    descriptionLines: ["Kilo, beslenme, su ve hareket", "verilerini incele."],
     href: "/progress",
     top: 740,
     height: 298,
     visual: null,
     tone: "progress",
+    lightAspect: "1598 / 405",
   },
 ] as const;
 
-function LightFeatureIcon({ tone }: { tone: (typeof FEATURES)[number]["tone"] }) {
-  if (tone === "scanner") {
-    return (
-      <span className="flex size-[clamp(2.65rem,12.6vw,4.7rem)] shrink-0 items-center justify-center rounded-[clamp(0.75rem,3.4vw,1.35rem)] bg-emerald-50 text-emerald-500" aria-hidden="true">
-        <svg viewBox="0 0 48 48" className="size-[58%]" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round">
-          <path d="M17 9h-5a3 3 0 0 0-3 3v5M31 9h5a3 3 0 0 1 3 3v5M39 31v5a3 3 0 0 1-3 3h-5M17 39h-5a3 3 0 0 1-3-3v-5" />
-          <path d="M17 24h14" />
-        </svg>
-      </span>
-    );
-  }
+type Feature = (typeof FEATURES)[number];
 
-  if (tone === "blood") {
-    return (
-      <span className="flex size-[clamp(2.65rem,12.6vw,4.7rem)] shrink-0 items-center justify-center rounded-[clamp(0.75rem,3.4vw,1.35rem)] bg-rose-50 text-red-500" aria-hidden="true">
-        <svg viewBox="0 0 48 48" className="size-[58%]" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M24 6C19 13 12 21 12 29a12 12 0 0 0 24 0C36 21 29 13 24 6Z" />
-          <path d="M18 30c1.4 3 3.7 4.5 6.5 4.5 2 0 3.8-.7 5.2-2" />
-        </svg>
-      </span>
-    );
-  }
-
+function Chevron() {
   return (
-    <span className="flex size-[clamp(2.65rem,12.6vw,4.7rem)] shrink-0 items-center justify-center rounded-[clamp(0.75rem,3.4vw,1.35rem)] bg-emerald-50 text-emerald-600" aria-hidden="true">
+    <svg
+      viewBox="0 0 24 24"
+      className="h-[7.4cqw] w-[7.4cqw]"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="m9 5 7 7-7 7" />
+    </svg>
+  );
+}
+
+function ScannerIcon() {
+  return (
+    <span
+      className="flex size-[13.6cqw] shrink-0 items-center justify-center rounded-[3.1cqw] bg-emerald-50/95 text-emerald-600"
+      aria-hidden="true"
+    >
+      <svg
+        viewBox="0 0 48 48"
+        className="size-[58%]"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="3.2"
+        strokeLinecap="round"
+      >
+        <path d="M17 9h-5a3 3 0 0 0-3 3v5M31 9h5a3 3 0 0 1 3 3v5M39 31v5a3 3 0 0 1-3 3h-5M17 39h-5a3 3 0 0 1-3-3v-5" />
+        <path d="M17 24h14" />
+      </svg>
+    </span>
+  );
+}
+
+function BloodIcon() {
+  return (
+    <span
+      className="flex size-[13.6cqw] shrink-0 items-center justify-center rounded-[3.1cqw] bg-rose-50/95 text-red-500"
+      aria-hidden="true"
+    >
+      <svg
+        viewBox="0 0 48 48"
+        className="size-[59%]"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M24 6C19 13 12 21 12 29a12 12 0 0 0 24 0C36 21 29 13 24 6Z" />
+        <path d="M18 30c1.4 3 3.7 4.5 6.5 4.5 2 0 3.8-.7 5.2-2" />
+      </svg>
+    </span>
+  );
+}
+
+function ProgressIcon() {
+  return (
+    <span
+      className="flex size-[13.6cqw] shrink-0 items-center justify-center rounded-[3.1cqw] bg-emerald-50/95 text-emerald-600"
+      aria-hidden="true"
+    >
       <svg viewBox="0 0 48 48" className="size-[58%]" fill="currentColor">
         <rect x="8" y="27" width="8" height="13" rx="1.5" />
         <rect x="20" y="19" width="8" height="21" rx="1.5" />
@@ -73,98 +114,219 @@ function LightFeatureIcon({ tone }: { tone: (typeof FEATURES)[number]["tone"] })
   );
 }
 
-function LightReferenceVisual({
-  top,
-  height,
-  tone,
-}: {
-  top: number;
-  height: number;
-  tone: (typeof FEATURES)[number]["tone"];
-}) {
-  const sourceWidthPercent = (REFERENCE_WIDTH / REFERENCE_CARD_WIDTH) * 100;
-  const sourceLeftPercent = -(REFERENCE_CARD_LEFT / REFERENCE_CARD_WIDTH) * 100;
-  const sourceTopPercent = -(top / height) * 100;
-
-  // Reveal the approved raster artwork only after the live heading area. The
-  // progress reveal starts earlier because its native title is substantially
-  // shorter; this keeps the "text ends, visual begins" relationship consistent
-  // without redrawing or distorting the approved chart artwork.
-  const revealMask =
-    tone === "progress"
-      ? "linear-gradient(to right, transparent 0%, transparent 39%, black 48%, black 100%)"
-      : tone === "blood"
-        ? "linear-gradient(to right, transparent 0%, transparent 46%, black 55%, black 100%)"
-        : "linear-gradient(to right, transparent 0%, transparent 50%, black 59%, black 100%)";
-
+function ProgressArtwork() {
   return (
     <span
-      className="pointer-events-none absolute inset-0 z-10 overflow-hidden"
-      style={{
-        WebkitMaskImage: revealMask,
-        maskImage: revealMask,
-      }}
+      className="pointer-events-none absolute inset-y-0 right-[5.4cqw] z-10 w-[41.5%]"
       aria-hidden="true"
     >
-      <Image
-        src="/images/dashboard/feature-cards-reference.jpg"
-        alt=""
-        width={REFERENCE_WIDTH}
-        height={REFERENCE_HEIGHT}
-        unoptimized
-        draggable={false}
-        className="absolute max-w-none select-none"
-        style={{
-          width: `${sourceWidthPercent}%`,
-          height: "auto",
-          left: `${sourceLeftPercent}%`,
-          top: `${sourceTopPercent}%`,
-        }}
-      />
+      <svg
+        viewBox="0 0 430 210"
+        className="h-full w-full"
+        fill="none"
+        preserveAspectRatio="xMidYMid meet"
+      >
+        <defs>
+          <linearGradient id="diewishProgressBar" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#83e5c3" stopOpacity="0.72" />
+            <stop offset="100%" stopColor="#4fd0aa" stopOpacity="0.95" />
+          </linearGradient>
+          <linearGradient id="diewishProgressWave" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="#ecfff7" stopOpacity="0.18" />
+            <stop offset="100%" stopColor="#cdf7e7" stopOpacity="0.78" />
+          </linearGradient>
+        </defs>
+
+        <path
+          d="M0 177C70 161 88 80 161 84c62 3 68 37 119 25 53-13 72-63 150-67v168H0Z"
+          fill="url(#diewishProgressWave)"
+        />
+
+        <g fill="url(#diewishProgressBar)">
+          <rect x="62" y="150" width="42" height="42" rx="5" />
+          <rect x="119" y="134" width="42" height="58" rx="5" />
+          <rect x="176" y="112" width="42" height="80" rx="5" />
+          <rect x="233" y="94" width="42" height="98" rx="5" />
+          <rect x="290" y="75" width="42" height="117" rx="5" />
+          <rect x="347" y="52" width="42" height="140" rx="5" />
+        </g>
+
+        <path
+          d="M83 132 140 116 197 91 254 78 311 61 368 35"
+          stroke="#08aa82"
+          strokeWidth="6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <g fill="#08aa82">
+          <circle cx="83" cy="132" r="8" />
+          <circle cx="140" cy="116" r="8" />
+          <circle cx="197" cy="91" r="8" />
+          <circle cx="254" cy="78" r="8" />
+          <circle cx="311" cy="61" r="8" />
+          <circle cx="368" cy="35" r="8" />
+        </g>
+
+        <g transform="translate(307 2)">
+          <rect width="112" height="42" rx="17" fill="#dff8ee" fillOpacity=".96" />
+          <text
+            x="56"
+            y="28"
+            textAnchor="middle"
+            fill="#087e66"
+            fontFamily="Arial, Helvetica, sans-serif"
+            fontSize="25"
+            fontWeight="700"
+          >
+            -4,2 kg
+          </text>
+        </g>
+
+        <g fill="#bff0df" fillOpacity=".42">
+          <ellipse cx="393" cy="165" rx="13" ry="38" transform="rotate(34 393 165)" />
+          <ellipse cx="417" cy="179" rx="12" ry="34" transform="rotate(38 417 179)" />
+        </g>
+      </svg>
     </span>
   );
 }
 
+function LightFeatureCard({ feature }: { feature: Feature }) {
+  const isScanner = feature.tone === "scanner";
+  const isBlood = feature.tone === "blood";
+  const isProgress = feature.tone === "progress";
+
+  return (
+    <Link
+      href={feature.href}
+      className="relative block w-full overflow-hidden rounded-[4.3cqw] border border-slate-200/75 bg-white shadow-[0_2px_12px_rgba(15,23,42,0.055)] [container-type:inline-size] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+      style={{ aspectRatio: feature.lightAspect }}
+      aria-label={`${feature.title}. ${feature.description}`}
+    >
+      {isScanner ? (
+        <>
+          <span className="pointer-events-none absolute inset-y-0 right-0 z-0 w-[55%]" aria-hidden="true">
+            <Image
+              src="/images/dashboard/food-barcode-card.webp"
+              alt=""
+              fill
+              unoptimized
+              draggable={false}
+              sizes="(max-width: 768px) 55vw, 520px"
+              className="object-cover object-center"
+            />
+            <span className="absolute inset-y-0 left-0 w-[28%] bg-gradient-to-r from-white via-white/80 to-transparent" />
+          </span>
+
+          <span className="relative z-20 flex h-full items-center gap-[2.2cqw] pl-[3.1cqw] pr-[42cqw]">
+            <ScannerIcon />
+            <span className="min-w-0 text-left">
+              <span className="block whitespace-nowrap text-[3.15cqw] font-extrabold leading-[1.03] tracking-[-0.035em] text-slate-950">
+                Besin ve Barkod Tarayıcı
+              </span>
+              <span className="mt-[0.75cqw] block whitespace-nowrap text-[2.45cqw] font-normal leading-[1.24] tracking-[-0.015em] text-slate-500">
+                Yemeğini fotoğrafla veya
+              </span>
+              <span className="block whitespace-nowrap text-[2.45cqw] font-normal leading-[1.24] tracking-[-0.015em] text-slate-500">
+                paketli ürünü barkodla tara.
+              </span>
+            </span>
+          </span>
+
+          <span className="absolute right-[1.85cqw] top-1/2 z-30 -translate-y-1/2 text-slate-700">
+            <Chevron />
+          </span>
+        </>
+      ) : null}
+
+      {isBlood ? (
+        <>
+          <span
+            className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(circle_at_82%_38%,rgba(219,238,255,0.9),transparent_45%),radial-gradient(circle_at_8%_92%,rgba(255,224,226,0.8),transparent_28%)]"
+            aria-hidden="true"
+          />
+          <span className="pointer-events-none absolute inset-y-0 right-0 z-10 w-[47%]" aria-hidden="true">
+            <Image
+              src="/images/dashboard/blood-test-card.webp"
+              alt=""
+              fill
+              unoptimized
+              draggable={false}
+              sizes="(max-width: 768px) 47vw, 450px"
+              className="object-cover object-center"
+            />
+            <span className="absolute inset-y-0 left-0 w-[19%] bg-gradient-to-r from-white via-white/65 to-transparent" />
+          </span>
+
+          <span className="relative z-20 flex h-full items-center gap-[2.4cqw] pl-[3.15cqw] pr-[44cqw]">
+            <BloodIcon />
+            <span className="min-w-0 text-left">
+              <span className="block whitespace-nowrap text-[3.65cqw] font-extrabold leading-[1.03] tracking-[-0.035em] text-slate-950">
+                Kan Tahlili Analizi
+              </span>
+              <span className="mt-[0.8cqw] block whitespace-nowrap text-[2.75cqw] font-normal leading-[1.22] tracking-[-0.015em] text-slate-500">
+                Tahlil sonuçlarını yükle,
+              </span>
+              <span className="block whitespace-nowrap text-[2.75cqw] font-normal leading-[1.22] tracking-[-0.015em] text-slate-500">
+                anlaşılır şekilde değerlendir.
+              </span>
+            </span>
+          </span>
+
+          <span className="absolute right-[1.9cqw] top-1/2 z-30 -translate-y-1/2 text-slate-700">
+            <Chevron />
+          </span>
+        </>
+      ) : null}
+
+      {isProgress ? (
+        <>
+          <span
+            className="pointer-events-none absolute inset-0 z-0 bg-[linear-gradient(115deg,#ffffff_0%,#ffffff_42%,#f5fffb_65%,#edfff8_100%)]"
+            aria-hidden="true"
+          />
+          <span className="pointer-events-none absolute bottom-[-18%] left-[36%] z-0 h-[74%] w-[45%] rounded-[50%] bg-emerald-100/35 blur-[0.6cqw]" aria-hidden="true" />
+
+          <ProgressArtwork />
+
+          <span className="relative z-20 flex h-full items-center gap-[2.45cqw] pl-[3.1cqw] pr-[46cqw]">
+            <ProgressIcon />
+            <span className="min-w-0 text-left">
+              <span className="block whitespace-nowrap text-[3.8cqw] font-extrabold leading-[1.02] tracking-[-0.04em] text-slate-950">
+                İlerlememi Gör
+              </span>
+              <span className="mt-[0.8cqw] block whitespace-nowrap text-[2.7cqw] font-normal leading-[1.22] tracking-[-0.015em] text-slate-500">
+                Kilo, beslenme, su ve hareket
+              </span>
+              <span className="block whitespace-nowrap text-[2.7cqw] font-normal leading-[1.22] tracking-[-0.015em] text-slate-500">
+                verilerini incele.
+              </span>
+            </span>
+          </span>
+
+          <span className="absolute right-[1.8cqw] top-1/2 z-30 -translate-y-1/2 text-slate-700">
+            <Chevron />
+          </span>
+        </>
+      ) : null}
+    </Link>
+  );
+}
+
 /**
- * Light mode keeps copy as native UI and uses the approved reference artwork for
- * the right-hand imagery. Dark mode intentionally stays unchanged until light is approved.
+ * Light mode uses the final approved dashboard-card compositions as a stable,
+ * responsive implementation. Dark mode intentionally remains unchanged until
+ * its dedicated reference artwork is supplied.
+ *
+ * The Android app hosts this responsive web UI in its trusted WebView, so this
+ * single light-mode implementation is shared by staging web and Android.
  */
 export function DashboardFeatureLinks() {
   return (
     <section id="diewish-tools" className="w-full" aria-label="Diewish araçları">
       <div className="space-y-[clamp(0.45rem,1.8vw,0.8rem)] dark:hidden">
         {FEATURES.map((feature) => (
-          <Link
-            key={`light-${feature.href}`}
-            href={feature.href}
-            className="relative block w-full overflow-hidden border border-slate-200/70 bg-white shadow-[0_2px_12px_rgba(15,23,42,0.045)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-            style={{
-              aspectRatio: `${REFERENCE_CARD_WIDTH} / ${feature.height}`,
-              borderRadius: "clamp(1rem, 3.2vw, 2.2rem)",
-            }}
-            aria-label={`${feature.title}. ${feature.description}`}
-          >
-            <LightReferenceVisual top={feature.top} height={feature.height} tone={feature.tone} />
-
-            <span className="relative z-20 flex h-full w-[72%] min-w-0 items-center gap-[clamp(0.48rem,2.3vw,1.1rem)] pl-[clamp(0.6rem,3vw,1.55rem)] pr-[clamp(0.35rem,1.2vw,0.75rem)]">
-              <LightFeatureIcon tone={feature.tone} />
-              <span className="min-w-0 flex-1 text-left">
-                <span
-                  className={
-                    feature.tone === "scanner"
-                      ? "block whitespace-nowrap text-[clamp(0.66rem,2.95vw,1.06rem)] font-extrabold leading-[1.06] tracking-[-0.035em] text-slate-950"
-                      : "block whitespace-nowrap text-[clamp(0.69rem,3.1vw,1.08rem)] font-extrabold leading-[1.06] tracking-[-0.03em] text-slate-950"
-                  }
-                >
-                  {feature.title}
-                </span>
-                <span className="mt-[clamp(0.08rem,0.38vw,0.18rem)] block max-w-[20rem] text-[clamp(0.58rem,2.55vw,0.86rem)] font-[450] leading-[1.18] tracking-[-0.01em] text-slate-600">
-                  <span className="block whitespace-nowrap">{feature.descriptionLines[0]}</span>
-                  <span className="block whitespace-nowrap">{feature.descriptionLines[1]}</span>
-                </span>
-              </span>
-            </span>
-          </Link>
+          <LightFeatureCard key={`light-${feature.href}`} feature={feature} />
         ))}
       </div>
 
