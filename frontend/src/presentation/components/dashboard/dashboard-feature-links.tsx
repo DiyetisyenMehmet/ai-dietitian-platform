@@ -87,21 +87,20 @@ function LightProgressVisual() {
         <rect x="114" y="68" width="27" height="58" rx="3" fill="currentColor" className="text-emerald-200/80" />
         <rect x="156" y="55" width="27" height="71" rx="3" fill="currentColor" className="text-emerald-200/80" />
         <rect x="198" y="40" width="27" height="86" rx="3" fill="currentColor" className="text-emerald-200/80" />
-        <path d="M28 92C48 84 60 77 78 75C97 72 109 61 124 60C144 59 154 48 170 47C190 45 199 34 222 25" stroke="#10b981" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-        <circle cx="28" cy="92" r="5" fill="#10b981" />
-        <circle cx="78" cy="75" r="5" fill="#10b981" />
-        <circle cx="124" cy="60" r="5" fill="#10b981" />
-        <circle cx="170" cy="47" r="5" fill="#10b981" />
-        <circle cx="222" cy="25" r="5" fill="#10b981" />
+        <path d="M28 92C48 84 60 77 78 75C97 72 109 61 124 60C144 59 154 48 170 47C190 45 199 34 222 25" stroke="#10b981" strokeWidth="4.25" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+        <circle cx="28" cy="92" r="4.4" fill="#10b981" />
+        <circle cx="78" cy="75" r="4.4" fill="#10b981" />
+        <circle cx="124" cy="60" r="4.4" fill="#10b981" />
+        <circle cx="170" cy="47" r="4.4" fill="#10b981" />
+        <circle cx="222" cy="25" r="4.4" fill="#10b981" />
       </svg>
     </span>
   );
 }
 
 /**
- * Light mode is rendered as native UI so raster text can never bleed through
- * behind the live labels. Dark mode intentionally keeps its previous geometry
- * until the approved light treatment is visually signed off.
+ * Light mode keeps copy as native UI and imagery on a separate visual layer.
+ * Dark mode intentionally stays unchanged until the light treatment is approved.
  */
 export function DashboardFeatureLinks() {
   return (
@@ -118,24 +117,12 @@ export function DashboardFeatureLinks() {
             }}
             aria-label={`${feature.title}. ${feature.description}`}
           >
-            <span className="relative z-20 flex h-full w-[63%] min-w-0 items-center gap-[clamp(0.48rem,2.3vw,1.1rem)] pl-[clamp(0.6rem,3vw,1.55rem)]">
-              <LightFeatureIcon tone={feature.tone} />
-              <span className="min-w-0 flex-1 text-left">
-                <span className="block whitespace-nowrap text-[clamp(0.69rem,3.15vw,1.08rem)] font-extrabold leading-[1.06] tracking-[-0.03em] text-slate-950">
-                  {feature.title}
-                </span>
-                <span className="mt-[clamp(0.12rem,0.6vw,0.32rem)] block max-w-[24rem] text-[clamp(0.55rem,2.45vw,0.82rem)] font-medium leading-[1.18] text-slate-600">
-                  {feature.description}
-                </span>
-              </span>
-            </span>
-
             {feature.visual ? (
               <span
-                className="pointer-events-none absolute inset-y-0 right-0 z-10 w-[49%] overflow-hidden"
+                className="pointer-events-none absolute inset-y-0 right-0 z-10 w-[47%] overflow-hidden"
                 style={{
-                  WebkitMaskImage: "linear-gradient(to right, transparent 0%, black 23%, black 100%)",
-                  maskImage: "linear-gradient(to right, transparent 0%, black 23%, black 100%)",
+                  WebkitMaskImage: "linear-gradient(to right, transparent 0%, black 28%, black 100%)",
+                  maskImage: "linear-gradient(to right, transparent 0%, black 28%, black 100%)",
                 }}
                 aria-hidden="true"
               >
@@ -145,13 +132,42 @@ export function DashboardFeatureLinks() {
                   fill
                   unoptimized
                   draggable={false}
-                  sizes="(max-width: 768px) 49vw, 490px"
+                  sizes="(max-width: 768px) 47vw, 470px"
                   className="object-cover object-right"
                 />
               </span>
             ) : (
               <LightProgressVisual />
             )}
+
+            {feature.visual ? (
+              <span
+                className="pointer-events-none absolute inset-y-0 left-0 z-[15] w-[72%]"
+                style={{
+                  background:
+                    "linear-gradient(to right, #ffffff 0%, #ffffff 78%, rgba(255,255,255,0.97) 86%, rgba(255,255,255,0.72) 93%, rgba(255,255,255,0) 100%)",
+                }}
+                aria-hidden="true"
+              />
+            ) : null}
+
+            <span className="relative z-20 flex h-full w-[72%] min-w-0 items-center gap-[clamp(0.48rem,2.3vw,1.1rem)] pl-[clamp(0.6rem,3vw,1.55rem)] pr-[clamp(0.35rem,1.2vw,0.75rem)]">
+              <LightFeatureIcon tone={feature.tone} />
+              <span className="min-w-0 flex-1 text-left">
+                <span
+                  className={
+                    feature.tone === "scanner"
+                      ? "block whitespace-nowrap text-[clamp(0.66rem,2.95vw,1.06rem)] font-extrabold leading-[1.06] tracking-[-0.035em] text-slate-950"
+                      : "block whitespace-nowrap text-[clamp(0.69rem,3.1vw,1.08rem)] font-extrabold leading-[1.06] tracking-[-0.03em] text-slate-950"
+                  }
+                >
+                  {feature.title}
+                </span>
+                <span className="mt-[clamp(0.12rem,0.6vw,0.32rem)] block max-w-[20rem] text-[clamp(0.54rem,2.35vw,0.81rem)] font-medium leading-[1.2] text-slate-600">
+                  {feature.description}
+                </span>
+              </span>
+            </span>
 
             <span className="pointer-events-none absolute right-[clamp(0.55rem,2.2vw,1.25rem)] top-1/2 z-30 -translate-y-1/2 text-[clamp(1.15rem,4.4vw,2rem)] font-medium leading-none text-slate-700" aria-hidden="true">
               ›
