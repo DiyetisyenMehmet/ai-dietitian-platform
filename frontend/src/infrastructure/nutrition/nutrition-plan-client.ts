@@ -138,6 +138,13 @@ export interface NutritionPlanDeviationRecord {
   note: string | null;
 }
 
+export interface ActualNutritionInput {
+  calories?: number;
+  proteinG?: number;
+  carbsG?: number;
+  fatG?: number;
+}
+
 export interface CreateNutritionPlanDeviationInput {
   dayNumber: number;
   mealIndex?: number;
@@ -146,6 +153,7 @@ export interface CreateNutritionPlanDeviationInput {
   type: NutritionPlanDeviationType;
   actualItemName?: string;
   actualPortion?: string;
+  actualNutrition?: ActualNutritionInput;
   note?: string;
 }
 
@@ -308,7 +316,7 @@ export const nutritionPlanClient = {
       path: `/nutrition-plans/${encodeURIComponent(planId)}/deviations`,
       method: "POST",
       auth: true,
-      body: JSON.stringify(input),
+      body: JSON.stringify({ ...input, localDate: localDateYmd() }),
     });
   },
 
