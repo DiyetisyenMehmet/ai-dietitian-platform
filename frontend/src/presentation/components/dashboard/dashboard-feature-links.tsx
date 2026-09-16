@@ -1,7 +1,6 @@
 import Link from "next/link";
 import {
   ChevronRight,
-  FlaskConical,
   ScanLine,
   TrendingUp,
   type LucideIcon,
@@ -31,7 +30,7 @@ const FEATURES: FeatureLink[] = [
     title: "Kan Tahlili Analizi",
     description: "Tahlil sonuçlarını yükle, anlaşılır şekilde değerlendir.",
     href: "/profile/blood-tests",
-    icon: FlaskConical,
+    icon: ScanLine,
     iconWrap: "bg-rose-500/10",
     iconColor: "text-rose-500",
     visual: "blood",
@@ -47,47 +46,93 @@ const FEATURES: FeatureLink[] = [
   },
 ];
 
-const softMask = {
-  WebkitMaskImage: "linear-gradient(to right, transparent 0%, black 20%, black 100%)",
-  maskImage: "linear-gradient(to right, transparent 0%, black 20%, black 100%)",
-};
-
-function ScannerVisual() {
+function BloodDropIcon() {
   return (
-    <span
-      className="relative h-20 w-[40%] min-w-[118px] max-w-[220px] shrink-0 overflow-hidden sm:h-24"
+    <svg
+      viewBox="0 0 32 40"
+      className="h-8 w-7 text-rose-500"
+      fill="none"
       aria-hidden="true"
     >
-      <span className="absolute inset-0 overflow-hidden" style={softMask}>
-        <img
-          src="/images/dashboard/food-barcode-card.webp"
-          alt=""
-          loading="lazy"
-          decoding="async"
-          className="size-full object-cover object-center transition-transform duration-300 group-hover:scale-[1.025]"
-        />
-        <span className="absolute inset-0 bg-gradient-to-r from-card/45 via-transparent to-transparent" />
-      </span>
-    </span>
+      <path
+        d="M16 2.5C13.1 8.1 4.25 17.15 4.25 25.3C4.25 32.25 9.5 37.5 16 37.5C22.5 37.5 27.75 32.25 27.75 25.3C27.75 17.15 18.9 8.1 16 2.5Z"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M20.7 23.35C20.7 27.4 18.2 30.1 14.8 30.1C11.95 30.1 9.85 28.25 9.85 25.55C9.85 22.75 12.8 19.75 16.1 16.25C17.1 18.8 20.7 20.65 20.7 23.35Z"
+        fill="currentColor"
+      />
+    </svg>
   );
 }
 
-function BloodTestVisual() {
+function ReferenceFeatureCard({ feature }: { feature: FeatureLink }) {
+  const isScanner = feature.visual === "scanner";
+  const aspectRatio = isScanner ? "810 / 186" : "810 / 206";
+  const imageUrl = isScanner
+    ? "/images/dashboard/food-barcode-card.webp"
+    : "/images/dashboard/blood-test-card.webp";
+
   return (
-    <span
-      className="relative h-20 w-[40%] min-w-[118px] max-w-[220px] shrink-0 overflow-hidden bg-gradient-to-r from-transparent via-sky-50/35 to-sky-100/55 dark:via-sky-950/20 dark:to-slate-900/35 sm:h-24"
-      style={softMask}
-      aria-hidden="true"
+    <Link
+      href={feature.href}
+      aria-label={`${feature.title}. ${feature.description}`}
+      className={`group relative block w-full overflow-hidden rounded-2xl border border-border/60 shadow-sm transition-shadow hover:shadow-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+        isScanner
+          ? "bg-card"
+          : "bg-gradient-to-r from-card via-card to-sky-50/75 dark:to-sky-950/20"
+      }`}
+      style={{ aspectRatio }}
     >
-      <img
-        src="/images/dashboard/blood-test-card.webp"
-        alt=""
-        loading="lazy"
-        decoding="async"
-        className="size-full object-cover object-center transition-transform duration-300 group-hover:scale-[1.015]"
+      <span
+        className="absolute inset-y-0 right-[4.5%] w-[53%] bg-cover bg-center bg-no-repeat"
+        style={{ backgroundImage: `url(${imageUrl})` }}
+        aria-hidden="true"
       />
-      <span className="absolute inset-0 bg-gradient-to-r from-card/50 via-transparent to-transparent" />
-    </span>
+      <span
+        className="absolute inset-y-0 left-[39%] w-[22%] bg-gradient-to-r from-card via-card/75 to-transparent"
+        aria-hidden="true"
+      />
+
+      <span
+        className={`absolute left-[3%] top-1/2 flex size-12 -translate-y-1/2 items-center justify-center rounded-2xl ${feature.iconWrap}`}
+        aria-hidden="true"
+      >
+        {isScanner ? (
+          <ScanLine className={`size-7 ${feature.iconColor}`} />
+        ) : (
+          <BloodDropIcon />
+        )}
+      </span>
+
+      <span className="absolute left-[19%] top-1/2 z-10 w-[39%] -translate-y-1/2">
+        <span className="block whitespace-nowrap text-sm font-bold leading-tight text-foreground">
+          {feature.title}
+        </span>
+        <span className="mt-1 block text-xs leading-[1.4] text-muted-foreground">
+          {isScanner ? (
+            <>
+              Yemeğini fotoğrafla veya
+              <br />
+              paketli ürünü barkodla tara.
+            </>
+          ) : (
+            <>
+              Tahlil sonuçlarını yükle,
+              <br />
+              anlaşılır şekilde değerlendir.
+            </>
+          )}
+        </span>
+      </span>
+
+      <ChevronRight
+        className="absolute right-[1.5%] top-1/2 z-20 size-[18px] -translate-y-1/2 text-slate-700 transition-transform group-hover:translate-x-0.5 dark:text-slate-300"
+        aria-hidden="true"
+      />
+    </Link>
   );
 }
 
@@ -95,7 +140,6 @@ function ProgressVisual() {
   return (
     <span
       className="relative h-20 w-[40%] min-w-[118px] max-w-[220px] shrink-0 overflow-hidden bg-gradient-to-r from-transparent via-emerald-50/55 to-emerald-100/70 dark:via-emerald-950/20 dark:to-emerald-950/35 sm:h-24"
-      style={softMask}
       aria-hidden="true"
     >
       <span className="absolute bottom-2 left-[18%] right-3 flex h-[55%] items-end gap-1.5 sm:gap-2">
@@ -142,17 +186,15 @@ function ProgressVisual() {
   );
 }
 
-function FeatureVisual({ visual }: { visual: FeatureLink["visual"] }) {
-  if (visual === "scanner") return <ScannerVisual />;
-  if (visual === "blood") return <BloodTestVisual />;
-  return <ProgressVisual />;
-}
-
-/** High-value feature shortcuts. Destinations intentionally reuse existing routes instead of creating parallel flows. */
+/** High-value feature shortcuts. Scanner and blood-test cards follow the approved mobile reference composition. */
 export function DashboardFeatureLinks() {
   return (
-    <section id="diewish-tools" className="space-y-3" aria-label="Diewish araçları">
+    <section id="diewish-tools" className="space-y-2" aria-label="Diewish araçları">
       {FEATURES.map((feature) => {
+        if (feature.visual === "scanner" || feature.visual === "blood") {
+          return <ReferenceFeatureCard key={feature.title} feature={feature} />;
+        }
+
         const Icon = feature.icon;
         return (
           <Link
@@ -176,7 +218,7 @@ export function DashboardFeatureLinks() {
               </p>
             </div>
 
-            <FeatureVisual visual={feature.visual} />
+            <ProgressVisual />
             <ChevronRight
               className="size-5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary"
               aria-hidden="true"
