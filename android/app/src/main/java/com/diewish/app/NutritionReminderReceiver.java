@@ -37,13 +37,12 @@ public final class NutritionReminderReceiver extends BroadcastReceiver {
             manager.createNotificationChannel(channel);
         }
 
-        Intent openApp = new Intent(context, MainActivity.class)
-            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        PendingIntent contentIntent = PendingIntent.getActivity(
+        String id = intent == null ? null : intent.getStringExtra("reminderId");
+        int requestCode = id == null ? 41 : id.hashCode();
+        PendingIntent contentIntent = NotificationTapReceiver.pendingIntent(
             context,
-            0,
-            openApp,
-            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+            requestCode,
+            NotificationRoutes.MEALS
         );
 
         Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
@@ -57,7 +56,6 @@ public final class NutritionReminderReceiver extends BroadcastReceiver {
             .setAutoCancel(true)
             .build();
 
-        String id = intent.getStringExtra("reminderId");
         manager.notify(id == null ? 41 : id.hashCode(), notification);
     }
 }
