@@ -6,7 +6,6 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
-import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Build;
 
@@ -24,7 +23,6 @@ import java.util.Map;
 
 /** Receives data-only Diewish FCM messages without exposing tokens or payloads in logs. */
 public final class DiewishMessagingService extends FirebaseMessagingService {
-    public static final String EXTRA_DIEWISH_PATH = "diewish_path";
     private static final String CHANNEL_ID = "diewish_remote_updates";
     private static final String PREFS = "diewish_push_delivery";
     private static final String SHOWN_IDS = "shown_notification_ids";
@@ -59,14 +57,10 @@ public final class DiewishMessagingService extends FirebaseMessagingService {
             manager.createNotificationChannel(channel);
         }
 
-        Intent intent = new Intent(this, MainActivity.class)
-            .putExtra(EXTRA_DIEWISH_PATH, path)
-            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        PendingIntent pendingIntent = PendingIntent.getActivity(
+        PendingIntent pendingIntent = NotificationTapReceiver.pendingIntent(
             this,
             id.hashCode(),
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+            path
         );
         Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher)
