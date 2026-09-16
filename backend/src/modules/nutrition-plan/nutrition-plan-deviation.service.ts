@@ -35,6 +35,30 @@ function dayFromContent(content: NutritionPlanContent, dayNumber: number): Daily
   return day;
 }
 
+function planDayYmd(plan: NutritionPlan, content: NutritionPlanContent, dayNumber: number): string {
+  dayFromContent(content, dayNumber);
+  const mapping = content.calendar?.find((item) => item.dayNumber === dayNumber);
+  const offset = Math.max(0, Math.trunc(mapping?.dateOffsetDays ?? 0));
+  const date = new Date(plan.startDate);
+  date.setUTCDate(date.getUTCDate() + dayNumber - 1 + offset);
+  return date.toISOString().slice(0, 10);
+}
+
+function assertPlanDayStarted(
+  plan: NutritionPlan,
+  content: NutritionPlanContent,
+  dayNumber: number,
+  localDate: string,
+): void {
+  const selectedDate = planDayYmd(plan, content, dayNumber);
+  if (selectedDate > localDate) {
+    throw new ApiError(409, "Bu plan günü henüz başlamadı.", {
+      code: "NUTRITION_PLAN_DAY_NOT_STARTED",
+      details: { dayNumber, selectedDate },
+    });
+  }
+}
+
 function plannedContext(content: NutritionPlanContent, input: CreateDeviationInput): PlannedContext {
   const day = dayFromContent(content, input.dayNumber);
   if (input.scope === "DAY") return {};
@@ -100,9 +124,10 @@ export const nutritionPlanDeviationService = {
     await requirePaidTier(userId);
     const plan = await requireReadablePlan(userId, planId);
     const content = contentFromPlan(plan);
+    assertPlanDayStarted(plan, content, input.dayNumber, input.localDate);
     const planned = plannedContext(content, input);
 
-    return nutritionPlanDeviationRepository.create({
+    const result = await nutritionPlanDeviationRepository.createGuarded({
       userId,
       planId,
       dayNumber: input.dayNumber,
@@ -116,6 +141,15 @@ export const nutritionPlanDeviationService = {
       actualPortion: input.actualPortion,
       note: input.note,
     });
+
+    if (result.kind === "conflict") {
+      throw new ApiError(409, "Bu plan hedefi için çakışan bir Kaçamak kaydı zaten var.", {
+        code: "NUTRITION_PLAN_DEVIATION_CONFLICT",
+        details: { deviationId: result.record.id },
+      });
+    }
+
+    return result.record;
   },
 
   async remove(userId: string, planId: string, deviationId: string): Promise<void> {
