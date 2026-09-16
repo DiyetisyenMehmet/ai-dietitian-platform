@@ -3,13 +3,7 @@ import Link from "next/link";
 
 const REFERENCE_WIDTH = 1536;
 const REFERENCE_HEIGHT = 1054;
-const LIGHT_CROP_LEFT = 54;
-const LIGHT_CROP_RIGHT = 52;
-const LIGHT_REFERENCE_WIDTH = REFERENCE_WIDTH - LIGHT_CROP_LEFT - LIGHT_CROP_RIGHT;
 
-// Card bounds in the approved artwork. Vertical percentages preserve the
-// original reference geometry while the light-theme viewport trims only the
-// baked outer horizontal gutters.
 const FEATURES = [
   {
     title: "Besin ve Barkod Tarayıcı",
@@ -18,6 +12,7 @@ const FEATURES = [
     top: 21,
     height: 312,
     visual: "/images/dashboard/food-barcode-card.webp",
+    tone: "scanner",
   },
   {
     title: "Kan Tahlili Analizi",
@@ -26,6 +21,7 @@ const FEATURES = [
     top: 361,
     height: 348,
     visual: "/images/dashboard/blood-test-card.webp",
+    tone: "blood",
   },
   {
     title: "İlerlememi Gör",
@@ -34,90 +30,136 @@ const FEATURES = [
     top: 740,
     height: 298,
     visual: null,
+    tone: "progress",
   },
 ] as const;
 
-const LIGHT_TEXT_WASHES = [
-  "rgba(255,255,255,0.76)",
-  "rgba(250,253,255,0.74)",
-  "rgba(251,255,253,0.74)",
-] as const;
+function LightFeatureIcon({ tone }: { tone: (typeof FEATURES)[number]["tone"] }) {
+  if (tone === "scanner") {
+    return (
+      <span className="flex size-[clamp(2.65rem,12.6vw,4.7rem)] shrink-0 items-center justify-center rounded-[clamp(0.75rem,3.4vw,1.35rem)] bg-emerald-50 text-emerald-500" aria-hidden="true">
+        <svg viewBox="0 0 48 48" className="size-[58%]" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round">
+          <path d="M17 9h-5a3 3 0 0 0-3 3v5M31 9h5a3 3 0 0 1 3 3v5M39 31v5a3 3 0 0 1-3 3h-5M17 39h-5a3 3 0 0 1-3-3v-5" />
+          <path d="M17 24h14" />
+        </svg>
+      </span>
+    );
+  }
 
-/** Approved reference artwork in light mode, with the existing dark-mode layer preserved. */
+  if (tone === "blood") {
+    return (
+      <span className="flex size-[clamp(2.65rem,12.6vw,4.7rem)] shrink-0 items-center justify-center rounded-[clamp(0.75rem,3.4vw,1.35rem)] bg-rose-50 text-red-500" aria-hidden="true">
+        <svg viewBox="0 0 48 48" className="size-[58%]" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M24 6C19 13 12 21 12 29a12 12 0 0 0 24 0C36 21 29 13 24 6Z" />
+          <path d="M18 30c1.4 3 3.7 4.5 6.5 4.5 2 0 3.8-.7 5.2-2" />
+        </svg>
+      </span>
+    );
+  }
+
+  return (
+    <span className="flex size-[clamp(2.65rem,12.6vw,4.7rem)] shrink-0 items-center justify-center rounded-[clamp(0.75rem,3.4vw,1.35rem)] bg-emerald-50 text-emerald-600" aria-hidden="true">
+      <svg viewBox="0 0 48 48" className="size-[58%]" fill="currentColor">
+        <rect x="8" y="27" width="8" height="13" rx="1.5" />
+        <rect x="20" y="19" width="8" height="21" rx="1.5" />
+        <rect x="32" y="9" width="8" height="31" rx="1.5" />
+      </svg>
+    </span>
+  );
+}
+
+function LightProgressVisual() {
+  return (
+    <span
+      className="pointer-events-none absolute inset-y-0 right-0 z-10 w-[49%] overflow-hidden bg-[radial-gradient(circle_at_78%_40%,rgba(16,185,129,0.12),transparent_58%)]"
+      style={{
+        WebkitMaskImage: "linear-gradient(to right, transparent 0%, black 23%, black 100%)",
+        maskImage: "linear-gradient(to right, transparent 0%, black 23%, black 100%)",
+      }}
+      aria-hidden="true"
+    >
+      <span className="absolute right-[10%] top-[8%] rounded-full bg-emerald-50/95 px-[clamp(0.28rem,1.25vw,0.55rem)] py-[clamp(0.08rem,0.35vw,0.18rem)] text-[clamp(0.52rem,2.15vw,0.78rem)] font-bold text-emerald-700 shadow-sm">
+        -4,2 kg
+      </span>
+      <svg viewBox="0 0 300 140" className="absolute inset-x-0 bottom-0 h-[84%] w-full" fill="none" preserveAspectRatio="none">
+        <rect x="30" y="94" width="27" height="32" rx="3" fill="currentColor" className="text-emerald-200/80" />
+        <rect x="72" y="80" width="27" height="46" rx="3" fill="currentColor" className="text-emerald-200/80" />
+        <rect x="114" y="68" width="27" height="58" rx="3" fill="currentColor" className="text-emerald-200/80" />
+        <rect x="156" y="55" width="27" height="71" rx="3" fill="currentColor" className="text-emerald-200/80" />
+        <rect x="198" y="40" width="27" height="86" rx="3" fill="currentColor" className="text-emerald-200/80" />
+        <path d="M28 92C48 84 60 77 78 75C97 72 109 61 124 60C144 59 154 48 170 47C190 45 199 34 222 25" stroke="#10b981" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+        <circle cx="28" cy="92" r="5" fill="#10b981" />
+        <circle cx="78" cy="75" r="5" fill="#10b981" />
+        <circle cx="124" cy="60" r="5" fill="#10b981" />
+        <circle cx="170" cy="47" r="5" fill="#10b981" />
+        <circle cx="222" cy="25" r="5" fill="#10b981" />
+      </svg>
+    </span>
+  );
+}
+
+/**
+ * Light mode is rendered as native UI so raster text can never bleed through
+ * behind the live labels. Dark mode intentionally keeps its previous geometry
+ * until the approved light treatment is visually signed off.
+ */
 export function DashboardFeatureLinks() {
   return (
-    <section id="diewish-tools" className="isolate w-full" aria-label="Diewish araçları">
-      {/* Light mode: crop only the empty side gutters baked into the approved JPG.
-          The artwork itself is not regenerated or redesigned. */}
-      <div
-        className="relative w-full overflow-hidden dark:hidden"
-        style={{ aspectRatio: `${LIGHT_REFERENCE_WIDTH} / ${REFERENCE_HEIGHT}` }}
-      >
-        <Image
-          src="/images/dashboard/feature-cards-reference.jpg"
-          alt=""
-          width={REFERENCE_WIDTH}
-          height={REFERENCE_HEIGHT}
-          unoptimized
-          draggable={false}
-          className="pointer-events-none absolute top-0 h-auto max-w-none select-none"
-          style={{
-            left: `${-(LIGHT_CROP_LEFT / LIGHT_REFERENCE_WIDTH) * 100}%`,
-            width: `${(REFERENCE_WIDTH / LIGHT_REFERENCE_WIDTH) * 100}%`,
-          }}
-        />
-
-        {/* Keep the approved artwork for icons/photos/charts. The native text sits
-            on a softly feathered wash so there is no rectangular white panel. */}
-        {FEATURES.map((feature, index) => (
+    <section id="diewish-tools" className="w-full" aria-label="Diewish araçları">
+      <div className="space-y-[clamp(0.45rem,1.8vw,0.8rem)] dark:hidden">
+        {FEATURES.map((feature) => (
           <Link
             key={`light-${feature.href}`}
             href={feature.href}
-            className="absolute left-0 block w-full overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+            className="relative block w-full overflow-hidden border border-slate-200/70 bg-white shadow-[0_2px_12px_rgba(15,23,42,0.045)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
             style={{
-              top: `${(feature.top / REFERENCE_HEIGHT) * 100}%`,
-              height: `${(feature.height / REFERENCE_HEIGHT) * 100}%`,
-              borderRadius: `${(44 / LIGHT_REFERENCE_WIDTH) * 100}% / ${(44 / feature.height) * 100}%`,
+              aspectRatio: `${1430} / ${feature.height}`,
+              borderRadius: "clamp(1rem, 3.2vw, 2.2rem)",
             }}
             aria-label={`${feature.title}. ${feature.description}`}
           >
-            <span
-              className="pointer-events-none absolute left-[15.5%] top-[2%] z-10 h-[96%] w-[50%]"
-              style={{
-                background: LIGHT_TEXT_WASHES[index],
-                WebkitMaskImage:
-                  "radial-gradient(ellipse 76% 72% at 34% 50%, black 0%, black 54%, rgba(0,0,0,0.72) 70%, transparent 100%)",
-                maskImage:
-                  "radial-gradient(ellipse 76% 72% at 34% 50%, black 0%, black 54%, rgba(0,0,0,0.72) 70%, transparent 100%)",
-              }}
-              aria-hidden="true"
-            />
-            <span
-              className="pointer-events-none absolute left-[18.2%] top-1/2 z-20 w-[44.5%] -translate-y-1/2 bg-transparent text-left"
-              aria-hidden="true"
-            >
-              <span
-                className={
-                  index === 0
-                    ? "block whitespace-nowrap text-[clamp(0.66rem,3.05vw,0.91rem)] font-extrabold leading-[1.08] tracking-[-0.03em] text-slate-950"
-                    : "block whitespace-nowrap text-[clamp(0.7rem,3.3vw,0.96rem)] font-extrabold leading-[1.08] tracking-[-0.025em] text-slate-950"
-                }
-              >
-                {feature.title}
-              </span>
-              <span className="mt-[clamp(0.12rem,0.65vw,0.28rem)] block text-[clamp(0.57rem,2.55vw,0.76rem)] font-medium leading-[1.2] text-slate-700">
-                {feature.description}
+            <span className="relative z-20 flex h-full w-[63%] min-w-0 items-center gap-[clamp(0.48rem,2.3vw,1.1rem)] pl-[clamp(0.6rem,3vw,1.55rem)]">
+              <LightFeatureIcon tone={feature.tone} />
+              <span className="min-w-0 flex-1 text-left">
+                <span className="block whitespace-nowrap text-[clamp(0.69rem,3.15vw,1.08rem)] font-extrabold leading-[1.06] tracking-[-0.03em] text-slate-950">
+                  {feature.title}
+                </span>
+                <span className="mt-[clamp(0.12rem,0.6vw,0.32rem)] block max-w-[24rem] text-[clamp(0.55rem,2.45vw,0.82rem)] font-medium leading-[1.18] text-slate-600">
+                  {feature.description}
+                </span>
               </span>
             </span>
-            <span className="sr-only">
-              {feature.title}. {feature.description}
+
+            {feature.visual ? (
+              <span
+                className="pointer-events-none absolute inset-y-0 right-0 z-10 w-[49%] overflow-hidden"
+                style={{
+                  WebkitMaskImage: "linear-gradient(to right, transparent 0%, black 23%, black 100%)",
+                  maskImage: "linear-gradient(to right, transparent 0%, black 23%, black 100%)",
+                }}
+                aria-hidden="true"
+              >
+                <Image
+                  src={feature.visual}
+                  alt=""
+                  fill
+                  unoptimized
+                  draggable={false}
+                  sizes="(max-width: 768px) 49vw, 490px"
+                  className="object-cover object-right"
+                />
+              </span>
+            ) : (
+              <LightProgressVisual />
+            )}
+
+            <span className="pointer-events-none absolute right-[clamp(0.55rem,2.2vw,1.25rem)] top-1/2 z-30 -translate-y-1/2 text-[clamp(1.15rem,4.4vw,2rem)] font-medium leading-none text-slate-700" aria-hidden="true">
+              ›
             </span>
           </Link>
         ))}
       </div>
 
-      {/* Dark mode is intentionally kept on its previous geometry until the
-          light-mode reference is visually approved. */}
       <div
         className="relative hidden w-full dark:block"
         style={{ aspectRatio: `${REFERENCE_WIDTH} / ${REFERENCE_HEIGHT}` }}
@@ -178,10 +220,8 @@ export function DashboardFeatureLinks() {
               <span
                 className="pointer-events-none absolute inset-y-0 right-0 z-10 w-[46%]"
                 style={{
-                  WebkitMaskImage:
-                    "linear-gradient(to right, transparent 0%, black 30%, black 100%)",
-                  maskImage:
-                    "linear-gradient(to right, transparent 0%, black 30%, black 100%)",
+                  WebkitMaskImage: "linear-gradient(to right, transparent 0%, black 30%, black 100%)",
+                  maskImage: "linear-gradient(to right, transparent 0%, black 30%, black 100%)",
                 }}
                 aria-hidden="true"
               >
@@ -200,10 +240,8 @@ export function DashboardFeatureLinks() {
               <span
                 className="pointer-events-none absolute inset-y-0 right-0 z-10 w-[44%] bg-gradient-to-l from-sky-400/[0.06] via-sky-400/[0.02] to-transparent text-sky-300/75"
                 style={{
-                  WebkitMaskImage:
-                    "linear-gradient(to right, transparent 0%, black 28%, black 100%)",
-                  maskImage:
-                    "linear-gradient(to right, transparent 0%, black 28%, black 100%)",
+                  WebkitMaskImage: "linear-gradient(to right, transparent 0%, black 28%, black 100%)",
+                  maskImage: "linear-gradient(to right, transparent 0%, black 28%, black 100%)",
                 }}
                 aria-hidden="true"
               >
