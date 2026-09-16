@@ -38,6 +38,7 @@ jobs:
           set -euo pipefail
           test "$PROJECT_ID" = "project-a2e260c1-839d-4f1d-b90"
           test "$PROJECT_NUMBER" = "730419163638"
+          [[ "$WIF_PROVIDER" == *"diewish-staging"* ]]
           [[ "$DEPLOY_SERVICE_ACCOUNT" == diewish-staging-deployer@* ]]
           test "$ANDROID_PACKAGE" = "com.diewish.app"
 
@@ -91,7 +92,7 @@ jobs:
             -d "$create_body" \
             "https://firebase.googleapis.com/v1beta1/projects/${PROJECT_ID}/androidApps")"
 
-          if [[ "$create_code" != "200" && "$create_code" != "201" ]]; then
+          if [[ "$create_code" != "200" && "$create_code" != "201" && "$create_code" != "202" ]]; then
             error_status="$(jq -r '.error.status // "unknown"' "$request_file" 2>/dev/null || true)"
             echo "Could not create isolated staging Firebase Android app (HTTP ${create_code}, status=${error_status})." >&2
             rm -f "$request_file"
@@ -119,7 +120,17 @@ jobs:
                 exit 1
               fi
               if jq -e '.done == true' "$operation_file" >/dev/null 2>&1; then
+                response_package="$(jq -r '.response.packageName // empty' "$operation_file")"
+                response_project="$(jq -r '.response.projectId // empty' "$operation_file")"
                 rm -f "$operation_file"
+                if [[ -n "$response_package" && "$response_package" != "$ANDROID_PACKAGE" ]]; then
+                  echo "Staging Firebase Android app creation returned an unexpected package." >&2
+                  exit 1
+                fi
+                if [[ -n "$response_project" && "$response_project" != "$PROJECT_ID" ]]; then
+                  echo "Staging Firebase Android app creation returned an unexpected project." >&2
+                  exit 1
+                fi
                 break
               fi
               rm -f "$operation_file"
