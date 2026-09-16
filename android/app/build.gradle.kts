@@ -12,10 +12,18 @@ val stagingWebBaseUrl = providers.gradleProperty("DIEWISH_WEB_BASE_URL")
 val productionWebBaseUrl = providers.gradleProperty("DIEWISH_PRODUCTION_WEB_BASE_URL")
     .orElse("https://diewish-frontend-730419163638.europe-west1.run.app")
     .get()
-val firebaseProjectId = providers.gradleProperty("DIEWISH_FIREBASE_PROJECT_ID").orElse("").get()
-val firebaseAppId = providers.gradleProperty("DIEWISH_FIREBASE_APP_ID").orElse("").get()
-val firebaseApiKey = providers.gradleProperty("DIEWISH_FIREBASE_API_KEY").orElse("").get()
-val firebaseSenderId = providers.gradleProperty("DIEWISH_FIREBASE_SENDER_ID").orElse("").get()
+
+// Firebase client configuration is intentionally build-type scoped. Debug APKs
+// may receive only staging values; release builds require separately named
+// production properties and can never inherit staging Firebase identifiers.
+val stagingFirebaseProjectId = providers.gradleProperty("DIEWISH_FIREBASE_PROJECT_ID").orElse("").get()
+val stagingFirebaseAppId = providers.gradleProperty("DIEWISH_FIREBASE_APP_ID").orElse("").get()
+val stagingFirebaseApiKey = providers.gradleProperty("DIEWISH_FIREBASE_API_KEY").orElse("").get()
+val stagingFirebaseSenderId = providers.gradleProperty("DIEWISH_FIREBASE_SENDER_ID").orElse("").get()
+val productionFirebaseProjectId = providers.gradleProperty("DIEWISH_PRODUCTION_FIREBASE_PROJECT_ID").orElse("").get()
+val productionFirebaseAppId = providers.gradleProperty("DIEWISH_PRODUCTION_FIREBASE_APP_ID").orElse("").get()
+val productionFirebaseApiKey = providers.gradleProperty("DIEWISH_PRODUCTION_FIREBASE_API_KEY").orElse("").get()
+val productionFirebaseSenderId = providers.gradleProperty("DIEWISH_PRODUCTION_FIREBASE_SENDER_ID").orElse("").get()
 val buildRevision = providers.environmentVariable("GITHUB_SHA")
     .orElse("local")
     .get()
@@ -33,10 +41,6 @@ android {
         versionName = "0.1.1"
 
         buildConfigField("String", "BUILD_REVISION", buildConfigString(buildRevision))
-        buildConfigField("String", "FIREBASE_PROJECT_ID", buildConfigString(firebaseProjectId))
-        buildConfigField("String", "FIREBASE_APP_ID", buildConfigString(firebaseAppId))
-        buildConfigField("String", "FIREBASE_API_KEY", buildConfigString(firebaseApiKey))
-        buildConfigField("String", "FIREBASE_SENDER_ID", buildConfigString(firebaseSenderId))
     }
 
     buildFeatures {
@@ -50,11 +54,19 @@ android {
             // deployment workflow supplies DIEWISH_WEB_BASE_URL explicitly.
             buildConfigField("String", "WEB_BASE_URL", buildConfigString(stagingWebBaseUrl))
             buildConfigField("String", "APP_ENVIRONMENT", "\"staging\"")
+            buildConfigField("String", "FIREBASE_PROJECT_ID", buildConfigString(stagingFirebaseProjectId))
+            buildConfigField("String", "FIREBASE_APP_ID", buildConfigString(stagingFirebaseAppId))
+            buildConfigField("String", "FIREBASE_API_KEY", buildConfigString(stagingFirebaseApiKey))
+            buildConfigField("String", "FIREBASE_SENDER_ID", buildConfigString(stagingFirebaseSenderId))
         }
         release {
             isMinifyEnabled = true
             buildConfigField("String", "WEB_BASE_URL", buildConfigString(productionWebBaseUrl))
             buildConfigField("String", "APP_ENVIRONMENT", "\"production\"")
+            buildConfigField("String", "FIREBASE_PROJECT_ID", buildConfigString(productionFirebaseProjectId))
+            buildConfigField("String", "FIREBASE_APP_ID", buildConfigString(productionFirebaseAppId))
+            buildConfigField("String", "FIREBASE_API_KEY", buildConfigString(productionFirebaseApiKey))
+            buildConfigField("String", "FIREBASE_SENDER_ID", buildConfigString(productionFirebaseSenderId))
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
@@ -82,10 +94,12 @@ dependencies {
     // Bundled/on-device retail barcode decoder. No scan frame leaves the phone.
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
 
-    // Firebase is initialized from staging BuildConfig values. No service-account
-    // secret or private key is stored in the APK.
+    // Firebase is initialized from build-type-scoped public client values. No
+    // service-account secret or private key is stored in the APK.
     implementation(platform("com.google.firebase:firebase-bom:34.19.0"))
     implementation("com.google.firebase:firebase-messaging")
 
     implementation("com.android.billingclient:billing:9.1.0")
+
+    testImplementation("junit:junit:4.13.2")
 }
