@@ -3,6 +3,10 @@ import Link from "next/link";
 
 const REFERENCE_WIDTH = 1536;
 const REFERENCE_HEIGHT = 1054;
+const REFERENCE_CARD_LEFT = 54;
+const REFERENCE_CARD_WIDTH = 1430;
+const LIGHT_VISUAL_WIDTH_RATIO = 0.52;
+const LIGHT_VISUAL_START_RATIO = 1 - LIGHT_VISUAL_WIDTH_RATIO;
 
 const FEATURES = [
   {
@@ -69,37 +73,41 @@ function LightFeatureIcon({ tone }: { tone: (typeof FEATURES)[number]["tone"] })
 }
 
 function LightProgressVisual() {
+  const sourceWidthPercent =
+    (REFERENCE_WIDTH / (REFERENCE_CARD_WIDTH * LIGHT_VISUAL_WIDTH_RATIO)) * 100;
+  const sourceTranslateXPercent =
+    -(
+      (REFERENCE_CARD_LEFT + REFERENCE_CARD_WIDTH * LIGHT_VISUAL_START_RATIO) /
+      REFERENCE_WIDTH
+    ) * 100;
+  const sourceTranslateYPercent = -(740 / REFERENCE_HEIGHT) * 100;
+
   return (
     <span
-      className="pointer-events-none absolute inset-y-0 right-0 z-10 w-[49%] overflow-hidden bg-[radial-gradient(circle_at_78%_40%,rgba(16,185,129,0.12),transparent_58%)]"
-      style={{
-        WebkitMaskImage: "linear-gradient(to right, transparent 0%, black 23%, black 100%)",
-        maskImage: "linear-gradient(to right, transparent 0%, black 23%, black 100%)",
-      }}
+      className="pointer-events-none absolute inset-y-0 right-0 z-10 w-[52%] overflow-hidden"
       aria-hidden="true"
     >
-      <span className="absolute right-[10%] top-[8%] rounded-full bg-emerald-50/95 px-[clamp(0.28rem,1.25vw,0.55rem)] py-[clamp(0.08rem,0.35vw,0.18rem)] text-[clamp(0.52rem,2.15vw,0.78rem)] font-bold text-emerald-700 shadow-sm">
-        -4,2 kg
-      </span>
-      <svg viewBox="0 0 300 140" className="absolute inset-x-0 bottom-0 h-[84%] w-full" fill="none" preserveAspectRatio="none">
-        <rect x="30" y="94" width="27" height="32" rx="3" fill="currentColor" className="text-emerald-200/80" />
-        <rect x="72" y="80" width="27" height="46" rx="3" fill="currentColor" className="text-emerald-200/80" />
-        <rect x="114" y="68" width="27" height="58" rx="3" fill="currentColor" className="text-emerald-200/80" />
-        <rect x="156" y="55" width="27" height="71" rx="3" fill="currentColor" className="text-emerald-200/80" />
-        <rect x="198" y="40" width="27" height="86" rx="3" fill="currentColor" className="text-emerald-200/80" />
-        <path d="M28 92C48 84 60 77 78 75C97 72 109 61 124 60C144 59 154 48 170 47C190 45 199 34 222 25" stroke="#10b981" strokeWidth="4.25" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-        <circle cx="28" cy="92" r="4.4" fill="#10b981" />
-        <circle cx="78" cy="75" r="4.4" fill="#10b981" />
-        <circle cx="124" cy="60" r="4.4" fill="#10b981" />
-        <circle cx="170" cy="47" r="4.4" fill="#10b981" />
-        <circle cx="222" cy="25" r="4.4" fill="#10b981" />
-      </svg>
+      <Image
+        src="/images/dashboard/feature-cards-reference.jpg"
+        alt=""
+        width={REFERENCE_WIDTH}
+        height={REFERENCE_HEIGHT}
+        unoptimized
+        draggable={false}
+        className="absolute left-0 top-0 max-w-none select-none"
+        style={{
+          width: `${sourceWidthPercent}%`,
+          height: "auto",
+          transform: `translate(${sourceTranslateXPercent}%, ${sourceTranslateYPercent}%)`,
+          transformOrigin: "top left",
+        }}
+      />
     </span>
   );
 }
 
 /**
- * Light mode keeps copy as native UI and imagery on a separate visual layer.
+ * Light mode keeps copy as native UI and reference imagery on a separate visual layer.
  * Dark mode intentionally stays unchanged until the light treatment is approved.
  */
 export function DashboardFeatureLinks() {
@@ -119,10 +127,10 @@ export function DashboardFeatureLinks() {
           >
             {feature.visual ? (
               <span
-                className="pointer-events-none absolute inset-y-0 right-0 z-10 w-[47%] overflow-hidden"
+                className="pointer-events-none absolute inset-y-0 right-0 z-10 w-[52%] overflow-hidden"
                 style={{
-                  WebkitMaskImage: "linear-gradient(to right, transparent 0%, black 28%, black 100%)",
-                  maskImage: "linear-gradient(to right, transparent 0%, black 28%, black 100%)",
+                  WebkitMaskImage: "linear-gradient(to right, transparent 0%, black 12%, black 100%)",
+                  maskImage: "linear-gradient(to right, transparent 0%, black 12%, black 100%)",
                 }}
                 aria-hidden="true"
               >
@@ -132,7 +140,7 @@ export function DashboardFeatureLinks() {
                   fill
                   unoptimized
                   draggable={false}
-                  sizes="(max-width: 768px) 47vw, 470px"
+                  sizes="(max-width: 768px) 52vw, 520px"
                   className="object-cover object-right"
                 />
               </span>
@@ -142,10 +150,10 @@ export function DashboardFeatureLinks() {
 
             {feature.visual ? (
               <span
-                className="pointer-events-none absolute inset-y-0 left-0 z-[15] w-[72%]"
+                className="pointer-events-none absolute inset-y-0 left-0 z-[15] w-[61%]"
                 style={{
                   background:
-                    "linear-gradient(to right, #ffffff 0%, #ffffff 78%, rgba(255,255,255,0.97) 86%, rgba(255,255,255,0.72) 93%, rgba(255,255,255,0) 100%)",
+                    "linear-gradient(to right, #ffffff 0%, #ffffff 69%, rgba(255,255,255,0.96) 80%, rgba(255,255,255,0.58) 91%, rgba(255,255,255,0) 100%)",
                 }}
                 aria-hidden="true"
               />
