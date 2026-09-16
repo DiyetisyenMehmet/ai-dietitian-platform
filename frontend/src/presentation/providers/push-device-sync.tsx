@@ -4,6 +4,10 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 
 import { useAuth } from "@/application/auth/auth-store";
+import {
+  notificationRegistrationKey,
+  resolvePendingNotificationTarget,
+} from "@/infrastructure/notifications/notification-lifecycle";
 import { notificationClient } from "@/infrastructure/notifications/notification-client";
 
 interface NativePushBridge {
@@ -14,19 +18,6 @@ interface NativePushBridge {
   pendingNotificationPath?(): string;
   clearPendingNotificationPath?(): void;
 }
-
-const SAFE_NOTIFICATION_TARGETS = new Set([
-  "/dashboard",
-  "/ai",
-  "/insights",
-  "/goals",
-  "/meals",
-  "/activity",
-  "/sleep",
-  "/progress",
-  "/profile/blood-tests",
-  "/profile/notifications",
-]);
 
 function bridge(): NativePushBridge | undefined {
   if (typeof window === "undefined") return undefined;
@@ -81,8 +72,8 @@ export function PushDeviceSync() {
         native.ensurePushToken();
         const token = native.pushToken().trim();
         if (token) {
-          const registrationKey = `${user.id}:${token}`;
-          if (lastRegistration !== registrationKey) {
+          const registrationKey = notificationRegistrationKey(user.id, token);
+          if (registrationKey && lastRegistration !== registrationKey) {
             await notificationClient.registerDevice({
               token,
               platform: "android",
@@ -123,7 +114,9 @@ export function PushDeviceSync() {
   }, [status, user?.id]);
 
   React.useEffect(() => {
-    if (status !== "authenticated" || !user?.id || !user.onboardingCompleted) return;
+    const canNavigate =
+      status === "authenticated" && Boolean(user?.id) && user?.onboardingCompleted === true;
+    if (!canNavigate) return;
     const native = bridge();
     if (
       !native ||
@@ -134,9 +127,11 @@ export function PushDeviceSync() {
 
     const consumePendingTarget = () => {
       try {
-        const raw = native.pendingNotificationPath?.().trim() ?? "";
-        if (!raw) return;
-        const target = SAFE_NOTIFICATION_TARGETS.has(raw) ? raw : "/dashboard";
+        const target = resolvePendingNotificationTarget(
+          native.pendingNotificationPath?.(),
+          canNavigate,
+        );
+        if (!target) return;
         native.clearPendingNotificationPath?.();
         router.push(target);
       } catch {
