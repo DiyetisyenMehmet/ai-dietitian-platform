@@ -28,6 +28,13 @@ const localClockSchema = z
   .string()
   .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "localTime must use HH:mm");
 
+function hasPositivePortion(value: string): boolean {
+  const match = value.replace(",", ".").match(/[+-]?\d+(?:\.\d+)?/);
+  if (!match) return false;
+  const amount = Number(match[0]);
+  return Number.isFinite(amount) && amount > 0;
+}
+
 /** Body for generating a new plan. Pantry text is optional practical context, never a command. */
 export const generatePlanSchema = z.object({
   duration: z.enum(PLAN_DURATIONS),
@@ -111,11 +118,14 @@ export const NUTRITION_PLAN_DEVIATION_TYPES = [
 /**
  * Body for recording a user-reported "Kaçamak". Planned item names/portions are
  * deliberately not accepted from the client; the service derives them from the
- * immutable plan snapshot to prevent inconsistent adherence history.
+ * immutable plan snapshot to prevent inconsistent adherence history. localDate
+ * follows the same date-only contract used by plan shifting so future plan days
+ * are rejected on the backend without depending on server UTC midnight.
  */
 export const createDeviationSchema = z
   .object({
     dayNumber: z.number().int().min(1).max(60),
+    localDate: planStartDateSchema,
     mealIndex: z.number().int().min(0).max(20).optional(),
     foodIndex: z.number().int().min(0).max(50).optional(),
     scope: z.enum(NUTRITION_PLAN_DEVIATION_SCOPES),
@@ -176,11 +186,11 @@ export const createDeviationSchema = z
     }
 
     if (value.type === "REPLACED") {
-      if (value.scope === "DAY") {
+      if (value.scope !== "FOOD") {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["scope"],
-          message: "A replacement must target a planned food or meal.",
+          message: "A replacement must target a planned food.",
         });
       }
       if (!value.actualItemName) {
@@ -192,11 +202,28 @@ export const createDeviationSchema = z
       }
     }
 
-    if (value.type === "EXTRA" && !value.actualItemName) {
+    if (value.type === "EXTRA") {
+      if (!value.actualItemName) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["actualItemName"],
+          message: "The extra item is required.",
+        });
+      }
+      if (!value.actualPortion) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["actualPortion"],
+          message: "The extra item portion is required.",
+        });
+      }
+    }
+
+    if (value.actualPortion && !hasPositivePortion(value.actualPortion)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ["actualItemName"],
-        message: "The extra item is required.",
+        path: ["actualPortion"],
+        message: "The actual portion must include a positive numeric amount.",
       });
     }
   });
