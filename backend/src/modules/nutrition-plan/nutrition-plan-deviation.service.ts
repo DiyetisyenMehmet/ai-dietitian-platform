@@ -35,6 +35,28 @@ function dayFromContent(content: NutritionPlanContent, dayNumber: number): Daily
   return day;
 }
 
+function planDayYmd(plan: NutritionPlan, content: NutritionPlanContent, dayNumber: number): string {
+  dayFromContent(content, dayNumber);
+  const mapping = content.calendar?.find((item) => item.dayNumber === dayNumber);
+  const date = new Date(plan.startDate);
+  date.setUTCDate(date.getUTCDate() + dayNumber - 1 + Math.max(0, mapping?.dateOffsetDays ?? 0));
+  return date.toISOString().slice(0, 10);
+}
+
+function assertDayStarted(
+  plan: NutritionPlan,
+  content: NutritionPlanContent,
+  input: CreateDeviationInput,
+): void {
+  const planDate = planDayYmd(plan, content, input.dayNumber);
+  if (planDate > input.localDate) {
+    throw new ApiError(409, "Gün başlamadı.", {
+      code: "NUTRITION_PLAN_DAY_NOT_STARTED",
+      details: { dayNumber: input.dayNumber, planDate },
+    });
+  }
+}
+
 function plannedContext(content: NutritionPlanContent, input: CreateDeviationInput): PlannedContext {
   const day = dayFromContent(content, input.dayNumber);
   if (input.scope === "DAY") return {};
@@ -44,6 +66,10 @@ function plannedContext(content: NutritionPlanContent, input: CreateDeviationInp
     throw ApiError.badRequest("The selected meal is unavailable in this plan day.");
   }
   const meal = day.meals[mealIndex];
+
+  // EXTRA is plan-independent. The meal index is only placement/context and must
+  // never be copied into the immutable planned-item snapshot.
+  if (input.type === "EXTRA") return {};
 
   if (input.scope === "MEAL") {
     return { plannedItemName: meal.name };
@@ -100,9 +126,10 @@ export const nutritionPlanDeviationService = {
     await requirePaidTier(userId);
     const plan = await requireReadablePlan(userId, planId);
     const content = contentFromPlan(plan);
+    assertDayStarted(plan, content, input);
     const planned = plannedContext(content, input);
 
-    return nutritionPlanDeviationRepository.create({
+    const result = await nutritionPlanDeviationRepository.createGuarded({
       userId,
       planId,
       dayNumber: input.dayNumber,
@@ -116,6 +143,15 @@ export const nutritionPlanDeviationService = {
       actualPortion: input.actualPortion,
       note: input.note,
     });
+
+    if (result.status === "CONFLICT") {
+      throw new ApiError(409, "Bu plan hedefi için çakışan bir Kaçamak kaydı zaten var.", {
+        code: "NUTRITION_PLAN_DEVIATION_CONFLICT",
+        details: { reason: result.reason },
+      });
+    }
+
+    return result.deviation;
   },
 
   async remove(userId: string, planId: string, deviationId: string): Promise<void> {
