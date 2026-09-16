@@ -70,7 +70,6 @@ function BloodDropIcon() {
 
 function ReferenceFeatureCard({ feature }: { feature: FeatureLink }) {
   const isScanner = feature.visual === "scanner";
-  const aspectRatio = isScanner ? "810 / 186" : "810 / 206";
   const imageUrl = isScanner
     ? "/images/dashboard/food-barcode-card.webp"
     : "/images/dashboard/blood-test-card.webp";
@@ -79,43 +78,39 @@ function ReferenceFeatureCard({ feature }: { feature: FeatureLink }) {
     <Link
       href={feature.href}
       aria-label={`${feature.title}. ${feature.description}`}
-      className={`group relative block w-full overflow-hidden rounded-2xl border border-border/70 shadow-sm transition-shadow hover:shadow-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+      className={`group relative flex min-h-[94px] w-full items-center overflow-hidden rounded-[24px] border border-border/55 shadow-sm transition-shadow hover:shadow-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-[106px] ${
         isScanner
           ? "bg-card"
-          : "bg-gradient-to-r from-card via-card to-sky-50/75 dark:to-sky-950/20"
+          : "bg-gradient-to-r from-card via-card to-sky-50/70 dark:to-sky-950/20"
       }`}
-      style={{ aspectRatio }}
     >
       <span
-        className="absolute inset-y-0 left-[45%] right-0 bg-no-repeat"
-        style={{
-          backgroundImage: `url(${imageUrl})`,
-          backgroundPosition: "right center",
-          backgroundSize: "94% auto",
-          WebkitMaskImage:
-            "linear-gradient(to right, transparent 0%, rgba(0,0,0,0.18) 7%, rgba(0,0,0,0.72) 18%, #000 30%, #000 100%)",
-          maskImage:
-            "linear-gradient(to right, transparent 0%, rgba(0,0,0,0.18) 7%, rgba(0,0,0,0.72) 18%, #000 30%, #000 100%)",
-        }}
+        className="absolute inset-y-0 right-0 w-[45%] bg-cover bg-center bg-no-repeat"
+        style={{ backgroundImage: `url(${imageUrl})` }}
         aria-hidden="true"
       />
 
       <span
-        className={`absolute left-[2.8%] top-1/2 z-10 flex size-11 -translate-y-1/2 items-center justify-center rounded-2xl ${feature.iconWrap}`}
+        className="absolute inset-y-0 left-[49%] z-[5] w-[18%] bg-gradient-to-r from-card via-card/90 to-transparent"
+        aria-hidden="true"
+      />
+
+      <span
+        className={`relative z-20 ml-[3%] flex size-11 shrink-0 items-center justify-center rounded-2xl sm:size-12 ${feature.iconWrap}`}
         aria-hidden="true"
       >
         {isScanner ? (
-          <ScanLine className={`size-6 ${feature.iconColor}`} />
+          <ScanLine className={`size-6 sm:size-7 ${feature.iconColor}`} />
         ) : (
           <BloodDropIcon />
         )}
       </span>
 
-      <span className="absolute left-[19%] top-1/2 z-20 w-[39%] -translate-y-1/2">
-        <span className="block whitespace-nowrap text-[13px] font-bold leading-[1.2] text-foreground sm:text-sm">
+      <span className="relative z-20 ml-3 w-[44%] min-w-0 sm:ml-4">
+        <span className="block whitespace-nowrap text-[12px] font-bold leading-[1.2] tracking-[-0.01em] text-foreground sm:text-sm">
           {feature.title}
         </span>
-        <span className="mt-1 block text-[11px] leading-[1.35] text-muted-foreground sm:text-xs">
+        <span className="mt-1 block text-[10.5px] leading-[1.35] text-muted-foreground sm:text-xs">
           {isScanner ? (
             <>
               <span className="block whitespace-nowrap">Yemeğini fotoğrafla veya</span>
@@ -131,7 +126,7 @@ function ReferenceFeatureCard({ feature }: { feature: FeatureLink }) {
       </span>
 
       <ChevronRight
-        className="absolute right-[2.4%] top-1/2 z-30 size-[18px] -translate-y-1/2 text-slate-700 drop-shadow-[0_1px_2px_rgba(255,255,255,0.95)] transition-transform group-hover:translate-x-0.5 dark:text-slate-200"
+        className="absolute right-[2.8%] top-1/2 z-30 size-[18px] -translate-y-1/2 text-slate-700/90 drop-shadow-[0_1px_2px_rgba(255,255,255,0.95)] transition-transform group-hover:translate-x-0.5 dark:text-slate-200"
         aria-hidden="true"
       />
     </Link>
