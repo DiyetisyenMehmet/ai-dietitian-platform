@@ -5,8 +5,6 @@ const REFERENCE_WIDTH = 1536;
 const REFERENCE_HEIGHT = 1054;
 const REFERENCE_CARD_LEFT = 54;
 const REFERENCE_CARD_WIDTH = 1430;
-const LIGHT_VISUAL_WIDTH_RATIO = 0.52;
-const LIGHT_VISUAL_START_RATIO = 1 - LIGHT_VISUAL_WIDTH_RATIO;
 
 const FEATURES = [
   {
@@ -72,19 +70,33 @@ function LightFeatureIcon({ tone }: { tone: (typeof FEATURES)[number]["tone"] })
   );
 }
 
-function LightProgressVisual() {
-  const sourceWidthPercent =
-    (REFERENCE_WIDTH / (REFERENCE_CARD_WIDTH * LIGHT_VISUAL_WIDTH_RATIO)) * 100;
-  const sourceTranslateXPercent =
-    -(
-      (REFERENCE_CARD_LEFT + REFERENCE_CARD_WIDTH * LIGHT_VISUAL_START_RATIO) /
-      REFERENCE_WIDTH
-    ) * 100;
-  const sourceTranslateYPercent = -(740 / REFERENCE_HEIGHT) * 100;
+function LightReferenceVisual({
+  top,
+  height,
+  tone,
+}: {
+  top: number;
+  height: number;
+  tone: (typeof FEATURES)[number]["tone"];
+}) {
+  const sourceWidthPercent = (REFERENCE_WIDTH / REFERENCE_CARD_WIDTH) * 100;
+  const sourceLeftPercent = -(REFERENCE_CARD_LEFT / REFERENCE_CARD_WIDTH) * 100;
+  const sourceTopPercent = -(top / height) * 100;
+
+  const revealMask =
+    tone === "progress"
+      ? "linear-gradient(to right, transparent 0%, transparent 53%, black 59%, black 100%)"
+      : tone === "blood"
+        ? "linear-gradient(to right, transparent 0%, transparent 48%, black 58%, black 100%)"
+        : "linear-gradient(to right, transparent 0%, transparent 47%, black 57%, black 100%)";
 
   return (
     <span
-      className="pointer-events-none absolute inset-y-0 right-0 z-10 w-[52%] overflow-hidden"
+      className="pointer-events-none absolute inset-0 z-10 overflow-hidden"
+      style={{
+        WebkitMaskImage: revealMask,
+        maskImage: revealMask,
+      }}
       aria-hidden="true"
     >
       <Image
@@ -94,12 +106,12 @@ function LightProgressVisual() {
         height={REFERENCE_HEIGHT}
         unoptimized
         draggable={false}
-        className="absolute left-0 top-0 max-w-none select-none"
+        className="absolute max-w-none select-none"
         style={{
           width: `${sourceWidthPercent}%`,
           height: "auto",
-          transform: `translate(${sourceTranslateXPercent}%, ${sourceTranslateYPercent}%)`,
-          transformOrigin: "top left",
+          left: `${sourceLeftPercent}%`,
+          top: `${sourceTopPercent}%`,
         }}
       />
     </span>
@@ -107,8 +119,8 @@ function LightProgressVisual() {
 }
 
 /**
- * Light mode keeps copy as native UI and reference imagery on a separate visual layer.
- * Dark mode intentionally stays unchanged until the light treatment is approved.
+ * Light mode keeps copy as native UI and uses the approved reference artwork for
+ * the right-hand imagery. Dark mode intentionally stays unchanged until light is approved.
  */
 export function DashboardFeatureLinks() {
   return (
@@ -120,44 +132,12 @@ export function DashboardFeatureLinks() {
             href={feature.href}
             className="relative block w-full overflow-hidden border border-slate-200/70 bg-white shadow-[0_2px_12px_rgba(15,23,42,0.045)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
             style={{
-              aspectRatio: `${1430} / ${feature.height}`,
+              aspectRatio: `${REFERENCE_CARD_WIDTH} / ${feature.height}`,
               borderRadius: "clamp(1rem, 3.2vw, 2.2rem)",
             }}
             aria-label={`${feature.title}. ${feature.description}`}
           >
-            {feature.visual ? (
-              <span
-                className="pointer-events-none absolute inset-y-0 right-0 z-10 w-[52%] overflow-hidden"
-                style={{
-                  WebkitMaskImage: "linear-gradient(to right, transparent 0%, black 12%, black 100%)",
-                  maskImage: "linear-gradient(to right, transparent 0%, black 12%, black 100%)",
-                }}
-                aria-hidden="true"
-              >
-                <Image
-                  src={feature.visual}
-                  alt=""
-                  fill
-                  unoptimized
-                  draggable={false}
-                  sizes="(max-width: 768px) 52vw, 520px"
-                  className="object-cover object-right"
-                />
-              </span>
-            ) : (
-              <LightProgressVisual />
-            )}
-
-            {feature.visual ? (
-              <span
-                className="pointer-events-none absolute inset-y-0 left-0 z-[15] w-[61%]"
-                style={{
-                  background:
-                    "linear-gradient(to right, #ffffff 0%, #ffffff 69%, rgba(255,255,255,0.96) 80%, rgba(255,255,255,0.58) 91%, rgba(255,255,255,0) 100%)",
-                }}
-                aria-hidden="true"
-              />
-            ) : null}
+            <LightReferenceVisual top={feature.top} height={feature.height} tone={feature.tone} />
 
             <span className="relative z-20 flex h-full w-[72%] min-w-0 items-center gap-[clamp(0.48rem,2.3vw,1.1rem)] pl-[clamp(0.6rem,3vw,1.55rem)] pr-[clamp(0.35rem,1.2vw,0.75rem)]">
               <LightFeatureIcon tone={feature.tone} />
@@ -189,10 +169,6 @@ export function DashboardFeatureLinks() {
                   )}
                 </span>
               </span>
-            </span>
-
-            <span className="pointer-events-none absolute right-[clamp(0.55rem,2.2vw,1.25rem)] top-1/2 z-30 -translate-y-1/2 text-[clamp(1.15rem,4.4vw,2rem)] font-medium leading-none text-slate-700" aria-hidden="true">
-              ›
             </span>
           </Link>
         ))}
