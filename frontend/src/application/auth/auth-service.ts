@@ -126,7 +126,7 @@ export const authService = {
 
   async verifyEmail(token: string): Promise<AuthResult<{ message: string }>> {
     try {
-      const data = await authClient.verifyEmail(token);
+      const data = await authClient.verifyEmail({ token });
       return { ok: true, data };
     } catch (error) {
       return { ok: false, error: toFriendlyError(error) };
