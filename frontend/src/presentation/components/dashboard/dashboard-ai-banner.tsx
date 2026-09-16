@@ -22,11 +22,43 @@ function DiewishMascot() {
   );
 }
 
-/** Compact AI entry point placed after the core tracking tools. */
+/** AI entry point matched to the approved light reference; dark mode stays unchanged until approval. */
 export function DashboardAiBanner() {
   return (
     <section aria-label="Diewish AI Koçu">
-      <div className="relative overflow-hidden rounded-3xl border border-sky-500/15 bg-gradient-to-r from-sky-500/[0.09] via-card to-emerald-500/[0.11] p-4 shadow-sm">
+      {/* Light mode: compact geometry from the approved final reference. */}
+      <div className="relative overflow-hidden rounded-3xl border border-sky-500/15 bg-gradient-to-r from-sky-500/[0.09] via-card to-emerald-500/[0.11] px-3 py-2.5 shadow-sm dark:hidden">
+        <Leaf className="pointer-events-none absolute -bottom-4 right-[28%] size-14 rotate-[-22deg] text-emerald-400/[0.07]" aria-hidden="true" />
+        <Leaf className="pointer-events-none absolute -top-5 right-1 size-12 rotate-[20deg] text-sky-400/[0.06]" aria-hidden="true" />
+
+        <div className="relative flex items-center gap-2.5">
+          <span className="flex size-12 shrink-0 items-center justify-center" aria-hidden="true">
+            <span className="block origin-center scale-[0.82]">
+              <DiewishMascot />
+            </span>
+          </span>
+
+          <div className="min-w-0 flex-1">
+            <h2 className="whitespace-nowrap text-[clamp(0.68rem,2.8vw,0.9rem)] font-bold leading-tight tracking-[-0.01em]">
+              Diewish AI Koçun Yanında
+            </h2>
+            <p className="mt-0.5 whitespace-nowrap text-[clamp(0.52rem,2vw,0.72rem)] leading-tight text-muted-foreground">
+              Daha sağlıklı bir senin için buradayım.
+            </p>
+          </div>
+
+          <Link
+            href="/ai"
+            className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-emerald-500/10 px-2.5 py-1.5 text-[clamp(0.6rem,2.2vw,0.75rem)] font-bold text-emerald-700 shadow-sm ring-1 ring-inset ring-emerald-500/10 transition hover:bg-emerald-500/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            Hemen Sor
+            <ChevronRight className="size-3.5" aria-hidden="true" />
+          </Link>
+        </div>
+      </div>
+
+      {/* Dark mode: preserve the existing implementation until light-mode approval. */}
+      <div className="relative hidden overflow-hidden rounded-3xl border border-sky-500/15 bg-gradient-to-r from-sky-500/[0.09] via-card to-emerald-500/[0.11] p-4 shadow-sm dark:block">
         <Leaf className="pointer-events-none absolute -bottom-3 right-20 size-16 rotate-[-22deg] text-emerald-400/[0.08]" aria-hidden="true" />
         <Leaf className="pointer-events-none absolute -top-5 right-2 size-14 rotate-[20deg] text-sky-400/[0.07]" aria-hidden="true" />
 
