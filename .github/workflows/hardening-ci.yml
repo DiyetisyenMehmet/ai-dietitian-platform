@@ -82,6 +82,8 @@ jobs:
         run: npm audit --audit-level=high
       - name: Test identity runtime and error recovery
         run: node --test tests/identity.test.cjs
+      - name: Test notification lifecycle guards
+        run: node --test tests/notification-lifecycle.test.cjs
       - run: npm run type-check
       - run: npm run build
         env:
@@ -108,6 +110,8 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.6.0"
+      - name: Test notification route guards
+        run: gradle --no-daemon -p android :app:testDebugUnitTest --tests com.diewish.app.NotificationRoutesTest
       - name: Build current-SHA debug APK
         run: gradle --no-daemon -p android :app:assembleDebug
       - name: Stamp current-SHA APK
