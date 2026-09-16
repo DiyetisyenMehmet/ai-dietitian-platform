@@ -34,11 +34,12 @@ public final class WellnessReminderScheduler {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(KEY_SCHEDULE).apply();
     }
 
+    /** Replaces old persisted schedules so removed reminder types are cancelled. */
     public static void rescheduleStored(Context context) {
         String raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_SCHEDULE, null);
         if (raw == null || raw.isEmpty()) return;
         try {
-            scheduleArray(context, sanitize(new JSONArray(raw)));
+            replace(context, raw);
         } catch (JSONException ignored) {
             cancelAll(context);
         }
@@ -65,7 +66,9 @@ public final class WellnessReminderScheduler {
     }
 
     private static boolean isAllowedType(String type) {
-        return "water".equals(type) || "activity".equals(type) || "sleep".equals(type) || "weekly".equals(type);
+        // Weekly summaries are remote/account-aware. Keeping them out of the
+        // local AlarmManager prevents one preference from producing two alerts.
+        return "water".equals(type) || "activity".equals(type) || "sleep".equals(type);
     }
 
     private static void scheduleArray(Context context, JSONArray schedule) {
