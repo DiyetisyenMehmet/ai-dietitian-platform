@@ -46,9 +46,22 @@ const OPTION_ORDER: NutritionPlanDeviationType[] = [
   "PORTION_CHANGED",
 ];
 
+function hasPositivePortion(value: string): boolean {
+  const match = value.replace(",", ".").match(/[+-]?\d+(?:\.\d+)?/);
+  if (!match) return false;
+  const amount = Number(match[0]);
+  return Number.isFinite(amount) && amount > 0;
+}
+
 function kacamakError(error: unknown): string {
   if (error instanceof ApiError && error.code === "SUBSCRIPTION_REQUIRED") {
     return "Kaçamak özelliği Premium ve Premium Plus kullanıcıları içindir.";
+  }
+  if (error instanceof ApiError && error.code === "NUTRITION_PLAN_DAY_NOT_STARTED") {
+    return "Bu plan günü henüz başlamadı.";
+  }
+  if (error instanceof ApiError && error.code === "NUTRITION_PLAN_DEVIATION_CONFLICT") {
+    return "Bu besin veya öğün için çakışan bir Kaçamak kaydı zaten var.";
   }
   return "Kaçamak kaydedilemedi. Lütfen tekrar dene.";
 }
@@ -177,12 +190,15 @@ export function NutritionPlanKacamak({
   const parsedFoodIndex =
     foodIndex === "" || foodIndex === WHOLE_MEAL_VALUE ? undefined : Number(foodIndex);
   const hasPlannedTarget = !needsPlannedFood || wholeMealSkipped || parsedFoodIndex !== undefined;
+  const portionProvided = actualPortion.trim().length > 0;
+  const portionValid = !portionProvided || hasPositivePortion(actualPortion.trim());
   const canSubmit =
     selectedType !== null &&
     hasPlannedTarget &&
+    portionValid &&
     (selectedType !== "REPLACED" || actualItemName.trim().length > 0) &&
-    (selectedType !== "EXTRA" || actualItemName.trim().length > 0) &&
-    (selectedType !== "PORTION_CHANGED" || actualPortion.trim().length > 0);
+    (selectedType !== "EXTRA" || (actualItemName.trim().length > 0 && portionProvided)) &&
+    (selectedType !== "PORTION_CHANGED" || portionProvided);
 
   const save = async () => {
     if (!selectedType || !canSubmit || saving) return;
@@ -218,7 +234,7 @@ export function NutritionPlanKacamak({
     setDeletingId(deviationId);
     try {
       await onDelete(deviationId);
-      toast.success("Kaçamak kaydı kaldırıldı");
+      toast.success("Kaçamak kaydı kaldırıldı.");
     } catch {
       toast.error("Kaçamak kaydı kaldırılamadı. Lütfen tekrar dene.");
     } finally {
@@ -253,16 +269,21 @@ export function NutritionPlanKacamak({
           {mealDeviations.map((record) => (
             <div
               key={record.id}
-              className="flex items-center justify-between gap-3 rounded-xl bg-muted/50 px-3 py-2"
+              className="flex items-start justify-between gap-3 rounded-xl bg-muted/50 px-3 py-2"
             >
-              <div className="min-w-0">
-                <p className="truncate text-xs font-medium">{recordText(record)}</p>
-                {record.note && <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{record.note}</p>}
+              <div className="min-w-0 flex-1">
+                <p className="break-words text-xs font-medium leading-relaxed">{recordText(record)}</p>
+                {record.note && (
+                  <p className="mt-0.5 break-words text-[11px] leading-relaxed text-muted-foreground">
+                    {record.note}
+                  </p>
+                )}
               </div>
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
+                className="shrink-0"
                 disabled={deletingId === record.id}
                 onClick={() => void remove(record.id)}
               >
@@ -358,14 +379,24 @@ export function NutritionPlanKacamak({
 
               {(selectedType === "REPLACED" || selectedType === "EXTRA" || selectedType === "PORTION_CHANGED") && (
                 <label className="block text-xs font-medium">
-                  {selectedType === "PORTION_CHANGED" ? "Ne kadar tükettin?" : "Miktar (isteğe bağlı)"}
+                  {selectedType === "PORTION_CHANGED"
+                    ? "Ne kadar tükettin?"
+                    : selectedType === "EXTRA"
+                      ? "Miktar"
+                      : "Miktar (isteğe bağlı)"}
                   <Input
                     className="mt-1.5"
                     value={actualPortion}
                     maxLength={80}
+                    aria-invalid={portionProvided && !portionValid}
                     placeholder="Örn. 2 dilim, 150 g"
                     onChange={(event) => setActualPortion(event.target.value)}
                   />
+                  {portionProvided && !portionValid && (
+                    <span className="mt-1 block text-[11px] text-destructive">
+                      Miktar sıfırdan büyük sayısal bir değer içermelidir.
+                    </span>
+                  )}
                 </label>
               )}
 
