@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { useAuth } from "@/application/auth/auth-store";
 import {
+  buildWellnessReminderSchedule,
   notificationRegistrationKey,
   resolvePendingNotificationTarget,
 } from "@/infrastructure/notifications/notification-lifecycle";
@@ -17,6 +18,8 @@ interface NativePushBridge {
   appVersion(): string;
   pendingNotificationPath?(): string;
   clearPendingNotificationPath?(): void;
+  replaceWellnessSchedule?(scheduleJson: string): number;
+  cancelWellness?(): void;
 }
 
 function bridge(): NativePushBridge | undefined {
@@ -39,11 +42,12 @@ function bridge(): NativePushBridge | undefined {
 }
 
 let lastRegistration = "";
+let lastWellnessSync = "";
 
 /**
- * Keeps the Android FCM token bound to the current authenticated account and
- * consumes one pending, allowlisted notification route only after auth/router
- * initialization has completed.
+ * Keeps Android push/local reminder state bound to the current authenticated
+ * account and consumes one pending, allowlisted notification route only after
+ * auth/router initialization has completed.
  */
 export function PushDeviceSync() {
   const { status, user } = useAuth();
@@ -51,9 +55,8 @@ export function PushDeviceSync() {
 
   React.useEffect(() => {
     if (status !== "authenticated" || !user?.id) {
-      // Logout must allow the same account/token pair to register again later,
-      // because the server-side device binding is explicitly disabled at logout.
       lastRegistration = "";
+      lastWellnessSync = "";
       return;
     }
     const native = bridge();
@@ -62,11 +65,12 @@ export function PushDeviceSync() {
     let cancelled = false;
     let attempts = 0;
     let timer: number | undefined;
-    let syncing = false;
+    let tokenSyncing = false;
+    let wellnessSyncing = false;
 
-    const sync = async () => {
-      if (cancelled || syncing) return;
-      syncing = true;
+    const syncToken = async () => {
+      if (cancelled || tokenSyncing) return;
+      tokenSyncing = true;
       attempts += 1;
       try {
         native.ensurePushToken();
@@ -86,23 +90,63 @@ export function PushDeviceSync() {
       } catch {
         // Token delivery is best-effort and must never block the app shell.
       } finally {
-        syncing = false;
+        tokenSyncing = false;
       }
-      if (!cancelled && attempts < 12) timer = window.setTimeout(() => void sync(), 1500);
+      if (!cancelled && attempts < 12) timer = window.setTimeout(() => void syncToken(), 1500);
+    };
+
+    const syncWellness = async () => {
+      if (
+        cancelled ||
+        wellnessSyncing ||
+        typeof native.replaceWellnessSchedule !== "function" ||
+        typeof native.cancelWellness !== "function"
+      ) return;
+      wellnessSyncing = true;
+      try {
+        let { preferences } = await notificationClient.getPreferences();
+        const timezoneOffsetMinutes = new Date().getTimezoneOffset();
+        if (preferences.timezoneOffsetMinutes !== timezoneOffsetMinutes) {
+          ({ preferences } = await notificationClient.updatePreferences({ timezoneOffsetMinutes }));
+        }
+
+        const signature = JSON.stringify([
+          user.id,
+          timezoneOffsetMinutes,
+          preferences.waterReminders,
+          preferences.waterReminderTime,
+          preferences.activityReminders,
+          preferences.activityReminderTime,
+          preferences.sleepReminders,
+          preferences.sleepReminderTime,
+        ]);
+        if (signature === lastWellnessSync) return;
+
+        const schedule = buildWellnessReminderSchedule(preferences);
+        if (schedule.length === 0) native.cancelWellness?.();
+        else native.replaceWellnessSchedule?.(JSON.stringify(schedule));
+        lastWellnessSync = signature;
+      } catch {
+        // A network failure leaves the last valid native schedule untouched.
+      } finally {
+        wellnessSyncing = false;
+      }
     };
 
     const syncOnResume = () => {
       attempts = 0;
-      void sync();
+      void syncToken();
+      void syncWellness();
     };
     const syncOnVisibility = () => {
       if (document.visibilityState === "visible") syncOnResume();
     };
 
-    void sync();
+    void syncToken();
+    void syncWellness();
     window.addEventListener("focus", syncOnResume);
     document.addEventListener("visibilitychange", syncOnVisibility);
-    const refreshTimer = window.setInterval(syncOnResume, 60_000);
+    const refreshTimer = window.setInterval(() => void syncToken(), 60_000);
 
     return () => {
       cancelled = true;
