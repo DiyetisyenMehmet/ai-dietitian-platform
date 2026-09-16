@@ -37,10 +37,10 @@ const FEATURES = [
   },
 ] as const;
 
-const LIGHT_TEXT_COVERS = [
-  "linear-gradient(to right, rgba(255,255,255,0.995) 0%, rgba(255,255,255,0.995) 84%, rgba(255,255,255,0) 100%)",
-  "linear-gradient(to right, rgba(250,253,255,0.995) 0%, rgba(250,253,255,0.995) 84%, rgba(250,253,255,0) 100%)",
-  "linear-gradient(to right, rgba(251,255,253,0.995) 0%, rgba(251,255,253,0.995) 84%, rgba(251,255,253,0) 100%)",
+const LIGHT_TEXT_WASHES = [
+  "rgba(255,255,255,0.76)",
+  "rgba(250,253,255,0.74)",
+  "rgba(251,255,253,0.74)",
 ] as const;
 
 /** Approved reference artwork in light mode, with the existing dark-mode layer preserved. */
@@ -67,8 +67,8 @@ export function DashboardFeatureLinks() {
           }}
         />
 
-        {/* Light mode: keep the reference artwork for icons/photos/charts, but
-            replace only its rasterized labels with crisp native text. */}
+        {/* Keep the approved artwork for icons/photos/charts. The native text sits
+            on a softly feathered wash so there is no rectangular white panel. */}
         {FEATURES.map((feature, index) => (
           <Link
             key={`light-${feature.href}`}
@@ -82,18 +82,30 @@ export function DashboardFeatureLinks() {
             aria-label={`${feature.title}. ${feature.description}`}
           >
             <span
-              className="pointer-events-none absolute left-[16.4%] top-[9%] z-10 h-[82%] w-[45%]"
-              style={{ background: LIGHT_TEXT_COVERS[index] }}
+              className="pointer-events-none absolute left-[15.5%] top-[2%] z-10 h-[96%] w-[50%]"
+              style={{
+                background: LIGHT_TEXT_WASHES[index],
+                WebkitMaskImage:
+                  "radial-gradient(ellipse 76% 72% at 34% 50%, black 0%, black 54%, rgba(0,0,0,0.72) 70%, transparent 100%)",
+                maskImage:
+                  "radial-gradient(ellipse 76% 72% at 34% 50%, black 0%, black 54%, rgba(0,0,0,0.72) 70%, transparent 100%)",
+              }}
               aria-hidden="true"
             />
             <span
-              className="pointer-events-none absolute left-[18.2%] top-1/2 z-20 w-[40.5%] -translate-y-1/2 text-left"
+              className="pointer-events-none absolute left-[18.2%] top-1/2 z-20 w-[44.5%] -translate-y-1/2 bg-transparent text-left"
               aria-hidden="true"
             >
-              <span className="block whitespace-nowrap text-[clamp(0.7rem,3.45vw,0.98rem)] font-extrabold leading-[1.08] tracking-[-0.025em] text-slate-950">
+              <span
+                className={
+                  index === 0
+                    ? "block whitespace-nowrap text-[clamp(0.66rem,3.05vw,0.91rem)] font-extrabold leading-[1.08] tracking-[-0.03em] text-slate-950"
+                    : "block whitespace-nowrap text-[clamp(0.7rem,3.3vw,0.96rem)] font-extrabold leading-[1.08] tracking-[-0.025em] text-slate-950"
+                }
+              >
                 {feature.title}
               </span>
-              <span className="mt-[clamp(0.12rem,0.65vw,0.28rem)] block text-[clamp(0.59rem,2.85vw,0.79rem)] font-medium leading-[1.18] text-slate-600">
+              <span className="mt-[clamp(0.12rem,0.65vw,0.28rem)] block text-[clamp(0.57rem,2.55vw,0.76rem)] font-medium leading-[1.2] text-slate-700">
                 {feature.description}
               </span>
             </span>
