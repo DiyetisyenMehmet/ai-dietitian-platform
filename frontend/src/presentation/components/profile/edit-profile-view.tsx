@@ -74,10 +74,10 @@ export function EditProfileView() {
       e.age = "Geçerli bir yaş gir (13-120).";
     if (!Number.isFinite(heightNum) || heightNum < 100 || heightNum > 250)
       e.heightCm = "Boy 100-250 cm arasında olmalı.";
-    if (!Number.isFinite(currentNum) || currentNum < 30 || currentNum > 400)
-      e.currentWeightKg = "Kilo 30-400 kg arasında olmalı.";
-    if (!Number.isFinite(targetNum) || targetNum < 30 || targetNum > 400)
-      e.targetWeightKg = "Hedef kilo 30-400 kg arasında olmalı.";
+    if (!Number.isFinite(currentNum) || currentNum < 25 || currentNum > 400)
+      e.currentWeightKg = "Kilo 25-400 kg arasında olmalı.";
+    if (!Number.isFinite(targetNum) || targetNum < 25 || targetNum > 400)
+      e.targetWeightKg = "Hedef kilo 25-400 kg arasında olmalı.";
     if (!Number.isFinite(waterNum) || waterNum < 500 || waterNum > 6000)
       e.dailyWaterGoalMl = "Su hedefi 500-6000 ml arasında olmalı.";
 
@@ -123,8 +123,8 @@ export function EditProfileView() {
     };
 
     try {
-      // Persist the health profile first. Client stores are refreshed only from
-      // the backend response, never from unchecked form state.
+      // Profile + changed weight history are persisted atomically by the backend.
+      // Client stores are refreshed only from the committed backend response.
       const result = await onboardingService.complete(payload);
       if (!result.ok) {
         toast.error(result.error);
@@ -134,16 +134,12 @@ export function EditProfileView() {
       authStore.updateUser({ fullName: result.data.fullName });
       hydrateStoresFromProfile(result.data.profile, result.data.fullName);
 
-      // A changed current weight is also a real time-series measurement. Persist
-      // it through the tracking endpoint so profile, progress history and AI
-      // context remain synchronized. Backend weight logging updates UserProfile
-      // atomically with the log row.
       if (weightChanged) {
         try {
-          await weightStore.add(nextCurrent, "Profil güncellemesi");
+          await weightStore.hydrateWeightFromBackend(result.data.profile.currentWeightKg);
           await journeyStore.hydrateJourneyFromBackend();
         } catch {
-          toast.warning("Profil kaydedildi, ancak kilo geçmişi kaydı tamamlanamadı.");
+          toast.warning("Profil kaydedildi. İlerleme görünümü bir sonraki yenilemede güncellenecek.");
         }
       }
 
