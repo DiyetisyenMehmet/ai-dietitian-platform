@@ -1,5 +1,6 @@
 import { ApiError } from "@/infrastructure/api/http-client";
 import { authClient } from "@/infrastructure/auth/auth-client";
+import { notificationClient } from "@/infrastructure/notifications/notification-client";
 import type {
   ForgotPasswordInput,
   LoginInput,
@@ -9,6 +10,25 @@ import type {
 import type { AuthSession } from "@/domain/auth/types";
 
 export type AuthResult<T> = { ok: true; data: T } | { ok: false; error: string };
+
+interface NativeNotificationLifecycleBridge {
+  pushToken(): string;
+  deletePushToken?(): void;
+  clearPendingNotificationPath?(): void;
+}
+
+function nativeNotificationBridge(): NativeNotificationLifecycleBridge | undefined {
+  if (typeof window === "undefined") return undefined;
+  try {
+    const value = (
+      window as typeof window & { DiewishReminders?: Partial<NativeNotificationLifecycleBridge> }
+    ).DiewishReminders;
+    if (!value || typeof value.pushToken !== "function") return undefined;
+    return value as NativeNotificationLifecycleBridge;
+  } catch {
+    return undefined;
+  }
+}
 
 function toFriendlyError(error: unknown): string {
   if (error instanceof ApiError) {
@@ -46,8 +66,36 @@ export const authService = {
     }
   },
 
-  /** Best-effort cookie-session logout. Optional arg keeps older callers source-compatible. */
+  /**
+   * Best-effort cookie-session logout. The current Android push binding is
+   * disabled while the access token is still valid, then the native FCM token
+   * is deleted so a later account receives a newly registered token.
+   */
   async logout(_legacyRefreshToken?: string | null): Promise<void> {
+    const native = nativeNotificationBridge();
+    let token = "";
+    try {
+      token = native?.pushToken().trim() ?? "";
+    } catch {
+      token = "";
+    }
+
+    if (token) {
+      try {
+        await notificationClient.unregisterDevice(token);
+      } catch {
+        // Logout must still complete. Native token deletion makes a stale server
+        // binding self-heal through FCM invalid-token cleanup if unregister fails.
+      }
+    }
+
+    try {
+      native?.clearPendingNotificationPath?.();
+      native?.deletePushToken?.();
+    } catch {
+      // Optional native cleanup must never block account logout.
+    }
+
     try {
       await authClient.logout();
     } catch {
@@ -78,7 +126,7 @@ export const authService = {
 
   async verifyEmail(token: string): Promise<AuthResult<{ message: string }>> {
     try {
-      const data = await authClient.verifyEmail({ token });
+      const data = await authClient.verifyEmail(token);
       return { ok: true, data };
     } catch (error) {
       return { ok: false, error: toFriendlyError(error) };
