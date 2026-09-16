@@ -1,6 +1,7 @@
 import { ApiError } from "@/infrastructure/api/http-client";
 import { authClient } from "@/infrastructure/auth/auth-client";
 import { notificationClient } from "@/infrastructure/notifications/notification-client";
+import { releaseNotificationDevice } from "@/infrastructure/notifications/notification-lifecycle";
 import type {
   ForgotPasswordInput,
   LoginInput,
@@ -80,21 +81,14 @@ export const authService = {
       token = "";
     }
 
-    if (token) {
-      try {
-        await notificationClient.unregisterDevice(token);
-      } catch {
-        // Logout must still complete. Native token deletion makes a stale server
-        // binding self-heal through FCM invalid-token cleanup if unregister fails.
-      }
-    }
-
-    try {
-      native?.clearPendingNotificationPath?.();
-      native?.deletePushToken?.();
-    } catch {
-      // Optional native cleanup must never block account logout.
-    }
+    await releaseNotificationDevice(
+      token,
+      (currentToken) => notificationClient.unregisterDevice(currentToken),
+      () => {
+        native?.clearPendingNotificationPath?.();
+        native?.deletePushToken?.();
+      },
+    );
 
     try {
       await authClient.logout();
