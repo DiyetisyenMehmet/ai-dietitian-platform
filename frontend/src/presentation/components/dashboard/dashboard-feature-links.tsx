@@ -10,6 +10,7 @@ const FEATURES = [
   {
     title: "Besin ve Barkod Tarayıcı",
     description: "Yemeğini fotoğrafla veya paketli ürünü barkodla tara.",
+    descriptionLines: ["Yemeğini fotoğrafla veya", "paketli ürünü barkodla tara."],
     href: "/meals/scan",
     top: 21,
     height: 312,
@@ -19,6 +20,7 @@ const FEATURES = [
   {
     title: "Kan Tahlili Analizi",
     description: "Tahlil sonuçlarını yükle, anlaşılır şekilde değerlendir.",
+    descriptionLines: ["Tahlil sonuçlarını yükle,", "anlaşılır şekilde değerlendir."],
     href: "/profile/blood-tests",
     top: 361,
     height: 348,
@@ -28,6 +30,7 @@ const FEATURES = [
   {
     title: "İlerlememi Gör",
     description: "Kilo, beslenme, su ve hareket verilerini incele.",
+    descriptionLines: ["Kilo, beslenme, su ve hareket", "verilerini incele."],
     href: "/progress",
     top: 740,
     height: 298,
@@ -83,12 +86,16 @@ function LightReferenceVisual({
   const sourceLeftPercent = -(REFERENCE_CARD_LEFT / REFERENCE_CARD_WIDTH) * 100;
   const sourceTopPercent = -(top / height) * 100;
 
+  // Reveal the approved raster artwork only after the live heading area. The
+  // progress reveal starts earlier because its native title is substantially
+  // shorter; this keeps the "text ends, visual begins" relationship consistent
+  // without redrawing or distorting the approved chart artwork.
   const revealMask =
     tone === "progress"
-      ? "linear-gradient(to right, transparent 0%, transparent 53%, black 59%, black 100%)"
+      ? "linear-gradient(to right, transparent 0%, transparent 39%, black 48%, black 100%)"
       : tone === "blood"
-        ? "linear-gradient(to right, transparent 0%, transparent 48%, black 58%, black 100%)"
-        : "linear-gradient(to right, transparent 0%, transparent 47%, black 57%, black 100%)";
+        ? "linear-gradient(to right, transparent 0%, transparent 46%, black 55%, black 100%)"
+        : "linear-gradient(to right, transparent 0%, transparent 50%, black 59%, black 100%)";
 
   return (
     <span
@@ -151,22 +158,9 @@ export function DashboardFeatureLinks() {
                 >
                   {feature.title}
                 </span>
-                <span className="mt-[clamp(0.12rem,0.6vw,0.32rem)] block max-w-[20rem] text-[clamp(0.54rem,2.35vw,0.81rem)] font-medium leading-[1.2] text-slate-600">
-                  {feature.tone === "scanner" ? (
-                    <>
-                      Yemeğini fotoğrafla veya
-                      <br />
-                      paketli ürünü barkodla tara.
-                    </>
-                  ) : feature.tone === "blood" ? (
-                    <>
-                      Tahlil sonuçlarını yükle,
-                      <br />
-                      anlaşılır şekilde değerlendir.
-                    </>
-                  ) : (
-                    feature.description
-                  )}
+                <span className="mt-[clamp(0.08rem,0.38vw,0.18rem)] block max-w-[20rem] text-[clamp(0.58rem,2.55vw,0.86rem)] font-[450] leading-[1.18] tracking-[-0.01em] text-slate-600">
+                  <span className="block whitespace-nowrap">{feature.descriptionLines[0]}</span>
+                  <span className="block whitespace-nowrap">{feature.descriptionLines[1]}</span>
                 </span>
               </span>
             </span>
