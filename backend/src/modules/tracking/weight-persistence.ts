@@ -29,6 +29,30 @@ export async function lockUserWeightMutation(
 }
 
 /**
+ * Re-derives the profile scalar from the chronologically latest persisted
+ * measurement. Caller must hold `lockUserWeightMutation` in the same
+ * transaction. A null result means the user has no weight history.
+ */
+export async function syncCurrentWeightFromHistory(
+  tx: Prisma.TransactionClient,
+  userId: string,
+): Promise<WeightLog | null> {
+  const latest = await tx.weightLog.findFirst({
+    where: { userId },
+    orderBy: weightLogOrderBy(),
+  });
+
+  if (latest) {
+    await tx.userProfile.updateMany({
+      where: { userId },
+      data: { currentWeightKg: latest.weightKg },
+    });
+  }
+
+  return latest;
+}
+
+/**
  * Creates a time-series measurement and then derives `currentWeightKg` from the
  * actual latest WeightLog rather than request arrival order. Caller must hold
  * `lockUserWeightMutation` inside the same transaction.
@@ -43,17 +67,6 @@ export async function createWeightLogAndSyncCurrent(
   },
 ): Promise<WeightLog> {
   const log = await tx.weightLog.create({ data });
-  const latest = await tx.weightLog.findFirst({
-    where: { userId: data.userId },
-    orderBy: weightLogOrderBy(),
-  });
-
-  if (latest) {
-    await tx.userProfile.updateMany({
-      where: { userId: data.userId },
-      data: { currentWeightKg: latest.weightKg },
-    });
-  }
-
+  await syncCurrentWeightFromHistory(tx, data.userId);
   return log;
 }

@@ -38,6 +38,20 @@ export const createWeightLogSchema = z.object({
   loggedAt: optionalWeightLoggedAt,
 });
 
+export const updateWeightLogSchema = z
+  .object({
+    weightKg: weightKgSchema.optional(),
+    note: z.string().trim().max(280).optional(),
+    loggedAt: optionalWeightLoggedAt,
+  })
+  .refine((value) => Object.keys(value).length > 0, {
+    message: "At least one weight field must be provided.",
+  });
+
+export const weightLogIdParamsSchema = z.object({
+  id: z.string().uuid("id must be a valid UUID."),
+});
+
 export const createMealLogSchema = z.object({
   mealType: z.enum(["BREAKFAST", "LUNCH", "DINNER", "SNACK"]),
   name: z.string().trim().max(200).optional(),
@@ -86,6 +100,7 @@ export const scheduleWaterReminderSchema = z.object({
 });
 
 export type CreateWeightLogInput = z.infer<typeof createWeightLogSchema>;
+export type UpdateWeightLogInput = z.infer<typeof updateWeightLogSchema>;
 export type CreateMealLogInput = z.infer<typeof createMealLogSchema>;
 export type UpdateMealLogInput = z.infer<typeof updateMealLogSchema>;
 export type CreateWaterLogInput = z.infer<typeof createWaterLogSchema>;

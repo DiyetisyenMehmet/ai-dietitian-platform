@@ -12,8 +12,11 @@ import {
   scheduleWaterReminderSchema,
   updateMealLogSchema,
   updateWaterGoalSchema,
+  updateWeightLogSchema,
   waterLogIdParamsSchema,
+  weightLogIdParamsSchema,
 } from "./tracking.schemas";
+import { weightEntryController } from "./weight-entry.controller";
 
 /**
  * Tracking router (mounted at /api/tracking). Every route is owner-scoped and
@@ -33,6 +36,25 @@ trackingRouter.post(
   trackingController.createWeight,
 );
 trackingRouter.get("/weight", authenticate, trackingController.listWeight);
+trackingRouter.get(
+  "/weight/:id",
+  authenticate,
+  validate({ params: weightLogIdParamsSchema }),
+  weightEntryController.get,
+);
+trackingRouter.patch(
+  "/weight/:id",
+  authenticate,
+  requireConsent,
+  validate({ params: weightLogIdParamsSchema, body: updateWeightLogSchema }),
+  weightEntryController.update,
+);
+trackingRouter.delete(
+  "/weight/:id",
+  authenticate,
+  validate({ params: weightLogIdParamsSchema }),
+  weightEntryController.delete,
+);
 
 /**
  * Meal time-series. A body containing only `mealType` is a valid explicit meal

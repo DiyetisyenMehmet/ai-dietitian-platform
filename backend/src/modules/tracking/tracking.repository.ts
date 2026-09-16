@@ -4,8 +4,12 @@ import { prisma } from "../../lib/prisma";
 import {
   createWeightLogAndSyncCurrent,
   lockUserWeightMutation,
+  syncCurrentWeightFromHistory,
+  WEIGHT_BASELINE_NOTE,
   weightLogOrderBy,
 } from "./weight-persistence";
+
+const MAX_WEIGHT_HISTORY_LOGS = 500;
 
 /**
  * Data access for tracking logs. All reads/writes/deletes are owner-scoped by
@@ -28,10 +32,75 @@ export const trackingRepository = {
     });
   },
 
-  listWeightLogs(userId: string, since?: Date): Promise<WeightLog[]> {
-    return prisma.weightLog.findMany({
+  async listWeightLogs(userId: string, since?: Date): Promise<WeightLog[]> {
+    const logs = await prisma.weightLog.findMany({
       where: { userId, ...(since ? { loggedAt: { gte: since } } : {}) },
       orderBy: weightLogOrderBy(),
+      take: MAX_WEIGHT_HISTORY_LOGS,
+    });
+
+    // The client uses the onboarding baseline for starting-weight semantics. If
+    // a very long history reaches the safety cap, retain that one canonical row
+    // without allowing an unbounded response. `since` requests intentionally
+    // remain strict to their requested time window.
+    if (
+      since ||
+      logs.length < MAX_WEIGHT_HISTORY_LOGS ||
+      logs.some((log) => log.note === WEIGHT_BASELINE_NOTE)
+    ) {
+      return logs;
+    }
+
+    const baseline = await prisma.weightLog.findFirst({
+      where: { userId, note: WEIGHT_BASELINE_NOTE },
+      orderBy: [{ loggedAt: "asc" }, { createdAt: "asc" }, { id: "asc" }],
+    });
+    if (!baseline || logs.some((log) => log.id === baseline.id)) return logs;
+    return [...logs.slice(0, MAX_WEIGHT_HISTORY_LOGS - 1), baseline];
+  },
+
+  getWeightLogForUser(id: string, userId: string): Promise<WeightLog | null> {
+    return prisma.weightLog.findFirst({ where: { id, userId } });
+  },
+
+  async updateWeightLogForUser(
+    id: string,
+    userId: string,
+    data: { weightKg?: number; note?: string; loggedAt?: Date },
+  ) {
+    return prisma.$transaction(async (tx) => {
+      await lockUserWeightMutation(tx, userId);
+      const existing = await tx.weightLog.findFirst({ where: { id, userId } });
+      if (!existing) return { status: "NOT_FOUND" as const };
+      if (existing.note === WEIGHT_BASELINE_NOTE) {
+        return { status: "BASELINE_IMMUTABLE" as const };
+      }
+
+      const log = await tx.weightLog.update({ where: { id }, data });
+      await syncCurrentWeightFromHistory(tx, userId);
+      return { status: "UPDATED" as const, log };
+    });
+  },
+
+  async deleteWeightLogForUser(id: string, userId: string) {
+    return prisma.$transaction(async (tx) => {
+      await lockUserWeightMutation(tx, userId);
+      const existing = await tx.weightLog.findFirst({ where: { id, userId } });
+      if (!existing) return { status: "NOT_FOUND" as const };
+      if (existing.note === WEIGHT_BASELINE_NOTE) {
+        return { status: "BASELINE_IMMUTABLE" as const };
+      }
+
+      const remaining = await tx.weightLog.findFirst({
+        where: { userId, id: { not: id } },
+        orderBy: weightLogOrderBy(),
+        select: { id: true },
+      });
+      if (!remaining) return { status: "LAST_ENTRY" as const };
+
+      await tx.weightLog.delete({ where: { id } });
+      await syncCurrentWeightFromHistory(tx, userId);
+      return { status: "DELETED" as const };
     });
   },
 
