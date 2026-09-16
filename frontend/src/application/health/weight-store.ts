@@ -105,8 +105,13 @@ async function performAdd(weightKg: number, note?: string, dateKey?: string): Pr
     throw new Error("INVALID_WEIGHT");
   }
 
-  const loggedAt = dateKey ? dateKeyToLocalNoon(dateKey) : undefined;
-  if (dateKey && !loggedAt) {
+  // A measurement entered for today means "now", not local noon. Sending noon
+  // can make a same-day onboarding baseline look chronologically newer and keep
+  // currentWeightKg pinned to the baseline. Historical dates still use local
+  // noon to preserve their intended calendar day across UTC conversion.
+  const isToday = dateKey === localDateKey();
+  const loggedAt = dateKey && !isToday ? dateKeyToLocalNoon(dateKey) : undefined;
+  if (dateKey && !isToday && !loggedAt) {
     throw new Error("INVALID_WEIGHT_DATE");
   }
 
