@@ -8,7 +8,7 @@ import {
   dailyTrackingStore,
   useDailyTracking,
 } from "@/application/health/daily-tracking-store";
-import { useHealthProfile } from "@/application/health/health-profile-store";
+import { healthProfileStore, useHealthProfile } from "@/application/health/health-profile-store";
 import {
   nutritionPlanStore,
   useNutritionPlan,
@@ -19,6 +19,7 @@ import {
   weightStore,
 } from "@/application/health/weight-store";
 import { computeTotals, mealsStore, useMeals } from "@/application/meals/meals-store";
+import { onboardingClient } from "@/infrastructure/onboarding/onboarding-client";
 import { trackingClient } from "@/infrastructure/tracking/tracking-client";
 import { formatNumber, toPercent } from "@/shared/lib/format";
 
@@ -98,6 +99,13 @@ export function DashboardMetricsSection() {
 
   React.useEffect(() => {
     void Promise.allSettled([
+      onboardingClient.getProfile().then(({ profile: backendProfile }) => {
+        if (!backendProfile) return;
+        healthProfileStore.update({
+          currentWeightKg: backendProfile.currentWeightKg,
+          targetWeightKg: backendProfile.targetWeightKg,
+        });
+      }),
       dailyTrackingStore.hydrateWaterFromBackend(),
       mealsStore.hydrateMealsFromBackend(),
       activityStore.hydrateFromBackend(),
@@ -128,7 +136,7 @@ export function DashboardMetricsSection() {
   const movementPercent = movementGoal > 0 ? toPercent(movementValue, movementGoal) : 0;
   const movementUnit = showSteps ? "adım" : "dk";
 
-  const latestWeight = entries.at(-1)?.weightKg ?? profile.currentWeightKg;
+  const latestWeight = profile.currentWeightKg > 0 ? profile.currentWeightKg : (entries.at(-1)?.weightKg ?? 0);
   const weightAnalysis = React.useMemo(
     () => analyzeWeight(entries, profile.targetWeightKg),
     [entries, profile.targetWeightKg],
