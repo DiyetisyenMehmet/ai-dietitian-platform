@@ -79,7 +79,7 @@ function ReferenceFeatureCard({ feature }: { feature: FeatureLink }) {
     <Link
       href={feature.href}
       aria-label={`${feature.title}. ${feature.description}`}
-      className={`group relative block w-full overflow-hidden rounded-2xl border border-border/60 shadow-sm transition-shadow hover:shadow-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+      className={`group relative block w-full overflow-hidden rounded-2xl border border-border/70 shadow-sm transition-shadow hover:shadow-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
         isScanner
           ? "bg-card"
           : "bg-gradient-to-r from-card via-card to-sky-50/75 dark:to-sky-950/20"
@@ -87,49 +87,51 @@ function ReferenceFeatureCard({ feature }: { feature: FeatureLink }) {
       style={{ aspectRatio }}
     >
       <span
-        className="absolute inset-y-0 right-0 w-[51.5%] bg-cover bg-center bg-no-repeat"
-        style={{ backgroundImage: `url(${imageUrl})` }}
-        aria-hidden="true"
-      />
-      <span
-        className="absolute inset-y-0 left-[39%] w-[22%] bg-gradient-to-r from-card via-card/75 to-transparent"
+        className="absolute inset-y-0 left-[45%] right-0 bg-no-repeat"
+        style={{
+          backgroundImage: `url(${imageUrl})`,
+          backgroundPosition: "right center",
+          backgroundSize: "94% auto",
+          WebkitMaskImage:
+            "linear-gradient(to right, transparent 0%, rgba(0,0,0,0.18) 7%, rgba(0,0,0,0.72) 18%, #000 30%, #000 100%)",
+          maskImage:
+            "linear-gradient(to right, transparent 0%, rgba(0,0,0,0.18) 7%, rgba(0,0,0,0.72) 18%, #000 30%, #000 100%)",
+        }}
         aria-hidden="true"
       />
 
       <span
-        className={`absolute left-[3%] top-1/2 flex size-12 -translate-y-1/2 items-center justify-center rounded-2xl ${feature.iconWrap}`}
+        className={`absolute left-[2.8%] top-1/2 z-10 flex size-11 -translate-y-1/2 items-center justify-center rounded-2xl ${feature.iconWrap}`}
         aria-hidden="true"
       >
         {isScanner ? (
-          <ScanLine className={`size-7 ${feature.iconColor}`} />
+          <ScanLine className={`size-6 ${feature.iconColor}`} />
         ) : (
           <BloodDropIcon />
         )}
       </span>
 
-      <span className="absolute left-[19%] top-1/2 z-10 w-[39%] -translate-y-1/2">
-        <span className="block whitespace-nowrap text-sm font-bold leading-tight text-foreground">
+      <span className="absolute left-[19%] top-1/2 z-20 w-[39%] -translate-y-1/2">
+        <span className="block whitespace-nowrap text-[13px] font-bold leading-[1.2] text-foreground sm:text-sm">
           {feature.title}
         </span>
-        <span className="mt-1 block text-xs leading-[1.4] text-muted-foreground">
+        <span className="mt-1 block text-[11px] leading-[1.35] text-muted-foreground sm:text-xs">
           {isScanner ? (
             <>
-              Yemeğini fotoğrafla veya
-              <br />
-              paketli ürünü barkodla tara.
+              <span className="block whitespace-nowrap">Yemeğini fotoğrafla veya</span>
+              <span className="block whitespace-nowrap">paketli ürünü barkodla tara.</span>
             </>
           ) : (
             <>
-              Tahlil sonuçlarını yükle,
-              <br />
-              anlaşılır şekilde değerlendir.
+              <span className="block whitespace-nowrap">Tahlil sonuçlarını yükle,</span>
+              <span className="block whitespace-nowrap">anlaşılır şekilde değerlendir.</span>
             </>
           )}
         </span>
       </span>
 
       <ChevronRight
-        className="absolute right-[2.2%] top-1/2 z-20 size-[18px] -translate-y-1/2 text-slate-700 drop-shadow-[0_1px_2px_rgba(255,255,255,0.9)] transition-transform group-hover:translate-x-0.5 dark:text-slate-200"
+        className="absolute right-[2.4%] top-1/2 z-30 size-[18px] -translate-y-1/2 text-slate-700 drop-shadow-[0_1px_2px_rgba(255,255,255,0.95)] transition-transform group-hover:translate-x-0.5 dark:text-slate-200"
         aria-hidden="true"
       />
     </Link>
