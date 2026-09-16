@@ -45,6 +45,15 @@
             android:name=".WellnessReminderReceiver"
             android:exported="false" />
         <receiver
+            android:name=".ReminderClockChangeReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.TIME_SET" />
+            </intent-filter>
+        </receiver>
+        <receiver
             android:name=".NutritionReminderBootReceiver"
             android:enabled="true"
             android:exported="false">
