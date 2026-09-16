@@ -1,0 +1,94 @@
+name: Stage4 Weight Runtime
+
+on:
+  push:
+    branches:
+      - feature/staging-preview
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: diewish-stage4-weight-runtime
+  cancel-in-progress: false
+
+env:
+  PROJECT_ID: project-a2e260c1-839d-4f1d-b90
+  REGION: europe-west1
+  WIF_PROVIDER: projects/730419163638/locations/global/workloadIdentityPools/github-actions/providers/diewish-staging
+  DEPLOY_SERVICE_ACCOUNT: diewish-staging-deployer@project-a2e260c1-839d-4f1d-b90.iam.gserviceaccount.com
+  BACKEND_SERVICE: diewish-backend-staging
+  FRONTEND_SERVICE: diewish-frontend-staging
+  STAGING_WEB_URL: https://staging.diewish.com
+
+jobs:
+  weight-runtime:
+    if: ${{ contains(github.event.head_commit.message, '[deploy-staging]') }}
+    name: Validate Body Weight on exact staging SHA
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    environment: staging
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate staging-only contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$BACKEND_SERVICE" == *-staging ]]
+          [[ "$FRONTEND_SERVICE" == *-staging ]]
+          [[ "$DEPLOY_SERVICE_ACCOUNT" == diewish-staging-deployer@* ]]
+          [[ "$WIF_PROVIDER" == *diewish-staging* ]]
+          [[ "$STAGING_WEB_URL" == "https://staging.diewish.com" ]]
+
+      - name: Authenticate to isolated staging Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Wait for both staging services to run this exact SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected_suffix=":${GITHUB_SHA}"
+          for attempt in {1..120}; do
+            backend_image="$(gcloud run services describe "$BACKEND_SERVICE" --project "$PROJECT_ID" --region "$REGION" --format='value(spec.template.spec.containers[0].image)' 2>/dev/null || true)"
+            frontend_image="$(gcloud run services describe "$FRONTEND_SERVICE" --project "$PROJECT_ID" --region "$REGION" --format='value(spec.template.spec.containers[0].image)' 2>/dev/null || true)"
+            if [[ "$backend_image" == *"$expected_suffix" && "$frontend_image" == *"$expected_suffix" ]]; then
+              echo "Both isolated staging services are running exact SHA ${GITHUB_SHA}."
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Exact-SHA staging rollout was not observed for both services." >&2
+          exit 1
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend test dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run real staging Body Weight acceptance
+        working-directory: frontend
+        env:
+          E2E_WEB_BASE_URL: ${{ env.STAGING_WEB_URL }}
+          E2E_API_BASE_URL: ${{ env.STAGING_WEB_URL }}/api
+        run: npx playwright test e2e/staging-weight-runtime.spec.js --workers=1 --reporter=line
