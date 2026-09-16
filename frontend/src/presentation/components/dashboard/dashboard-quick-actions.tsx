@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Droplets, Footprints, Moon, Scale, Utensils, X } from "lucide-react";
+import { Droplets, Footprints, Moon, Utensils, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { activityStore } from "@/application/health/activity-store";
@@ -54,6 +54,26 @@ function defaultSleepTimes(): { start: string; wake: string } {
   wake.setSeconds(0, 0);
   const start = new Date(wake.getTime() - 8 * 60 * 60 * 1000);
   return { start: toLocalDateTimeInput(start), wake: toLocalDateTimeInput(wake) };
+}
+
+function WeightScaleIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="size-6 text-violet-500 sm:size-7"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="4" y="3" width="16" height="18" rx="4" />
+      <rect x="8" y="6" width="8" height="5" rx="2" />
+      <path d="M12 8.5 14 7" />
+      <path d="M8 17h8" />
+    </svg>
+  );
 }
 
 function QuickModal({
@@ -284,7 +304,7 @@ export function DashboardQuickActions() {
           <span className="text-[10px] font-semibold leading-tight sm:text-sm">Hareket</span>
         </button>
         <button type="button" onClick={() => openQuickAction("weight")} className={`${tileClass} bg-violet-500/[0.06]`}>
-          <Scale className="size-6 text-violet-500 sm:size-7" aria-hidden="true" />
+          <WeightScaleIcon />
           <span className="text-[10px] font-semibold leading-tight sm:text-sm">Kilo Ekle</span>
         </button>
         <button type="button" onClick={() => openQuickAction("sleep")} className={`${tileClass} bg-indigo-500/[0.06]`}>
