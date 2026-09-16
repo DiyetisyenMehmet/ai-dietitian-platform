@@ -4,8 +4,8 @@ import Link from "next/link";
 const REFERENCE_WIDTH = 1536;
 const REFERENCE_HEIGHT = 1054;
 
-// Card bounds in the approved artwork. Percentages keep both the light-theme
-// hit areas and the dark-theme cards aligned at every container width.
+// Card bounds in the approved artwork. Percentages keep the light-theme hit
+// areas aligned with the unmodified reference image at every container width.
 const FEATURES = [
   {
     title: "Besin ve Barkod Tarayıcı",
@@ -33,8 +33,8 @@ const FEATURES = [
   },
 ] as const;
 
-const CARD_LEFT = `${(54 / REFERENCE_WIDTH) * 100}%`;
-const CARD_WIDTH = `${(1430 / REFERENCE_WIDTH) * 100}%`;
+const LIGHT_CARD_LEFT = `${(54 / REFERENCE_WIDTH) * 100}%`;
+const LIGHT_CARD_WIDTH = `${(1430 / REFERENCE_WIDTH) * 100}%`;
 
 /** Approved reference artwork in light mode, with native dark-mode equivalents. */
 export function DashboardFeatureLinks() {
@@ -63,8 +63,8 @@ export function DashboardFeatureLinks() {
           href={feature.href}
           className="absolute block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset dark:hidden"
           style={{
-            left: CARD_LEFT,
-            width: CARD_WIDTH,
+            left: LIGHT_CARD_LEFT,
+            width: LIGHT_CARD_WIDTH,
             top: `${(feature.top / REFERENCE_HEIGHT) * 100}%`,
             height: `${(feature.height / REFERENCE_HEIGHT) * 100}%`,
             borderRadius: `${(44 / 1430) * 100}% / ${(44 / feature.height) * 100}%`,
@@ -77,19 +77,17 @@ export function DashboardFeatureLinks() {
         </Link>
       ))}
 
-      {/* Dark mode: do not show the white JPEG canvas. Render theme-native cards
-          while reusing only the existing decorative food/blood-test assets. */}
+      {/* Dark mode: use the full dashboard content width instead of inheriting
+          the reference artwork's baked-in 54 px side margins. */}
       {FEATURES.map((feature, index) => (
         <Link
           key={`dark-${feature.href}`}
           href={feature.href}
-          className="absolute hidden items-center overflow-hidden border border-white/10 bg-zinc-900/95 shadow-sm transition-colors hover:bg-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset dark:flex"
+          className="absolute left-0 hidden w-full items-center overflow-hidden border border-white/10 bg-zinc-900/95 shadow-sm transition-colors hover:bg-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset dark:flex"
           style={{
-            left: CARD_LEFT,
-            width: CARD_WIDTH,
             top: `${(feature.top / REFERENCE_HEIGHT) * 100}%`,
             height: `${(feature.height / REFERENCE_HEIGHT) * 100}%`,
-            borderRadius: `${(44 / 1430) * 100}% / ${(44 / feature.height) * 100}%`,
+            borderRadius: "clamp(1rem, 3vw, 2.75rem)",
           }}
           aria-label={`${feature.title}. ${feature.description}`}
         >
@@ -135,12 +133,12 @@ export function DashboardFeatureLinks() {
 
           {feature.visual ? (
             <span
-              className="pointer-events-none absolute inset-y-0 right-0 z-10 w-[42%]"
+              className="pointer-events-none absolute inset-y-0 right-0 z-10 w-[46%]"
               style={{
                 WebkitMaskImage:
-                  "linear-gradient(to right, transparent 0%, black 24%, black 100%)",
+                  "linear-gradient(to right, transparent 0%, black 30%, black 100%)",
                 maskImage:
-                  "linear-gradient(to right, transparent 0%, black 24%, black 100%)",
+                  "linear-gradient(to right, transparent 0%, black 30%, black 100%)",
               }}
               aria-hidden="true"
             >
@@ -150,22 +148,38 @@ export function DashboardFeatureLinks() {
                 fill
                 unoptimized
                 draggable={false}
-                sizes="(max-width: 768px) 42vw, 420px"
-                className="object-cover object-center"
+                sizes="(max-width: 768px) 46vw, 460px"
+                className="object-cover object-right"
               />
-              <span className="absolute inset-0 bg-gradient-to-r from-zinc-900/80 via-zinc-900/10 to-transparent" />
+              <span className="absolute inset-0 bg-gradient-to-r from-zinc-900/75 via-zinc-900/10 to-transparent" />
             </span>
           ) : (
-            <span className="pointer-events-none absolute inset-y-0 right-[7%] z-10 flex w-[24%] items-center justify-center text-sky-300/70" aria-hidden="true">
-              <svg viewBox="0 0 180 90" className="h-[64%] w-full" fill="none">
-                <path d="M8 71h164M8 48h164M8 25h164" stroke="currentColor" strokeOpacity=".12" />
-                <path d="M10 68c25-2 35-28 57-24 18 3 20 20 38 12 17-8 22-33 39-31 10 1 15 8 26 3" stroke="currentColor" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
-                <circle cx="170" cy="28" r="6" fill="currentColor" />
+            <span
+              className="pointer-events-none absolute inset-y-0 right-0 z-10 w-[44%] bg-gradient-to-l from-sky-400/[0.06] via-sky-400/[0.02] to-transparent text-sky-300/75"
+              style={{
+                WebkitMaskImage:
+                  "linear-gradient(to right, transparent 0%, black 28%, black 100%)",
+                maskImage:
+                  "linear-gradient(to right, transparent 0%, black 28%, black 100%)",
+              }}
+              aria-hidden="true"
+            >
+              <svg viewBox="0 0 240 110" className="h-full w-full" fill="none" preserveAspectRatio="none">
+                <path d="M18 84H218M18 58H218M18 32H218" stroke="currentColor" strokeOpacity=".10" />
+                <path
+                  d="M18 84C48 81 58 50 84 51C108 52 111 69 132 60C157 50 159 25 184 25C199 25 207 33 218 31"
+                  stroke="currentColor"
+                  strokeWidth="5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  vectorEffect="non-scaling-stroke"
+                />
+                <circle cx="218" cy="31" r="5.5" fill="currentColor" />
               </svg>
             </span>
           )}
 
-          <span className="absolute right-[clamp(0.65rem,2.8vw,2rem)] top-1/2 z-30 -translate-y-1/2 text-[clamp(1rem,4vw,2.25rem)] leading-none text-zinc-400" aria-hidden="true">
+          <span className="absolute right-[clamp(0.65rem,2.8vw,2rem)] top-1/2 z-30 -translate-y-1/2 text-[clamp(1rem,4vw,2.25rem)] leading-none text-zinc-300/80" aria-hidden="true">
             ›
           </span>
         </Link>
