@@ -22,4 +22,11 @@ public final class DiewishPushTokenStore {
         SharedPreferences preferences = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         return preferences.getString(TOKEN, "");
     }
+
+    public static void clear(Context context) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .remove(TOKEN)
+            .apply();
+    }
 }
