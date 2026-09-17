@@ -205,17 +205,21 @@ function LightFeatureCard({ feature }: { feature: Feature }) {
     >
       {isScanner ? (
         <>
-          <span className="pointer-events-none absolute inset-y-0 right-0 z-0 w-[55%]" aria-hidden="true">
+          <span
+            className="pointer-events-none absolute inset-y-0 right-[1.6cqw] z-0 w-[50%]"
+            aria-hidden="true"
+          >
             <Image
               src="/images/dashboard/food-barcode-card.webp"
               alt=""
               fill
-              unoptimized
+              quality={100}
               draggable={false}
-              sizes="(max-width: 768px) 55vw, 520px"
-              className="object-cover object-center"
+              sizes="(max-width: 768px) 50vw, 470px"
+              className="object-contain object-right"
+              style={{ transform: "scale(0.92)", transformOrigin: "right center" }}
             />
-            <span className="absolute inset-y-0 left-0 w-[28%] bg-gradient-to-r from-white via-white/80 to-transparent" />
+            <span className="absolute inset-y-0 left-0 w-[18%] bg-gradient-to-r from-white via-white/75 to-transparent" />
           </span>
 
           <span className="relative z-20 flex h-full items-center gap-[2.2cqw] pl-[3.1cqw] pr-[42cqw]">
@@ -245,17 +249,21 @@ function LightFeatureCard({ feature }: { feature: Feature }) {
             className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(circle_at_82%_38%,rgba(219,238,255,0.9),transparent_45%),radial-gradient(circle_at_8%_92%,rgba(255,224,226,0.8),transparent_28%)]"
             aria-hidden="true"
           />
-          <span className="pointer-events-none absolute inset-y-0 right-0 z-10 w-[47%]" aria-hidden="true">
+          <span
+            className="pointer-events-none absolute inset-y-0 right-[1.8cqw] z-10 w-[48%]"
+            aria-hidden="true"
+          >
             <Image
               src="/images/dashboard/blood-test-card.webp"
               alt=""
               fill
-              unoptimized
+              quality={100}
               draggable={false}
-              sizes="(max-width: 768px) 47vw, 450px"
-              className="object-cover object-center"
+              sizes="(max-width: 768px) 48vw, 445px"
+              className="object-contain object-right"
+              style={{ transform: "scale(0.9)", transformOrigin: "right center" }}
             />
-            <span className="absolute inset-y-0 left-0 w-[19%] bg-gradient-to-r from-white via-white/65 to-transparent" />
+            <span className="absolute inset-y-0 left-0 w-[13%] bg-gradient-to-r from-white via-white/60 to-transparent" />
           </span>
 
           <span className="relative z-20 flex h-full items-center gap-[2.4cqw] pl-[3.15cqw] pr-[44cqw]">
