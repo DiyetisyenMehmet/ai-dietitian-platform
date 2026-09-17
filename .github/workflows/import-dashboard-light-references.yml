@@ -1,0 +1,72 @@
+name: Import Dashboard Light References
+
+on:
+  push:
+    branches:
+      - feature/staging-preview
+    paths:
+      - .github/workflows/import-dashboard-light-references.yml
+
+permissions:
+  contents: write
+
+jobs:
+  import-reference-assets:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout staging branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/staging-preview
+          fetch-depth: 0
+
+      - name: Download approved final light references
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p frontend/public/images/dashboard/references
+          curl --fail --location --retry 3 --silent --show-error \
+            'https://d2jqrm6oza8nb6.cloudfront.net/datasets/61a6e1fb-9e8a-4a1c-a70f-0e85e13c8628.png?_jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJrZXlIYXNoIjoiYjcyZTM4NzNiMzI5NWNjNSIsImJ1Y2tldCI6InJ1bndheS1kYXRhc2V0cyIsInN0YWdlIjoicHJvZCIsImV4cCI6MTc4OTc4NzYzNX0.n9Hpvel0pPnMSWbCKAxktwJsmvjJHyVftxmxyeagSJ8' \
+            --output frontend/public/images/dashboard/references/food-light-final.png
+          curl --fail --location --retry 3 --silent --show-error \
+            'https://d2jqrm6oza8nb6.cloudfront.net/datasets/9d75be8b-dc5f-4489-8355-524005687e36.png?_jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJrZXlIYXNoIjoiMDIyNTMyZTY4ZDc1OGQyMCIsImJ1Y2tldCI6InJ1bndheS1kYXRhc2V0cyIsInN0YWdlIjoicHJvZCIsImV4cCI6MTc4OTczOTQ5NH0.30t8WGDu24h4W5uy2xwY3qKNnnL8jd3_GMBCi_1mtw0' \
+            --output frontend/public/images/dashboard/references/blood-light-final.png
+
+      - name: Verify reference bytes and dimensions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import struct
+          from pathlib import Path
+
+          expected = {
+              'frontend/public/images/dashboard/references/food-light-final.png': (1603, 400),
+              'frontend/public/images/dashboard/references/blood-light-final.png': (1603, 460),
+          }
+          for filename, wanted in expected.items():
+              data = Path(filename).read_bytes()
+              if data[:8] != b'\x89PNG\r\n\x1a\n':
+                  raise SystemExit(f'{filename}: not a PNG')
+              width, height = struct.unpack('>II', data[16:24])
+              if (width, height) != wanted:
+                  raise SystemExit(f'{filename}: expected {wanted}, got {(width, height)}')
+              if len(data) < 100_000:
+                  raise SystemExit(f'{filename}: unexpectedly small ({len(data)} bytes)')
+              print(f'{filename}: {width}x{height}, {len(data)} bytes')
+          PY
+
+      - name: Commit exact reference assets to staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add frontend/public/images/dashboard/references/food-light-final.png \
+                  frontend/public/images/dashboard/references/blood-light-final.png
+          if git diff --cached --quiet; then
+            echo 'Reference assets already match; nothing to commit.'
+            exit 0
+          fi
+          git commit -m 'chore(dashboard): import exact light reference assets [asset-sync]'
+          git push origin HEAD:feature/staging-preview
