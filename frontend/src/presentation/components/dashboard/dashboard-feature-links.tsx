@@ -46,16 +46,36 @@ function Chevron() {
   return (
     <svg
       viewBox="0 0 24 24"
-      className="h-[7.4cqw] w-[7.4cqw]"
+      className="h-[6.2cqw] w-[6.2cqw]"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2.3"
+      strokeWidth="2.2"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
     >
       <path d="m9 5 7 7-7 7" />
     </svg>
+  );
+}
+
+function ReferenceChevronOverlay({ tone }: { tone: Feature["tone"] }) {
+  const coverBackground =
+    tone === "blood"
+      ? "linear-gradient(to right, rgba(241,248,255,0) 0%, rgba(241,248,255,0.97) 34%, rgba(241,248,255,1) 100%)"
+      : "linear-gradient(to right, rgba(248,250,244,0) 0%, rgba(248,250,244,0.97) 34%, rgba(248,250,244,1) 100%)";
+
+  return (
+    <>
+      <span
+        className="pointer-events-none absolute right-[0.2cqw] top-1/2 z-20 h-[12cqw] w-[10.6cqw] -translate-y-1/2 backdrop-blur-[0.55cqw]"
+        style={{ background: coverBackground }}
+        aria-hidden="true"
+      />
+      <span className="pointer-events-none absolute right-[2.2cqw] top-1/2 z-30 -translate-y-1/2 text-[#29425f]" aria-hidden="true">
+        <Chevron />
+      </span>
+    </>
   );
 }
 
@@ -172,6 +192,7 @@ function LightFeatureCard({ feature }: { feature: Feature }) {
           className="pointer-events-none select-none object-fill"
           aria-hidden="true"
         />
+        <ReferenceChevronOverlay tone={feature.tone} />
         <span className="sr-only">{feature.title}. {feature.description}</span>
       </Link>
     );
@@ -209,7 +230,7 @@ function LightFeatureCard({ feature }: { feature: Feature }) {
             </span>
           </span>
 
-          <span className="absolute right-[1.8cqw] top-1/2 z-30 -translate-y-1/2 text-slate-700">
+          <span className="absolute right-[2.2cqw] top-1/2 z-30 -translate-y-1/2 text-[#29425f]" aria-hidden="true">
             <Chevron />
           </span>
         </>
@@ -219,10 +240,10 @@ function LightFeatureCard({ feature }: { feature: Feature }) {
 }
 
 /**
- * Light mode uses the final approved dashboard-card artwork at its native
- * composition and aspect ratio. The approved PNG bytes are served directly
- * without optimizer recompression, so the reference remains visually exact
- * while scaling responsively on web and the Android trusted WebView.
+ * Light mode keeps the final approved dashboard-card artwork at its native
+ * composition and aspect ratio. The reference PNG bytes are served directly
+ * without optimizer recompression; only the embedded reference chevron area
+ * is softly neutralized so all three cards can share one live Chevron.
  * Dark mode intentionally remains unchanged until its dedicated references
  * are supplied.
  */

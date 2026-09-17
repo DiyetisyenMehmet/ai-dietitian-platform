@@ -1,9 +1,5 @@
-import Image from "next/image";
 import Link from "next/link";
 import { ChevronRight, Leaf } from "lucide-react";
-
-const LIGHT_MASCOT_DATA_URI =
-  "data:image/webp;base64,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";
 
 function DiewishMascot() {
   return (
@@ -34,26 +30,16 @@ export function DashboardAiBanner() {
         className="relative w-full overflow-hidden rounded-[clamp(1.1rem,4vw,2rem)] border border-sky-300/25 bg-[linear-gradient(100deg,#f7fbff_0%,#f2fbff_45%,#ebfff8_100%)] shadow-sm dark:hidden"
         style={{ aspectRatio: "670 / 126" }}
       >
-        <Image
-          src={LIGHT_MASCOT_DATA_URI}
-          alt=""
-          width={97}
-          height={116}
-          unoptimized
-          draggable={false}
-          className="pointer-events-none absolute left-[1.6%] top-[3%] h-[92%] w-[16%] select-none object-contain"
-          style={{
-            WebkitMaskImage: "linear-gradient(to right, black 0%, black 82%, transparent 100%)",
-            maskImage: "linear-gradient(to right, black 0%, black 82%, transparent 100%)",
-          }}
-        />
+        <span className="pointer-events-none absolute left-[3.1%] top-1/2 origin-center -translate-y-1/2 scale-[0.8] sm:scale-100" aria-hidden="true">
+          <DiewishMascot />
+        </span>
 
         <div className="absolute left-[19%] top-[19%] min-w-0 pr-[31%]">
           <h2 className="whitespace-nowrap text-[clamp(0.76rem,3.15vw,1rem)] font-extrabold leading-none tracking-[-0.025em] text-slate-950">
             Diewish AI Koçun Yanında
           </h2>
           <p className="mt-[clamp(0.2rem,0.9vw,0.38rem)] whitespace-nowrap text-[clamp(0.58rem,2.4vw,0.78rem)] font-medium leading-none text-slate-600">
-            Daha sağlıklı bir senin için buradayım.
+            Daha sağlıklı bir sen için buradayım.
           </p>
         </div>
 
