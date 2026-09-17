@@ -60,19 +60,49 @@ function Chevron() {
 }
 
 function ReferenceChevronOverlay({ tone }: { tone: Feature["tone"] }) {
-  const coverBackground =
+  const patch =
     tone === "blood"
-      ? "linear-gradient(to right, rgba(241,248,255,0) 0%, rgba(241,248,255,0.97) 34%, rgba(241,248,255,1) 100%)"
-      : "linear-gradient(to right, rgba(248,250,244,0) 0%, rgba(248,250,244,0.97) 34%, rgba(248,250,244,1) 100%)";
+      ? {
+          src: "/images/dashboard/references/blood-chevron-clean.png",
+          left: 1495,
+          top: 175,
+          width: 90,
+          height: 115,
+          sourceWidth: 1603,
+          sourceHeight: 460,
+        }
+      : {
+          src: "/images/dashboard/references/food-chevron-clean.png",
+          left: 1495,
+          top: 145,
+          width: 95,
+          height: 115,
+          sourceWidth: 1603,
+          sourceHeight: 400,
+        };
 
   return (
     <>
-      <span
-        className="pointer-events-none absolute right-[0.2cqw] top-1/2 z-20 h-[12cqw] w-[10.6cqw] -translate-y-1/2 backdrop-blur-[0.55cqw]"
-        style={{ background: coverBackground }}
+      <Image
+        src={patch.src}
+        alt=""
+        width={patch.width}
+        height={patch.height}
+        unoptimized
+        draggable={false}
+        className="pointer-events-none absolute z-20 select-none"
+        style={{
+          left: `${(patch.left / patch.sourceWidth) * 100}%`,
+          top: `${(patch.top / patch.sourceHeight) * 100}%`,
+          width: `${(patch.width / patch.sourceWidth) * 100}%`,
+          height: `${(patch.height / patch.sourceHeight) * 100}%`,
+        }}
         aria-hidden="true"
       />
-      <span className="pointer-events-none absolute right-[2.2cqw] top-1/2 z-30 -translate-y-1/2 text-[#29425f]" aria-hidden="true">
+      <span
+        className="pointer-events-none absolute right-[2.2cqw] top-1/2 z-30 -translate-y-1/2 bg-transparent text-[#29425f]"
+        aria-hidden="true"
+      >
         <Chevron />
       </span>
     </>
@@ -242,8 +272,9 @@ function LightFeatureCard({ feature }: { feature: Feature }) {
 /**
  * Light mode keeps the final approved dashboard-card artwork at its native
  * composition and aspect ratio. The reference PNG bytes are served directly
- * without optimizer recompression; only the embedded reference chevron area
- * is softly neutralized so all three cards can share one live Chevron.
+ * without optimizer recompression. A feathered, artwork-matched cleanup layer
+ * removes only the embedded chevron strokes; the shared live Chevron itself has
+ * a fully transparent background, so no rectangular panel is introduced.
  * Dark mode intentionally remains unchanged until its dedicated references
  * are supplied.
  */
