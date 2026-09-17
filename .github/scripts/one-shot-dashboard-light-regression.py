@@ -2,7 +2,6 @@ from pathlib import Path
 from PIL import Image, ImageFilter
 import cv2
 import numpy as np
-import re
 
 root = Path('.')
 refs = root / 'frontend/public/images/dashboard/references'
@@ -59,7 +58,7 @@ build_patch(
 
 feature_path = root / 'frontend/src/presentation/components/dashboard/dashboard-feature-links.tsx'
 feature_text = feature_path.read_text(encoding='utf-8')
-replacement = r'''function ReferenceChevronOverlay({ tone }: { tone: Feature["tone"] }) {
+replacement = '''function ReferenceChevronOverlay({ tone }: { tone: Feature["tone"] }) {
   const patch =
     tone === "blood"
       ? {
@@ -109,16 +108,15 @@ replacement = r'''function ReferenceChevronOverlay({ tone }: { tone: Feature["to
   );
 }
 
-function ProgressIcon()'''
+'''
 
-feature_text, count = re.subn(
-    r'function ReferenceChevronOverlay\(\{ tone \}: \{ tone: Feature\["tone"\] \} \) \{.*?\n\}\n\nfunction ProgressIcon\(\)',
-    replacement,
-    feature_text,
-    flags=re.S,
-)
-if count != 1:
-    raise SystemExit(f'Expected one ReferenceChevronOverlay block, replaced {count}')
+start_marker = 'function ReferenceChevronOverlay({ tone }: { tone: Feature["tone"] }) {'
+end_marker = 'function ProgressIcon()'
+start = feature_text.find(start_marker)
+end = feature_text.find(end_marker, start)
+if start == -1 or end == -1:
+    raise SystemExit(f'ReferenceChevronOverlay markers not found: start={start}, end={end}')
+feature_text = feature_text[:start] + replacement + feature_text[end:]
 
 feature_text = feature_text.replace(
     ' * without optimizer recompression; only the embedded reference chevron area\n'
