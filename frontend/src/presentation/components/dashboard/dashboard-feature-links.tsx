@@ -12,8 +12,9 @@ const FEATURES = [
     top: 21,
     height: 312,
     visual: "/images/dashboard/food-barcode-card.webp",
+    lightReference: "/images/dashboard/references/food-light-final.png",
     tone: "scanner",
-    lightAspect: "1595 / 392",
+    lightAspect: "1603 / 400",
   },
   {
     title: "Kan Tahlili Analizi",
@@ -22,8 +23,9 @@ const FEATURES = [
     top: 361,
     height: 348,
     visual: "/images/dashboard/blood-test-card.webp",
+    lightReference: "/images/dashboard/references/blood-light-final.png",
     tone: "blood",
-    lightAspect: "1606 / 455",
+    lightAspect: "1603 / 460",
   },
   {
     title: "İlerlememi Gör",
@@ -32,6 +34,7 @@ const FEATURES = [
     top: 740,
     height: 298,
     visual: null,
+    lightReference: null,
     tone: "progress",
     lightAspect: "1598 / 405",
   },
@@ -53,49 +56,6 @@ function Chevron() {
     >
       <path d="m9 5 7 7-7 7" />
     </svg>
-  );
-}
-
-function ScannerIcon() {
-  return (
-    <span
-      className="flex size-[13.6cqw] shrink-0 items-center justify-center rounded-[3.1cqw] bg-emerald-50/95 text-emerald-600"
-      aria-hidden="true"
-    >
-      <svg
-        viewBox="0 0 48 48"
-        className="size-[58%]"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="3.2"
-        strokeLinecap="round"
-      >
-        <path d="M17 9h-5a3 3 0 0 0-3 3v5M31 9h5a3 3 0 0 1 3 3v5M39 31v5a3 3 0 0 1-3 3h-5M17 39h-5a3 3 0 0 1-3-3v-5" />
-        <path d="M17 24h14" />
-      </svg>
-    </span>
-  );
-}
-
-function BloodIcon() {
-  return (
-    <span
-      className="flex size-[13.6cqw] shrink-0 items-center justify-center rounded-[3.1cqw] bg-rose-50/95 text-red-500"
-      aria-hidden="true"
-    >
-      <svg
-        viewBox="0 0 48 48"
-        className="size-[59%]"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="3"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M24 6C19 13 12 21 12 29a12 12 0 0 0 24 0C36 21 29 13 24 6Z" />
-        <path d="M18 30c1.4 3 3.7 4.5 6.5 4.5 2 0 3.8-.7 5.2-2" />
-      </svg>
-    </span>
   );
 }
 
@@ -192,9 +152,30 @@ function ProgressArtwork() {
 }
 
 function LightFeatureCard({ feature }: { feature: Feature }) {
-  const isScanner = feature.tone === "scanner";
-  const isBlood = feature.tone === "blood";
   const isProgress = feature.tone === "progress";
+
+  if (feature.lightReference) {
+    return (
+      <Link
+        href={feature.href}
+        className="relative block w-full overflow-hidden bg-white [container-type:inline-size] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+        style={{ aspectRatio: feature.lightAspect }}
+        aria-label={`${feature.title}. ${feature.description}`}
+      >
+        <Image
+          src={feature.lightReference}
+          alt=""
+          fill
+          unoptimized
+          draggable={false}
+          sizes="(max-width: 768px) 100vw, 960px"
+          className="pointer-events-none select-none object-fill"
+          aria-hidden="true"
+        />
+        <span className="sr-only">{feature.title}. {feature.description}</span>
+      </Link>
+    );
+  }
 
   return (
     <Link
@@ -203,90 +184,6 @@ function LightFeatureCard({ feature }: { feature: Feature }) {
       style={{ aspectRatio: feature.lightAspect }}
       aria-label={`${feature.title}. ${feature.description}`}
     >
-      {isScanner ? (
-        <>
-          <span
-            className="pointer-events-none absolute inset-y-0 right-[1.6cqw] z-0 w-[50%]"
-            aria-hidden="true"
-          >
-            <Image
-              src="/images/dashboard/food-barcode-card.webp"
-              alt=""
-              fill
-              quality={100}
-              draggable={false}
-              sizes="(max-width: 768px) 50vw, 470px"
-              className="object-contain object-right"
-              style={{ transform: "scale(0.92)", transformOrigin: "right center" }}
-            />
-            <span className="absolute inset-y-0 left-0 w-[18%] bg-gradient-to-r from-white via-white/75 to-transparent" />
-          </span>
-
-          <span className="relative z-20 flex h-full items-center gap-[2.2cqw] pl-[3.1cqw] pr-[42cqw]">
-            <ScannerIcon />
-            <span className="min-w-0 text-left">
-              <span className="block whitespace-nowrap text-[3.15cqw] font-extrabold leading-[1.03] tracking-[-0.035em] text-slate-950">
-                Besin ve Barkod Tarayıcı
-              </span>
-              <span className="mt-[0.75cqw] block whitespace-nowrap text-[2.45cqw] font-normal leading-[1.24] tracking-[-0.015em] text-slate-500">
-                Yemeğini fotoğrafla veya
-              </span>
-              <span className="block whitespace-nowrap text-[2.45cqw] font-normal leading-[1.24] tracking-[-0.015em] text-slate-500">
-                paketli ürünü barkodla tara.
-              </span>
-            </span>
-          </span>
-
-          <span className="absolute right-[1.85cqw] top-1/2 z-30 -translate-y-1/2 text-slate-700">
-            <Chevron />
-          </span>
-        </>
-      ) : null}
-
-      {isBlood ? (
-        <>
-          <span
-            className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(circle_at_82%_38%,rgba(219,238,255,0.9),transparent_45%),radial-gradient(circle_at_8%_92%,rgba(255,224,226,0.8),transparent_28%)]"
-            aria-hidden="true"
-          />
-          <span
-            className="pointer-events-none absolute inset-y-0 right-[1.8cqw] z-10 w-[48%]"
-            aria-hidden="true"
-          >
-            <Image
-              src="/images/dashboard/blood-test-card.webp"
-              alt=""
-              fill
-              quality={100}
-              draggable={false}
-              sizes="(max-width: 768px) 48vw, 445px"
-              className="object-contain object-right"
-              style={{ transform: "scale(0.9)", transformOrigin: "right center" }}
-            />
-            <span className="absolute inset-y-0 left-0 w-[13%] bg-gradient-to-r from-white via-white/60 to-transparent" />
-          </span>
-
-          <span className="relative z-20 flex h-full items-center gap-[2.4cqw] pl-[3.15cqw] pr-[44cqw]">
-            <BloodIcon />
-            <span className="min-w-0 text-left">
-              <span className="block whitespace-nowrap text-[3.65cqw] font-extrabold leading-[1.03] tracking-[-0.035em] text-slate-950">
-                Kan Tahlili Analizi
-              </span>
-              <span className="mt-[0.8cqw] block whitespace-nowrap text-[2.75cqw] font-normal leading-[1.22] tracking-[-0.015em] text-slate-500">
-                Tahlil sonuçlarını yükle,
-              </span>
-              <span className="block whitespace-nowrap text-[2.75cqw] font-normal leading-[1.22] tracking-[-0.015em] text-slate-500">
-                anlaşılır şekilde değerlendir.
-              </span>
-            </span>
-          </span>
-
-          <span className="absolute right-[1.9cqw] top-1/2 z-30 -translate-y-1/2 text-slate-700">
-            <Chevron />
-          </span>
-        </>
-      ) : null}
-
       {isProgress ? (
         <>
           <span
@@ -322,12 +219,12 @@ function LightFeatureCard({ feature }: { feature: Feature }) {
 }
 
 /**
- * Light mode uses the final approved dashboard-card compositions as a stable,
- * responsive implementation. Dark mode intentionally remains unchanged until
- * its dedicated reference artwork is supplied.
- *
- * The Android app hosts this responsive web UI in its trusted WebView, so this
- * single light-mode implementation is shared by staging web and Android.
+ * Light mode uses the final approved dashboard-card artwork at its native
+ * composition and aspect ratio. The approved PNG bytes are served directly
+ * without optimizer recompression, so the reference remains visually exact
+ * while scaling responsively on web and the Android trusted WebView.
+ * Dark mode intentionally remains unchanged until its dedicated references
+ * are supplied.
  */
 export function DashboardFeatureLinks() {
   return (
