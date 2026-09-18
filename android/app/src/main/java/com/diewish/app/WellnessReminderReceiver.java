@@ -34,7 +34,13 @@ public final class WellnessReminderReceiver extends BroadcastReceiver {
             NotificationChannel channel = new NotificationChannel(CHANNEL_ID, "Sağlıklı yaşam hatırlatmaları", NotificationManager.IMPORTANCE_DEFAULT);
             channel.setDescription("Diewish su, aktivite, uyku ve haftalık özet hatırlatmaları");
             manager.createNotificationChannel(channel);
+            NotificationChannel activeChannel = manager.getNotificationChannel(CHANNEL_ID);
+            if (
+                activeChannel != null
+                    && activeChannel.getImportance() == NotificationManager.IMPORTANCE_NONE
+            ) return false;
         }
+        if (!manager.areNotificationsEnabled()) return false;
 
         String title;
         String body;
@@ -57,7 +63,7 @@ public final class WellnessReminderReceiver extends BroadcastReceiver {
             NotificationRoutes.forWellnessType(type)
         );
         Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O ? new Notification.Builder(context, CHANNEL_ID) : new Notification.Builder(context);
-        Notification notification = builder.setSmallIcon(R.drawable.ic_launcher).setContentTitle(title).setContentText(body).setContentIntent(contentIntent).setAutoCancel(true).build();
+        Notification notification = builder.setSmallIcon(R.drawable.ic_notification).setContentTitle(title).setContentText(body).setContentIntent(contentIntent).setAutoCancel(true).build();
         manager.notify(requestCode, notification);
         return true;
     }
