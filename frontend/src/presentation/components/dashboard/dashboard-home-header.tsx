@@ -12,10 +12,52 @@ interface DashboardHomeHeaderProps {
 }
 
 /** Dashboard-owned top bar so the home screen can stay personal without changing the shared app header. */
+interface NativeNotificationBadgeBridge {
+  unreadNotificationCount?(): number;
+}
+
+function nativeUnreadCount(): number {
+  if (typeof window === "undefined") return 0;
+  try {
+    const bridge = (
+      window as typeof window & {
+        DiewishReminders?: NativeNotificationBadgeBridge;
+      }
+    ).DiewishReminders;
+    if (!bridge || typeof bridge.unreadNotificationCount !== "function") return 0;
+    const count = Number(bridge.unreadNotificationCount());
+    return Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0;
+  } catch {
+    return 0;
+  }
+}
+
 export function DashboardHomeHeader({ userName }: DashboardHomeHeaderProps) {
   const [now, setNow] = React.useState<Date | null>(null);
+  const [unreadCount, setUnreadCount] = React.useState(0);
 
   React.useEffect(() => setNow(new Date()), []);
+
+  React.useEffect(() => {
+    const sync = () => setUnreadCount(nativeUnreadCount());
+    const onState = (event: Event) => {
+      const detail = (event as CustomEvent<{ unreadCount?: number }>).detail;
+      if (typeof detail?.unreadCount === "number") {
+        setUnreadCount(Math.max(0, Math.floor(detail.unreadCount)));
+      } else {
+        sync();
+      }
+    };
+    sync();
+    window.addEventListener("focus", sync);
+    window.addEventListener("diewish:notification-state", onState);
+    const timer = window.setInterval(sync, 5000);
+    return () => {
+      window.removeEventListener("focus", sync);
+      window.removeEventListener("diewish:notification-state", onState);
+      window.clearInterval(timer);
+    };
+  }, []);
 
   const displayName = userName.trim() || "Diewish";
 
@@ -36,10 +78,18 @@ export function DashboardHomeHeader({ userName }: DashboardHomeHeaderProps) {
         </div>
         <Link
           href="/profile/notifications"
-          aria-label="Bildirim ayarları"
-          className="flex size-10 items-center justify-center rounded-2xl border border-border bg-card text-foreground shadow-sm transition hover:border-primary/30 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:size-11"
+          aria-label={unreadCount > 0 ? `Bildirimler, ${unreadCount} okunmamış` : "Bildirim ayarları"}
+          className="relative flex size-10 items-center justify-center rounded-2xl border border-border bg-card text-foreground shadow-sm transition hover:border-primary/30 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:size-11"
         >
           <Bell className="size-5" aria-hidden="true" />
+          {unreadCount > 0 && (
+            <span
+              className="absolute -right-1 -top-1 flex min-w-4.5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold leading-[18px] text-destructive-foreground shadow-sm"
+              aria-hidden="true"
+            >
+              {unreadCount > 99 ? "99+" : unreadCount}
+            </span>
+          )}
         </Link>
         <Link
           href="/profile"
