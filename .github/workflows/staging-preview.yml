@@ -275,11 +275,35 @@ jobs:
           fi
 
           android_app_name="$(jq -r --arg package "$package_name" '(.apps // [])[] | select(.packageName == $package) | .name' "$apps_file" | head -n 1)"
-          rm -f "$apps_file"
+
+          # The isolated staging project may be new and legitimately have no
+          # Android client yet. Create ONLY the staging Firebase Android app;
+          # never fall back to, read from, or mutate production Firebase.
           if [[ -z "$android_app_name" ]]; then
-            echo "Staging Firebase Android app ${package_name} is missing; refusing to build an APK without FCM." >&2
-            exit 1
+            create_file="$(mktemp)"
+            create_code="$(curl --silent --show-error -o "$create_file" -w '%{http_code}' \
+              -H "$auth_header" \
+              -H "x-goog-user-project: ${PROJECT_ID}" \
+              -H 'Content-Type: application/json' \
+              -X POST \
+              -d "$(jq -cn --arg package "$package_name" --arg name "Diewish Staging Android" '{packageName:$package,displayName:$name}')" \
+              "https://firebase.googleapis.com/v1beta1/projects/${PROJECT_ID}/androidApps")"
+            if [[ "$create_code" != "200" && "$create_code" != "201" ]]; then
+              echo "Staging Firebase Android app is missing and could not be created (HTTP ${create_code})." >&2
+              jq -r '.error.message // empty' "$create_file" >&2 || true
+              rm -f "$apps_file" "$create_file"
+              exit 1
+            fi
+            android_app_name="$(jq -r '.name // empty' "$create_file")"
+            rm -f "$create_file"
+            if [[ -z "$android_app_name" ]]; then
+              echo "Staging Firebase Android app creation returned no app name." >&2
+              rm -f "$apps_file"
+              exit 1
+            fi
+            echo "Created isolated staging Firebase Android app for ${package_name}."
           fi
+          rm -f "$apps_file"
 
           config_file="$(mktemp)"
           config_code="$(curl --silent --show-error -o "$config_file" -w '%{http_code}' \
