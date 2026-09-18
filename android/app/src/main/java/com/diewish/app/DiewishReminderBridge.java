@@ -63,6 +63,12 @@ public final class DiewishReminderBridge {
     }
 
     @JavascriptInterface
+    public int unreadNotificationCount() {
+        if (!trustedPage.getAsBoolean()) return 0;
+        return DiewishNotificationUnreadStore.count(activity.getApplicationContext());
+    }
+
+    @JavascriptInterface
     public String pendingNotificationPath() {
         if (!trustedPage.getAsBoolean()) return "";
         return DiewishNotificationTargetStore.get(activity.getApplicationContext());
