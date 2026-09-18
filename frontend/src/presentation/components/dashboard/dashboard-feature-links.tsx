@@ -10,9 +10,8 @@ const FEATURES = [
     height: 312,
     visual: "/images/dashboard/food-barcode-card.webp",
     lightReference: "/images/dashboard/references/food-light-final.png",
-    darkReference: "/images/dashboard/references/food-dark-final.jpg",
+    darkReference: "/images/dashboard/references/food-dark-parity.png",
     darkAspect: "1469 / 354",
-    darkCrop: { left: 33, top: 240, width: 1469, height: 354, sourceWidth: 1536, sourceHeight: 864 },
     tone: "scanner",
     lightAspect: "1603 / 400",
   },
@@ -24,9 +23,8 @@ const FEATURES = [
     height: 348,
     visual: "/images/dashboard/blood-test-card.webp",
     lightReference: "/images/dashboard/references/blood-light-final.png",
-    darkReference: "/images/dashboard/references/blood-dark-final.jpg",
-    darkAspect: "1462 / 410",
-    darkCrop: { left: 37, top: 205, width: 1462, height: 410, sourceWidth: 1536, sourceHeight: 864 },
+    darkReference: "/images/dashboard/references/blood-dark-parity.png",
+    darkAspect: "1603 / 460",
     tone: "blood",
     lightAspect: "1603 / 460",
   },
@@ -38,9 +36,8 @@ const FEATURES = [
     height: 298,
     visual: null,
     lightReference: null,
-    darkReference: "/images/dashboard/references/progress-dark-final.jpg",
-    darkAspect: "1452 / 354",
-    darkCrop: { left: 42, top: 248, width: 1452, height: 354, sourceWidth: 1536, sourceHeight: 864 },
+    darkReference: "/images/dashboard/references/progress-dark-parity.png",
+    darkAspect: "1598 / 405",
     tone: "progress",
     lightAspect: "1598 / 405",
   },
@@ -276,32 +273,31 @@ function LightFeatureCard({ feature }: { feature: Feature }) {
 }
 
 function DarkFeatureCard({ feature }: { feature: Feature }) {
-  const crop = feature.darkCrop;
-
   return (
     <Link
       href={feature.href}
-      className="relative block w-full overflow-hidden [container-type:inline-size] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 focus-visible:ring-inset"
+      className="relative block w-full overflow-hidden [container-type:inline-size] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
       style={{ aspectRatio: feature.darkAspect }}
       aria-label={`${feature.title}. ${feature.description}`}
     >
       <Image
         src={feature.darkReference}
         alt=""
-        width={crop.sourceWidth}
-        height={crop.sourceHeight}
+        fill
         unoptimized
         draggable={false}
-        sizes="(max-width: 768px) 105vw, 1008px"
-        className="pointer-events-none absolute max-w-none select-none"
-        style={{
-          left: `${(-crop.left / crop.width) * 100}%`,
-          top: `${(-crop.top / crop.height) * 100}%`,
-          width: `${(crop.sourceWidth / crop.width) * 100}%`,
-          height: `${(crop.sourceHeight / crop.height) * 100}%`,
-        }}
+        sizes="(max-width: 768px) 100vw, 960px"
+        className="pointer-events-none select-none object-fill"
         aria-hidden="true"
       />
+
+      <span
+        className="pointer-events-none absolute right-[2.2cqw] top-1/2 z-30 -translate-y-1/2 bg-transparent text-[#29425f]"
+        aria-hidden="true"
+      >
+        <Chevron />
+      </span>
+
       <span className="sr-only">
         {feature.title}. {feature.description}
       </span>
@@ -311,9 +307,9 @@ function DarkFeatureCard({ feature }: { feature: Feature }) {
 
 /**
  * Light mode remains the approved final implementation and is not changed here.
- * Dark mode uses the user's final reference artwork directly. The Link layer
- * owns routing, responsive sizing and accessibility; visible card content,
- * typography, artwork and chevrons come only from the supplied reference image.
+ * Dark mode preserves the approved reference artwork while matching the
+ * light-mode card geometry for Blood and Progress. All three dark cards use
+ * the exact same live Chevron component, size, stroke and offset as light mode.
  */
 export function DashboardFeatureLinks() {
   return (
