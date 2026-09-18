@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ChevronRight, Leaf } from "lucide-react";
 
-function DiewishMascot() {
+function DiewishMascot({ gradientId }: { gradientId: string }) {
   return (
     <span className="relative flex size-14 shrink-0 items-center justify-center overflow-visible" aria-hidden="true">
       <span
@@ -10,18 +10,18 @@ function DiewishMascot() {
       >
         <svg viewBox="0 0 32 28" className="h-full w-full overflow-visible" fill="none">
           <defs>
-            <linearGradient id="diewishLeafLeft" x1="5" y1="3" x2="16" y2="13" gradientUnits="userSpaceOnUse">
+            <linearGradient id={`${gradientId}-diewishLeafLeft`} x1="5" y1="3" x2="16" y2="13" gradientUnits="userSpaceOnUse">
               <stop stopColor="#5EE0AE" />
               <stop offset="1" stopColor="#149A73" />
             </linearGradient>
-            <linearGradient id="diewishLeafRight" x1="27" y1="2" x2="16" y2="12" gradientUnits="userSpaceOnUse">
+            <linearGradient id={`${gradientId}-diewishLeafRight`} x1="27" y1="2" x2="16" y2="12" gradientUnits="userSpaceOnUse">
               <stop stopColor="#70E8B8" />
               <stop offset="1" stopColor="#0D8F69" />
             </linearGradient>
           </defs>
           <path d="M16 26C16.2 20.7 15.8 15.5 16.3 10.2" stroke="#168D69" strokeWidth="2" strokeLinecap="round" />
-          <path d="M15.8 11.6C11.2 12.1 6.6 9.4 5.1 4.1C10.2 2.8 14.9 5.9 15.8 11.6Z" fill="url(#diewishLeafLeft)" />
-          <path d="M16.4 9.9C17.7 5.2 21.9 2.1 27.1 2.9C26.3 8 22.1 11.2 16.4 9.9Z" fill="url(#diewishLeafRight)" />
+          <path d="M15.8 11.6C11.2 12.1 6.6 9.4 5.1 4.1C10.2 2.8 14.9 5.9 15.8 11.6Z" fill={`url(#${gradientId}-diewishLeafLeft)`} />
+          <path d="M16.4 9.9C17.7 5.2 21.9 2.1 27.1 2.9C26.3 8 22.1 11.2 16.4 9.9Z" fill={`url(#${gradientId}-diewishLeafRight)`} />
           <path d="M7.1 5.2C9.7 6.8 12.1 8.5 14.7 10.6" stroke="#D8FFF0" strokeOpacity=".58" strokeWidth=".8" strokeLinecap="round" />
           <path d="M25.2 4.2C22.7 5.6 20.4 7.2 17.5 9.1" stroke="#D8FFF0" strokeOpacity=".55" strokeWidth=".8" strokeLinecap="round" />
           <path d="M10.1 6.9L9.5 9.2M22.5 6.1L23.2 8" stroke="#0B7659" strokeOpacity=".45" strokeWidth=".7" strokeLinecap="round" />
@@ -51,7 +51,7 @@ export function DashboardAiBanner() {
         style={{ aspectRatio: "670 / 126" }}
       >
         <span className="pointer-events-none absolute left-[3.1%] top-1/2 origin-center -translate-y-1/2 scale-[0.8] sm:scale-100" aria-hidden="true">
-          <DiewishMascot />
+          <DiewishMascot gradientId="light" />
         </span>
 
         <div className="absolute left-[19%] top-[19%] min-w-0 pr-[31%]">
@@ -79,7 +79,7 @@ export function DashboardAiBanner() {
 
         <div className="relative flex items-center gap-3">
           <span className="shrink-0 origin-center scale-[0.8] sm:scale-100" aria-hidden="true">
-            <DiewishMascot />
+            <DiewishMascot gradientId="dark" />
           </span>
           <div className="min-w-0 flex-1">
             <h2 className="text-sm font-bold sm:text-base">Diewish AI Koçun Yanında</h2>
