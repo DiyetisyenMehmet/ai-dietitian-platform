@@ -2,8 +2,13 @@ package com.diewish.app;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.NotificationManager;
+import android.content.ActivityNotFoundException;
+import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.os.Build;
+import android.provider.Settings;
 import android.webkit.JavascriptInterface;
 
 import com.google.firebase.FirebaseApp;
@@ -72,9 +77,45 @@ public final class DiewishReminderBridge {
     @JavascriptInterface
     public String permissionStatus() {
         if (!trustedPage.getAsBoolean()) return "unavailable";
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return "granted";
-        return activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
-            == PackageManager.PERMISSION_GRANTED ? "granted" : "denied";
+        if (
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                && activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                    != PackageManager.PERMISSION_GRANTED
+        ) return "denied";
+
+        NotificationManager manager =
+            (NotificationManager) activity.getSystemService(Activity.NOTIFICATION_SERVICE);
+        if (manager == null) return "unavailable";
+        return manager.areNotificationsEnabled() ? "granted" : "denied";
+    }
+
+    @JavascriptInterface
+    public String exactAlarmStatus() {
+        if (!trustedPage.getAsBoolean()) return "unavailable";
+        return ReminderAlarmPolicy.status(activity.getApplicationContext());
+    }
+
+    @JavascriptInterface
+    public void requestExactAlarmAccess() {
+        if (!trustedPage.getAsBoolean() || Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return;
+        if ("granted".equals(ReminderAlarmPolicy.status(activity.getApplicationContext()))) return;
+
+        activity.runOnUiThread(() -> {
+            Uri packageUri = Uri.parse("package:" + activity.getPackageName());
+            Intent exactAlarmSettings = new Intent(
+                Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                packageUri
+            );
+            try {
+                activity.startActivity(exactAlarmSettings);
+            } catch (ActivityNotFoundException ignored) {
+                Intent appSettings = new Intent(
+                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    packageUri
+                );
+                activity.startActivity(appSettings);
+            }
+        });
     }
 
     @JavascriptInterface
@@ -128,6 +169,22 @@ public final class DiewishReminderBridge {
     @JavascriptInterface
     public boolean showTestNotification() {
         if (!trustedPage.getAsBoolean()) return false;
-        return WellnessReminderReceiver.show(activity.getApplicationContext(), "test", "wellness-test");
+        return WellnessReminderReceiver.show(
+            activity.getApplicationContext(),
+            "test",
+            "wellness-test"
+        );
+    }
+
+    @JavascriptInterface
+    public boolean scheduleTestReminder(int delaySeconds) {
+        if (!trustedPage.getAsBoolean()) return false;
+        if (!"granted".equals(ReminderAlarmPolicy.status(activity.getApplicationContext()))) {
+            return false;
+        }
+        return WellnessReminderScheduler.scheduleTest(
+            activity.getApplicationContext(),
+            delaySeconds
+        );
     }
 }
