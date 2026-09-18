@@ -267,15 +267,30 @@ function LightFeatureCard({ feature }: { feature: Feature }) {
 }
 
 function DarkFeatureIcon({ tone }: { tone: Feature["tone"] }) {
+  const isScanner = tone === "scanner";
+  const sizeClass = isScanner ? "size-[12cqw]" : "size-[13.6cqw]";
+  const radiusClass = isScanner ? "rounded-[2.25cqw]" : "rounded-[2.65cqw]";
   const shell =
-    "flex size-[13.6cqw] shrink-0 items-center justify-center rounded-[3.1cqw] border bg-[#0a2a25]/92 shadow-[inset_0_0_2.6cqw_rgba(35,228,176,0.08),0_0_2.2cqw_rgba(15,134,105,0.08)]";
+    `flex ${sizeClass} ${radiusClass} shrink-0 items-center justify-center border bg-[#082822]/94 shadow-[inset_0_0_2.2cqw_rgba(45,239,188,0.08),0_0_2.4cqw_rgba(22,153,117,0.10)]`;
 
   if (tone === "blood") {
     return (
-      <span className={`${shell} border-emerald-300/15 text-[#ff2535]`} aria-hidden="true">
-        <svg viewBox="0 0 48 48" className="size-[61%]" fill="none" stroke="currentColor" strokeWidth="3.1" strokeLinecap="round" strokeLinejoin="round">
+      <span className={`${shell} border-[#2c745f]/35 text-[#ff1f32]`} aria-hidden="true">
+        <svg
+          viewBox="0 0 48 48"
+          className="size-[61%]"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="3.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <path d="M24 5C24 5 10 21 10 31a14 14 0 0 0 28 0C38 21 24 5 24 5Z" />
-          <path d="M29 27c-4.5 0-8 3.2-8 7.2 0 2.7 1.5 5.1 4 6.3 5.8-.4 10.4-4.4 11.8-9.7A8 8 0 0 0 29 27Z" fill="currentColor" stroke="none" />
+          <path
+            d="M29 27c-4.5 0-8 3.2-8 7.2 0 2.7 1.5 5.1 4 6.3 5.8-.4 10.4-4.4 11.8-9.7A8 8 0 0 0 29 27Z"
+            fill="currentColor"
+            stroke="none"
+          />
         </svg>
       </span>
     );
@@ -283,19 +298,35 @@ function DarkFeatureIcon({ tone }: { tone: Feature["tone"] }) {
 
   if (tone === "progress") {
     return (
-      <span className={`${shell} border-emerald-300/20 text-[#27e1ae]`} aria-hidden="true">
+      <span className={`${shell} border-[#2c745f]/40 text-[#32e9b4]`} aria-hidden="true">
         <svg viewBox="0 0 48 48" className="size-[58%]" fill="currentColor">
-          <rect x="8" y="27" width="8" height="13" rx="1.5" />
-          <rect x="20" y="19" width="8" height="21" rx="1.5" />
-          <rect x="32" y="9" width="8" height="31" rx="1.5" />
+          <defs>
+            <linearGradient id="diewishDarkProgressIconBars" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#3cf1be" />
+              <stop offset="100%" stopColor="#17b98c" />
+            </linearGradient>
+          </defs>
+          <g fill="url(#diewishDarkProgressIconBars)">
+            <rect x="8" y="27" width="8" height="13" rx="1.5" />
+            <rect x="20" y="19" width="8" height="21" rx="1.5" />
+            <rect x="32" y="9" width="8" height="31" rx="1.5" />
+          </g>
         </svg>
       </span>
     );
   }
 
   return (
-    <span className={`${shell} border-emerald-300/20 text-[#2fe0ad]`} aria-hidden="true">
-      <svg viewBox="0 0 48 48" className="size-[62%]" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round">
+    <span className={`${shell} border-[#2c745f]/40 text-[#32e9b4]`} aria-hidden="true">
+      <svg
+        viewBox="0 0 48 48"
+        className="size-[62%]"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="3.25"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
         <path d="M16 8h-5a3 3 0 0 0-3 3v5M32 8h5a3 3 0 0 1 3 3v5M40 32v5a3 3 0 0 1-3 3h-5M16 40h-5a3 3 0 0 1-3-3v-5" />
         <path d="M17 24h14" />
       </svg>
@@ -306,22 +337,27 @@ function DarkFeatureIcon({ tone }: { tone: Feature["tone"] }) {
 function DarkProgressArtwork() {
   return (
     <span
-      className="pointer-events-none absolute inset-y-0 right-[5.4cqw] z-10 w-[41.5%]"
+      className="pointer-events-none absolute inset-y-0 right-[5.35cqw] z-10 w-[41.6%]"
       aria-hidden="true"
     >
-      <svg viewBox="0 0 430 210" className="h-full w-full" fill="none" preserveAspectRatio="xMidYMid meet">
+      <svg
+        viewBox="0 0 430 210"
+        className="h-full w-full"
+        fill="none"
+        preserveAspectRatio="xMidYMid meet"
+      >
         <defs>
           <linearGradient id="diewishDarkProgressBar" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#32efbb" stopOpacity=".98" />
-            <stop offset="100%" stopColor="#0d7559" stopOpacity=".88" />
+            <stop offset="0%" stopColor="#39efbd" stopOpacity=".98" />
+            <stop offset="100%" stopColor="#0f7b5e" stopOpacity=".90" />
           </linearGradient>
           <linearGradient id="diewishDarkProgressWave" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor="#0d3b32" stopOpacity=".18" />
-            <stop offset="50%" stopColor="#125344" stopOpacity=".5" />
-            <stop offset="100%" stopColor="#0b4a3c" stopOpacity=".18" />
+            <stop offset="0%" stopColor="#0a352d" stopOpacity=".12" />
+            <stop offset="52%" stopColor="#155646" stopOpacity=".55" />
+            <stop offset="100%" stopColor="#0a4237" stopOpacity=".18" />
           </linearGradient>
           <filter id="diewishDarkProgressGlow" x="-40%" y="-40%" width="180%" height="180%">
-            <feGaussianBlur stdDeviation="2.6" result="blur" />
+            <feGaussianBlur stdDeviation="2.2" result="blur" />
             <feMerge>
               <feMergeNode in="blur" />
               <feMergeNode in="SourceGraphic" />
@@ -345,13 +381,13 @@ function DarkProgressArtwork() {
 
         <path
           d="M83 132 140 116 197 91 254 78 311 61 368 35"
-          stroke="#32efbb"
-          strokeWidth="6"
+          stroke="#39efbd"
+          strokeWidth="5.6"
           strokeLinecap="round"
           strokeLinejoin="round"
           filter="url(#diewishDarkProgressGlow)"
         />
-        <g fill="#32efbb" filter="url(#diewishDarkProgressGlow)">
+        <g fill="#39efbd" filter="url(#diewishDarkProgressGlow)">
           <circle cx="83" cy="132" r="8" />
           <circle cx="140" cy="116" r="8" />
           <circle cx="197" cy="91" r="8" />
@@ -361,7 +397,15 @@ function DarkProgressArtwork() {
         </g>
 
         <g transform="translate(307 2)">
-          <rect width="112" height="42" rx="17" fill="#0b3d32" stroke="#1a6f5b" strokeWidth="1.2" />
+          <rect
+            width="112"
+            height="42"
+            rx="17"
+            fill="#0a392f"
+            fillOpacity=".97"
+            stroke="#1b6b58"
+            strokeWidth="1.2"
+          />
           <text
             x="56"
             y="28"
@@ -375,10 +419,54 @@ function DarkProgressArtwork() {
           </text>
         </g>
 
-        <g fill="#0d725a" fillOpacity=".28">
+        <g fill="#126249" fillOpacity=".32">
           <ellipse cx="393" cy="165" rx="13" ry="38" transform="rotate(34 393 165)" />
           <ellipse cx="417" cy="179" rx="12" ry="34" transform="rotate(38 417 179)" />
         </g>
+      </svg>
+    </span>
+  );
+}
+
+function DarkChevron({ tone }: { tone: Feature["tone"] }) {
+  if (tone === "blood") {
+    return (
+      <span
+        className="pointer-events-none absolute right-[1.35cqw] top-1/2 z-30 flex size-[5.35cqw] -translate-y-1/2 items-center justify-center rounded-full bg-black/25 text-[#edf5f2]"
+        aria-hidden="true"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          className="size-[3.45cqw]"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.3"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="m9 5 7 7-7 7" />
+        </svg>
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className={`pointer-events-none absolute right-[2.15cqw] top-1/2 z-30 -translate-y-1/2 bg-transparent ${
+        tone === "scanner" ? "text-[#35e5b1]" : "text-[#d6e1de]"
+      }`}
+      aria-hidden="true"
+    >
+      <svg
+        viewBox="0 0 24 24"
+        className="size-[3.55cqw]"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="m9 5 7 7-7 7" />
       </svg>
     </span>
   );
@@ -393,27 +481,54 @@ function DarkFeatureCard({ feature }: { feature: Feature }) {
         ? ["Tahlil sonuçlarını yükle,", "anlaşılır şekilde değerlendir."]
         : ["Kilo, beslenme, su ve hareket", "verilerini incele."];
 
-  const chevronTone =
-    feature.tone === "scanner" ? "text-[#2ee3ae]" : "text-[#dbe5e2]";
+  const layout =
+    feature.tone === "scanner"
+      ? {
+          iconLeft: "2.35cqw",
+          textLeft: "16.35cqw",
+          titleSize: "3.35cqw",
+          bodySize: "2.55cqw",
+        }
+      : feature.tone === "blood"
+        ? {
+            iconLeft: "2.45cqw",
+            textLeft: "18.75cqw",
+            titleSize: "3.65cqw",
+            bodySize: "2.55cqw",
+          }
+        : {
+            iconLeft: "2.35cqw",
+            textLeft: "18.55cqw",
+            titleSize: "3.72cqw",
+            bodySize: "2.55cqw",
+          };
 
   return (
     <Link
       href={feature.href}
-      className="relative block w-full overflow-hidden rounded-[4.3cqw] border border-[#1b6b58]/70 bg-[#061a18] shadow-[inset_0_0_4.8cqw_rgba(15,104,83,0.08),0_1.6cqw_4.8cqw_rgba(0,0,0,0.16)] [container-type:inline-size] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 focus-visible:ring-inset"
+      className="relative block w-full overflow-hidden rounded-[3.15cqw] border border-[#1b6b58]/80 bg-[#061917] shadow-[inset_0_0_4.6cqw_rgba(17,105,84,0.07),0_1.4cqw_4.2cqw_rgba(0,0,0,0.16)] [container-type:inline-size] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 focus-visible:ring-inset"
       style={{ aspectRatio: feature.lightAspect }}
       aria-label={`${feature.title}. ${feature.description}`}
     >
       <span
-        className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(circle_at_80%_50%,rgba(20,107,86,0.16),transparent_36%),linear-gradient(105deg,#071a18_0%,#071c19_49%,#061715_100%)]"
+        className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(circle_at_78%_52%,rgba(19,103,82,0.15),transparent_38%),linear-gradient(104deg,#071b18_0%,#071c19_48%,#061715_100%)]"
         aria-hidden="true"
       />
 
       {feature.visual ? (
         <span
-          className="pointer-events-none absolute inset-y-0 right-0 z-10 w-[49%] overflow-hidden"
+          className={`pointer-events-none absolute inset-y-0 right-0 z-10 overflow-hidden ${
+            feature.tone === "scanner" ? "w-[56.5%]" : "w-[50.5%]"
+          }`}
           style={{
-            WebkitMaskImage: "linear-gradient(to right, transparent 0%, black 22%, black 100%)",
-            maskImage: "linear-gradient(to right, transparent 0%, black 22%, black 100%)",
+            WebkitMaskImage:
+              feature.tone === "scanner"
+                ? "linear-gradient(to right, transparent 0%, black 17%, black 100%)"
+                : "linear-gradient(to right, transparent 0%, black 10%, black 100%)",
+            maskImage:
+              feature.tone === "scanner"
+                ? "linear-gradient(to right, transparent 0%, black 17%, black 100%)"
+                : "linear-gradient(to right, transparent 0%, black 10%, black 100%)",
           }}
           aria-hidden="true"
         >
@@ -423,42 +538,64 @@ function DarkFeatureCard({ feature }: { feature: Feature }) {
             fill
             unoptimized
             draggable={false}
-            sizes="(max-width: 768px) 49vw, 490px"
-            className="object-cover object-right saturate-[1.08] contrast-[1.06] brightness-[0.86]"
+            sizes="(max-width: 768px) 58vw, 580px"
+            className={
+              feature.tone === "scanner"
+                ? "object-cover object-right saturate-[1.13] contrast-[1.05] brightness-[0.98]"
+                : "object-cover object-right saturate-[0.98] contrast-[1.03] brightness-[0.83]"
+            }
             aria-hidden="true"
           />
-          <span className="absolute inset-0 bg-[linear-gradient(90deg,#061a18_0%,rgba(6,26,24,0.72)_14%,rgba(6,26,24,0.12)_42%,transparent_68%)]" />
-          <span className="absolute inset-0 bg-emerald-950/10" />
+          <span
+            className={
+              feature.tone === "scanner"
+                ? "absolute inset-0 bg-[linear-gradient(90deg,#061917_0%,rgba(6,25,23,0.68)_13%,rgba(6,25,23,0.08)_37%,transparent_66%)]"
+                : "absolute inset-0 bg-[linear-gradient(90deg,#061917_0%,rgba(6,25,23,0.50)_10%,rgba(6,25,23,0.04)_34%,transparent_58%)]"
+            }
+          />
         </span>
       ) : (
         <DarkProgressArtwork />
       )}
 
-      <span className="relative z-20 flex h-full items-center gap-[2.45cqw] pl-[3.1cqw] pr-[46cqw]">
+      <span
+        className="absolute top-1/2 z-20 -translate-y-1/2"
+        style={{ left: layout.iconLeft }}
+      >
         <DarkFeatureIcon tone={feature.tone} />
-        <span className="min-w-0 text-left">
-          <span className="block whitespace-nowrap text-[3.1cqw] font-extrabold leading-[1.04] tracking-[-0.035em] text-white">
-            {feature.title}
-          </span>
-          <span className="mt-[0.85cqw] block">
-            {descriptionLines.map((line) => (
-              <span
-                key={line}
-                className="block whitespace-nowrap text-[2.45cqw] font-normal leading-[1.24] tracking-[-0.012em] text-[#aab7b4]"
-              >
-                {line}
-              </span>
-            ))}
-          </span>
-        </span>
       </span>
 
       <span
-        className={`pointer-events-none absolute right-[2.2cqw] top-1/2 z-30 -translate-y-1/2 bg-transparent ${chevronTone}`}
-        aria-hidden="true"
+        className="absolute top-1/2 z-20 min-w-0 -translate-y-1/2 text-left"
+        style={{ left: layout.textLeft }}
       >
-        <Chevron />
+        <span
+          className="block whitespace-nowrap font-extrabold leading-[1.03] tracking-[-0.035em] text-white"
+          style={{ fontSize: layout.titleSize }}
+        >
+          {feature.title}
+        </span>
+        <span className="mt-[0.8cqw] block">
+          {descriptionLines.map((line) => (
+            <span
+              key={line}
+              className="block whitespace-nowrap font-normal leading-[1.22] tracking-[-0.012em] text-[#aeb9b6]"
+              style={{ fontSize: layout.bodySize }}
+            >
+              {line}
+            </span>
+          ))}
+        </span>
       </span>
+
+      {isProgress ? (
+        <span
+          className="pointer-events-none absolute bottom-[-15%] left-[39%] z-[1] h-[72%] w-[38%] rounded-[50%] bg-emerald-900/10 blur-[0.45cqw]"
+          aria-hidden="true"
+        />
+      ) : null}
+
+      <DarkChevron tone={feature.tone} />
     </Link>
   );
 }
