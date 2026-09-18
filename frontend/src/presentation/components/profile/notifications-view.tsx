@@ -24,6 +24,9 @@ interface NativeReminderBridge {
   isAvailable(): boolean;
   permissionStatus(): string;
   requestPermission(): void;
+  exactAlarmStatus?(): string;
+  requestExactAlarmAccess?(): void;
+  scheduleTestReminder?(delaySeconds: number): boolean;
   replaceWellnessSchedule(scheduleJson: string): number;
   cancelWellness(): void;
   showTestNotification(): boolean;
@@ -68,6 +71,36 @@ function nativeBridge(): NativeReminderBridge | undefined {
   }
 }
 
+function nativeExactAlarmStatus(bridge: NativeReminderBridge | undefined): string {
+  if (!bridge || typeof bridge.exactAlarmStatus !== "function") return "unavailable";
+  try {
+    return bridge.exactAlarmStatus();
+  } catch {
+    return "unavailable";
+  }
+}
+
+function requestNativeExactAlarmAccess(bridge: NativeReminderBridge | undefined): void {
+  if (!bridge || typeof bridge.requestExactAlarmAccess !== "function") return;
+  try {
+    bridge.requestExactAlarmAccess();
+  } catch {
+    // Older APKs can expose a partial JavascriptInterface proxy.
+  }
+}
+
+function scheduleNativeTestReminder(
+  bridge: NativeReminderBridge | undefined,
+  delaySeconds: number,
+): boolean {
+  if (!bridge || typeof bridge.scheduleTestReminder !== "function") return false;
+  try {
+    return bridge.scheduleTestReminder(delaySeconds);
+  } catch {
+    return false;
+  }
+}
+
 function dateAt(base: Date, time: string): Date {
   const [hour, minute] = time.split(":").map(Number);
   const result = new Date(base);
@@ -105,6 +138,7 @@ export function NotificationsView() {
   const [savingKey, setSavingKey] = React.useState<string | null>(null);
   const [nativeAvailable, setNativeAvailable] = React.useState(false);
   const [permission, setPermission] = React.useState("unavailable");
+  const [exactAlarm, setExactAlarm] = React.useState("unavailable");
   const [webAvailable, setWebAvailable] = React.useState(false);
   const [webPermission, setWebPermission] = React.useState<WebPushPermission>("unsupported");
 
@@ -126,12 +160,14 @@ export function NotificationsView() {
       const available = Boolean(bridge && bridge.isAvailable());
       setNativeAvailable(available);
       setPermission(available && bridge ? bridge.permissionStatus() : "unavailable");
+      setExactAlarm(available ? nativeExactAlarmStatus(bridge) : "unavailable");
       const browserAvailable = !available && isWebPushSupported();
       setWebAvailable(browserAvailable);
       setWebPermission(browserAvailable ? webPushPermissionStatus() : "unsupported");
     } catch {
       setNativeAvailable(false);
       setPermission("unavailable");
+      setExactAlarm("unavailable");
       const browserAvailable = isWebPushSupported();
       setWebAvailable(browserAvailable);
       setWebPermission(browserAvailable ? webPushPermissionStatus() : "unsupported");
@@ -338,7 +374,11 @@ export function NotificationsView() {
               <p className="mt-1 text-xs text-muted-foreground">
                 {nativeAvailable
                   ? permission === "granted"
-                    ? "Android bildirim izni açık."
+                    ? exactAlarm === "required"
+                      ? "Android bildirim izni açık. Zamanında hatırlatmalar için Alarmlar ve hatırlatıcılar erişimi gerekli."
+                      : exactAlarm === "granted"
+                        ? "Android bildirim ve tam zamanlı hatırlatıcı izinleri açık."
+                        : "Android bildirim izni açık."
                     : "Android bildirim izni bekleniyor."
                   : webAvailable
                     ? webPermission === "granted"
@@ -370,6 +410,16 @@ export function NotificationsView() {
               Tarayıcı bildirimlerini etkinleştir
             </Button>
           )}
+          {nativeAvailable && permission === "granted" && exactAlarm === "required" && (
+            <Button
+              className="w-full"
+              variant="outline"
+              disabled={savingKey !== null}
+              onClick={() => requestNativeExactAlarmAccess(nativeBridge())}
+            >
+              Tam zamanlı hatırlatıcı izni ver
+            </Button>
+          )}
           {nativeAvailable && permission === "granted" && (
             <Button
               className="w-full"
@@ -377,11 +427,25 @@ export function NotificationsView() {
               disabled={savingKey !== null}
               onClick={() => {
                 const shown = nativeBridge()?.showTestNotification();
-                if (shown) toast.success("Yerel test bildirimi gösterildi");
-                else toast.error("Yerel test bildirimi gösterilemedi");
+                if (shown) toast.success("Anlık yerel bildirim gösterildi");
+                else toast.error("Bildirim gösterilemedi. Android bildirim kanalını kontrol et.");
               }}
             >
-              Yerel test bildirimi göster
+              Anlık yerel bildirimi test et
+            </Button>
+          )}
+          {nativeAvailable && permission === "granted" && exactAlarm === "granted" && (
+            <Button
+              className="w-full"
+              variant="outline"
+              disabled={savingKey !== null}
+              onClick={() => {
+                const scheduled = scheduleNativeTestReminder(nativeBridge(), 60);
+                if (scheduled) toast.success("1 dakika sonraya test bildirimi kuruldu");
+                else toast.error("1 dakikalık test bildirimi planlanamadı");
+              }}
+            >
+              1 dk zamanlama testi
             </Button>
           )}
           {isStagingNotificationHost() &&
