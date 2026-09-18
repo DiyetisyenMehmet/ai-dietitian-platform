@@ -36,7 +36,7 @@ const FEATURES = [
     height: 298,
     visual: null,
     lightReference: null,
-    darkReference: "/images/dashboard/references/progress-dark-parity.png",
+    darkReference: "/images/dashboard/references/progress-dark-parity-noicon.png",
     darkAspect: "1598 / 405",
     tone: "progress",
     lightAspect: "1598 / 405",
@@ -291,6 +291,15 @@ function DarkFeatureCard({ feature }: { feature: Feature }) {
         aria-hidden="true"
       />
 
+      {feature.tone === "progress" ? (
+        <span
+          className="pointer-events-none absolute left-[3.1cqw] top-1/2 z-20 -translate-y-1/2"
+          aria-hidden="true"
+        >
+          <ProgressIcon />
+        </span>
+      ) : null}
+
       <span
         className="pointer-events-none absolute right-[2.2cqw] top-1/2 z-30 -translate-y-1/2 bg-transparent text-[#29425f]"
         aria-hidden="true"
@@ -308,8 +317,8 @@ function DarkFeatureCard({ feature }: { feature: Feature }) {
 /**
  * Light mode remains the approved final implementation and is not changed here.
  * Dark mode preserves the approved reference artwork while matching the
- * light-mode card geometry for Blood and Progress. All three dark cards use
- * the exact same live Chevron component, size, stroke and offset as light mode.
+ * light-mode geometry. Progress uses the exact same live ProgressIcon component
+ * as light mode; all three dark cards share the same live Chevron component.
  */
 export function DashboardFeatureLinks() {
   return (

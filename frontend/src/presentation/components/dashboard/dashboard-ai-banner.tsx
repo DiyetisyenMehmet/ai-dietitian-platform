@@ -4,9 +4,9 @@ import { ChevronRight, Leaf } from "lucide-react";
 function DiewishMascot({ refinedLeaf = false }: { refinedLeaf?: boolean } = {}) {
   return (
     <span className="relative flex size-14 shrink-0 items-center justify-center" aria-hidden="true">
-      <span className="absolute -left-1 top-1/2 h-7 w-2 -translate-y-1/2 rounded-l-full bg-slate-300 shadow-sm dark:bg-slate-600" />
-      <span className="absolute -right-1 top-1/2 h-7 w-2 -translate-y-1/2 rounded-r-full bg-slate-300 shadow-sm dark:bg-slate-600" />
-      <span className="relative flex h-12 w-12 items-center justify-center rounded-[18px] bg-gradient-to-br from-white via-sky-50 to-emerald-50 shadow-md ring-1 ring-slate-200/70 dark:from-slate-800 dark:via-slate-900 dark:to-emerald-950 dark:ring-slate-700">
+      <span className="absolute -left-1 top-1/2 h-7 w-2 -translate-y-1/2 rounded-l-full bg-slate-300 shadow-sm" />
+      <span className="absolute -right-1 top-1/2 h-7 w-2 -translate-y-1/2 rounded-r-full bg-slate-300 shadow-sm" />
+      <span className="relative flex h-12 w-12 items-center justify-center rounded-[18px] bg-gradient-to-br from-white via-sky-50 to-emerald-50 shadow-md ring-1 ring-slate-200/70">
         {refinedLeaf ? (
           <span className="absolute -top-[13px] left-1/2 h-[22px] w-[26px] -translate-x-1/2" aria-hidden="true">
             <svg viewBox="0 0 32 28" className="h-full w-full overflow-visible" fill="none">
@@ -81,7 +81,9 @@ export function DashboardAiBanner() {
         <Leaf className="pointer-events-none absolute -top-5 right-2 size-14 rotate-[20deg] text-sky-400/[0.07]" aria-hidden="true" />
 
         <div className="relative flex items-center gap-3">
-          <DiewishMascot />
+          <span className="shrink-0 origin-center scale-[0.8] sm:scale-100" aria-hidden="true">
+            <DiewishMascot refinedLeaf />
+          </span>
           <div className="min-w-0 flex-1">
             <h2 className="text-sm font-bold sm:text-base">Diewish AI Koçun Yanında</h2>
             <p className="mt-0.5 text-xs text-muted-foreground sm:text-sm">
