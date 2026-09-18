@@ -8,6 +8,7 @@ import {
   buildFcmMessage,
   classifyFcmFailure,
   getNotificationProvider,
+  privacySafeRemoteCopy,
   setNotificationProvider,
   type NotificationDeliveryResult,
   type NotificationProvider,
@@ -268,6 +269,8 @@ test("FCM envelopes stay data-only and apply platform-specific transport config"
   });
   assert.equal(android.token, "android-token");
   assert.equal(android.data.type, "PROACTIVE_MESSAGE");
+  assert.equal(android.data.title, "Diewish Koç");
+  assert.equal(android.data.body, "Yeni bir koç mesajın var.");
   assert.equal(android.android?.priority, "high");
   assert.equal(android.webpush, undefined);
   assert.equal("notification" in android, false);
@@ -280,4 +283,15 @@ test("FCM envelopes stay data-only and apply platform-specific transport config"
   assert.equal(web.webpush?.headers.Urgency, "high");
   assert.equal(web.android, undefined);
   assert.equal("notification" in web, false);
+});
+
+
+test("remote notification copy never forwards stored personalized body text", () => {
+  const weekly = privacySafeRemoteCopy("WEEKLY_REVIEW");
+  assert.equal(weekly.title, "Haftalık özet");
+  assert.equal(weekly.body, "Yeni haftalık özetin hazır.");
+
+  const risk = privacySafeRemoteCopy("RISK_ALERT");
+  assert.equal(risk.title, "Diewish");
+  assert.equal(risk.body, "Diewish'te yeni bir bilgilendirme var.");
 });

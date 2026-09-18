@@ -110,6 +110,28 @@ function deviceKey(token: string): string {
   return createHash("sha256").update(token).digest("hex").slice(0, 24);
 }
 
+export function privacySafeRemoteCopy(type: Notification["type"]): {
+  title: string;
+  body: string;
+} {
+  switch (type) {
+    case "PROACTIVE_MESSAGE":
+      return { title: "Diewish Koç", body: "Yeni bir koç mesajın var." };
+    case "WEEKLY_REVIEW":
+      return { title: "Haftalık özet", body: "Yeni haftalık özetin hazır." };
+    case "MONTHLY_REVIEW":
+      return { title: "Aylık özet", body: "Yeni aylık özetin hazır." };
+    case "RISK_ALERT":
+      return { title: "Diewish", body: "Diewish'te yeni bir bilgilendirme var." };
+    case "GOAL_REMINDER":
+      return { title: "Hedef hatırlatması", body: "Hedeflerini kontrol etme zamanı." };
+    case "WATER_REMINDER":
+      return { title: "Su hatırlatması", body: "Su hedefini kontrol etmeyi unutma." };
+    default:
+      return { title: "Diewish", body: "Yeni bir bildirimin var." };
+  }
+}
+
 export interface FcmMessageEnvelope {
   token: string;
   data: {
@@ -140,13 +162,14 @@ export function buildFcmMessage(
   notification: Notification,
   device: ActiveNotificationDevice,
 ): FcmMessageEnvelope {
+  const copy = privacySafeRemoteCopy(notification.type);
   const message: FcmMessageEnvelope = {
     token: device.token,
     data: {
       notificationId: notification.id,
       type: notification.type,
-      title: notification.title,
-      body: notification.body,
+      title: copy.title,
+      body: copy.body,
     },
   };
 
@@ -168,7 +191,7 @@ export function buildFcmMessage(
 }
 
 /**
- * Real Android push provider for the isolated staging Cloud Run service.
+ * Real Android/Web push provider for the isolated staging Cloud Run service.
  * It uses the service account already attached to Cloud Run and therefore does
  * not add or persist a service-account private key in Diewish.
  */
