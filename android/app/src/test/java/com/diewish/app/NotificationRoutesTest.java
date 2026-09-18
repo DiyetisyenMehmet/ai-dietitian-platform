@@ -30,6 +30,7 @@ public final class NotificationRoutesTest {
         assertEquals(NotificationRoutes.ACTIVITY, NotificationRoutes.forWellnessType("activity"));
         assertEquals(NotificationRoutes.SLEEP, NotificationRoutes.forWellnessType("sleep"));
         assertEquals(NotificationRoutes.INSIGHTS, NotificationRoutes.forWellnessType("weekly"));
+        assertEquals(NotificationRoutes.NOTIFICATION_SETTINGS, NotificationRoutes.forWellnessType("test"));
         assertEquals(NotificationRoutes.DASHBOARD, NotificationRoutes.forWellnessType("unexpected"));
         assertEquals(NotificationRoutes.MEALS, NotificationRoutes.sanitizeTarget(NotificationRoutes.MEALS));
         assertEquals(NotificationRoutes.BLOOD_TESTS, NotificationRoutes.sanitizeTarget(NotificationRoutes.BLOOD_TESTS));
