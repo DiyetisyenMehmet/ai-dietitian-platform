@@ -57,10 +57,17 @@ public final class DiewishMessagingService extends FirebaseMessagingService {
             manager.createNotificationChannel(channel);
         }
 
+        String unreadId = "remote:" + id;
         PendingIntent pendingIntent = NotificationTapReceiver.pendingIntent(
             this,
             id.hashCode(),
-            path
+            path,
+            unreadId
+        );
+        PendingIntent dismissIntent = NotificationTapReceiver.dismissPendingIntent(
+            this,
+            id.hashCode(),
+            unreadId
         );
         Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher)
@@ -69,9 +76,11 @@ public final class DiewishMessagingService extends FirebaseMessagingService {
             .setStyle(new NotificationCompat.BigTextStyle().bigText(body))
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
+            .setDeleteIntent(dismissIntent)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build();
         manager.notify(id.hashCode(), notification);
+        DiewishNotificationUnreadStore.markUnread(getApplicationContext(), unreadId);
         remember(id);
     }
 
