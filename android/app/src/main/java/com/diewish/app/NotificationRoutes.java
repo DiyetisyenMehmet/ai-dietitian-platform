@@ -46,6 +46,7 @@ public final class NotificationRoutes {
         if ("activity".equals(type)) return ACTIVITY;
         if ("sleep".equals(type)) return SLEEP;
         if ("weekly".equals(type)) return INSIGHTS;
+        if ("test".equals(type)) return NOTIFICATION_SETTINGS;
         return DASHBOARD;
     }
 
