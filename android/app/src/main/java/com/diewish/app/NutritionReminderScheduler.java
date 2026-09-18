@@ -82,8 +82,8 @@ public final class NutritionReminderScheduler {
             String id = row.optString("id", "");
             long at = row.optLong("at", 0L);
             if (id.isEmpty() || at <= now) continue;
-            alarms.setAndAllowWhileIdle(
-                AlarmManager.RTC_WAKEUP,
+            ReminderAlarmPolicy.schedule(
+                alarms,
                 at,
                 pendingIntent(context, id)
             );
