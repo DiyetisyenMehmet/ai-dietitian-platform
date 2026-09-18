@@ -271,33 +271,21 @@ jobs:
             "https://firebase.googleapis.com/v1beta1/projects/${PROJECT_ID}/androidApps")"
           if [[ "$apps_code" != "200" ]]; then
             echo "Could not read isolated staging Firebase Android apps (HTTP ${apps_code})." >&2
+            rm -f "$apps_file"
             exit 1
           fi
 
           android_app_name="$(jq -r --arg package "$package_name" '(.apps // [])[] | select(.packageName == $package) | .name' "$apps_file" | head -n 1)"
+          rm -f "$apps_file"
 
           # Android app registration is a one-time infrastructure bootstrap
           # operation. The deployment identity intentionally cannot self-escalate
           # or create Firebase clients. Fail closed with an actionable message.
           if [[ -z "$android_app_name" ]]; then
-            rm -f "$apps_file"
             echo "Staging Firebase Android app com.diewish.app is missing; refusing to build an APK without FCM." >&2
             echo "Run scripts/bootstrap-staging-auth-gcp.sh once with an authorized staging project administrator, then re-run this staging deploy." >&2
             exit 1
           fi
- "$create_file"
-              exit 1
-            fi
-            android_app_name="$(jq -r '.name // empty' "$create_file")"
-            rm -f "$create_file"
-            if [[ -z "$android_app_name" ]]; then
-              echo "Staging Firebase Android app creation returned no app name." >&2
-              rm -f "$apps_file"
-              exit 1
-            fi
-            echo "Created isolated staging Firebase Android app for ${package_name}."
-          fi
-          rm -f "$apps_file"
 
           config_file="$(mktemp)"
           config_code="$(curl --silent --show-error -o "$config_file" -w '%{http_code}' \
@@ -306,6 +294,7 @@ jobs:
             "https://firebase.googleapis.com/v1beta1/${android_app_name}/config")"
           if [[ "$config_code" != "200" ]]; then
             echo "Could not read staging Firebase Android client config (HTTP ${config_code})." >&2
+            rm -f "$config_file"
             exit 1
           fi
 
