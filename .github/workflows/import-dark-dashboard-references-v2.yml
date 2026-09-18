@@ -1,0 +1,73 @@
+name: Import final dark dashboard references v2
+
+on:
+  push:
+    branches:
+      - feature/staging-preview
+
+permissions:
+  contents: write
+
+jobs:
+  import-dark-references:
+    if: github.event.head_commit.message == 'run-dark-reference-import'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout staging branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/staging-preview
+          fetch-depth: 0
+
+      - name: Download exact user references
+        shell: bash
+        env:
+          FOOD_URL_B64: aHR0cHM6Ly9kMmpxcm02b3phOG5iNi5jbG91ZGZyb250Lm5ldC9kYXRhc2V0cy9lMmVmMzJlNS1lZDM2LTQ5NTQtYjY2Yi1lNzdjNmQyM2RhNDQucG5nP19qd3Q9ZXlKaGJHY2lPaUpJVXpJMU5pSXNJblI1Y0NJNklrcFhWQ0o5LmV5SnJaWGxJWVhOb0lqb2lNRFkxT0RSaE9EUTFOMlpsTURka1lpSXNJbUoxWTJ0bGRDSTZJbkoxYm5kaGVTMWtZWFJoYzJWMGN5SXNJbk4wWVdkbElqb2ljSEp2WkNJc0ltVjRjQ0k2TVRjNE9UZzJOekUwTUgwLlc0Vl9MRW5kU1FwczF3VlZ5R1MwYmZQdUxHWmFHbXFpT1F2MHlhTHpmMlE=
+          BLOOD_URL_B64: aHR0cHM6Ly9kMmpxcm02b3phOG5iNi5jbG91ZGZyb250Lm5ldC9kYXRhc2V0cy9lMTQ5NWM5OC1mNGE1LTRiMzMtYjI3MS1iYmZjYmI2NjQyYTIucG5nP19qd3Q9ZXlKaGJHY2lPaUpJVXpJMU5pSXNJblI1Y0NJNklrcFhWQ0o5LmV5SnJaWGxJWVhOb0lqb2lOR0ZqT1dRMk16UXhaR0kwWWprMFlTSXNJbUoxWTJ0bGRDSTZJbkoxYm5kaGVTMWtZWFJoYzJWMGN5SXNJbk4wWVdkbElqb2ljSEp2WkNJc0ltVjRjQ0k2TVRjNE9UZ3hOamMxTm4wLnR1Z2VraGRGbDgwSUFoWG90S2k2cXQxdzgwdDRjSmtXT05RMEJjUEJ6dk0=
+          PROGRESS_URL_B64: aHR0cHM6Ly9kMmpxcm02b3phOG5iNi5jbG91ZGZyb250Lm5ldC9kYXRhc2V0cy9jYjJmMzYyZC0zMmIyLTQ0YjMtYmQ5Mi00NjdkMjZhOGY3NGYucG5nP19qd3Q9ZXlKaGJHY2lPaUpJVXpJMU5pSXNJblI1Y0NJNklrcFhWQ0o5LmV5SnJaWGxJWVhOb0lqb2lPRFV4TW1Gak0yRmpaakZsTnprd09DSXNJbUoxWTJ0bGRDSTZJbkoxYm5kaGVTMWtZWFJoYzJWMGN5SXNJbk4wWVdkbElqb2ljSEp2WkNJc0ltVjRjQ0k2TVRjNE9UZzNPVGcyTm4wLkw2X0twTlZEZ1FWak9oOEprNmlTcks5WWFYcnRGV0JBVS1SREdBZmFwdDQ=
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/diewish-dark-refs
+          printf '%s' "$FOOD_URL_B64" | base64 -d > /tmp/food.url
+          printf '%s' "$BLOOD_URL_B64" | base64 -d > /tmp/blood.url
+          printf '%s' "$PROGRESS_URL_B64" | base64 -d > /tmp/progress.url
+          curl --fail --location --silent --show-error "$(cat /tmp/food.url)" -o /tmp/diewish-dark-refs/food.png
+          curl --fail --location --silent --show-error "$(cat /tmp/blood.url)" -o /tmp/diewish-dark-refs/blood.png
+          curl --fail --location --silent --show-error "$(cat /tmp/progress.url)" -o /tmp/diewish-dark-refs/progress.png
+          echo 'f32f69dbb8fcb516d9b6c11152a91e56ef1fce19a454d27368ac58596de85e1f  /tmp/diewish-dark-refs/food.png' | sha256sum -c -
+          echo 'ac94fce855fc1635dc634da97516cfd5f799b65b003cf3a36704a78123bdeb73  /tmp/diewish-dark-refs/blood.png' | sha256sum -c -
+          echo '79dc91d623b0751ff577ec0ed06da61358015e9dcd9cd1a4e22e3900adc04e31  /tmp/diewish-dark-refs/progress.png' | sha256sum -c -
+
+      - name: Crop cards pixel-faithfully
+        shell: bash
+        run: |
+          python -m pip install --disable-pip-version-check pillow
+          python <<'PY'
+          from pathlib import Path
+          from PIL import Image
+
+          src = Path('/tmp/diewish-dark-refs')
+          out = Path('frontend/public/images/dashboard/references')
+          out.mkdir(parents=True, exist_ok=True)
+
+          specs = {
+              'food': ((33, 240, 1502, 594), 'food-dark-final.png'),
+              'blood': ((37, 205, 1499, 615), 'blood-dark-final.png'),
+              'progress': ((42, 248, 1494, 602), 'progress-dark-final.png'),
+          }
+
+          for name, (box, filename) in specs.items():
+              card = Image.open(src / f'{name}.png').convert('RGB').crop(box)
+              card.save(out / filename, format='PNG', optimize=False)
+              print(filename, card.size)
+          PY
+
+      - name: Commit exact dark references
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Diewish Staging Automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add frontend/public/images/dashboard/references/*-dark-final.png
+          git commit -m "chore(dashboard): add exact dark reference assets"
+          git push origin HEAD:feature/staging-preview
