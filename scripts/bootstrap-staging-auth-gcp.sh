@@ -8,6 +8,8 @@ DEPLOY_SA="diewish-staging-deployer@${PROJECT_ID}.iam.gserviceaccount.com"
 FRONTEND_SERVICE="diewish-frontend-staging"
 CUSTOM_FRONTEND_HOST="${DIEWISH_STAGING_CUSTOM_HOST:-staging.diewish.com}"
 WEB_APP_DISPLAY_NAME="Diewish Staging Web"
+ANDROID_APP_DISPLAY_NAME="Diewish Staging Android"
+ANDROID_PACKAGE_NAME="com.diewish.app"
 FIREBASE_TOOLS_VERSION="15.30.0"
 SMS_REGIONS="${DIEWISH_STAGING_SMS_REGIONS:-TR}"
 
@@ -163,6 +165,25 @@ if [[ -z "$web_app_name" ]]; then
   exit 1
 fi
 
+echo "Ensuring the staging Firebase Android App exists..."
+android_apps_response="$(firebase_request GET "https://firebase.googleapis.com/v1beta1/projects/${PROJECT_ID}/androidApps")"
+android_app_name="$(jq -r --arg package "$ANDROID_PACKAGE_NAME" '(.apps // [])[] | select(.packageName == $package) | .name' <<<"$android_apps_response" | head -n 1)"
+if [[ -z "$android_app_name" ]]; then
+  create_response="$(firebase_request POST     "https://firebase.googleapis.com/v1beta1/projects/${PROJECT_ID}/androidApps"     "$(jq -cn --arg package "$ANDROID_PACKAGE_NAME" --arg display "$ANDROID_APP_DISPLAY_NAME" '{packageName:$package,displayName:$display}')")"
+  operation_name="$(jq -r '.name // empty' <<<"$create_response")"
+  if [[ -z "$operation_name" ]]; then
+    jq -r '.error.message // "Could not create the staging Firebase Android App"' <<<"$create_response" >&2
+    exit 1
+  fi
+  poll_firebase_operation "$operation_name"
+  android_apps_response="$(firebase_request GET "https://firebase.googleapis.com/v1beta1/projects/${PROJECT_ID}/androidApps")"
+  android_app_name="$(jq -r --arg package "$ANDROID_PACKAGE_NAME" '(.apps // [])[] | select(.packageName == $package) | .name' <<<"$android_apps_response" | head -n 1)"
+fi
+if [[ -z "$android_app_name" ]]; then
+  echo "Staging Firebase Android App could not be resolved after creation." >&2
+  exit 1
+fi
+
 echo "Ensuring Identity Platform is initialized..."
 identity_file="$(mktemp)"
 identity_code="$(curl -sS -o "$identity_file" -w '%{http_code}' \
@@ -261,8 +282,8 @@ fi
 rm -f "$patch_file"
 
 # Give the protected staging deployer only the permissions needed to read the
-# Firebase Web/Android App configuration and maintain Firebase Authentication configuration.
-for role in roles/firebaseauth.editor roles/serviceusage.apiKeysViewer roles/firebase.developAdmin; do
+# Firebase client configuration and maintain Firebase Authentication configuration.
+for role in roles/firebaseauth.editor roles/serviceusage.apiKeysViewer; do
   gcloud projects add-iam-policy-binding "$PROJECT_ID" \
     --member "serviceAccount:${DEPLOY_SA}" \
     --role "$role" \
