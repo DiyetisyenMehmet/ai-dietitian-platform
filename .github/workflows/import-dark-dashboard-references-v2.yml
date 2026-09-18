@@ -1,4 +1,4 @@
-name: Import final dark dashboard references v2
+name: Import final dark dashboard references v3
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   import-dark-references:
-    if: github.event.head_commit.message == 'run-dark-reference-import'
+    if: github.event.head_commit.message == 'run-dark-reference-import-final'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout staging branch
@@ -22,23 +22,20 @@ jobs:
       - name: Download exact user references
         shell: bash
         env:
-          FOOD_URL_B64: aHR0cHM6Ly9kMmpxcm02b3phOG5iNi5jbG91ZGZyb250Lm5ldC9kYXRhc2V0cy9lMmVmMzJlNS1lZDM2LTQ5NTQtYjY2Yi1lNzdjNmQyM2RhNDQucG5nP19qd3Q9ZXlKaGJHY2lPaUpJVXpJMU5pSXNJblI1Y0NJNklrcFhWQ0o5LmV5SnJaWGxJWVhOb0lqb2lNRFkxT0RSaE9EUTFOMlpsTURka1lpSXNJbUoxWTJ0bGRDSTZJbkoxYm5kaGVTMWtZWFJoYzJWMGN5SXNJbk4wWVdkbElqb2ljSEp2WkNJc0ltVjRjQ0k2TVRjNE9UZzJOekUwTUgwLlc0Vl9MRW5kU1FwczF3VlZ5R1MwYmZQdUxHWmFHbXFpT1F2MHlhTHpmMlE=
-          BLOOD_URL_B64: aHR0cHM6Ly9kMmpxcm02b3phOG5iNi5jbG91ZGZyb250Lm5ldC9kYXRhc2V0cy9lMTQ5NWM5OC1mNGE1LTRiMzMtYjI3MS1iYmZjYmI2NjQyYTIucG5nP19qd3Q9ZXlKaGJHY2lPaUpJVXpJMU5pSXNJblI1Y0NJNklrcFhWQ0o5LmV5SnJaWGxJWVhOb0lqb2lOR0ZqT1dRMk16UXhaR0kwWWprMFlTSXNJbUoxWTJ0bGRDSTZJbkoxYm5kaGVTMWtZWFJoYzJWMGN5SXNJbk4wWVdkbElqb2ljSEp2WkNJc0ltVjRjQ0k2TVRjNE9UZ3hOamMxTm4wLnR1Z2VraGRGbDgwSUFoWG90S2k2cXQxdzgwdDRjSmtXT05RMEJjUEJ6dk0=
-          PROGRESS_URL_B64: aHR0cHM6Ly9kMmpxcm02b3phOG5iNi5jbG91ZGZyb250Lm5ldC9kYXRhc2V0cy9jYjJmMzYyZC0zMmIyLTQ0YjMtYmQ5Mi00NjdkMjZhOGY3NGYucG5nP19qd3Q9ZXlKaGJHY2lPaUpJVXpJMU5pSXNJblI1Y0NJNklrcFhWQ0o5LmV5SnJaWGxJWVhOb0lqb2lPRFV4TW1Gak0yRmpaakZsTnprd09DSXNJbUoxWTJ0bGRDSTZJbkoxYm5kaGVTMWtZWFJoYzJWMGN5SXNJbk4wWVdkbElqb2ljSEp2WkNJc0ltVjRjQ0k2TVRjNE9UZzNPVGcyTm4wLkw2X0twTlZEZ1FWak9oOEprNmlTcks5WWFYcnRGV0JBVS1SREdBZmFwdDQ=
+          FOOD_URL: 'https://d2jqrm6oza8nb6.cloudfront.net/datasets/9dafb286-6da5-4a2a-b6f0-61285925d4e7?_jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJrZXlIYXNoIjoiMTkyYmRkZTA3ZDY2ODY5NyIsImJ1Y2tldCI6InJ1bndheS1kYXRhc2V0cyIsInN0YWdlIjoicHJvZCIsImV4cCI6MTc4OTg0NDQ0OH0.tWebKJKe3vPf07o4CWb5Rr3hE7OkRWcCAWs5w8t_2pY'
+          BLOOD_URL: 'https://d2jqrm6oza8nb6.cloudfront.net/datasets/d5b268b1-a61a-4995-bad1-5218543d0757?_jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJrZXlIYXNoIjoiZjIyOTNjMzk4OTQ0ZmMzMCIsImJ1Y2tldCI6InJ1bndheS1kYXRhc2V0cyIsInN0YWdlIjoicHJvZCIsImV4cCI6MTc4OTg2Mzg2NX0.ULGAaUL64_U1n6n6CDK1gkPDCpTzMh50k7s41fJCDsU'
+          PROGRESS_URL: 'https://d2jqrm6oza8nb6.cloudfront.net/datasets/f344a63f-8473-411e-b0ff-c1e500101e36?_jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJrZXlIYXNoIjoiZjg1MmI0ZmU0YjI2MGU3MiIsImJ1Y2tldCI6InJ1bndheS1kYXRhc2V0cyIsInN0YWdlIjoicHJvZCIsImV4cCI6MTc4OTgyNDI1NH0.6oE7osbPZ2wfoPxSc2wXaffHc63pYuamacXOoRpNngg'
         run: |
           set -euo pipefail
           mkdir -p /tmp/diewish-dark-refs
-          printf '%s' "$FOOD_URL_B64" | base64 -d > /tmp/food.url
-          printf '%s' "$BLOOD_URL_B64" | base64 -d > /tmp/blood.url
-          printf '%s' "$PROGRESS_URL_B64" | base64 -d > /tmp/progress.url
-          curl --fail --location --silent --show-error "$(cat /tmp/food.url)" -o /tmp/diewish-dark-refs/food.png
-          curl --fail --location --silent --show-error "$(cat /tmp/blood.url)" -o /tmp/diewish-dark-refs/blood.png
-          curl --fail --location --silent --show-error "$(cat /tmp/progress.url)" -o /tmp/diewish-dark-refs/progress.png
+          curl --fail --location --silent --show-error "$FOOD_URL" -o /tmp/diewish-dark-refs/food.png
+          curl --fail --location --silent --show-error "$BLOOD_URL" -o /tmp/diewish-dark-refs/blood.png
+          curl --fail --location --silent --show-error "$PROGRESS_URL" -o /tmp/diewish-dark-refs/progress.png
           echo 'f32f69dbb8fcb516d9b6c11152a91e56ef1fce19a454d27368ac58596de85e1f  /tmp/diewish-dark-refs/food.png' | sha256sum -c -
           echo 'ac94fce855fc1635dc634da97516cfd5f799b65b003cf3a36704a78123bdeb73  /tmp/diewish-dark-refs/blood.png' | sha256sum -c -
           echo '79dc91d623b0751ff577ec0ed06da61358015e9dcd9cd1a4e22e3900adc04e31  /tmp/diewish-dark-refs/progress.png' | sha256sum -c -
 
-      - name: Crop cards pixel-faithfully
+      - name: Extract card surfaces losslessly
         shell: bash
         run: |
           python -m pip install --disable-pip-version-check pillow
@@ -57,10 +54,14 @@ jobs:
           }
 
           for name, (box, filename) in specs.items():
-              card = Image.open(src / f'{name}.png').convert('RGB').crop(box)
+              image = Image.open(src / f'{name}.png')
+              card = image.crop(box)
               card.save(out / filename, format='PNG', optimize=False)
-              print(filename, card.size)
+              print(filename, card.mode, card.size)
           PY
+          echo '9ae96a52d51a057bdf238e2ea379a948752289f3e1745de06b45a05e44f67095  frontend/public/images/dashboard/references/food-dark-final.png' | sha256sum -c -
+          echo 'e317d48d6a8fb50715d09429c8ed30533ad736d9a8d72ebe4ca61ae9ec63ff29  frontend/public/images/dashboard/references/blood-dark-final.png' | sha256sum -c -
+          echo '103cef9a36e77ca400e614571ea718813ff06ddcd5d4cb7d8978affe8c64116e  frontend/public/images/dashboard/references/progress-dark-final.png' | sha256sum -c -
 
       - name: Commit exact dark references
         shell: bash
@@ -69,5 +70,9 @@ jobs:
           git config user.name "Diewish Staging Automation"
           git config user.email "actions@users.noreply.github.com"
           git add frontend/public/images/dashboard/references/*-dark-final.png
+          if git diff --cached --quiet; then
+            echo "Dark references already match expected hashes."
+            exit 0
+          fi
           git commit -m "chore(dashboard): add exact dark reference assets"
           git push origin HEAD:feature/staging-preview
