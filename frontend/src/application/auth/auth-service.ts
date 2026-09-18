@@ -37,7 +37,18 @@ function toFriendlyError(error: unknown): string {
     if (error.status === 401) return "E-posta veya şifre hatalı.";
     if (error.status === 409) return "Bu e-posta adresi zaten kayıtlı.";
     if (error.status === 422) return "Girilen bilgiler geçersiz. Lütfen kontrol edin.";
-    if (error.status === 429) return "Çok fazla deneme yapıldı. Lütfen biraz sonra tekrar deneyin.";
+    if (error.status === 429) {
+      if (error.code === "AUTH_LOGIN_RATE_LIMITED") {
+        return "Çok sayıda başarısız giriş denemesi yapıldı. Lütfen kısa süre sonra tekrar deneyin.";
+      }
+      if (error.code === "AUTH_REGISTER_RATE_LIMITED") {
+        return "Kısa sürede çok fazla kayıt denemesi yapıldı. Lütfen biraz sonra tekrar deneyin.";
+      }
+      if (error.code === "AUTH_REFRESH_RATE_LIMITED") {
+        return "Oturum yenileme geçici olarak sınırlandı. Lütfen kısa süre sonra tekrar deneyin.";
+      }
+      return "Çok fazla istek gönderildi. Lütfen kısa süre sonra tekrar deneyin.";
+    }
     if (error.status >= 500) return "Sunucu hatası. Lütfen daha sonra tekrar deneyin.";
     return error.message;
   }

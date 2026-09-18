@@ -1,15 +1,19 @@
 import { Router } from "express";
 
 import { authenticate } from "../../middleware/authenticate";
-import { authRateLimiter } from "../../middleware/auth-rate-limit";
+import {
+  loginRateLimiter,
+  refreshRateLimiter,
+  registerRateLimiter,
+} from "../../middleware/auth-rate-limit";
 import { validate } from "../../middleware/validate";
 import { authController } from "./auth.controller";
 import { loginSchema, logoutSchema, refreshSchema, registerSchema } from "./auth.schemas";
 
 /**
- * Auth router. Unauthenticated, abuse-prone endpoints (register/login/refresh)
- * sit behind the stricter `authRateLimiter`; `/me` requires a valid access
- * token via `authenticate`.
+ * Auth router. Abuse-prone unauthenticated actions use independent limiter
+ * buckets so normal refresh traffic cannot exhaust the login-attempt budget.
+ * `/me` requires a valid access token via `authenticate`.
  */
 export const authRouter = Router();
 
@@ -37,7 +41,7 @@ export const authRouter = Router();
  */
 authRouter.post(
   "/register",
-  authRateLimiter,
+  registerRateLimiter,
   validate({ body: registerSchema }),
   authController.register,
 );
@@ -63,7 +67,12 @@ authRouter.post(
  *       401: { description: Invalid credentials. }
  *       403: { description: Account deactivated. }
  */
-authRouter.post("/login", authRateLimiter, validate({ body: loginSchema }), authController.login);
+authRouter.post(
+  "/login",
+  loginRateLimiter,
+  validate({ body: loginSchema }),
+  authController.login,
+);
 
 /**
  * @openapi
@@ -86,7 +95,7 @@ authRouter.post("/login", authRateLimiter, validate({ body: loginSchema }), auth
  */
 authRouter.post(
   "/refresh-token",
-  authRateLimiter,
+  refreshRateLimiter,
   validate({ body: refreshSchema }),
   authController.refresh,
 );
