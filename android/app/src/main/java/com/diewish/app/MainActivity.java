@@ -6,6 +6,7 @@ import android.content.res.Configuration;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
@@ -79,6 +80,10 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
     private PermissionRequest pendingWebCameraRequest;
     private final Map<String, ProductDetails> productCache = new HashMap<>();
     private String trustedHost;
+    // @JavascriptInterface methods run on WebView's JavaBridge thread. Never call
+    // WebView#getUrl() from that thread; keep a UI-thread-owned trusted-origin
+    // snapshot that bridges may read safely.
+    private volatile boolean trustedPageActive = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -87,6 +92,7 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
 
         trustedHost = URI.create(BuildConfig.WEB_BASE_URL).getHost();
+        updateTrustedPageState(BuildConfig.WEB_BASE_URL + "/dashboard");
         configureBilling();
         configureWebView();
         configureRootView();
@@ -223,12 +229,19 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
     }
 
     private boolean isTrustedPage() {
-        String current = webView == null ? null : webView.getUrl();
-        if (current == null) return false;
+        return trustedPageActive;
+    }
+
+    /** Updates trusted-origin state only from WebView/UI-thread navigation callbacks. */
+    private void updateTrustedPageState(String url) {
+        if (url == null) {
+            trustedPageActive = false;
+            return;
+        }
         try {
-            return isTrustedOrigin(Uri.parse(current));
+            trustedPageActive = isTrustedOrigin(Uri.parse(url));
         } catch (RuntimeException ignored) {
-            return false;
+            trustedPageActive = false;
         }
     }
 
@@ -666,12 +679,21 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
             WebResourceRequest request
         ) {
             Uri uri = request.getUrl();
-            if (isTrustedOrigin(uri)) return false;
+            if (isTrustedOrigin(uri)) {
+                if (request.isForMainFrame()) updateTrustedPageState(uri.toString());
+                return false;
+            }
             try {
                 startActivity(new Intent(Intent.ACTION_VIEW, uri));
             } catch (ActivityNotFoundException ignored) {
             }
             return true;
+        }
+
+        @Override
+        public void onPageStarted(WebView view, String url, Bitmap favicon) {
+            super.onPageStarted(view, url, favicon);
+            updateTrustedPageState(url);
         }
 
         @Override
@@ -686,6 +708,7 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
         @Override
         public void onPageFinished(WebView view, String url) {
             super.onPageFinished(view, url);
+            updateTrustedPageState(url);
             persistSessionCookies();
             if (isTrustedPage()) {
                 view.evaluateJavascript(
