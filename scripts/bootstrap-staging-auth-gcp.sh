@@ -261,8 +261,8 @@ fi
 rm -f "$patch_file"
 
 # Give the protected staging deployer only the permissions needed to read the
-# Firebase Web App/API key and maintain Firebase Authentication configuration.
-for role in roles/firebaseauth.editor roles/serviceusage.apiKeysViewer; do
+# Firebase Web/Android App configuration and maintain Firebase Authentication configuration.
+for role in roles/firebaseauth.editor roles/serviceusage.apiKeysViewer roles/firebase.developAdmin; do
   gcloud projects add-iam-policy-binding "$PROJECT_ID" \
     --member "serviceAccount:${DEPLOY_SA}" \
     --role "$role" \
