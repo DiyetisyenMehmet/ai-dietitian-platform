@@ -112,10 +112,14 @@ function ReferenceChevronOverlay({ tone }: { tone: Feature["tone"] }) {
   );
 }
 
-function ProgressIcon() {
+function ProgressIcon({ dark = false }: { dark?: boolean } = {}) {
   return (
     <span
-      className="flex size-[13.6cqw] shrink-0 items-center justify-center rounded-[3.1cqw] bg-emerald-50/95 text-emerald-600"
+      className={`flex size-[13.6cqw] shrink-0 items-center justify-center rounded-[3.1cqw] ${
+        dark
+          ? "border border-emerald-400/15 bg-[#0a2d27]/96 text-emerald-400 shadow-[inset_0_0_1.8cqw_rgba(52,211,153,0.05)]"
+          : "bg-emerald-50/95 text-emerald-600"
+      }`}
       aria-hidden="true"
     >
       <svg viewBox="0 0 48 48" className="size-[58%]" fill="currentColor">
@@ -296,7 +300,7 @@ function DarkFeatureCard({ feature }: { feature: Feature }) {
           className="pointer-events-none absolute left-[3.1cqw] top-1/2 z-20 -translate-y-1/2"
           aria-hidden="true"
         >
-          <ProgressIcon />
+          <ProgressIcon dark />
         </span>
       ) : null}
 
