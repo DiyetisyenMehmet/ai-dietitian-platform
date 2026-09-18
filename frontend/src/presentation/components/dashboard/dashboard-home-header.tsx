@@ -20,17 +20,17 @@ export function DashboardHomeHeader({ userName }: DashboardHomeHeaderProps) {
   const displayName = userName.trim() || "Diewish";
 
   return (
-    <section className="flex items-start justify-between gap-3 pt-1" aria-label="Ana sayfa özeti">
-      <div className="min-w-0 flex-1">
+    <section className="relative pt-1" aria-label="Ana sayfa özeti">
+      <div className="min-w-0">
         <p className="text-sm font-medium text-muted-foreground">
           {now ? formatLongDate(now) : "\u00a0"}
         </p>
-        <h1 className="mt-0.5 truncate text-2xl font-bold tracking-tight sm:text-3xl">
+        <h1 className="mt-3.5 break-words text-2xl font-bold leading-tight tracking-tight sm:text-3xl">
           {now ? getGreeting(now) : "Merhaba"}, {displayName} <span aria-hidden="true">👋</span>
         </h1>
       </div>
 
-      <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+      <div className="absolute right-0 top-0 flex shrink-0 -translate-y-1 items-center gap-1 sm:gap-2">
         <div className="flex size-10 items-center justify-center rounded-2xl border border-border bg-card shadow-sm sm:size-11 [&_button]:size-10 [&_button]:rounded-2xl sm:[&_button]:size-11">
           <ThemeToggle />
         </div>
