@@ -10,6 +10,9 @@ const FEATURES = [
     height: 312,
     visual: "/images/dashboard/food-barcode-card.webp",
     lightReference: "/images/dashboard/references/food-light-final.png",
+    darkReference: "/images/dashboard/references/food-dark-final.jpg",
+    darkAspect: "1469 / 354",
+    darkCrop: { left: 33, top: 240, width: 1469, height: 354, sourceWidth: 1536, sourceHeight: 864 },
     tone: "scanner",
     lightAspect: "1603 / 400",
   },
@@ -21,6 +24,9 @@ const FEATURES = [
     height: 348,
     visual: "/images/dashboard/blood-test-card.webp",
     lightReference: "/images/dashboard/references/blood-light-final.png",
+    darkReference: "/images/dashboard/references/blood-dark-final.jpg",
+    darkAspect: "1462 / 410",
+    darkCrop: { left: 37, top: 205, width: 1462, height: 410, sourceWidth: 1536, sourceHeight: 864 },
     tone: "blood",
     lightAspect: "1603 / 460",
   },
@@ -32,6 +38,9 @@ const FEATURES = [
     height: 298,
     visual: null,
     lightReference: null,
+    darkReference: "/images/dashboard/references/progress-dark-final.jpg",
+    darkAspect: "1452 / 354",
+    darkCrop: { left: 42, top: 248, width: 1452, height: 354, sourceWidth: 1536, sourceHeight: 864 },
     tone: "progress",
     lightAspect: "1598 / 405",
   },
@@ -266,345 +275,45 @@ function LightFeatureCard({ feature }: { feature: Feature }) {
   );
 }
 
-function DarkFeatureIcon({ tone }: { tone: Feature["tone"] }) {
-  const isScanner = tone === "scanner";
-  const sizeClass = isScanner ? "size-[12cqw]" : "size-[13.6cqw]";
-  const radiusClass = isScanner ? "rounded-[2.25cqw]" : "rounded-[2.65cqw]";
-  const shell =
-    `flex ${sizeClass} ${radiusClass} shrink-0 items-center justify-center border bg-[#082822]/94 shadow-[inset_0_0_2.2cqw_rgba(45,239,188,0.08),0_0_2.4cqw_rgba(22,153,117,0.10)]`;
-
-  if (tone === "blood") {
-    return (
-      <span className={`${shell} border-[#2c745f]/35 text-[#ff1f32]`} aria-hidden="true">
-        <svg
-          viewBox="0 0 48 48"
-          className="size-[61%]"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="3.2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M24 5C24 5 10 21 10 31a14 14 0 0 0 28 0C38 21 24 5 24 5Z" />
-          <path
-            d="M29 27c-4.5 0-8 3.2-8 7.2 0 2.7 1.5 5.1 4 6.3 5.8-.4 10.4-4.4 11.8-9.7A8 8 0 0 0 29 27Z"
-            fill="currentColor"
-            stroke="none"
-          />
-        </svg>
-      </span>
-    );
-  }
-
-  if (tone === "progress") {
-    return (
-      <span className={`${shell} border-[#2c745f]/40 text-[#32e9b4]`} aria-hidden="true">
-        <svg viewBox="0 0 48 48" className="size-[58%]" fill="currentColor">
-          <defs>
-            <linearGradient id="diewishDarkProgressIconBars" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#3cf1be" />
-              <stop offset="100%" stopColor="#17b98c" />
-            </linearGradient>
-          </defs>
-          <g fill="url(#diewishDarkProgressIconBars)">
-            <rect x="8" y="27" width="8" height="13" rx="1.5" />
-            <rect x="20" y="19" width="8" height="21" rx="1.5" />
-            <rect x="32" y="9" width="8" height="31" rx="1.5" />
-          </g>
-        </svg>
-      </span>
-    );
-  }
-
-  return (
-    <span className={`${shell} border-[#2c745f]/40 text-[#32e9b4]`} aria-hidden="true">
-      <svg
-        viewBox="0 0 48 48"
-        className="size-[62%]"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="3.25"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M16 8h-5a3 3 0 0 0-3 3v5M32 8h5a3 3 0 0 1 3 3v5M40 32v5a3 3 0 0 1-3 3h-5M16 40h-5a3 3 0 0 1-3-3v-5" />
-        <path d="M17 24h14" />
-      </svg>
-    </span>
-  );
-}
-
-function DarkProgressArtwork() {
-  return (
-    <span
-      className="pointer-events-none absolute inset-y-0 right-[5.35cqw] z-10 w-[41.6%]"
-      aria-hidden="true"
-    >
-      <svg
-        viewBox="0 0 430 210"
-        className="h-full w-full"
-        fill="none"
-        preserveAspectRatio="xMidYMid meet"
-      >
-        <defs>
-          <linearGradient id="diewishDarkProgressBar" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#39efbd" stopOpacity=".98" />
-            <stop offset="100%" stopColor="#0f7b5e" stopOpacity=".90" />
-          </linearGradient>
-          <linearGradient id="diewishDarkProgressWave" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor="#0a352d" stopOpacity=".12" />
-            <stop offset="52%" stopColor="#155646" stopOpacity=".55" />
-            <stop offset="100%" stopColor="#0a4237" stopOpacity=".18" />
-          </linearGradient>
-          <filter id="diewishDarkProgressGlow" x="-40%" y="-40%" width="180%" height="180%">
-            <feGaussianBlur stdDeviation="2.2" result="blur" />
-            <feMerge>
-              <feMergeNode in="blur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-        </defs>
-
-        <path
-          d="M0 177C70 161 88 80 161 84c62 3 68 37 119 25 53-13 72-63 150-67v168H0Z"
-          fill="url(#diewishDarkProgressWave)"
-        />
-
-        <g fill="url(#diewishDarkProgressBar)" filter="url(#diewishDarkProgressGlow)">
-          <rect x="62" y="150" width="42" height="42" rx="5" />
-          <rect x="119" y="134" width="42" height="58" rx="5" />
-          <rect x="176" y="112" width="42" height="80" rx="5" />
-          <rect x="233" y="94" width="42" height="98" rx="5" />
-          <rect x="290" y="75" width="42" height="117" rx="5" />
-          <rect x="347" y="52" width="42" height="140" rx="5" />
-        </g>
-
-        <path
-          d="M83 132 140 116 197 91 254 78 311 61 368 35"
-          stroke="#39efbd"
-          strokeWidth="5.6"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          filter="url(#diewishDarkProgressGlow)"
-        />
-        <g fill="#39efbd" filter="url(#diewishDarkProgressGlow)">
-          <circle cx="83" cy="132" r="8" />
-          <circle cx="140" cy="116" r="8" />
-          <circle cx="197" cy="91" r="8" />
-          <circle cx="254" cy="78" r="8" />
-          <circle cx="311" cy="61" r="8" />
-          <circle cx="368" cy="35" r="8" />
-        </g>
-
-        <g transform="translate(307 2)">
-          <rect
-            width="112"
-            height="42"
-            rx="17"
-            fill="#0a392f"
-            fillOpacity=".97"
-            stroke="#1b6b58"
-            strokeWidth="1.2"
-          />
-          <text
-            x="56"
-            y="28"
-            textAnchor="middle"
-            fill="#35efbb"
-            fontFamily="Arial, Helvetica, sans-serif"
-            fontSize="25"
-            fontWeight="700"
-          >
-            -4,2 kg
-          </text>
-        </g>
-
-        <g fill="#126249" fillOpacity=".32">
-          <ellipse cx="393" cy="165" rx="13" ry="38" transform="rotate(34 393 165)" />
-          <ellipse cx="417" cy="179" rx="12" ry="34" transform="rotate(38 417 179)" />
-        </g>
-      </svg>
-    </span>
-  );
-}
-
-function DarkChevron({ tone }: { tone: Feature["tone"] }) {
-  if (tone === "blood") {
-    return (
-      <span
-        className="pointer-events-none absolute right-[1.35cqw] top-1/2 z-30 flex size-[5.35cqw] -translate-y-1/2 items-center justify-center rounded-full bg-black/25 text-[#edf5f2]"
-        aria-hidden="true"
-      >
-        <svg
-          viewBox="0 0 24 24"
-          className="size-[3.45cqw]"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.3"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="m9 5 7 7-7 7" />
-        </svg>
-      </span>
-    );
-  }
-
-  return (
-    <span
-      className={`pointer-events-none absolute right-[2.15cqw] top-1/2 z-30 -translate-y-1/2 bg-transparent ${
-        tone === "scanner" ? "text-[#35e5b1]" : "text-[#d6e1de]"
-      }`}
-      aria-hidden="true"
-    >
-      <svg
-        viewBox="0 0 24 24"
-        className="size-[3.55cqw]"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2.3"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="m9 5 7 7-7 7" />
-      </svg>
-    </span>
-  );
-}
-
 function DarkFeatureCard({ feature }: { feature: Feature }) {
-  const isProgress = feature.tone === "progress";
-  const descriptionLines =
-    feature.tone === "scanner"
-      ? ["Yemeğini fotoğrafla veya", "paketli ürünü barkodla tara."]
-      : feature.tone === "blood"
-        ? ["Tahlil sonuçlarını yükle,", "anlaşılır şekilde değerlendir."]
-        : ["Kilo, beslenme, su ve hareket", "verilerini incele."];
-
-  const layout =
-    feature.tone === "scanner"
-      ? {
-          iconLeft: "2.35cqw",
-          textLeft: "16.35cqw",
-          titleSize: "3.35cqw",
-          bodySize: "2.55cqw",
-        }
-      : feature.tone === "blood"
-        ? {
-            iconLeft: "2.45cqw",
-            textLeft: "18.75cqw",
-            titleSize: "3.65cqw",
-            bodySize: "2.55cqw",
-          }
-        : {
-            iconLeft: "2.35cqw",
-            textLeft: "18.55cqw",
-            titleSize: "3.72cqw",
-            bodySize: "2.55cqw",
-          };
+  const crop = feature.darkCrop;
 
   return (
     <Link
       href={feature.href}
-      className="relative block w-full overflow-hidden rounded-[3.15cqw] border border-[#1b6b58]/80 bg-[#061917] shadow-[inset_0_0_4.6cqw_rgba(17,105,84,0.07),0_1.4cqw_4.2cqw_rgba(0,0,0,0.16)] [container-type:inline-size] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 focus-visible:ring-inset"
-      style={{ aspectRatio: feature.lightAspect }}
+      className="relative block w-full overflow-hidden [container-type:inline-size] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 focus-visible:ring-inset"
+      style={{ aspectRatio: feature.darkAspect }}
       aria-label={`${feature.title}. ${feature.description}`}
     >
-      <span
-        className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(circle_at_78%_52%,rgba(19,103,82,0.15),transparent_38%),linear-gradient(104deg,#071b18_0%,#071c19_48%,#061715_100%)]"
+      <Image
+        src={feature.darkReference}
+        alt=""
+        width={crop.sourceWidth}
+        height={crop.sourceHeight}
+        unoptimized
+        draggable={false}
+        sizes="(max-width: 768px) 105vw, 1008px"
+        className="pointer-events-none absolute max-w-none select-none"
+        style={{
+          left: `${(-crop.left / crop.width) * 100}%`,
+          top: `${(-crop.top / crop.height) * 100}%`,
+          width: `${(crop.sourceWidth / crop.width) * 100}%`,
+          height: `${(crop.sourceHeight / crop.height) * 100}%`,
+        }}
         aria-hidden="true"
       />
-
-      {feature.visual ? (
-        <span
-          className={`pointer-events-none absolute inset-y-0 right-0 z-10 overflow-hidden ${
-            feature.tone === "scanner" ? "w-[56.5%]" : "w-[50.5%]"
-          }`}
-          style={{
-            WebkitMaskImage:
-              feature.tone === "scanner"
-                ? "linear-gradient(to right, transparent 0%, black 17%, black 100%)"
-                : "linear-gradient(to right, transparent 0%, black 10%, black 100%)",
-            maskImage:
-              feature.tone === "scanner"
-                ? "linear-gradient(to right, transparent 0%, black 17%, black 100%)"
-                : "linear-gradient(to right, transparent 0%, black 10%, black 100%)",
-          }}
-          aria-hidden="true"
-        >
-          <Image
-            src={feature.visual}
-            alt=""
-            fill
-            unoptimized
-            draggable={false}
-            sizes="(max-width: 768px) 58vw, 580px"
-            className={
-              feature.tone === "scanner"
-                ? "object-cover object-right saturate-[1.13] contrast-[1.05] brightness-[0.98]"
-                : "object-cover object-right saturate-[0.98] contrast-[1.03] brightness-[0.83]"
-            }
-            aria-hidden="true"
-          />
-          <span
-            className={
-              feature.tone === "scanner"
-                ? "absolute inset-0 bg-[linear-gradient(90deg,#061917_0%,rgba(6,25,23,0.68)_13%,rgba(6,25,23,0.08)_37%,transparent_66%)]"
-                : "absolute inset-0 bg-[linear-gradient(90deg,#061917_0%,rgba(6,25,23,0.50)_10%,rgba(6,25,23,0.04)_34%,transparent_58%)]"
-            }
-          />
-        </span>
-      ) : (
-        <DarkProgressArtwork />
-      )}
-
-      <span
-        className="absolute top-1/2 z-20 -translate-y-1/2"
-        style={{ left: layout.iconLeft }}
-      >
-        <DarkFeatureIcon tone={feature.tone} />
+      <span className="sr-only">
+        {feature.title}. {feature.description}
       </span>
-
-      <span
-        className="absolute top-1/2 z-20 min-w-0 -translate-y-1/2 text-left"
-        style={{ left: layout.textLeft }}
-      >
-        <span
-          className="block whitespace-nowrap font-extrabold leading-[1.03] tracking-[-0.035em] text-white"
-          style={{ fontSize: layout.titleSize }}
-        >
-          {feature.title}
-        </span>
-        <span className="mt-[0.8cqw] block">
-          {descriptionLines.map((line) => (
-            <span
-              key={line}
-              className="block whitespace-nowrap font-normal leading-[1.22] tracking-[-0.012em] text-[#aeb9b6]"
-              style={{ fontSize: layout.bodySize }}
-            >
-              {line}
-            </span>
-          ))}
-        </span>
-      </span>
-
-      {isProgress ? (
-        <span
-          className="pointer-events-none absolute bottom-[-15%] left-[39%] z-[1] h-[72%] w-[38%] rounded-[50%] bg-emerald-900/10 blur-[0.45cqw]"
-          aria-hidden="true"
-        />
-      ) : null}
-
-      <DarkChevron tone={feature.tone} />
     </Link>
   );
 }
 
 /**
  * Light mode remains the approved final implementation and is not changed here.
- * Dark mode mirrors the exact light-card geometry (same aspect ratios, spacing,
- * icon/text/chevron positions and routes) while applying the supplied deep
- * green/teal night palette, glow hierarchy and contrast language.
+ * Dark mode uses the user's final reference artwork directly. The Link layer
+ * owns routing, responsive sizing and accessibility; visible card content,
+ * typography, artwork and chevrons come only from the supplied reference image.
  */
 export function DashboardFeatureLinks() {
   return (
