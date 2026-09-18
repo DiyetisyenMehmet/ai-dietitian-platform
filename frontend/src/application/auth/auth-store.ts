@@ -19,7 +19,8 @@ interface AuthState {
   tokens: AuthTokens | null;
 }
 
-let state: AuthState = { status: "loading", user: null, tokens: null };
+const SERVER_SNAPSHOT: AuthState = { status: "loading", user: null, tokens: null };
+let state: AuthState = SERVER_SNAPSHOT;
 let sessionVersion = 0;
 let hydrationPromise: Promise<void> | null = null;
 let refreshPromise: Promise<string | null> | null = null;
@@ -110,7 +111,10 @@ export const authStore = {
   },
 
   getServerSnapshot(): AuthState {
-    return { status: "loading", user: null, tokens: null };
+    // React 19 requires getServerSnapshot to be referentially stable. Returning
+    // a fresh object here can trigger an infinite external-store render loop
+    // during hydration and crash the entire client shell.
+    return SERVER_SNAPSHOT;
   },
 
   /** Resolves the browser session from the HttpOnly cookie; no token storage is read. */
