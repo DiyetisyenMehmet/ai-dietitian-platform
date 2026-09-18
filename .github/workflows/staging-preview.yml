@@ -276,22 +276,16 @@ jobs:
 
           android_app_name="$(jq -r --arg package "$package_name" '(.apps // [])[] | select(.packageName == $package) | .name' "$apps_file" | head -n 1)"
 
-          # The isolated staging project may be new and legitimately have no
-          # Android client yet. Create ONLY the staging Firebase Android app;
-          # never fall back to, read from, or mutate production Firebase.
+          # Android app registration is a one-time infrastructure bootstrap
+          # operation. The deployment identity intentionally cannot self-escalate
+          # or create Firebase clients. Fail closed with an actionable message.
           if [[ -z "$android_app_name" ]]; then
-            create_file="$(mktemp)"
-            create_code="$(curl --silent --show-error -o "$create_file" -w '%{http_code}' \
-              -H "$auth_header" \
-              -H "x-goog-user-project: ${PROJECT_ID}" \
-              -H 'Content-Type: application/json' \
-              -X POST \
-              -d "$(jq -cn --arg package "$package_name" --arg name "Diewish Staging Android" '{packageName:$package,displayName:$name}')" \
-              "https://firebase.googleapis.com/v1beta1/projects/${PROJECT_ID}/androidApps")"
-            if [[ "$create_code" != "200" && "$create_code" != "201" ]]; then
-              echo "Staging Firebase Android app com.diewish.app is missing; refusing to build an APK without FCM. Automatic staging-only creation failed (HTTP ${create_code})." >&2
-              jq -r '.error.message // empty' "$create_file" >&2 || true
-              rm -f "$apps_file" "$create_file"
+            rm -f "$apps_file"
+            echo "Staging Firebase Android app com.diewish.app is missing; refusing to build an APK without FCM." >&2
+            echo "Run scripts/bootstrap-staging-auth-gcp.sh once with an authorized staging project administrator, then re-run this staging deploy." >&2
+            exit 1
+          fi
+ "$create_file"
               exit 1
             fi
             android_app_name="$(jq -r '.name // empty' "$create_file")"
