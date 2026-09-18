@@ -287,9 +287,11 @@ export function PushDeviceSync() {
 
     consumePendingTarget();
     window.addEventListener("focus", consumePendingTarget);
+    window.addEventListener("diewish:notification-open", consumePendingTarget);
     const timer = window.setTimeout(consumePendingTarget, 250);
     return () => {
       window.removeEventListener("focus", consumePendingTarget);
+      window.removeEventListener("diewish:notification-open", consumePendingTarget);
       window.clearTimeout(timer);
     };
   }, [router, status, user?.id, user?.onboardingCompleted]);
