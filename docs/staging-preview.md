@@ -27,6 +27,9 @@ The repository includes `scripts/bootstrap-staging-gcp.sh`. Run it from Google C
 
 The script is idempotent and performs the staging-only bootstrap:
 
+It also registers the staging-only Firebase Android client `com.diewish.app` when it is missing. This is intentionally a one-time administrator bootstrap operation; the normal GitHub staging deploy identity is not allowed to create Firebase clients or grant itself broader IAM roles.
+
+
 1. Enables Cloud Run, Cloud Build, Artifact Registry, Secret Manager, Vertex AI, IAM Credentials and STS APIs.
 2. Creates the `diewish-staging` Docker repository when missing.
 3. Creates `diewish-staging-runtime` and `diewish-staging-deployer` service accounts when missing.
