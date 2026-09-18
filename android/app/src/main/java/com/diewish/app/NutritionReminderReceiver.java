@@ -35,7 +35,13 @@ public final class NutritionReminderReceiver extends BroadcastReceiver {
             );
             channel.setDescription("Diewish öğün planı saat hatırlatmaları");
             manager.createNotificationChannel(channel);
+            NotificationChannel activeChannel = manager.getNotificationChannel(CHANNEL_ID);
+            if (
+                activeChannel != null
+                    && activeChannel.getImportance() == NotificationManager.IMPORTANCE_NONE
+            ) return;
         }
+        if (!manager.areNotificationsEnabled()) return;
 
         String id = intent == null ? null : intent.getStringExtra("reminderId");
         int requestCode = id == null ? 41 : id.hashCode();
@@ -49,7 +55,7 @@ public final class NutritionReminderReceiver extends BroadcastReceiver {
             ? new Notification.Builder(context, CHANNEL_ID)
             : new Notification.Builder(context);
         Notification notification = builder
-            .setSmallIcon(R.drawable.ic_launcher)
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("Diewish")
             .setContentText("Öğün saatin geldi. Planını kontrol edebilirsin.")
             .setContentIntent(contentIntent)
