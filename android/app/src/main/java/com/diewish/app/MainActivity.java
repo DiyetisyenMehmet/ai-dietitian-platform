@@ -245,6 +245,42 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
         }
     }
 
+    private void emitNotificationState() {
+        if (webView == null || !isTrustedPage()) return;
+        emitEvent(
+            "diewish:notification-state",
+            jsonObject(
+                "unreadCount",
+                DiewishNotificationUnreadStore.count(getApplicationContext())
+            )
+        );
+    }
+
+    private void emitPendingNotificationOpen() {
+        if (webView == null || !isTrustedPage()) return;
+        String target = DiewishNotificationTargetStore.get(getApplicationContext());
+        if (target == null || target.isBlank()) return;
+        emitEvent(
+            "diewish:notification-open",
+            jsonObject("target", NotificationRoutes.sanitizeTarget(target))
+        );
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        emitNotificationState();
+        emitPendingNotificationOpen();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        emitNotificationState();
+        emitPendingNotificationOpen();
+    }
+
     private boolean isTrustedOrigin(Uri uri) {
         return uri != null
             && "https".equalsIgnoreCase(uri.getScheme())
@@ -730,6 +766,8 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
                     "diewish:billing-status",
                     jsonObject("ready", billingReady)
                 );
+                emitNotificationState();
+                emitPendingNotificationOpen();
             }
         }
     }
