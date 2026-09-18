@@ -68,6 +68,7 @@ SERVICES=(
   artifactregistry.googleapis.com
   secretmanager.googleapis.com
   aiplatform.googleapis.com
+  fcm.googleapis.com
   iamcredentials.googleapis.com
   sts.googleapis.com
 )
@@ -104,6 +105,14 @@ echo "Configuring least-privilege runtime access..."
 gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
   --member "serviceAccount:${RUNTIME_SA}" \
   --role roles/aiplatform.user \
+  --condition=None \
+  --quiet >/dev/null
+
+# Cloud Run sends FCM HTTP v1 messages with its attached runtime identity.
+# Grant the narrow Firebase Cloud Messaging API role instead of Firebase Admin.
+gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+  --member "serviceAccount:${RUNTIME_SA}" \
+  --role roles/firebasecloudmessaging.admin \
   --condition=None \
   --quiet >/dev/null
 
