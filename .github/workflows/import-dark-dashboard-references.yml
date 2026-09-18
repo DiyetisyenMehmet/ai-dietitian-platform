@@ -1,0 +1,67 @@
+name: Import final dark dashboard references
+
+on:
+  push:
+    branches:
+      - feature/staging-preview
+
+permissions:
+  contents: write
+
+jobs:
+  import-dark-references:
+    if: github.event.head_commit.message == 'chore(staging): import final dark dashboard references'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout staging branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/staging-preview
+          fetch-depth: 0
+
+      - name: Download exact user references
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/diewish-dark-refs
+          curl --fail --location --silent --show-error 'https://d2jqrm6oza8nb6.cloudfront.net/datasets/e2ef32e5-ed36-4954-b66b-e77c6d23da44.png?_jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJrZXlIYXNoIjoiMDY1ODRhODQ1N2ZlMDdkYiIsImJ1Y2tldCI6InJ1bndheS1kYXRhc2V0cyIsInN0YWdlIjoicHJvZCIsImV4cCI6MTc4OTg2NzE0MH0.W4V_LEndSQps1wVVyGS0bfPuLGZaGmqiOQv0yaLzf2Q' -o /tmp/diewish-dark-refs/food.png
+          curl --fail --location --silent --show-error 'https://d2jqrm6oza8nb6.cloudfront.net/datasets/e1495c98-f4a5-4b33-b271-bbfcbb6642a2.png?_jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJrZXlIYXNoIjoiNGFjOWQ2MzQxZGI0Yjk0YSIsImJ1Y2tldCI6InJ1bndheS1kYXRhc2V0cyIsInN0YWdlIjoicHJvZCIsImV4cCI6MTc4OTgxNjc1Nn0.tugekhdFl80IAhXotKi6qt1w80t4cJkWONQ0BcPBzvM' -o /tmp/diewish-dark-refs/blood.png
+          curl --fail --location --silent --show-error 'https://d2jqrm6oza8nb6.cloudfront.net/datasets/cb2f362d-32b2-44b3-bd92-467d26a8f74f.png?_jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJrZXlIYXNoIjoiODUxMmFjM2FjZjFlNzkwOCIsImJ1Y2tldCI6InJ1bndheS1kYXRhc2V0cyIsInN0YWdlIjoicHJvZCIsImV4cCI6MTc4OTg3OTg2Nn0.L6_KpNVDgQVjOh8Jk6iSrK9YaXrtFWBAU-RDGAfapt4' -o /tmp/diewish-dark-refs/progress.png
+          echo 'f32f69dbb8fcb516d9b6c11152a91e56ef1fce19a454d27368ac58596de85e1f  /tmp/diewish-dark-refs/food.png' | sha256sum -c -
+          echo 'ac94fce855fc1635dc634da97516cfd5f799b65b003cf3a36704a78123bdeb73  /tmp/diewish-dark-refs/blood.png' | sha256sum -c -
+          echo '79dc91d623b0751ff577ec0ed06da61358015e9dcd9cd1a4e22e3900adc04e31  /tmp/diewish-dark-refs/progress.png' | sha256sum -c -
+
+      - name: Crop cards pixel-faithfully
+        shell: bash
+        run: |
+          python -m pip install --disable-pip-version-check pillow
+          python <<'PY'
+          from pathlib import Path
+          from PIL import Image
+
+          src = Path('/tmp/diewish-dark-refs')
+          out = Path('frontend/public/images/dashboard/references')
+          out.mkdir(parents=True, exist_ok=True)
+
+          specs = {
+              'food': ((33, 240, 1502, 594), 'food-dark-final.png'),
+              'blood': ((37, 205, 1499, 615), 'blood-dark-final.png'),
+              'progress': ((42, 248, 1494, 602), 'progress-dark-final.png'),
+          }
+
+          for name, (box, filename) in specs.items():
+              image = Image.open(src / f'{name}.png').convert('RGB')
+              card = image.crop(box)
+              card.save(out / filename, format='PNG', optimize=False)
+              print(filename, card.size)
+          PY
+
+      - name: Commit exact dark references
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Diewish Staging Automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add frontend/public/images/dashboard/references/*-dark-final.png
+          git commit -m "chore(dashboard): add exact dark reference assets"
+          git push origin HEAD:feature/staging-preview
