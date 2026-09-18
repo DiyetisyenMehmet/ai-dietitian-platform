@@ -61,3 +61,15 @@ export const refreshRateLimiter = createAuthRateLimiter({
   message: "Too many failed session refresh attempts. Please try again later.",
   skipSuccessfulRequests: true,
 });
+
+
+/**
+ * Sensitive account-lifecycle actions (password reset/change, verification,
+ * deletion) retain their own isolated abuse bucket. Keep the legacy export name
+ * for existing account routes; it is no longer shared with login/register/refresh.
+ */
+export const authRateLimiter = createAuthRateLimiter({
+  max: env.AUTH_RATE_LIMIT_MAX,
+  code: "AUTH_SENSITIVE_ACTION_RATE_LIMITED",
+  message: "Too many sensitive account attempts. Please try again later.",
+});
