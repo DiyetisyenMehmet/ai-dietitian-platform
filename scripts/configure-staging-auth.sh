@@ -223,6 +223,7 @@ fi
   echo "FIREBASE_WEB_API_KEY=${firebase_api_key}"
   echo "FIREBASE_AUTH_DOMAIN=${firebase_auth_domain}"
   echo "FIREBASE_WEB_APP_ID=${firebase_app_id}"
+  echo "FIREBASE_MESSAGING_SENDER_ID=${PROJECT_NUMBER}"
   echo "CANONICAL_FRONTEND_URL=https://${canonical_frontend_host}"
   echo "CUSTOM_FRONTEND_URL=https://${custom_frontend_host}"
 } >> "$GITHUB_ENV"

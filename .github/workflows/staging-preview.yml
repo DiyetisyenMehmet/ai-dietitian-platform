@@ -118,7 +118,7 @@ jobs:
             --timeout 120 \
             --min 0 \
             --max 2 \
-            --update-env-vars "API_PREFIX=/api,TRUST_PROXY_HOPS=1,ENABLE_API_DOCS=false,LOG_LEVEL=info,JWT_ISSUER=diewish-staging,REFRESH_COOKIE_NAME=diewish_staging_refresh,REFRESH_COOKIE_SAME_SITE=lax,STORAGE_PROVIDER=local,AI_PROVIDER=vertex,GOOGLE_CLOUD_PROJECT=${PROJECT_ID},VERTEX_AI_LOCATION=global,VERTEX_AI_MODEL=gemini-3.5-flash,USDA_FDC_API_KEY=DEMO_KEY,OPEN_FOOD_FACTS_USER_AGENT=Diewish-Staging/0.1" \
+            --update-env-vars "API_PREFIX=/api,TRUST_PROXY_HOPS=1,ENABLE_API_DOCS=false,LOG_LEVEL=info,JWT_ISSUER=diewish-staging,REFRESH_COOKIE_NAME=diewish_staging_refresh,REFRESH_COOKIE_SAME_SITE=lax,STORAGE_PROVIDER=local,AI_PROVIDER=vertex,GOOGLE_CLOUD_PROJECT=${PROJECT_ID},FIREBASE_MESSAGING_SENDER_ID=${PROJECT_NUMBER},VERTEX_AI_LOCATION=global,VERTEX_AI_MODEL=gemini-3.5-flash,USDA_FDC_API_KEY=DEMO_KEY,OPEN_FOOD_FACTS_USER_AGENT=Diewish-Staging/0.1" \
             --set-secrets "DATABASE_URL=${DATABASE_SECRET_NAME}:latest,JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET_NAME}:latest,JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET_NAME}:latest" \
             --quiet
 
@@ -184,7 +184,7 @@ jobs:
           gcloud run services update "$BACKEND_SERVICE" \
             --project "$PROJECT_ID" \
             --region "$REGION" \
-            --update-env-vars "^|^CORS_ORIGIN=${FRONTEND_URL},${CANONICAL_FRONTEND_URL},${CUSTOM_FRONTEND_URL}|APP_WEB_URL=${CUSTOM_FRONTEND_URL}|FIREBASE_WEB_API_KEY=${FIREBASE_WEB_API_KEY}|FIREBASE_AUTH_DOMAIN=${FIREBASE_AUTH_DOMAIN}|FIREBASE_WEB_APP_ID=${FIREBASE_WEB_APP_ID}" \
+            --update-env-vars "^|^CORS_ORIGIN=${FRONTEND_URL},${CANONICAL_FRONTEND_URL},${CUSTOM_FRONTEND_URL}|APP_WEB_URL=${CUSTOM_FRONTEND_URL}|FIREBASE_WEB_API_KEY=${FIREBASE_WEB_API_KEY}|FIREBASE_AUTH_DOMAIN=${FIREBASE_AUTH_DOMAIN}|FIREBASE_WEB_APP_ID=${FIREBASE_WEB_APP_ID}|FIREBASE_MESSAGING_SENDER_ID=${PROJECT_NUMBER}" \
             --quiet
 
       - name: Verify staging health and Authentication runtime
@@ -233,7 +233,7 @@ jobs:
             auth_config=""
             for attempt in {1..30}; do
               auth_config="$(curl --fail --silent --show-error "${frontend_origin}/api/identity/firebase-config" || true)"
-              if jq -e '.success == true and .data.configured == true and (.data.config.apiKey | length > 0) and (.data.config.authDomain | length > 0) and (.data.config.appId | length > 0)' >/dev/null 2>&1 <<<"$auth_config"; then
+              if jq -e '.success == true and .data.configured == true and (.data.config.apiKey | length > 0) and (.data.config.authDomain | length > 0) and (.data.config.appId | length > 0) and (.data.config.messagingSenderId | length > 0)' >/dev/null 2>&1 <<<"$auth_config"; then
                 break
               fi
               if [[ "$attempt" == "30" ]]; then
@@ -258,7 +258,7 @@ jobs:
             fi
           done
 
-      - name: Resolve optional staging Android Firebase config
+      - name: Resolve staging Android Firebase config
         shell: bash
         run: |
           set -euo pipefail
@@ -277,15 +277,8 @@ jobs:
           android_app_name="$(jq -r --arg package "$package_name" '(.apps // [])[] | select(.packageName == $package) | .name' "$apps_file" | head -n 1)"
           rm -f "$apps_file"
           if [[ -z "$android_app_name" ]]; then
-            echo "Staging Firebase Android app ${package_name} is not provisioned; building the staging preview APK with push disabled."
-            {
-              echo "DIEWISH_FIREBASE_PROJECT_ID="
-              echo "DIEWISH_FIREBASE_APP_ID="
-              echo "DIEWISH_FIREBASE_API_KEY="
-              echo "DIEWISH_FIREBASE_SENDER_ID="
-              echo "DIEWISH_ANDROID_FCM_STATUS=disabled"
-            } >> "$GITHUB_ENV"
-            exit 0
+            echo "Staging Firebase Android app ${package_name} is missing; refusing to build an APK without FCM." >&2
+            exit 1
           fi
 
           config_file="$(mktemp)"
@@ -362,14 +355,14 @@ jobs:
         run: |
           set -euo pipefail
           test "$CUSTOM_FRONTEND_URL" = "https://staging.diewish.com"
-          test "${DIEWISH_ANDROID_FCM_STATUS:-disabled}" = "disabled" || test "${DIEWISH_ANDROID_FCM_STATUS}" = "verified"
+          test "${DIEWISH_ANDROID_FCM_STATUS:-}" = "verified"
 
           gradle --no-daemon -p android :app:testDebugUnitTest :app:assembleDebug \
             -PDIEWISH_WEB_BASE_URL="${CUSTOM_FRONTEND_URL}" \
-            -PDIEWISH_FIREBASE_PROJECT_ID="${DIEWISH_FIREBASE_PROJECT_ID:-}" \
-            -PDIEWISH_FIREBASE_APP_ID="${DIEWISH_FIREBASE_APP_ID:-}" \
-            -PDIEWISH_FIREBASE_API_KEY="${DIEWISH_FIREBASE_API_KEY:-}" \
-            -PDIEWISH_FIREBASE_SENDER_ID="${DIEWISH_FIREBASE_SENDER_ID:-}"
+            -PDIEWISH_FIREBASE_PROJECT_ID="${DIEWISH_FIREBASE_PROJECT_ID}" \
+            -PDIEWISH_FIREBASE_APP_ID="${DIEWISH_FIREBASE_APP_ID}" \
+            -PDIEWISH_FIREBASE_API_KEY="${DIEWISH_FIREBASE_API_KEY}" \
+            -PDIEWISH_FIREBASE_SENDER_ID="${DIEWISH_FIREBASE_SENDER_ID}"
 
           short_sha="${GITHUB_SHA::7}"
           mkdir -p android/app/build/staging-apk
@@ -385,8 +378,8 @@ jobs:
           backend=${BACKEND_URL}
           api_base=/api
           auth=google+phone
-          fcm_status=${DIEWISH_ANDROID_FCM_STATUS:-disabled}
-          fcm_project=${DIEWISH_FIREBASE_PROJECT_ID:-}
+          fcm_status=${DIEWISH_ANDROID_FCM_STATUS}
+          fcm_project=${DIEWISH_FIREBASE_PROJECT_ID}
           sms_regions=${DIEWISH_STAGING_SMS_REGIONS}
           database_project=shiny-hill-56015697
           EOF
@@ -412,7 +405,8 @@ jobs:
             echo "- Backend: ${BACKEND_URL}"
             echo "- Browser API: same-origin ${FRONTEND_URL}/api"
             echo "- Authentication: Google + phone enabled; anonymous disabled; Cloud Run and custom staging origins authorized"
-            echo "- Android FCM: ${DIEWISH_ANDROID_FCM_STATUS:-disabled} (separate notification infrastructure; not required for Body/Weight preview APK)"
+            echo "- Android FCM: ${DIEWISH_ANDROID_FCM_STATUS} (mandatory for staging APK)"
+            echo "- Web FCM config: messaging sender verified; browser permission/token validated at runtime"
             echo "- SMS regions: ${DIEWISH_STAGING_SMS_REGIONS}"
             echo "- Database: isolated Diewish Staging Neon project"
             echo "- Migration: direct Neon endpoint via Cloud Build"

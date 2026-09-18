@@ -109,6 +109,7 @@ jobs:
           grep -q 'FIREBASE_WEB_API_KEY=${FIREBASE_WEB_API_KEY}' "$workflow"
           grep -q 'FIREBASE_AUTH_DOMAIN=${FIREBASE_AUTH_DOMAIN}' "$workflow"
           grep -q 'FIREBASE_WEB_APP_ID=${FIREBASE_WEB_APP_ID}' "$workflow"
+          grep -q 'FIREBASE_MESSAGING_SENDER_ID=${PROJECT_NUMBER}' "$workflow"
           grep -q 'CANONICAL_FRONTEND_URL' "$workflow"
           grep -q '/api/identity/firebase-config' "$workflow"
           grep -q '.configured == true' "$workflow"
@@ -147,6 +148,17 @@ jobs:
           grep -q 'FIREBASE_WEB_API_KEY=' "$auth_runtime"
           grep -q 'FIREBASE_AUTH_DOMAIN=' "$auth_runtime"
           grep -q 'FIREBASE_WEB_APP_ID=' "$auth_runtime"
+          grep -q 'FIREBASE_MESSAGING_SENDER_ID=' "$auth_runtime"
+
+          # Notification staging must fail closed. A successful staging APK is
+          # never allowed to silently disable FCM just to satisfy another feature preview.
+          grep -q 'Resolve staging Android Firebase config' "$workflow"
+          grep -q 'refusing to build an APK without FCM' "$workflow"
+          grep -Fq 'test "${DIEWISH_ANDROID_FCM_STATUS:-}" = "verified"' "$workflow"
+          if grep -q 'building the staging preview APK with push disabled' "$workflow"; then
+            echo 'Staging APK must not pass with Android FCM disabled.' >&2
+            exit 1
+          fi
 
           if grep -q 'setAcceptThirdPartyCookies(webView, true)' "$android_host"; then
             echo 'Android WebView must not globally accept third-party cookies.' >&2
