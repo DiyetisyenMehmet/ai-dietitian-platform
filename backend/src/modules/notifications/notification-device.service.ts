@@ -2,14 +2,17 @@ import { randomUUID } from "node:crypto";
 
 import { prisma } from "../../lib/prisma";
 
+export type NotificationDevicePlatform = "android" | "web";
+
 export interface RegisterNotificationDeviceInput {
   token: string;
-  platform: "android";
+  platform: NotificationDevicePlatform;
   appVersion?: string;
 }
 
-interface DeviceTokenRow {
+export interface ActiveNotificationDevice {
   token: string;
+  platform: NotificationDevicePlatform;
 }
 
 /**
@@ -44,15 +47,20 @@ export const notificationDeviceService = {
     `;
   },
 
-  async activeTokens(userId: string): Promise<string[]> {
-    const rows = await prisma.$queryRaw<DeviceTokenRow[]>`
-      SELECT "token"
+  async activeDevices(userId: string): Promise<ActiveNotificationDevice[]> {
+    const rows = await prisma.$queryRaw<Array<{ token: string; platform: string }>>`
+      SELECT "token", "platform"
       FROM "notification_devices"
-      WHERE "userId" = ${userId} AND "enabled" = true
+      WHERE "userId" = ${userId}
+        AND "enabled" = true
+        AND "platform" IN ('android', 'web')
       ORDER BY "lastSeenAt" DESC
       LIMIT 10
     `;
-    return rows.map((row) => row.token);
+    return rows.map((row) => ({
+      token: row.token,
+      platform: row.platform as NotificationDevicePlatform,
+    }));
   },
 
   async disableToken(token: string): Promise<void> {

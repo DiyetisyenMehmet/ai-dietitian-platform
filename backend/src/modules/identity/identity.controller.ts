@@ -50,11 +50,22 @@ export const identityController = {
     const appId = process.env.FIREBASE_WEB_APP_ID?.trim() ?? "";
     const authDomain =
       process.env.FIREBASE_AUTH_DOMAIN?.trim() || (projectId ? `${projectId}.firebaseapp.com` : "");
+    const messagingSenderId = env.FIREBASE_MESSAGING_SENDER_ID.trim();
+    const webPushVapidKey = env.FIREBASE_WEB_PUSH_VAPID_KEY.trim();
     const configured = Boolean(apiKey && projectId && appId && authDomain);
 
     sendSuccess(res, {
       configured,
-      config: configured ? { apiKey, authDomain, projectId, appId } : null,
+      config: configured
+        ? {
+            apiKey,
+            authDomain,
+            projectId,
+            appId,
+            messagingSenderId: messagingSenderId || null,
+            webPushVapidKey: webPushVapidKey || null,
+          }
+        : null,
     });
   }),
 

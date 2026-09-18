@@ -29,7 +29,7 @@ export const updateNotificationPreferencesSchema = z
 
 export const registerNotificationDeviceSchema = z.object({
   token: pushToken,
-  platform: z.literal("android").default("android"),
+  platform: z.enum(["android", "web"]).default("android"),
   appVersion: z.string().trim().min(1).max(64).optional(),
 });
 

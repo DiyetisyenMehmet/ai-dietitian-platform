@@ -41,6 +41,8 @@ const envSchema = z.object({
   // Firebase Authentication / Google Identity Platform verifies Google, Apple
   // and phone identities. This is a server-side lookup key, not a service-account secret.
   FIREBASE_WEB_API_KEY: z.string().default(""),
+  FIREBASE_MESSAGING_SENDER_ID: z.string().default(""),
+  FIREBASE_WEB_PUSH_VAPID_KEY: z.string().default(""),
   FIREBASE_AUTH_API_BASE_URL: z.string().url().default("https://identitytoolkit.googleapis.com/v1"),
   STORAGE_PROVIDER: z.enum(["local", "gcs"]).default("local"),
   STORAGE_LOCAL_ROOT: z.string().default("./storage/uploads"),

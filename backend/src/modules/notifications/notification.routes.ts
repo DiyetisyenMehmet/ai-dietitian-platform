@@ -32,6 +32,13 @@ notificationRouter.post(
   notificationController.registerDevice,
 );
 notificationRouter.post(
+  "/test",
+  authenticate,
+  requireConsent,
+  notificationController.testDelivery,
+);
+
+notificationRouter.post(
   "/devices/unregister",
   authenticate,
   validate({ body: unregisterNotificationDeviceSchema }),

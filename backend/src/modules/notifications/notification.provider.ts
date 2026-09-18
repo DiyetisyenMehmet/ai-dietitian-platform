@@ -4,7 +4,10 @@ import type { Notification } from "@prisma/client";
 
 import { env } from "../../config/env";
 import { logger } from "../../lib/logger";
-import { notificationDeviceService } from "./notification-device.service";
+import {
+  notificationDeviceService,
+  type ActiveNotificationDevice,
+} from "./notification-device.service";
 
 export type NotificationDeliveryDisposition =
   | "delivered"
@@ -107,6 +110,63 @@ function deviceKey(token: string): string {
   return createHash("sha256").update(token).digest("hex").slice(0, 24);
 }
 
+export interface FcmMessageEnvelope {
+  token: string;
+  data: {
+    notificationId: string;
+    type: string;
+    title: string;
+    body: string;
+  };
+  android?: {
+    priority: "high";
+    collapse_key: string;
+    ttl: string;
+  };
+  webpush?: {
+    headers: {
+      Urgency: "high";
+      TTL: string;
+    };
+  };
+}
+
+/**
+ * FCM remains data-only on both transports. Android and the web service worker
+ * own presentation, dedupe and allowlisted navigation so server payloads can
+ * never inject arbitrary URLs.
+ */
+export function buildFcmMessage(
+  notification: Notification,
+  device: ActiveNotificationDevice,
+): FcmMessageEnvelope {
+  const message: FcmMessageEnvelope = {
+    token: device.token,
+    data: {
+      notificationId: notification.id,
+      type: notification.type,
+      title: notification.title,
+      body: notification.body,
+    },
+  };
+
+  if (device.platform === "android") {
+    message.android = {
+      priority: "high",
+      collapse_key: `diewish-${notification.id}`,
+      ttl: "86400s",
+    };
+  } else {
+    message.webpush = {
+      headers: {
+        Urgency: "high",
+        TTL: "86400",
+      },
+    };
+  }
+  return message;
+}
+
 /**
  * Real Android push provider for the isolated staging Cloud Run service.
  * It uses the service account already attached to Cloud Run and therefore does
@@ -128,13 +188,15 @@ export class FirebaseCloudMessagingProvider implements NotificationProvider {
       return { disposition: "retry", code: "FCM_AUTH_UNAVAILABLE", deliveredDeviceKeys: [] };
     }
 
-    const deviceTokens = await notificationDeviceService.activeTokens(notification.userId);
-    if (deviceTokens.length === 0) {
+    const devices = await notificationDeviceService.activeDevices(notification.userId);
+    if (devices.length === 0) {
       return { disposition: "no_devices", code: "NO_ACTIVE_DEVICE", deliveredDeviceKeys: [] };
     }
 
-    const pendingTokens = deviceTokens.filter((token) => !alreadyDeliveredDeviceKeys.has(deviceKey(token)));
-    if (pendingTokens.length === 0) {
+    const pendingDevices = devices.filter(
+      (device) => !alreadyDeliveredDeviceKeys.has(deviceKey(device.token)),
+    );
+    if (pendingDevices.length === 0) {
       return { disposition: "delivered", deliveredDeviceKeys: [] };
     }
 
@@ -143,7 +205,8 @@ export class FirebaseCloudMessagingProvider implements NotificationProvider {
     let lastRetryCode: string | undefined;
     let permanentFailures = 0;
 
-    for (const token of pendingTokens) {
+    for (const device of pendingDevices) {
+      const token = device.token;
       const key = deviceKey(token);
       try {
         const response = await fetch(
@@ -155,20 +218,7 @@ export class FirebaseCloudMessagingProvider implements NotificationProvider {
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              message: {
-                token,
-                data: {
-                  notificationId: notification.id,
-                  type: notification.type,
-                  title: notification.title,
-                  body: notification.body,
-                },
-                android: {
-                  priority: "high",
-                  collapse_key: `diewish-${notification.id}`,
-                  ttl: "86400s",
-                },
-              },
+              message: buildFcmMessage(notification, device),
             }),
             signal: AbortSignal.timeout(10_000),
           },

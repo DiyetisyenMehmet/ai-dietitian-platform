@@ -5,13 +5,17 @@ import type { Notification } from "@prisma/client";
 
 import { prisma } from "../lib/prisma";
 import {
+  buildFcmMessage,
   classifyFcmFailure,
   getNotificationProvider,
   setNotificationProvider,
   type NotificationDeliveryResult,
   type NotificationProvider,
 } from "../modules/notifications/notification.provider";
-import { updateNotificationPreferencesSchema } from "../modules/notifications/notification.schemas";
+import {
+  registerNotificationDeviceSchema,
+  updateNotificationPreferencesSchema,
+} from "../modules/notifications/notification.schemas";
 import {
   nextWeeklySummaryAt,
   notificationService,
@@ -225,4 +229,55 @@ test("weekly summary time converts the browser timezone offset to UTC", () => {
     new Date("2026-09-20T06:00:00.000Z"),
   );
   assert.equal(scheduled.toISOString(), "2026-09-20T07:00:00.000Z");
+});
+
+
+test("notification device registration accepts Android and Web only", () => {
+  const token = "t".repeat(32);
+  assert.equal(
+    registerNotificationDeviceSchema.safeParse({ token, platform: "android" }).success,
+    true,
+  );
+  assert.equal(
+    registerNotificationDeviceSchema.safeParse({ token, platform: "web" }).success,
+    true,
+  );
+  assert.equal(
+    registerNotificationDeviceSchema.safeParse({ token, platform: "ios" }).success,
+    false,
+  );
+});
+
+test("FCM envelopes stay data-only and apply platform-specific transport config", () => {
+  const now = new Date("2026-09-18T18:00:00.000Z");
+  const notification = {
+    id: "notification-1",
+    userId: "user-1",
+    type: "PROACTIVE_MESSAGE",
+    title: "Diewish",
+    body: "Test",
+    scheduledFor: now,
+    deliveredAt: null,
+    metadata: null,
+    createdAt: now,
+  } as Notification;
+
+  const android = buildFcmMessage(notification, {
+    token: "android-token",
+    platform: "android",
+  });
+  assert.equal(android.token, "android-token");
+  assert.equal(android.data.type, "PROACTIVE_MESSAGE");
+  assert.equal(android.android?.priority, "high");
+  assert.equal(android.webpush, undefined);
+  assert.equal("notification" in android, false);
+
+  const web = buildFcmMessage(notification, {
+    token: "web-token",
+    platform: "web",
+  });
+  assert.equal(web.token, "web-token");
+  assert.equal(web.webpush?.headers.Urgency, "high");
+  assert.equal(web.android, undefined);
+  assert.equal("notification" in web, false);
 });
