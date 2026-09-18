@@ -50,13 +50,20 @@ jobs:
           echo '79dc91d623b0751ff577ec0ed06da61358015e9dcd9cd1a4e22e3900adc04e31  frontend/public/images/dashboard/references/progress-dark-final.png' | sha256sum -c -
           python - <<'PY'
           from pathlib import Path
-          from PIL import Image
+          import struct
           for name in ('food-dark-final.png','blood-dark-final.png','progress-dark-final.png'):
               p=Path('frontend/public/images/dashboard/references')/name
-              with Image.open(p) as im:
-                  if im.size != (1536, 864):
-                      raise SystemExit(f'{name}: unexpected size {im.size}')
-                  print(name, im.mode, im.size, p.stat().st_size)
+              with p.open('rb') as fh:
+                  if fh.read(8) != b'\x89PNG\r\n\x1a\n':
+                      raise SystemExit(f'{name}: not a PNG')
+                  length = struct.unpack('>I', fh.read(4))[0]
+                  chunk = fh.read(4)
+                  if chunk != b'IHDR' or length < 8:
+                      raise SystemExit(f'{name}: missing IHDR')
+                  width, height = struct.unpack('>II', fh.read(8))
+              if (width, height) != (1536, 864):
+                  raise SystemExit(f'{name}: unexpected size {(width, height)}')
+              print(name, (width, height), p.stat().st_size)
           PY
 
       - name: Commit exact dark references
