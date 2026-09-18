@@ -136,6 +136,7 @@ export function NotificationsView() {
   const [preferences, setPreferences] = React.useState<NotificationPreferences | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [savingKey, setSavingKey] = React.useState<string | null>(null);
+  const [savedKey, setSavedKey] = React.useState<string | null>(null);
   const [nativeAvailable, setNativeAvailable] = React.useState(false);
   const [permission, setPermission] = React.useState("unavailable");
   const [exactAlarm, setExactAlarm] = React.useState("unavailable");
@@ -205,6 +206,10 @@ export function NotificationsView() {
       const { preferences: next } = await notificationClient.updatePreferences(update);
       setPreferences(next);
       syncNative(next);
+      setSavedKey(key);
+      window.setTimeout(() => {
+        setSavedKey((current) => (current === key ? null : current));
+      }, 2200);
       toast.success("Bildirim tercihi kaydedildi");
     } catch {
       toast.error("Bildirim tercihi kaydedilemedi.");
@@ -326,15 +331,24 @@ export function NotificationsView() {
                           className="h-9 w-32"
                           value={String(preferences[timeField])}
                           disabled={savingKey !== null}
-                          onChange={(event) =>
-                            setPreferences({ ...preferences, [timeField]: event.target.value })
-                          }
-                          onBlur={(event) =>
+                          onChange={(event) => {
+                            const value = event.target.value;
+                            setPreferences({ ...preferences, [timeField]: value });
                             void patchPreference(String(timeField), {
-                              [timeField]: event.target.value,
-                            })
-                          }
+                              [timeField]: value,
+                            });
+                          }}
                         />
+                        <span
+                          className="min-w-20 text-[11px] font-medium text-muted-foreground"
+                          aria-live="polite"
+                        >
+                          {savingKey === String(timeField)
+                            ? "Kaydediliyor…"
+                            : savedKey === String(timeField)
+                              ? "✓ Kaydedildi"
+                              : ""}
+                        </span>
                         {item.key === "weeklySummary" && (
                           <select
                             aria-label="Haftalık özet günü"
