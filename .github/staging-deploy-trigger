@@ -1,3 +1,3 @@
 staging web preview trigger
-source_sha=8d44c472a83fca2de16e57d8d7f02525413b38de
-purpose=notification web+android fcm exact-sha staging validation
+source_sha=71929ad5d472884d49cfc1dfc32e1dac84c71ac8
+purpose=post-bootstrap firebase android client and staging APK validation
