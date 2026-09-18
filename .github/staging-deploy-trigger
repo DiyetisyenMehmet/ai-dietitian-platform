@@ -1,3 +1,3 @@
 staging web preview trigger
-source_sha=9d213e4e94499f285633925d36b5f23ac53e7836
-purpose=notification autosave + exact alarm + fcm runtime bootstrap validation
+source_sha=77e3063a06b82152abc277472d9ef3160f36e647
+purpose=notification tap routing + unread badge physical Android validation
