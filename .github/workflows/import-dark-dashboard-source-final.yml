@@ -1,0 +1,76 @@
+name: Import exact dark dashboard source references
+
+on:
+  push:
+    branches:
+      - feature/staging-preview
+
+permissions:
+  contents: write
+
+jobs:
+  import-dark-source-references:
+    if: github.event.head_commit.message == 'run-dark-reference-source-import'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout staging branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/staging-preview
+          fetch-depth: 0
+
+      - name: Resolve temporary source URLs
+        shell: bash
+        run: |
+          set -euo pipefail
+          workflow=.github/workflows/import-dark-dashboard-references-v2.yml
+          FOOD_URL="$(sed -n "s/^[[:space:]]*FOOD_URL: '\(.*\)'/\1/p" "$workflow" | head -1)"
+          BLOOD_URL="$(sed -n "s/^[[:space:]]*BLOOD_URL: '\(.*\)'/\1/p" "$workflow" | head -1)"
+          PROGRESS_URL="$(sed -n "s/^[[:space:]]*PROGRESS_URL: '\(.*\)'/\1/p" "$workflow" | head -1)"
+          test -n "$FOOD_URL"
+          test -n "$BLOOD_URL"
+          test -n "$PROGRESS_URL"
+          {
+            echo "FOOD_URL=$FOOD_URL"
+            echo "BLOOD_URL=$BLOOD_URL"
+            echo "PROGRESS_URL=$PROGRESS_URL"
+          } >> "$GITHUB_ENV"
+
+      - name: Download byte-identical final references
+        shell: bash
+        run: |
+          set -euo pipefail
+          out=frontend/public/images/dashboard/references
+          mkdir -p "$out"
+          curl --fail --location --silent --show-error "$FOOD_URL" -o "$out/food-dark-final.png"
+          curl --fail --location --silent --show-error "$BLOOD_URL" -o "$out/blood-dark-final.png"
+          curl --fail --location --silent --show-error "$PROGRESS_URL" -o "$out/progress-dark-final.png"
+          echo 'f32f69dbb8fcb516d9b6c11152a91e56ef1fce19a454d27368ac58596de85e1f  frontend/public/images/dashboard/references/food-dark-final.png' | sha256sum -c -
+          echo 'ac94fce855fc1635dc634da97516cfd5f799b65b003cf3a36704a78123bdeb73  frontend/public/images/dashboard/references/blood-dark-final.png' | sha256sum -c -
+          echo '79dc91d623b0751ff577ec0ed06da61358015e9dcd9cd1a4e22e3900adc04e31  frontend/public/images/dashboard/references/progress-dark-final.png' | sha256sum -c -
+          python - <<'PY'
+          from pathlib import Path
+          from PIL import Image
+          for name in ('food-dark-final.png','blood-dark-final.png','progress-dark-final.png'):
+              p=Path('frontend/public/images/dashboard/references')/name
+              with Image.open(p) as im:
+                  if im.size != (1536, 864):
+                      raise SystemExit(f'{name}: unexpected size {im.size}')
+                  print(name, im.mode, im.size, p.stat().st_size)
+          PY
+
+      - name: Commit exact dark references
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Diewish Staging Automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add frontend/public/images/dashboard/references/food-dark-final.png
+          git add frontend/public/images/dashboard/references/blood-dark-final.png
+          git add frontend/public/images/dashboard/references/progress-dark-final.png
+          if git diff --cached --quiet; then
+            echo "Dark reference sources already match expected hashes."
+            exit 0
+          fi
+          git commit -m "chore(dashboard): add byte-identical dark reference assets"
+          git push origin HEAD:feature/staging-preview
