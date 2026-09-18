@@ -57,14 +57,29 @@ public final class WellnessReminderReceiver extends BroadcastReceiver {
         }
 
         int requestCode = id == null ? 73 : id.hashCode();
+        String unreadId = "wellness:" + (id == null ? String.valueOf(requestCode) : id);
         PendingIntent contentIntent = NotificationTapReceiver.pendingIntent(
             context,
             requestCode,
-            NotificationRoutes.forWellnessType(type)
+            NotificationRoutes.forWellnessType(type),
+            unreadId
+        );
+        PendingIntent dismissIntent = NotificationTapReceiver.dismissPendingIntent(
+            context,
+            requestCode,
+            unreadId
         );
         Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O ? new Notification.Builder(context, CHANNEL_ID) : new Notification.Builder(context);
-        Notification notification = builder.setSmallIcon(R.drawable.ic_notification).setContentTitle(title).setContentText(body).setContentIntent(contentIntent).setAutoCancel(true).build();
+        Notification notification = builder
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setContentIntent(contentIntent)
+            .setDeleteIntent(dismissIntent)
+            .setAutoCancel(true)
+            .build();
         manager.notify(requestCode, notification);
+        DiewishNotificationUnreadStore.markUnread(context.getApplicationContext(), unreadId);
         return true;
     }
 }
