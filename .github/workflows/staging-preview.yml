@@ -289,7 +289,7 @@ jobs:
               -d "$(jq -cn --arg package "$package_name" --arg name "Diewish Staging Android" '{packageName:$package,displayName:$name}')" \
               "https://firebase.googleapis.com/v1beta1/projects/${PROJECT_ID}/androidApps")"
             if [[ "$create_code" != "200" && "$create_code" != "201" ]]; then
-              echo "Staging Firebase Android app is missing and could not be created (HTTP ${create_code})." >&2
+              echo "Staging Firebase Android app com.diewish.app is missing; refusing to build an APK without FCM. Automatic staging-only creation failed (HTTP ${create_code})." >&2
               jq -r '.error.message // empty' "$create_file" >&2 || true
               rm -f "$apps_file" "$create_file"
               exit 1
