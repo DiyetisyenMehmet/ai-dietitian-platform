@@ -6,6 +6,9 @@ on:
       - feature/staging-preview
     paths:
       - ".github/workflows/staging-notification-test-apk.yml"
+      - "android/**"
+      - "frontend/src/presentation/components/profile/notifications-view.tsx"
+      - "frontend/src/presentation/providers/push-device-sync.tsx"
   workflow_dispatch:
 
 permissions:
@@ -56,6 +59,7 @@ jobs:
           frontend=https://staging.diewish.com
           environment=staging
           android_fcm=disabled_until_firebase_android_app_is_registered
+          local_reminders=exact_when_alarms_and_reminders_access_is_granted
           EOF
 
       - name: Upload APK
