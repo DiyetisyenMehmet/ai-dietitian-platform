@@ -49,6 +49,19 @@ function bridge(): NativePushBridge | undefined {
   }
 }
 
+function isNativePushAvailable(
+  native: NativePushBridge | undefined,
+): native is NativePushBridge {
+  if (!native) return false;
+  try {
+    return native.isAvailable();
+  } catch {
+    // Android JavascriptInterface calls are optional infrastructure. A bridge
+    // failure must never take down the authenticated React shell.
+    return false;
+  }
+}
+
 let lastRegistration = "";
 let lastWebRegistration = "";
 let lastWellnessSync = "";
@@ -69,7 +82,7 @@ export function PushDeviceSync() {
       return;
     }
     const native = bridge();
-    if (!native || !native.isAvailable()) return;
+    if (!isNativePushAvailable(native)) return;
 
     let cancelled = false;
     let attempts = 0;
@@ -172,7 +185,7 @@ export function PushDeviceSync() {
       return;
     }
     const native = bridge();
-    if (native?.isAvailable() || !isWebPushSupported() || webPushPermissionStatus() !== "granted") {
+    if (isNativePushAvailable(native) || !isWebPushSupported() || webPushPermissionStatus() !== "granted") {
       return;
     }
 
@@ -223,7 +236,7 @@ export function PushDeviceSync() {
   React.useEffect(() => {
     if (status !== "authenticated" || !user?.id) return;
     const native = bridge();
-    if (native?.isAvailable()) return;
+    if (isNativePushAvailable(native)) return;
 
     return subscribeWebPushMessages((message) => {
       toast(message.title, {
@@ -242,8 +255,7 @@ export function PushDeviceSync() {
     if (!canNavigate) return;
     const native = bridge();
     if (
-      !native ||
-      !native.isAvailable() ||
+      !isNativePushAvailable(native) ||
       typeof native.pendingNotificationPath !== "function" ||
       typeof native.clearPendingNotificationPath !== "function"
     ) return;
