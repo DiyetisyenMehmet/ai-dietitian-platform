@@ -86,6 +86,13 @@ jobs:
           grep -q 'apikeys.googleapis.com' "$auth_bootstrap"
           grep -q 'roles/firebaseauth.editor' "$auth_bootstrap"
           grep -q 'roles/serviceusage.apiKeysViewer' "$auth_bootstrap"
+          grep -q 'ANDROID_PACKAGE_NAME="com.diewish.app"' "$auth_bootstrap"
+          grep -q '/androidApps' "$auth_bootstrap"
+          grep -q 'Diewish Staging Android' "$auth_bootstrap"
+          if grep -q 'roles/firebase.developAdmin' "$auth_bootstrap"; then
+            echo 'Staging deployer must not receive Firebase Develop Admin just to create an Android client.' >&2
+            exit 1
+          fi
           grep -q 'firebase-tools@${FIREBASE_TOOLS_VERSION}' "$auth_bootstrap"
           grep -q '"anonymous": false' "$auth_bootstrap"
           grep -q '"emailPassword": true' "$auth_bootstrap"
