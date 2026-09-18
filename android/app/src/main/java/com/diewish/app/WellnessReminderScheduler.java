@@ -82,8 +82,22 @@ public final class WellnessReminderScheduler {
             String type = row.optString("type", "");
             long at = row.optLong("at", 0L);
             if (id.isEmpty() || !isAllowedType(type) || at <= now) continue;
-            alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pendingIntent(context, id, type));
+            ReminderAlarmPolicy.schedule(alarms, at, pendingIntent(context, id, type));
         }
+    }
+
+    public static boolean scheduleTest(Context context, int delaySeconds) {
+        AlarmManager alarms = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+        if (alarms == null) return false;
+        int boundedDelay = Math.max(10, Math.min(delaySeconds, 300));
+        long triggerAt = System.currentTimeMillis() + boundedDelay * 1000L;
+        String id = "manual-test-" + triggerAt;
+        ReminderAlarmPolicy.schedule(
+            alarms,
+            triggerAt,
+            pendingIntent(context, id, "test")
+        );
+        return true;
     }
 
     private static void cancelStored(Context context) {
