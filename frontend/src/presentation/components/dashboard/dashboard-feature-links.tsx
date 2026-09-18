@@ -1,9 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
 
-const REFERENCE_WIDTH = 1536;
-const REFERENCE_HEIGHT = 1054;
-
 const FEATURES = [
   {
     title: "Besin ve Barkod Tarayıcı",
@@ -269,14 +266,208 @@ function LightFeatureCard({ feature }: { feature: Feature }) {
   );
 }
 
+function DarkFeatureIcon({ tone }: { tone: Feature["tone"] }) {
+  const shell =
+    "flex size-[13.6cqw] shrink-0 items-center justify-center rounded-[3.1cqw] border bg-[#0a2a25]/92 shadow-[inset_0_0_2.6cqw_rgba(35,228,176,0.08),0_0_2.2cqw_rgba(15,134,105,0.08)]";
+
+  if (tone === "blood") {
+    return (
+      <span className={`${shell} border-emerald-300/15 text-[#ff2535]`} aria-hidden="true">
+        <svg viewBox="0 0 48 48" className="size-[61%]" fill="none" stroke="currentColor" strokeWidth="3.1" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M24 5C24 5 10 21 10 31a14 14 0 0 0 28 0C38 21 24 5 24 5Z" />
+          <path d="M29 27c-4.5 0-8 3.2-8 7.2 0 2.7 1.5 5.1 4 6.3 5.8-.4 10.4-4.4 11.8-9.7A8 8 0 0 0 29 27Z" fill="currentColor" stroke="none" />
+        </svg>
+      </span>
+    );
+  }
+
+  if (tone === "progress") {
+    return (
+      <span className={`${shell} border-emerald-300/20 text-[#27e1ae]`} aria-hidden="true">
+        <svg viewBox="0 0 48 48" className="size-[58%]" fill="currentColor">
+          <rect x="8" y="27" width="8" height="13" rx="1.5" />
+          <rect x="20" y="19" width="8" height="21" rx="1.5" />
+          <rect x="32" y="9" width="8" height="31" rx="1.5" />
+        </svg>
+      </span>
+    );
+  }
+
+  return (
+    <span className={`${shell} border-emerald-300/20 text-[#2fe0ad]`} aria-hidden="true">
+      <svg viewBox="0 0 48 48" className="size-[62%]" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M16 8h-5a3 3 0 0 0-3 3v5M32 8h5a3 3 0 0 1 3 3v5M40 32v5a3 3 0 0 1-3 3h-5M16 40h-5a3 3 0 0 1-3-3v-5" />
+        <path d="M17 24h14" />
+      </svg>
+    </span>
+  );
+}
+
+function DarkProgressArtwork() {
+  return (
+    <span
+      className="pointer-events-none absolute inset-y-0 right-[5.4cqw] z-10 w-[41.5%]"
+      aria-hidden="true"
+    >
+      <svg viewBox="0 0 430 210" className="h-full w-full" fill="none" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <linearGradient id="diewishDarkProgressBar" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#32efbb" stopOpacity=".98" />
+            <stop offset="100%" stopColor="#0d7559" stopOpacity=".88" />
+          </linearGradient>
+          <linearGradient id="diewishDarkProgressWave" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="#0d3b32" stopOpacity=".18" />
+            <stop offset="50%" stopColor="#125344" stopOpacity=".5" />
+            <stop offset="100%" stopColor="#0b4a3c" stopOpacity=".18" />
+          </linearGradient>
+          <filter id="diewishDarkProgressGlow" x="-40%" y="-40%" width="180%" height="180%">
+            <feGaussianBlur stdDeviation="2.6" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
+
+        <path
+          d="M0 177C70 161 88 80 161 84c62 3 68 37 119 25 53-13 72-63 150-67v168H0Z"
+          fill="url(#diewishDarkProgressWave)"
+        />
+
+        <g fill="url(#diewishDarkProgressBar)" filter="url(#diewishDarkProgressGlow)">
+          <rect x="62" y="150" width="42" height="42" rx="5" />
+          <rect x="119" y="134" width="42" height="58" rx="5" />
+          <rect x="176" y="112" width="42" height="80" rx="5" />
+          <rect x="233" y="94" width="42" height="98" rx="5" />
+          <rect x="290" y="75" width="42" height="117" rx="5" />
+          <rect x="347" y="52" width="42" height="140" rx="5" />
+        </g>
+
+        <path
+          d="M83 132 140 116 197 91 254 78 311 61 368 35"
+          stroke="#32efbb"
+          strokeWidth="6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          filter="url(#diewishDarkProgressGlow)"
+        />
+        <g fill="#32efbb" filter="url(#diewishDarkProgressGlow)">
+          <circle cx="83" cy="132" r="8" />
+          <circle cx="140" cy="116" r="8" />
+          <circle cx="197" cy="91" r="8" />
+          <circle cx="254" cy="78" r="8" />
+          <circle cx="311" cy="61" r="8" />
+          <circle cx="368" cy="35" r="8" />
+        </g>
+
+        <g transform="translate(307 2)">
+          <rect width="112" height="42" rx="17" fill="#0b3d32" stroke="#1a6f5b" strokeWidth="1.2" />
+          <text
+            x="56"
+            y="28"
+            textAnchor="middle"
+            fill="#35efbb"
+            fontFamily="Arial, Helvetica, sans-serif"
+            fontSize="25"
+            fontWeight="700"
+          >
+            -4,2 kg
+          </text>
+        </g>
+
+        <g fill="#0d725a" fillOpacity=".28">
+          <ellipse cx="393" cy="165" rx="13" ry="38" transform="rotate(34 393 165)" />
+          <ellipse cx="417" cy="179" rx="12" ry="34" transform="rotate(38 417 179)" />
+        </g>
+      </svg>
+    </span>
+  );
+}
+
+function DarkFeatureCard({ feature }: { feature: Feature }) {
+  const isProgress = feature.tone === "progress";
+  const descriptionLines =
+    feature.tone === "scanner"
+      ? ["Yemeğini fotoğrafla veya", "paketli ürünü barkodla tara."]
+      : feature.tone === "blood"
+        ? ["Tahlil sonuçlarını yükle,", "anlaşılır şekilde değerlendir."]
+        : ["Kilo, beslenme, su ve hareket", "verilerini incele."];
+
+  const chevronTone =
+    feature.tone === "scanner" ? "text-[#2ee3ae]" : "text-[#dbe5e2]";
+
+  return (
+    <Link
+      href={feature.href}
+      className="relative block w-full overflow-hidden rounded-[4.3cqw] border border-[#1b6b58]/70 bg-[#061a18] shadow-[inset_0_0_4.8cqw_rgba(15,104,83,0.08),0_1.6cqw_4.8cqw_rgba(0,0,0,0.16)] [container-type:inline-size] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 focus-visible:ring-inset"
+      style={{ aspectRatio: feature.lightAspect }}
+      aria-label={`${feature.title}. ${feature.description}`}
+    >
+      <span
+        className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(circle_at_80%_50%,rgba(20,107,86,0.16),transparent_36%),linear-gradient(105deg,#071a18_0%,#071c19_49%,#061715_100%)]"
+        aria-hidden="true"
+      />
+
+      {feature.visual ? (
+        <span
+          className="pointer-events-none absolute inset-y-0 right-0 z-10 w-[49%] overflow-hidden"
+          style={{
+            WebkitMaskImage: "linear-gradient(to right, transparent 0%, black 22%, black 100%)",
+            maskImage: "linear-gradient(to right, transparent 0%, black 22%, black 100%)",
+          }}
+          aria-hidden="true"
+        >
+          <Image
+            src={feature.visual}
+            alt=""
+            fill
+            unoptimized
+            draggable={false}
+            sizes="(max-width: 768px) 49vw, 490px"
+            className="object-cover object-right saturate-[1.08] contrast-[1.06] brightness-[0.86]"
+            aria-hidden="true"
+          />
+          <span className="absolute inset-0 bg-[linear-gradient(90deg,#061a18_0%,rgba(6,26,24,0.72)_14%,rgba(6,26,24,0.12)_42%,transparent_68%)]" />
+          <span className="absolute inset-0 bg-emerald-950/10" />
+        </span>
+      ) : (
+        <DarkProgressArtwork />
+      )}
+
+      <span className="relative z-20 flex h-full items-center gap-[2.45cqw] pl-[3.1cqw] pr-[46cqw]">
+        <DarkFeatureIcon tone={feature.tone} />
+        <span className="min-w-0 text-left">
+          <span className="block whitespace-nowrap text-[3.1cqw] font-extrabold leading-[1.04] tracking-[-0.035em] text-white">
+            {feature.title}
+          </span>
+          <span className="mt-[0.85cqw] block">
+            {descriptionLines.map((line) => (
+              <span
+                key={line}
+                className="block whitespace-nowrap text-[2.45cqw] font-normal leading-[1.24] tracking-[-0.012em] text-[#aab7b4]"
+              >
+                {line}
+              </span>
+            ))}
+          </span>
+        </span>
+      </span>
+
+      <span
+        className={`pointer-events-none absolute right-[2.2cqw] top-1/2 z-30 -translate-y-1/2 bg-transparent ${chevronTone}`}
+        aria-hidden="true"
+      >
+        <Chevron />
+      </span>
+    </Link>
+  );
+}
+
 /**
- * Light mode keeps the final approved dashboard-card artwork at its native
- * composition and aspect ratio. The reference PNG bytes are served directly
- * without optimizer recompression. A feathered, artwork-matched cleanup layer
- * removes only the embedded chevron strokes; the shared live Chevron itself has
- * a fully transparent background, so no rectangular panel is introduced.
- * Dark mode intentionally remains unchanged until its dedicated references
- * are supplied.
+ * Light mode remains the approved final implementation and is not changed here.
+ * Dark mode mirrors the exact light-card geometry (same aspect ratios, spacing,
+ * icon/text/chevron positions and routes) while applying the supplied deep
+ * green/teal night palette, glow hierarchy and contrast language.
  */
 export function DashboardFeatureLinks() {
   return (
@@ -287,110 +478,9 @@ export function DashboardFeatureLinks() {
         ))}
       </div>
 
-      <div
-        className="relative hidden w-full dark:block"
-        style={{ aspectRatio: `${REFERENCE_WIDTH} / ${REFERENCE_HEIGHT}` }}
-      >
-        {FEATURES.map((feature, index) => (
-          <Link
-            key={`dark-${feature.href}`}
-            href={feature.href}
-            className="absolute left-0 hidden w-full items-center overflow-hidden border border-white/10 bg-zinc-900/95 shadow-sm transition-colors hover:bg-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset dark:flex"
-            style={{
-              top: `${(feature.top / REFERENCE_HEIGHT) * 100}%`,
-              height: `${(feature.height / REFERENCE_HEIGHT) * 100}%`,
-              borderRadius: "clamp(1rem, 3vw, 2.75rem)",
-            }}
-            aria-label={`${feature.title}. ${feature.description}`}
-          >
-            <div className="relative z-20 flex min-w-0 flex-1 items-center gap-[clamp(0.4rem,1.8vw,1.1rem)] pl-[clamp(0.65rem,3vw,2.1rem)] pr-[clamp(2.8rem,34%,27rem)]">
-              <span
-                className={
-                  index === 0
-                    ? "flex size-[clamp(1.75rem,7vw,4.75rem)] shrink-0 items-center justify-center rounded-full bg-amber-400/15 text-amber-300"
-                    : index === 1
-                      ? "flex size-[clamp(1.75rem,7vw,4.75rem)] shrink-0 items-center justify-center rounded-full bg-violet-400/15 text-violet-300"
-                      : "flex size-[clamp(1.75rem,7vw,4.75rem)] shrink-0 items-center justify-center rounded-full bg-sky-400/15 text-sky-300"
-                }
-                aria-hidden="true"
-              >
-                {index === 0 ? (
-                  <svg viewBox="0 0 24 24" className="size-[55%]" fill="none" stroke="currentColor" strokeWidth="1.8">
-                    <path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2" />
-                    <path d="M8 9v6M11 8v8M14 9v6M17 8v8" />
-                  </svg>
-                ) : index === 1 ? (
-                  <svg viewBox="0 0 24 24" className="size-[55%]" fill="none" stroke="currentColor" strokeWidth="1.8">
-                    <path d="M9 3h6M10 3v5l-5 9a2 2 0 0 0 1.7 3h10.6a2 2 0 0 0 1.7-3l-5-9V3" />
-                    <path d="M7.5 15h9" />
-                  </svg>
-                ) : (
-                  <svg viewBox="0 0 24 24" className="size-[55%]" fill="none" stroke="currentColor" strokeWidth="1.8">
-                    <path d="M4 18V6M4 18h16" />
-                    <path d="m7 15 4-4 3 2 5-6" />
-                    <path d="M16 7h3v3" />
-                  </svg>
-                )}
-              </span>
-
-              <span className="min-w-0">
-                <span className="block whitespace-nowrap text-[clamp(0.72rem,2.8vw,1.65rem)] font-semibold leading-tight tracking-[-0.02em] text-zinc-50">
-                  {feature.title}
-                </span>
-                <span className="mt-[clamp(0.08rem,0.6vw,0.4rem)] block text-[clamp(0.56rem,1.75vw,1rem)] leading-snug text-zinc-300">
-                  {feature.description}
-                </span>
-              </span>
-            </div>
-
-            {feature.visual ? (
-              <span
-                className="pointer-events-none absolute inset-y-0 right-0 z-10 w-[46%]"
-                style={{
-                  WebkitMaskImage: "linear-gradient(to right, transparent 0%, black 30%, black 100%)",
-                  maskImage: "linear-gradient(to right, transparent 0%, black 30%, black 100%)",
-                }}
-                aria-hidden="true"
-              >
-                <Image
-                  src={feature.visual}
-                  alt=""
-                  fill
-                  unoptimized
-                  draggable={false}
-                  sizes="(max-width: 768px) 46vw, 460px"
-                  className="object-cover object-right"
-                />
-                <span className="absolute inset-0 bg-gradient-to-r from-zinc-900/75 via-zinc-900/10 to-transparent" />
-              </span>
-            ) : (
-              <span
-                className="pointer-events-none absolute inset-y-0 right-0 z-10 w-[44%] bg-gradient-to-l from-sky-400/[0.06] via-sky-400/[0.02] to-transparent text-sky-300/75"
-                style={{
-                  WebkitMaskImage: "linear-gradient(to right, transparent 0%, black 28%, black 100%)",
-                  maskImage: "linear-gradient(to right, transparent 0%, black 28%, black 100%)",
-                }}
-                aria-hidden="true"
-              >
-                <svg viewBox="0 0 240 110" className="h-full w-full" fill="none" preserveAspectRatio="none">
-                  <path d="M18 84H218M18 58H218M18 32H218" stroke="currentColor" strokeOpacity=".10" />
-                  <path
-                    d="M18 84C48 81 58 50 84 51C108 52 111 69 132 60C157 50 159 25 184 25C199 25 207 33 218 31"
-                    stroke="currentColor"
-                    strokeWidth="5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    vectorEffect="non-scaling-stroke"
-                  />
-                  <circle cx="218" cy="31" r="5.5" fill="currentColor" />
-                </svg>
-              </span>
-            )}
-
-            <span className="absolute right-[clamp(0.65rem,2.8vw,2rem)] top-1/2 z-30 -translate-y-1/2 text-[clamp(1rem,4vw,2.25rem)] leading-none text-zinc-300/80" aria-hidden="true">
-              ›
-            </span>
-          </Link>
+      <div className="hidden space-y-[clamp(0.45rem,1.8vw,0.8rem)] dark:block">
+        {FEATURES.map((feature) => (
+          <DarkFeatureCard key={`dark-${feature.href}`} feature={feature} />
         ))}
       </div>
     </section>
