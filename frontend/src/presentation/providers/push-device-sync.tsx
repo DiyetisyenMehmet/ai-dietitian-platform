@@ -26,6 +26,7 @@ interface NativePushBridge {
   appVersion(): string;
   pendingNotificationPath?(): string;
   clearPendingNotificationPath?(): void;
+  exactAlarmStatus?(): string;
   replaceWellnessSchedule?(scheduleJson: string): number;
   cancelWellness?(): void;
 }
@@ -132,9 +133,19 @@ export function PushDeviceSync() {
           ({ preferences } = await notificationClient.updatePreferences({ timezoneOffsetMinutes }));
         }
 
+        let exactAlarmStatus = "legacy";
+        try {
+          exactAlarmStatus =
+            typeof native.exactAlarmStatus === "function"
+              ? native.exactAlarmStatus()
+              : "legacy";
+        } catch {
+          exactAlarmStatus = "legacy";
+        }
         const signature = JSON.stringify([
           user.id,
           timezoneOffsetMinutes,
+          exactAlarmStatus,
           preferences.waterReminders,
           preferences.waterReminderTime,
           preferences.activityReminders,
