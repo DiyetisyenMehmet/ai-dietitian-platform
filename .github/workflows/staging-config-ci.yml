@@ -19,6 +19,7 @@ jobs:
       - name: Validate bootstrap shell syntax
         run: |
           bash -n scripts/bootstrap-staging-gcp.sh
+          bash -n scripts/bootstrap-staging-fcm-gcp.sh
           bash -n scripts/bootstrap-staging-auth-gcp.sh
           bash -n scripts/configure-staging-auth.sh
 
@@ -29,6 +30,7 @@ jobs:
           workflow=.github/workflows/staging-preview.yml
           script=scripts/bootstrap-staging-gcp.sh
           auth_bootstrap=scripts/bootstrap-staging-auth-gcp.sh
+          fcm_bootstrap=scripts/bootstrap-staging-fcm-gcp.sh
           auth_runtime=scripts/configure-staging-auth.sh
           auth_alternatives=frontend/src/presentation/components/auth/auth-alternatives.tsx
           firebase_client=frontend/src/infrastructure/identity/firebase-browser.ts
@@ -81,6 +83,9 @@ jobs:
           # Authentication bootstrap is intentionally separate from the original
           # staging bootstrap so adding Firebase never rotates DB/JWT secrets.
           grep -q 'firebase.googleapis.com' "$auth_bootstrap"
+          grep -q 'fcm.googleapis.com' "$fcm_bootstrap"
+          grep -q 'roles/firebasecloudmessaging.admin' "$fcm_bootstrap"
+          grep -q 'cloudmessaging.messages.create' "$fcm_bootstrap"
           grep -q 'identitytoolkit.googleapis.com' "$auth_bootstrap"
           grep -q 'securetoken.googleapis.com' "$auth_bootstrap"
           grep -q 'apikeys.googleapis.com' "$auth_bootstrap"
