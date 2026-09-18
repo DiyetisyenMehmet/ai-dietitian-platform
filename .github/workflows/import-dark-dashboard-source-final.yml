@@ -48,23 +48,6 @@ jobs:
           echo 'f32f69dbb8fcb516d9b6c11152a91e56ef1fce19a454d27368ac58596de85e1f  frontend/public/images/dashboard/references/food-dark-final.png' | sha256sum -c -
           echo 'ac94fce855fc1635dc634da97516cfd5f799b65b003cf3a36704a78123bdeb73  frontend/public/images/dashboard/references/blood-dark-final.png' | sha256sum -c -
           echo '79dc91d623b0751ff577ec0ed06da61358015e9dcd9cd1a4e22e3900adc04e31  frontend/public/images/dashboard/references/progress-dark-final.png' | sha256sum -c -
-          python - <<'PY'
-          from pathlib import Path
-          import struct
-          for name in ('food-dark-final.png','blood-dark-final.png','progress-dark-final.png'):
-              p=Path('frontend/public/images/dashboard/references')/name
-              with p.open('rb') as fh:
-                  if fh.read(8) != b'\x89PNG\r\n\x1a\n':
-                      raise SystemExit(f'{name}: not a PNG')
-                  length = struct.unpack('>I', fh.read(4))[0]
-                  chunk = fh.read(4)
-                  if chunk != b'IHDR' or length < 8:
-                      raise SystemExit(f'{name}: missing IHDR')
-                  width, height = struct.unpack('>II', fh.read(8))
-              if (width, height) != (1536, 864):
-                  raise SystemExit(f'{name}: unexpected size {(width, height)}')
-              print(name, (width, height), p.stat().st_size)
-          PY
 
       - name: Commit exact dark references
         shell: bash
