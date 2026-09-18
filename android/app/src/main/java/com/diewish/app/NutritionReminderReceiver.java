@@ -45,10 +45,17 @@ public final class NutritionReminderReceiver extends BroadcastReceiver {
 
         String id = intent == null ? null : intent.getStringExtra("reminderId");
         int requestCode = id == null ? 41 : id.hashCode();
+        String unreadId = "nutrition:" + (id == null ? String.valueOf(requestCode) : id);
         PendingIntent contentIntent = NotificationTapReceiver.pendingIntent(
             context,
             requestCode,
-            NotificationRoutes.MEALS
+            NotificationRoutes.MEALS,
+            unreadId
+        );
+        PendingIntent dismissIntent = NotificationTapReceiver.dismissPendingIntent(
+            context,
+            requestCode,
+            unreadId
         );
 
         Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
@@ -59,9 +66,11 @@ public final class NutritionReminderReceiver extends BroadcastReceiver {
             .setContentTitle("Diewish")
             .setContentText("Öğün saatin geldi. Planını kontrol edebilirsin.")
             .setContentIntent(contentIntent)
+            .setDeleteIntent(dismissIntent)
             .setAutoCancel(true)
             .build();
 
         manager.notify(id == null ? 41 : id.hashCode(), notification);
+        DiewishNotificationUnreadStore.markUnread(context.getApplicationContext(), unreadId);
     }
 }
