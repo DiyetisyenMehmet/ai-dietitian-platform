@@ -73,3 +73,30 @@ test('logout without a token skips unregister but still clears native state', as
   assert.equal(unregisterCalls, 0);
   assert.equal(cleanupCalls, 1);
 });
+
+
+test('notification type routing is explicit and unknown types fall back safely', () => {
+  const { resolveNotificationTypeTarget } = load();
+  assert.equal(resolveNotificationTypeTarget('PROACTIVE_MESSAGE'), '/ai');
+  assert.equal(resolveNotificationTypeTarget('WEEKLY_REVIEW'), '/insights');
+  assert.equal(resolveNotificationTypeTarget('MONTHLY_REVIEW'), '/insights');
+  assert.equal(resolveNotificationTypeTarget('RISK_ALERT'), '/insights');
+  assert.equal(resolveNotificationTypeTarget('GOAL_REMINDER'), '/goals');
+  assert.equal(resolveNotificationTypeTarget('WATER_REMINDER'), '/dashboard');
+  assert.equal(resolveNotificationTypeTarget('UNKNOWN'), '/dashboard');
+  assert.equal(resolveNotificationTypeTarget('https://evil.invalid'), '/dashboard');
+});
+
+test('logout cleanup awaits asynchronous device cleanup', async () => {
+  const { releaseNotificationDevice } = load();
+  const events = [];
+  await releaseNotificationDevice(
+    '',
+    async () => undefined,
+    async () => {
+      await Promise.resolve();
+      events.push('async-cleanup');
+    },
+  );
+  assert.deepEqual(events, ['async-cleanup']);
+});

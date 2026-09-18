@@ -6,6 +6,13 @@ import { toast } from "sonner";
 
 import { NOTIFICATION_PREFERENCES, type NotificationPreferences } from "@/domain/account/types";
 import { notificationClient } from "@/infrastructure/notifications/notification-client";
+import {
+  ensureWebPushToken,
+  isStagingNotificationHost,
+  isWebPushSupported,
+  webPushPermissionStatus,
+  type WebPushPermission,
+} from "@/infrastructure/notifications/web-push";
 import { Button } from "@/presentation/components/ui/button";
 import { Card, CardContent } from "@/presentation/components/ui/card";
 import { Input } from "@/presentation/components/ui/input";
@@ -25,7 +32,7 @@ interface NativeReminderBridge {
 interface ReminderEntry {
   id: string;
   at: number;
-  type: "water" | "activity" | "sleep" | "weekly";
+  type: "water" | "activity" | "sleep";
 }
 
 const TIME_FIELDS: Partial<Record<TimedKey, keyof NotificationPreferences>> = {
@@ -84,9 +91,6 @@ function buildSchedule(preferences: NotificationPreferences): ReminderEntry[] {
     add(preferences.waterReminders, preferences.waterReminderTime, "water");
     add(preferences.activityReminders, preferences.activityReminderTime, "activity");
     add(preferences.sleepReminders, preferences.sleepReminderTime, "sleep");
-    if (date.getDay() === preferences.weeklySummaryDay) {
-      add(preferences.weeklySummary, preferences.weeklySummaryTime, "weekly");
-    }
   }
   return schedule;
 }
@@ -101,6 +105,8 @@ export function NotificationsView() {
   const [savingKey, setSavingKey] = React.useState<string | null>(null);
   const [nativeAvailable, setNativeAvailable] = React.useState(false);
   const [permission, setPermission] = React.useState("unavailable");
+  const [webAvailable, setWebAvailable] = React.useState(false);
+  const [webPermission, setWebPermission] = React.useState<WebPushPermission>("unsupported");
 
   const syncNative = React.useCallback((next: NotificationPreferences) => {
     try {
@@ -120,9 +126,15 @@ export function NotificationsView() {
       const available = Boolean(bridge && bridge.isAvailable());
       setNativeAvailable(available);
       setPermission(available && bridge ? bridge.permissionStatus() : "unavailable");
+      const browserAvailable = !available && isWebPushSupported();
+      setWebAvailable(browserAvailable);
+      setWebPermission(browserAvailable ? webPushPermissionStatus() : "unsupported");
     } catch {
       setNativeAvailable(false);
       setPermission("unavailable");
+      const browserAvailable = isWebPushSupported();
+      setWebAvailable(browserAvailable);
+      setWebPermission(browserAvailable ? webPushPermissionStatus() : "unsupported");
     }
   }, []);
 
@@ -170,6 +182,40 @@ export function NotificationsView() {
     const enabled = !preferences[key];
     if (enabled && nativeAvailable && permission !== "granted") nativeBridge()?.requestPermission();
     await patchPreference(key, { [key]: enabled });
+  };
+
+  const enableWebPush = async () => {
+    setSavingKey("web-push");
+    try {
+      const token = await ensureWebPushToken(true);
+      setWebPermission(webPushPermissionStatus());
+      if (!token) {
+        toast.error("Tarayıcı bildirim izni verilmedi.");
+        return;
+      }
+      await notificationClient.registerDevice({ token, platform: "web" });
+      toast.success("Tarayıcı bildirimleri etkinleştirildi");
+    } catch {
+      toast.error("Tarayıcı bildirimi etkinleştirilemedi.");
+    } finally {
+      setSavingKey(null);
+    }
+  };
+
+  const sendRemoteTest = async () => {
+    setSavingKey("remote-test");
+    try {
+      const result = await notificationClient.sendTestNotification();
+      if (result.disposition === "delivered") {
+        toast.success("Gerçek test bildirimi FCM tarafından kabul edildi");
+      } else {
+        toast.error(`Test bildirimi teslim edilemedi: ${result.code ?? result.disposition}`);
+      }
+    } catch {
+      toast.error("Gerçek test bildirimi gönderilemedi.");
+    } finally {
+      setSavingKey(null);
+    }
   };
 
   if (loading) {
@@ -294,7 +340,13 @@ export function NotificationsView() {
                   ? permission === "granted"
                     ? "Android bildirim izni açık."
                     : "Android bildirim izni bekleniyor."
-                  : "Gerçek zamanlı yerel hatırlatmalar Diewish Android uygulamasında çalışır."}
+                  : webAvailable
+                    ? webPermission === "granted"
+                      ? "Tarayıcı bildirim izni açık."
+                      : webPermission === "denied"
+                        ? "Tarayıcı bildirim izni engellenmiş."
+                        : "Tarayıcı bildirim izni bekleniyor."
+                    : "Bu tarayıcı gerçek zamanlı bildirimleri desteklemiyor."}
               </p>
             </div>
           </div>
@@ -302,24 +354,48 @@ export function NotificationsView() {
             <Button
               className="w-full"
               variant="outline"
+              disabled={savingKey !== null}
               onClick={() => nativeBridge()?.requestPermission()}
             >
               Bildirim izni ver
+            </Button>
+          )}
+          {!nativeAvailable && webAvailable && webPermission !== "granted" && (
+            <Button
+              className="w-full"
+              variant="outline"
+              disabled={savingKey !== null || webPermission === "denied"}
+              onClick={() => void enableWebPush()}
+            >
+              Tarayıcı bildirimlerini etkinleştir
             </Button>
           )}
           {nativeAvailable && permission === "granted" && (
             <Button
               className="w-full"
               variant="outline"
+              disabled={savingKey !== null}
               onClick={() => {
                 const shown = nativeBridge()?.showTestNotification();
-                if (shown) toast.success("Test bildirimi gönderildi");
-                else toast.error("Test bildirimi gösterilemedi");
+                if (shown) toast.success("Yerel test bildirimi gösterildi");
+                else toast.error("Yerel test bildirimi gösterilemedi");
               }}
             >
-              Test bildirimi gönder
+              Yerel test bildirimi göster
             </Button>
           )}
+          {isStagingNotificationHost() &&
+            ((nativeAvailable && permission === "granted") ||
+              (!nativeAvailable && webAvailable && webPermission === "granted")) && (
+              <Button
+                className="w-full"
+                variant="outline"
+                disabled={savingKey !== null}
+                onClick={() => void sendRemoteTest()}
+              >
+                Gerçek FCM test bildirimi gönder
+              </Button>
+            )}
         </CardContent>
       </Card>
     </div>

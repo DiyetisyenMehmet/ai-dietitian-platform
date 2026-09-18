@@ -22,12 +22,24 @@ export const notificationClient = {
     });
   },
 
-  registerDevice(input: { token: string; platform: "android"; appVersion?: string }) {
+  registerDevice(input: { token: string; platform: "android" | "web"; appVersion?: string }) {
     return apiRequest<{ registered: true }>({
       path: NOTIFICATION_ENDPOINTS.devices,
       method: "POST",
       auth: true,
       body: JSON.stringify(input),
+    });
+  },
+
+  sendTestNotification() {
+    return apiRequest<{
+      disposition: "delivered" | "retry" | "permanent_failure" | "no_devices" | "disabled";
+      code: string | null;
+      deliveredDeviceCount: number;
+    }>({
+      path: "/notifications/test",
+      method: "POST",
+      auth: true,
     });
   },
 

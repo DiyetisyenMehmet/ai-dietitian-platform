@@ -2,6 +2,10 @@ import { ApiError } from "@/infrastructure/api/http-client";
 import { authClient } from "@/infrastructure/auth/auth-client";
 import { notificationClient } from "@/infrastructure/notifications/notification-client";
 import { releaseNotificationDevice } from "@/infrastructure/notifications/notification-lifecycle";
+import {
+  deleteWebPushToken,
+  webPushCachedToken,
+} from "@/infrastructure/notifications/web-push";
 import type {
   ForgotPasswordInput,
   LoginInput,
@@ -99,6 +103,12 @@ export const authService = {
         native?.clearPendingNotificationPath?.();
         native?.deletePushToken?.();
       },
+    );
+
+    await releaseNotificationDevice(
+      webPushCachedToken(),
+      (currentToken) => notificationClient.unregisterDevice(currentToken),
+      () => deleteWebPushToken(),
     );
 
     try {

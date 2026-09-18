@@ -82,8 +82,8 @@ jobs:
         run: npm audit --audit-level=high
       - name: Test identity runtime and error recovery
         run: node --test tests/identity.test.cjs
-      - name: Test notification lifecycle guards
-        run: node --test tests/notification-lifecycle.test.cjs
+      - name: Test notification lifecycle and web push guards
+        run: node --test tests/notification-lifecycle.test.cjs tests/web-push-service-worker.test.cjs
       - run: npm run type-check
       - run: npm run build
         env:

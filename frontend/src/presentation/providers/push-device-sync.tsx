@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 
 import { useAuth } from "@/application/auth/auth-store";
 import {
@@ -10,6 +11,13 @@ import {
   resolvePendingNotificationTarget,
 } from "@/infrastructure/notifications/notification-lifecycle";
 import { notificationClient } from "@/infrastructure/notifications/notification-client";
+import {
+  ensureWebPushToken,
+  isWebPushSupported,
+  subscribeWebPushMessages,
+  webPushCachedToken,
+  webPushPermissionStatus,
+} from "@/infrastructure/notifications/web-push";
 
 interface NativePushBridge {
   isAvailable(): boolean;
@@ -42,6 +50,7 @@ function bridge(): NativePushBridge | undefined {
 }
 
 let lastRegistration = "";
+let lastWebRegistration = "";
 let lastWellnessSync = "";
 
 /**
@@ -156,6 +165,76 @@ export function PushDeviceSync() {
       if (timer !== undefined) window.clearTimeout(timer);
     };
   }, [status, user?.id]);
+
+  React.useEffect(() => {
+    if (status !== "authenticated" || !user?.id) {
+      lastWebRegistration = "";
+      return;
+    }
+    const native = bridge();
+    if (native?.isAvailable() || !isWebPushSupported() || webPushPermissionStatus() !== "granted") {
+      return;
+    }
+
+    let cancelled = false;
+    let syncing = false;
+
+    const syncWebToken = async () => {
+      if (cancelled || syncing) return;
+      syncing = true;
+      try {
+        const previousToken = webPushCachedToken();
+        const token = await ensureWebPushToken(false);
+        if (!token || cancelled) return;
+
+        if (previousToken && previousToken !== token) {
+          await notificationClient.unregisterDevice(previousToken).catch(() => undefined);
+        }
+
+        const registrationKey = notificationRegistrationKey(user.id, token);
+        if (registrationKey && registrationKey !== lastWebRegistration) {
+          await notificationClient.registerDevice({ token, platform: "web" });
+          lastWebRegistration = registrationKey;
+        }
+      } catch {
+        // Browser push remains best-effort; auth and app navigation stay usable.
+      } finally {
+        syncing = false;
+      }
+    };
+
+    const syncOnVisibility = () => {
+      if (document.visibilityState === "visible") void syncWebToken();
+    };
+
+    void syncWebToken();
+    window.addEventListener("focus", syncWebToken);
+    document.addEventListener("visibilitychange", syncOnVisibility);
+    const refreshTimer = window.setInterval(() => void syncWebToken(), 60_000);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", syncWebToken);
+      document.removeEventListener("visibilitychange", syncOnVisibility);
+      window.clearInterval(refreshTimer);
+    };
+  }, [status, user?.id]);
+
+  React.useEffect(() => {
+    if (status !== "authenticated" || !user?.id) return;
+    const native = bridge();
+    if (native?.isAvailable()) return;
+
+    return subscribeWebPushMessages((message) => {
+      toast(message.title, {
+        description: message.body,
+        action: {
+          label: "Aç",
+          onClick: () => router.push(message.target),
+        },
+      });
+    });
+  }, [router, status, user?.id]);
 
   React.useEffect(() => {
     const canNavigate =

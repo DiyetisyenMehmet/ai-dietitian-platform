@@ -11,6 +11,23 @@ const SAFE_NOTIFICATION_TARGETS = new Set([
   "/profile/notifications",
 ]);
 
+export function resolveNotificationTypeTarget(type: string | null | undefined): string {
+  switch (type?.trim()) {
+    case "PROACTIVE_MESSAGE":
+      return "/ai";
+    case "WEEKLY_REVIEW":
+    case "MONTHLY_REVIEW":
+    case "RISK_ALERT":
+      return "/insights";
+    case "GOAL_REMINDER":
+      return "/goals";
+    case "WATER_REMINDER":
+      return "/dashboard";
+    default:
+      return "/dashboard";
+  }
+}
+
 export interface WellnessPreferenceLike {
   waterReminders: boolean;
   activityReminders: boolean;
@@ -90,7 +107,7 @@ export function resolvePendingNotificationTarget(
 export async function releaseNotificationDevice(
   token: string,
   unregister: (token: string) => Promise<unknown>,
-  cleanup: () => void,
+  cleanup: () => void | Promise<void>,
 ): Promise<void> {
   const cleanToken = token.trim();
   if (cleanToken) {
@@ -101,7 +118,7 @@ export async function releaseNotificationDevice(
     }
   }
   try {
-    cleanup();
+    await cleanup();
   } catch {
     // Optional native cleanup must never block account logout.
   }
