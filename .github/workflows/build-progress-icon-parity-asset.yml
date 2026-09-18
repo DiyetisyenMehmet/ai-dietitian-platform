@@ -1,0 +1,70 @@
+name: Build progress icon parity asset
+
+on:
+  push:
+    branches:
+      - feature/staging-preview
+
+permissions:
+  contents: write
+
+jobs:
+  build-progress-icon-parity:
+    if: github.event.head_commit.message == 'run-dark-progress-icon-parity'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout staging branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/staging-preview
+          fetch-depth: 0
+
+      - name: Install deterministic image tooling
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check opencv-python-headless==4.13.0.92
+
+      - name: Remove embedded dark progress icon
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '3b4dac8cd28992fc4f9ced46b99625feaf2cd25fb0bf0af35aabf26a7943e314  frontend/public/images/dashboard/references/progress-dark-parity.png' | sha256sum -c -
+          python <<'PY'
+          from pathlib import Path
+          import cv2
+          import numpy as np
+
+          root = Path('frontend/public/images/dashboard/references')
+          src = root / 'progress-dark-parity.png'
+          out = root / 'progress-dark-parity-noicon.png'
+
+          image = cv2.imread(str(src))
+          if image is None:
+              raise SystemExit('Could not read progress-dark-parity.png')
+          if image.shape[:2] != (405, 1598):
+              raise SystemExit(f'Unexpected source size: {image.shape[:2]}')
+
+          mask = np.zeros(image.shape[:2], np.uint8)
+          cv2.rectangle(mask, (26, 72), (275, 336), 255, -1)
+          mask = cv2.GaussianBlur(mask, (9, 9), 0)
+          mask = (mask > 20).astype(np.uint8) * 255
+
+          cleaned = cv2.inpaint(image, mask, 25, cv2.INPAINT_TELEA)
+          cv2.imwrite(str(out), cleaned, [cv2.IMWRITE_PNG_COMPRESSION, 3])
+          PY
+          echo '687d82305527ed67ca0443b7ab5e1b332107fadd4daac04e3becc92acf7b0156  frontend/public/images/dashboard/references/progress-dark-parity-noicon.png' | sha256sum -c -
+
+      - name: Commit cleaned parity asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Diewish Staging Automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add frontend/public/images/dashboard/references/progress-dark-parity-noicon.png
+          if git diff --cached --quiet; then
+            echo "Cleaned progress parity asset already matches expected hash."
+            exit 0
+          fi
+          git commit -m "chore(dashboard): add cleaned dark progress parity asset"
+          git push origin HEAD:feature/staging-preview
