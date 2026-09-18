@@ -5,7 +5,7 @@ function DiewishMascot() {
   return (
     <span className="relative flex size-14 shrink-0 items-center justify-center overflow-visible" aria-hidden="true">
       <span
-        className="pointer-events-none absolute -top-[5px] left-1/2 z-30 h-[22px] w-[26px] -translate-x-1/2"
+        className="pointer-events-none absolute -top-[9px] left-1/2 z-30 h-[22px] w-[26px] -translate-x-1/2"
         aria-hidden="true"
       >
         <svg viewBox="0 0 32 28" className="h-full w-full overflow-visible" fill="none">
