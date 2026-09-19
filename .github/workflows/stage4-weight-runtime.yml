@@ -24,7 +24,10 @@ env:
 
 jobs:
   weight-runtime:
-    if: ${{ contains(github.event.head_commit.message, '[deploy-staging]') }}
+    # Same green-gated release path as staging-preview.yml. The first
+    # [stage4-release] push stays skipped; the exact-SHA job is re-run only
+    # after deployment of that SHA has completed.
+    if: ${{ contains(github.event.head_commit.message, '[deploy-staging]') || (github.run_attempt > 1 && contains(github.event.head_commit.message, '[stage4-release]')) }}
     name: Validate Body Weight on exact staging SHA
     runs-on: ubuntu-latest
     timeout-minutes: 35
@@ -71,6 +74,29 @@ jobs:
           echo "Exact-SHA staging rollout was not observed for both services." >&2
           exit 1
 
+      - name: Capture exact staging revision metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected_suffix=":${GITHUB_SHA}"
+          backend_image="$(gcloud run services describe "$BACKEND_SERVICE" --project "$PROJECT_ID" --region "$REGION" --format='value(spec.template.spec.containers[0].image)')"
+          frontend_image="$(gcloud run services describe "$FRONTEND_SERVICE" --project "$PROJECT_ID" --region "$REGION" --format='value(spec.template.spec.containers[0].image)')"
+          backend_revision="$(gcloud run services describe "$BACKEND_SERVICE" --project "$PROJECT_ID" --region "$REGION" --format='value(status.latestReadyRevisionName)')"
+          frontend_revision="$(gcloud run services describe "$FRONTEND_SERVICE" --project "$PROJECT_ID" --region "$REGION" --format='value(status.latestReadyRevisionName)')"
+
+          [[ "$backend_image" == *"$expected_suffix" ]]
+          [[ "$frontend_image" == *"$expected_suffix" ]]
+          curl --fail --silent --show-error "${STAGING_WEB_URL}/api/health" >/dev/null
+          curl --fail --silent --show-error "${STAGING_WEB_URL}/history" >/dev/null
+
+          {
+            echo "## Exact staging revision"
+            echo "- Commit: \`${GITHUB_SHA}\`"
+            echo "- Backend revision: \`${backend_revision}\`"
+            echo "- Frontend revision: \`${frontend_revision}\`"
+            echo "- Custom domain: ${STAGING_WEB_URL}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Set up Node 22
         uses: actions/setup-node@v4
         with:
@@ -92,3 +118,28 @@ jobs:
           E2E_WEB_BASE_URL: ${{ env.STAGING_WEB_URL }}
           E2E_API_BASE_URL: ${{ env.STAGING_WEB_URL }}/api
         run: npx playwright test e2e/staging-weight-runtime.spec.js --workers=1 --reporter=line
+
+      - name: Run real staging History acceptance
+        working-directory: frontend
+        env:
+          E2E_WEB_BASE_URL: ${{ env.STAGING_WEB_URL }}
+          E2E_API_BASE_URL: ${{ env.STAGING_WEB_URL }}/api
+        run: npx playwright test e2e/staging-history-runtime.spec.js --workers=1 --reporter=line
+
+      - name: Verify History log safety
+        shell: bash
+        run: |
+          set -euo pipefail
+          since="$(date -u -d '45 minutes ago' +'%Y-%m-%dT%H:%M:%SZ')"
+          logs="$(gcloud logging read \
+            "resource.type=cloud_run_revision AND resource.labels.service_name=\"${BACKEND_SERVICE}\" AND timestamp>=\"${since}\"" \
+            --project "$PROJECT_ID" \
+            --limit 1000 \
+            --format=json || true)"
+
+          if grep -Eiq 'STAGE4_HISTORY_PRIVATE_|stage4-history-a\.|stage4-history-b\.' <<<"$logs"; then
+            echo "Sensitive Stage4 History test data appeared in backend logs." >&2
+            exit 1
+          fi
+
+          echo "History log-safety scan passed: no test meal/sleep-note/email sentinels found."

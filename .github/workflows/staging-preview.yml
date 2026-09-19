@@ -33,7 +33,10 @@ env:
 
 jobs:
   deploy-staging:
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[deploy-staging]')) }}
+    # [stage4-release] is deliberately inert on the first push. It can only
+    # deploy when this exact workflow run is manually re-run after that SHA's
+    # required CI gates have already completed successfully.
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (contains(github.event.head_commit.message, '[deploy-staging]') || (github.run_attempt > 1 && contains(github.event.head_commit.message, '[stage4-release]')))) }}
     name: Deploy isolated staging
     runs-on: ubuntu-latest
     timeout-minutes: 45
