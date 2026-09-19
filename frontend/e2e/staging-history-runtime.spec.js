@@ -545,6 +545,11 @@ test("real staging History acceptance", async ({ page, request }) => {
   );
 
   await page.reload();
+  await expect(page.getByText("Geçmişim", { exact: true })).toBeVisible();
+  // Selected date is intentionally component state rather than URL-persisted
+  // state. Re-select the same day after a full document reload so this assertion
+  // validates deterministic event ordering rather than date-state persistence.
+  await page.locator('input[type="date"]').fill("2026-09-10");
   await expect(page.getByText(privateMeal, { exact: true })).toBeVisible();
   const afterReload = await page.locator("section").filter({
     has: page.getByText("Zaman çizelgesi", { exact: true }),
