@@ -409,7 +409,7 @@ test("Stage4B-1 real staging core History acceptance", async ({ page, request })
   // UI distinguishes data absence from technical unavailability/error.
   await page.getByRole("button", { name: "Günlük" }).click();
   await page.locator('input[type="date"]').fill("2026-09-01");
-  await expect(page.getByText("Bu gün için henüz kayıt bulunmuyor.")).toBeVisible();
+  await expect(page.getByText("Bu gün için henüz kayıt bulunmuyor", { exact: true })).toBeVisible();
 
   await page.route("**/api/history/day?*", async (route) => {
     await route.fulfill({
