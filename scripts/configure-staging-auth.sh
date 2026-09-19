@@ -141,6 +141,8 @@ fi
 
 existing_domains="$(jq -c '.authorizedDomains // []' "$config_file")"
 recaptcha_phone_enforcement="$(jq -r '.recaptchaConfig.phoneEnforcementState // "OFF"' "$config_file")"
+recaptcha_sms_toll_fraud="$(jq -r '.recaptchaConfig.useSmsTollFraudProtection // false' "$config_file")"
+recaptcha_toll_fraud_rules="$(jq -c '.recaptchaConfig.tollFraudManagedRules // []' "$config_file")"
 recaptcha_sms_bot_score="$(jq -r '.recaptchaConfig.useSmsBotScore // false' "$config_file")"
 rm -f "$config_file"
 authorized_domains="$(jq -cn \
@@ -229,4 +231,4 @@ fi
 } >> "$GITHUB_ENV"
 
 echo "Staging Authentication contract verified: Google enabled, phone enabled, anonymous disabled, Cloud Run and custom staging frontend domains authorized, SMS allowlist enforced."
-echo "Staging phone reCAPTCHA diagnostic: enforcement=${recaptcha_phone_enforcement}, smsBotScore=${recaptcha_sms_bot_score}."
+echo "Staging phone reCAPTCHA diagnostic: enforcement=${recaptcha_phone_enforcement}, smsTollFraudProtection=${recaptcha_sms_toll_fraud}, tollFraudManagedRules=${recaptcha_toll_fraud_rules}, smsBotScore=${recaptcha_sms_bot_score}."
