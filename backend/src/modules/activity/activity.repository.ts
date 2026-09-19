@@ -29,6 +29,13 @@ export const activityRepository = {
     });
   },
 
+  listActivitiesRange(userId: string, from: Date, to: Date): Promise<Activity[]> {
+    return prisma.activity.findMany({
+      where: { userId, loggedAt: { gte: from, lt: to } },
+      orderBy: [{ loggedAt: "asc" }, { createdAt: "asc" }, { id: "asc" }],
+    });
+  },
+
   async listLatestActivityIds(userId: string, limit: number): Promise<string[]> {
     const activities = await prisma.activity.findMany({
       where: { userId },

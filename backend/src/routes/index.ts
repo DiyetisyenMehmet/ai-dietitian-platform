@@ -16,6 +16,7 @@ import { notificationModule } from "../modules/notifications/notification.module
 import { aiCoachModule } from "../modules/ai-coach/ai-coach.module";
 import { activityModule } from "../modules/activity/activity.module";
 import { sleepModule } from "../modules/sleep/sleep.module";
+import { historyModule } from "../modules/history/history.module";
 import { expertProductModule } from "../modules/expert-products/expert-product.module";
 import { onboardingRouter } from "../modules/onboarding/onboarding.routes";
 import { foodScanRouter } from "../modules/food-scan/food-scan.routes";
@@ -82,6 +83,10 @@ for (const { path, router } of activityModule.routes) {
 }
 
 for (const { path, router } of sleepModule.routes) {
+  apiRouter.use(path, router);
+}
+
+for (const { path, router } of historyModule.routes) {
   apiRouter.use(path, router);
 }
 

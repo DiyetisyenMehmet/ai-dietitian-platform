@@ -32,6 +32,13 @@ export const trackingRepository = {
     });
   },
 
+  listWeightLogsRange(userId: string, from: Date, to: Date): Promise<WeightLog[]> {
+    return prisma.weightLog.findMany({
+      where: { userId, loggedAt: { gte: from, lt: to } },
+      orderBy: [{ loggedAt: "asc" }, { createdAt: "asc" }, { id: "asc" }],
+    });
+  },
+
   async listWeightLogs(userId: string, since?: Date): Promise<WeightLog[]> {
     const logs = await prisma.weightLog.findMany({
       where: { userId, ...(since ? { loggedAt: { gte: since } } : {}) },
@@ -148,6 +155,13 @@ export const trackingRepository = {
     });
   },
 
+  listMealLogsRange(userId: string, from: Date, to: Date): Promise<MealLog[]> {
+    return prisma.mealLog.findMany({
+      where: { userId, loggedAt: { gte: from, lt: to } },
+      orderBy: [{ loggedAt: "asc" }, { createdAt: "asc" }, { id: "asc" }],
+    });
+  },
+
   async updateMealLogForUser(
     id: string,
     userId: string,
@@ -180,6 +194,13 @@ export const trackingRepository = {
     return prisma.waterLog.findMany({
       where: { userId, ...(since ? { loggedAt: { gte: since } } : {}) },
       orderBy: { loggedAt: "desc" },
+    });
+  },
+
+  listWaterLogsRange(userId: string, from: Date, to: Date): Promise<WaterLog[]> {
+    return prisma.waterLog.findMany({
+      where: { userId, loggedAt: { gte: from, lt: to } },
+      orderBy: [{ loggedAt: "asc" }, { createdAt: "asc" }, { id: "asc" }],
     });
   },
 
