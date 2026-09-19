@@ -130,6 +130,54 @@ async function insight(request, token, scope, date, timezone = ZONE) {
   });
 }
 
+async function expectFreshAiAfterMutation(
+  request,
+  token,
+  scope,
+  date,
+  previousGeneratedAt,
+) {
+  let last = null;
+
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    last = await insight(request, token, scope, date);
+    expect(last.response.status()).toBe(200);
+
+    const value = last.body.data.insight;
+    console.log(
+      "HISTORY_AI_INVALIDATION_PROBE",
+      JSON.stringify({
+        scope,
+        attempt,
+        generatedBy: value.generatedBy,
+        cacheStatus: value.cacheStatus,
+        provider: value.provider,
+        model: value.model,
+        generatedAt: value.generatedAt,
+      }),
+    );
+
+    // A source mutation must never serve the stale pre-mutation cached result.
+    expect(value.cacheStatus).not.toBe("HIT");
+
+    if (value.generatedBy === "AI" && value.cacheStatus === "MISS") {
+      expect(value.generatedAt).not.toBe(previousGeneratedAt);
+      return last;
+    }
+
+    // Real providers can fail transiently. The product contract deliberately
+    // returns a non-persisted fallback instead of caching or serving stale AI.
+    expect(value.generatedBy).toBe("FALLBACK");
+    expect(value.cacheStatus).toBe("BYPASS");
+
+    if (attempt < 3) {
+      await new Promise((resolve) => setTimeout(resolve, 1500 * attempt));
+    }
+  }
+
+  throw new Error(scope + " History insight did not regenerate after source mutation.");
+}
+
 function expectNoNonFinite(value) {
   const walk = (node) => {
     if (typeof node === "number") expect(Number.isFinite(node)).toBe(true);
@@ -398,22 +446,33 @@ test("real staging History acceptance", async ({ page, request }) => {
     data: { amountMl: 250, loggedAt: "2026-09-10T09:00:00.000Z" },
   });
   expect(dailyMutation.response.status()).toBe(201);
-  const dailyAi3 = await insight(request, userA.token, "DAY", "2026-09-10");
-  expect(dailyAi3.response.status()).toBe(200);
-  expect(dailyAi3.body.data.insight.generatedBy).toBe("AI");
-  expect(dailyAi3.body.data.insight.cacheStatus).toBe("MISS");
+  await expectFreshAiAfterMutation(
+    request,
+    userA.token,
+    "DAY",
+    "2026-09-10",
+    dailyAi1.body.data.insight.generatedAt,
+  );
 
   const periodMutation = await apiJson(request, "post", "/activity", {
     token: userA.token,
     data: { type: "WALKING", durationMinutes: 20, loggedAt: "2026-09-15T10:00:00.000Z" },
   });
   expect(periodMutation.response.status()).toBe(201);
-  const weekAi2 = await insight(request, userA.token, "WEEK", "2026-09-16");
-  expect(weekAi2.response.status()).toBe(200);
-  expect(weekAi2.body.data.insight.cacheStatus).toBe("MISS");
-  const monthAi2 = await insight(request, userA.token, "MONTH", "2026-09-19");
-  expect(monthAi2.response.status()).toBe(200);
-  expect(monthAi2.body.data.insight.cacheStatus).toBe("MISS");
+  await expectFreshAiAfterMutation(
+    request,
+    userA.token,
+    "WEEK",
+    "2026-09-16",
+    weekAi1.body.data.insight.generatedAt,
+  );
+  await expectFreshAiAfterMutation(
+    request,
+    userA.token,
+    "MONTH",
+    "2026-09-19",
+    monthAi1.body.data.insight.generatedAt,
+  );
 
   const bDay = await historyDay(request, userB.token, "2026-09-10");
   expect(bDay.response.status()).toBe(200);
