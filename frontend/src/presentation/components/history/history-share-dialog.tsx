@@ -51,6 +51,10 @@ const PREVIEW_TONE: Record<HistoryShareVisualTone, string> = {
 };
 
 function VisualPreview({ payload }: { payload: HistorySharePayload }) {
+  const mealNames = payload.sections
+    .flatMap((section) => section.lines)
+    .find((line) => line.startsWith("Öğünler:"));
+
   return (
     <div className="overflow-hidden rounded-[28px] border border-border bg-slate-50 p-3 shadow-sm dark:bg-slate-950/40">
       <div className="rounded-[24px] bg-emerald-700 p-4 text-white">
@@ -114,6 +118,15 @@ function VisualPreview({ payload }: { payload: HistorySharePayload }) {
           </div>
         ))}
       </div>
+
+      {mealNames && (
+        <div className="mt-3 rounded-2xl border border-border bg-background/85 p-3">
+          <p className="text-[11px] font-semibold">Öğünler</p>
+          <p className="mt-1 break-words text-[10px] leading-relaxed text-muted-foreground">
+            {mealNames.replace(/^Öğünler:\s*/, "")}
+          </p>
+        </div>
+      )}
 
       {payload.aiInsight && (
         <div className="mt-3 rounded-2xl bg-emerald-500/10 p-3">
