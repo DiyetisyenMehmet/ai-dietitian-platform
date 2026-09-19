@@ -28,6 +28,7 @@ jobs:
     permissions:
       contents: read
       actions: read
+      security-events: write
 
   backend:
     runs-on: ubuntu-latest
