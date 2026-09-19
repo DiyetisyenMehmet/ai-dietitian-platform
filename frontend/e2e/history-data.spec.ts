@@ -181,7 +181,7 @@ test("explicit privacy toggles can include optional fields without adding hidden
   expect(serialized).toContain("Private meal name");
   expect(serialized).toContain("Selected AI insight");
   expect(serialized).toContain("70,2 kg");
-  expect(serialized).toContain("480 dk");
+  expect(serialized).toContain("8 sa");
   expect(serialized).not.toContain("email");
   expect(serialized).not.toContain("allerg");
 });
