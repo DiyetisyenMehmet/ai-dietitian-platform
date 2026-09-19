@@ -529,6 +529,15 @@ test("real staging History acceptance", async ({ page, request }) => {
   await expect(page).toHaveURL(/\/history$/);
   await expect(page.getByText("Geçmişim", { exact: true })).toBeVisible();
 
+  // Browser Back must return to Progress without breaking the authenticated
+  // session or manufacturing a tab-history chain. Re-enter History and continue.
+  await page.goBack();
+  await expect(page).toHaveURL(/\/progress$/);
+  await expect(page.getByText("Kilo İlerlemen", { exact: true })).toBeVisible();
+  await page.getByRole("link", { name: "Tüm geçmişimi gör" }).click();
+  await expect(page).toHaveURL(/\/history$/);
+  await expect(page.getByText("Geçmişim", { exact: true })).toBeVisible();
+
   const dateInput = page.locator('input[type="date"]');
   await dateInput.fill("2026-09-10");
   await expect(page.getByText(privateMeal, { exact: true })).toBeVisible();
