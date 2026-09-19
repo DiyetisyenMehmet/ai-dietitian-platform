@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  APPLICATION_SHA: 45782e6fd23d79635372835422622db83a3051e6
+  APPLICATION_SHA: fbd47631f340aff33dac5e486b2b382d59b4b48a
   PROJECT_ID: project-a2e260c1-839d-4f1d-b90
   REGION: europe-west1
   WIF_PROVIDER: projects/730419163638/locations/global/workloadIdentityPools/github-actions/providers/diewish-staging
@@ -59,13 +59,19 @@ jobs:
         run: |
           set -euo pipefail
           expected_suffix=":${APPLICATION_SHA}"
-          backend_image="$(gcloud run services describe "$BACKEND_SERVICE" --project "$PROJECT_ID" --region "$REGION" --format='value(spec.template.spec.containers[0].image)')"
-          frontend_image="$(gcloud run services describe "$FRONTEND_SERVICE" --project "$PROJECT_ID" --region "$REGION" --format='value(spec.template.spec.containers[0].image)')"
-          [[ "$backend_image" == *"$expected_suffix" ]]
-          [[ "$frontend_image" == *"$expected_suffix" ]]
-          echo "APPLICATION_SHA_MATCH=${APPLICATION_SHA}"
-          curl --fail --silent --show-error "${STAGING_WEB_URL}/api/health" >/dev/null
-          curl --fail --silent --show-error "${STAGING_WEB_URL}/history" >/dev/null
+          for attempt in {1..120}; do
+            backend_image="$(gcloud run services describe "$BACKEND_SERVICE" --project "$PROJECT_ID" --region "$REGION" --format='value(spec.template.spec.containers[0].image)' 2>/dev/null || true)"
+            frontend_image="$(gcloud run services describe "$FRONTEND_SERVICE" --project "$PROJECT_ID" --region "$REGION" --format='value(spec.template.spec.containers[0].image)' 2>/dev/null || true)"
+            if [[ "$backend_image" == *"$expected_suffix" && "$frontend_image" == *"$expected_suffix" ]]; then
+              echo "APPLICATION_SHA_MATCH=${APPLICATION_SHA}"
+              curl --fail --silent --show-error "${STAGING_WEB_URL}/api/health" >/dev/null
+              curl --fail --silent --show-error "${STAGING_WEB_URL}/history" >/dev/null
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Exact application SHA was not observed on both staging services." >&2
+          exit 1
 
       - name: Set up Node 22
         uses: actions/setup-node@v4
