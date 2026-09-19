@@ -215,7 +215,7 @@ function comparison(periodType, referenceDate, timezone) {
       },
       water: {
         totalMl: metric(4200, 3900),
-        averageMlPerRecordedDay: metric(2100, 1950),
+        averageMlPerRecordedDay: metric(2100, 0),
         recordedDays: metric(2, 2),
       },
       activity: {
@@ -357,11 +357,23 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await expect(page.getByText("Haftalık Özet", { exact: true })).toBeVisible();
   await expect(page.getByText("Günlük Ortalama Kalori", { exact: true })).toBeVisible();
   await expect(page.getByText("2/3 gün kayıt", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("7 sa 30 dk", { exact: true })).toBeVisible();
+  await expect(page.getByText("7 sa 30 dk", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Karşılaştırma", { exact: true })).toBeVisible();
+  await expect(page.getByText("Bu hafta ↔ Geçen haftanın aynı dönemi", { exact: true })).toBeVisible();
+  await expect(page.getByText("Geçen hafta", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("-100 kcal", { exact: true })).toBeVisible();
+  await expect(page.getByText("0 ml", { exact: true })).toBeVisible();
+  await expect(page.getByText("+2,1 L", { exact: true })).toBeVisible();
+  await expect(page.getByText("-0,3 kg azalış", { exact: true })).toBeVisible();
+  await expect(page.getByText(/Karşılaştırma kayıt kapsamı nedeniyle sınırlı olabilir/)).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 
   await page.getByRole("button", { name: "Aylık" }).click();
   await expect(page.getByText("Aylık Özet", { exact: true })).toBeVisible();
   await expect(page.getByText("2/19 gün kayıt", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Bu ay ↔ Geçen ayın aynı dönemi", { exact: true })).toBeVisible();
+  await expect(page.getByText("Geçen ay", { exact: true }).first()).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 
   await page.evaluate(() => document.documentElement.classList.add("dark"));
   expect(await page.evaluate(() => document.documentElement.classList.contains("dark"))).toBe(true);
