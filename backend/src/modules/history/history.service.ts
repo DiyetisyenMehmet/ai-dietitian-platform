@@ -31,7 +31,7 @@ const EVENT_PRIORITY: Record<HistoryTimelineEvent["type"], number> = {
   SLEEP: 50,
 };
 
-export type SourceResult<T> =
+export export type SourceResult<T> =
   | { status: "OK"; value: T }
   | { status: "UNAVAILABLE"; value: null };
 
@@ -491,7 +491,9 @@ export function buildDailyHistory(
     timeline: buildTimeline(snapshot),
     completeness: buildCompleteness(snapshot, nutrition, water, activity, sleep, weight),
     meta: {
-      partialResponse: unavailableSources.length > 0 || snapshot.waterGoal.status === "UNAVAILABLE",
+      partialResponse:
+        unavailableSources.length > 0 ||
+        (input.isToday && snapshot.waterGoal.status === "UNAVAILABLE"),
       unavailableSources,
       generatedAt: input.generatedAt.toISOString(),
     },
@@ -504,6 +506,69 @@ function settled<T>(result: PromiseSettledResult<T>): SourceResult<T> {
     : { status: "UNAVAILABLE", value: null };
 }
 
+export function buildDailySourceFingerprint(snapshot: DailyHistorySourceSnapshot): unknown {
+  return {
+    meals:
+      snapshot.meals.status === "UNAVAILABLE"
+        ? "UNAVAILABLE"
+        : snapshot.meals.value.map((log) => ({
+            id: log.id,
+            mealType: log.mealType,
+            name: log.name,
+            calories: log.calories,
+            proteinG: log.proteinG,
+            carbsG: log.carbsG,
+            fatG: log.fatG,
+            loggedAt: log.loggedAt.toISOString(),
+          })),
+    water:
+      snapshot.water.status === "UNAVAILABLE"
+        ? "UNAVAILABLE"
+        : snapshot.water.value.map((log) => ({
+            id: log.id,
+            amountMl: log.amountMl,
+            loggedAt: log.loggedAt.toISOString(),
+          })),
+    activities:
+      snapshot.activities.status === "UNAVAILABLE"
+        ? "UNAVAILABLE"
+        : snapshot.activities.value.map((entry) => ({
+            id: entry.id,
+            type: entry.type,
+            name: entry.name,
+            durationMinutes: entry.durationMinutes,
+            distanceKm: entry.distanceKm,
+            perceivedIntensity: entry.perceivedIntensity,
+            caloriesBurned: entry.caloriesBurned,
+            loggedAt: entry.loggedAt.toISOString(),
+          })),
+    sleep:
+      snapshot.sleep.status === "UNAVAILABLE"
+        ? "UNAVAILABLE"
+        : snapshot.sleep.value.map((entry) => ({
+            id: entry.id,
+            sleepStart: entry.sleepStart.toISOString(),
+            wakeTime: entry.wakeTime.toISOString(),
+            durationMinutes: entry.durationMinutes,
+            quality: entry.quality,
+            updatedAt: entry.updatedAt.toISOString(),
+          })),
+    weights:
+      snapshot.weights.status === "UNAVAILABLE"
+        ? "UNAVAILABLE"
+        : snapshot.weights.value.map((log) => ({
+            id: log.id,
+            weightKg: log.weightKg,
+            loggedAt: log.loggedAt.toISOString(),
+            createdAt: log.createdAt.toISOString(),
+          })),
+    waterGoal:
+      snapshot.waterGoal.status === "UNAVAILABLE"
+        ? "UNAVAILABLE"
+        : snapshot.waterGoal.value?.dailyWaterGoalMl ?? null,
+  };
+}
+
 export const historyService = {
   async getDay(
     userId: string,
@@ -511,6 +576,16 @@ export const historyService = {
     timezone: string | undefined,
     now = new Date(),
   ): Promise<DailyHistoryResponse> {
+    const bundle = await historyService.getDayWithFingerprint(userId, date, timezone, now);
+    return bundle.history;
+  },
+
+  async getDayWithFingerprint(
+    userId: string,
+    date: string,
+    timezone: string | undefined,
+    now = new Date(),
+  ): Promise<{ history: DailyHistoryResponse; sourceFingerprint: unknown }> {
     const range = resolveHistoryDayRange(date, timezone, now);
 
     const [meals, water, activities, sleep, weights, waterGoal] = await Promise.allSettled([
@@ -545,7 +620,7 @@ export const historyService = {
       });
     }
 
-    return buildDailyHistory(
+    const history = buildDailyHistory(
       {
         date: range.date,
         timezone: range.timezone,
@@ -556,5 +631,6 @@ export const historyService = {
       },
       snapshot,
     );
+    return { history, sourceFingerprint: buildDailySourceFingerprint(snapshot) };
   },
 };

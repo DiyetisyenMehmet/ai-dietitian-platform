@@ -662,6 +662,65 @@ function partitionRows(source: PeriodRows, period: ResolvedHistoryPeriod): Perio
   };
 }
 
+function periodRowsFingerprint(rows: PeriodRows): unknown {
+  return {
+    meals:
+      rows.meals.status === "UNAVAILABLE"
+        ? "UNAVAILABLE"
+        : rows.meals.value.map((log) => ({
+            id: log.id,
+            mealType: log.mealType,
+            name: log.name,
+            calories: log.calories,
+            proteinG: log.proteinG,
+            carbsG: log.carbsG,
+            fatG: log.fatG,
+            loggedAt: log.loggedAt.toISOString(),
+          })),
+    water:
+      rows.water.status === "UNAVAILABLE"
+        ? "UNAVAILABLE"
+        : rows.water.value.map((log) => ({
+            id: log.id,
+            amountMl: log.amountMl,
+            loggedAt: log.loggedAt.toISOString(),
+          })),
+    activities:
+      rows.activities.status === "UNAVAILABLE"
+        ? "UNAVAILABLE"
+        : rows.activities.value.map((entry) => ({
+            id: entry.id,
+            type: entry.type,
+            name: entry.name,
+            durationMinutes: entry.durationMinutes,
+            distanceKm: entry.distanceKm,
+            perceivedIntensity: entry.perceivedIntensity,
+            caloriesBurned: entry.caloriesBurned,
+            loggedAt: entry.loggedAt.toISOString(),
+          })),
+    sleep:
+      rows.sleep.status === "UNAVAILABLE"
+        ? "UNAVAILABLE"
+        : rows.sleep.value.map((entry) => ({
+            id: entry.id,
+            sleepStart: entry.sleepStart.toISOString(),
+            wakeTime: entry.wakeTime.toISOString(),
+            durationMinutes: entry.durationMinutes,
+            quality: entry.quality,
+            updatedAt: entry.updatedAt.toISOString(),
+          })),
+    weights:
+      rows.weights.status === "UNAVAILABLE"
+        ? "UNAVAILABLE"
+        : rows.weights.value.map((log) => ({
+            id: log.id,
+            weightKg: log.weightKg,
+            loggedAt: log.loggedAt.toISOString(),
+            createdAt: log.createdAt.toISOString(),
+          })),
+  };
+}
+
 export const historyComparisonService = {
   async getComparison(
     userId: string,
@@ -670,6 +729,23 @@ export const historyComparisonService = {
     timezone: string | undefined,
     now = new Date(),
   ): Promise<HistoryComparisonResponse> {
+    const bundle = await historyComparisonService.getComparisonWithFingerprint(
+      userId,
+      periodType,
+      referenceDate,
+      timezone,
+      now,
+    );
+    return bundle.comparison;
+  },
+
+  async getComparisonWithFingerprint(
+    userId: string,
+    periodType: HistoryPeriodType,
+    referenceDate: string,
+    timezone: string | undefined,
+    now = new Date(),
+  ): Promise<{ comparison: HistoryComparisonResponse; sourceFingerprint: unknown }> {
     const periods = resolveHistoryComparisonPeriods(periodType, referenceDate, timezone, now);
     const combinedFrom = new Date(periods.previousPeriod.fromUtc);
     const combinedTo = new Date(periods.currentPeriod.toUtcExclusive);
@@ -703,13 +779,15 @@ export const historyComparisonService = {
       });
     }
 
+    const currentRows = partitionRows(allRows, periods.currentPeriod);
+    const previousRows = partitionRows(allRows, periods.previousPeriod);
     const current = periodMetrics(
-      partitionRows(allRows, periods.currentPeriod),
+      currentRows,
       periods.currentPeriod,
       periods.timezone,
     );
     const previous = periodMetrics(
-      partitionRows(allRows, periods.previousPeriod),
+      previousRows,
       periods.previousPeriod,
       periods.timezone,
     );
@@ -718,7 +796,7 @@ export const historyComparisonService = {
       previous: previous.completeness,
     };
 
-    return {
+    const comparison: HistoryComparisonResponse = {
       periodType,
       timezone: periods.timezone,
       comparisonMode: periods.comparisonMode,
@@ -730,6 +808,14 @@ export const historyComparisonService = {
         partialResponse: unavailableSources.length > 0,
         unavailableSources,
         generatedAt: now.toISOString(),
+      },
+    };
+
+    return {
+      comparison,
+      sourceFingerprint: {
+        current: periodRowsFingerprint(currentRows),
+        previous: periodRowsFingerprint(previousRows),
       },
     };
   },

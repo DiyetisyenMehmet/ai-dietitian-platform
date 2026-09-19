@@ -283,3 +283,19 @@ export interface HistoryComparisonResponse {
     generatedAt: string;
   };
 }
+
+
+export type HistoryInsightScopeName = "DAY" | "WEEK" | "MONTH";
+export type HistoryInsightCacheStatus = "HIT" | "MISS" | "BYPASS";
+
+export interface HistoryInsightResponse {
+  scope: HistoryInsightScopeName;
+  periodKey: string;
+  timezone: string;
+  content: { text: string };
+  generatedBy: "AI" | "FALLBACK";
+  cacheStatus: HistoryInsightCacheStatus;
+  provider: string | null;
+  model: string | null;
+  generatedAt: string;
+}

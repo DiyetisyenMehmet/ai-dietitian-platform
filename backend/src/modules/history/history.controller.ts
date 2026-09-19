@@ -3,8 +3,13 @@ import type { Request, Response } from "express";
 import { ApiError } from "../../utils/api-error";
 import { sendSuccess } from "../../utils/api-response";
 import { asyncHandler } from "../../utils/async-handler";
+import { historyAiService } from "./history-ai.service";
 import { historyComparisonService } from "./history-comparison";
-import type { HistoryComparisonQuery, HistoryDayQuery } from "./history.schemas";
+import type {
+  HistoryComparisonQuery,
+  HistoryDayQuery,
+  HistoryInsightBody,
+} from "./history.schemas";
 import { historyService } from "./history.service";
 
 function requireUserId(req: Request): string {
@@ -28,5 +33,20 @@ export const historyController = {
       query.timezone,
     );
     sendSuccess(res, { comparison });
+  }),
+
+  insight: asyncHandler(async (req: Request, res: Response) => {
+    const body = req.body as HistoryInsightBody;
+    const userId = requireUserId(req);
+    const insight =
+      body.scope === "DAY"
+        ? await historyAiService.getDailyInsight(userId, body.date ?? "", body.timezone)
+        : await historyAiService.getPeriodInsight(
+            userId,
+            body.scope,
+            body.referenceDate ?? "",
+            body.timezone,
+          );
+    sendSuccess(res, { insight });
   }),
 };
