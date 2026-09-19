@@ -273,11 +273,14 @@ test("Stage4B-2 real AI cache isolation share and web acceptance", async ({ page
 
   await page.evaluate(() => {
     window.__stage4Canvas = [];
+    window.__stage4CanvasWidths = [];
     window.__stage4Share = null;
     const original = CanvasRenderingContext2D.prototype.fillText;
     if (!window.__stage4Original) window.__stage4Original = original;
     CanvasRenderingContext2D.prototype.fillText = function (value, ...args) {
-      window.__stage4Canvas.push(String(value));
+      const text = String(value);
+      window.__stage4Canvas.push(text);
+      window.__stage4CanvasWidths.push(this.measureText(text).width);
       return window.__stage4Original.call(this, value, ...args);
     };
     Object.defineProperty(navigator, "canShare", { configurable: true, value: () => true });
@@ -336,14 +339,28 @@ test("Stage4B-2 real AI cache isolation share and web acceptance", async ({ page
     await dialog.getByRole("checkbox", { name }).check();
   }
   await expect(dialog.getByText(/Öğünler:/)).toContainText(privateData.privateMeal);
-  await page.evaluate(() => { window.__stage4Canvas = []; });
+  await expect(dialog.getByText(day2.content.text, { exact: true })).toBeVisible();
+  await page.evaluate(() => {
+    window.__stage4Canvas = [];
+    window.__stage4CanvasWidths = [];
+  });
   await dialog.getByRole("button", { name: "Paylaş", exact: true }).click();
   await expect(dialog).toHaveCount(0);
-  const selectedCanvas = await page.evaluate(() => window.__stage4Canvas.join("\n"));
+  const selectedExport = await page.evaluate(() => ({
+    canvas: window.__stage4Canvas.join("\n"),
+    compactCanvas: window.__stage4Canvas.join(""),
+    maxTextWidth: Math.max(0, ...window.__stage4CanvasWidths),
+  }));
+  const selectedCanvas = selectedExport.canvas;
   expect(selectedCanvas).toContain(privateData.privateMeal);
+  expect(selectedExport.compactCanvas).toContain(privateData.longMeal);
   expect(selectedCanvas).toContain("69,4 kg");
   expect(selectedCanvas).toContain("460 dk");
-  expect(selectedCanvas).toContain(privateData.privateMeal);
+  expect(selectedCanvas).toContain("Diewish değerlendirmesi");
+  expect(selectedCanvas.replace(/\s+/g, " ")).toContain(
+    day2.content.text.replace(/\s+/g, " ").slice(0, 48),
+  );
+  expect(selectedExport.maxTextWidth).toBeLessThanOrEqual(865);
 
   for (const forbidden of [
     userA.email,
@@ -399,8 +416,34 @@ test("Stage4B-2 real AI cache isolation share and web acceptance", async ({ page
     () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
   )).toBe(false);
 
+  await page.getByRole("button", { name: "Haftalık" }).click();
+  await page.locator('input[type="date"]').fill("2026-09-16");
+  await expect(page.getByText("Dönem karşılaştırması", { exact: true })).toBeVisible();
+  expect(await page.evaluate(
+    () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+  )).toBe(false);
+
+  await page.getByRole("button", { name: "Aylık" }).click();
+  await page.locator('input[type="date"]').fill("2026-09-19");
+  await expect(page.getByText("Dönem karşılaştırması", { exact: true })).toBeVisible();
+  expect(await page.evaluate(
+    () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+  )).toBe(false);
+
+  await page.getByRole("button", { name: "Günlük" }).click();
+  await page.locator('input[type="date"]').fill("2026-09-15");
+  await expect(page.getByText(privateData.privateMeal, { exact: true })).toBeVisible();
+
   await page.evaluate(() => document.documentElement.classList.add("dark"));
   await expect(page.getByText("Geçmişim", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Haftalık" }).click();
+  await page.locator('input[type="date"]').fill("2026-09-16");
+  await expect(page.getByText("Dönem karşılaştırması", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Aylık" }).click();
+  await page.locator('input[type="date"]').fill("2026-09-19");
+  await expect(page.getByText("Dönem karşılaştırması", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Günlük" }).click();
+  await page.locator('input[type="date"]').fill("2026-09-15");
   await page.getByRole("button", { name: "Günü paylaş" }).click();
   dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
   await expect(dialog).toBeVisible();

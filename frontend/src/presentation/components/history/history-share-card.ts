@@ -76,6 +76,91 @@ function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number)
   return lines;
 }
 
+interface ShareCanvasLayout {
+  scale: number;
+  bodyFont: number;
+  sectionTitleFont: number;
+  bodyLineHeight: number;
+  sectionBaseHeight: number;
+  sectionGap: number;
+  sectionTitleOffset: number;
+  sectionBodyOffset: number;
+  aiFont: number;
+  aiTitleFont: number;
+  aiLineHeight: number;
+  aiBaseHeight: number;
+  aiTitleOffset: number;
+  aiBodyOffset: number;
+  totalHeight: number;
+}
+
+function measureShareLayout(
+  ctx: CanvasRenderingContext2D,
+  payload: HistorySharePayload,
+  scale: number,
+): ShareCanvasLayout {
+  const maxTextWidth = WIDTH - SIDE * 2 - 88;
+  const bodyFont = Math.max(12, Math.round(28 * scale));
+  const sectionTitleFont = Math.max(14, Math.round(30 * scale));
+  const bodyLineHeight = Math.max(18, Math.round(42 * scale));
+  const sectionBaseHeight = Math.max(56, Math.round(120 * scale));
+  const sectionGap = Math.max(8, Math.round(24 * scale));
+  const sectionTitleOffset = Math.max(22, Math.round(54 * scale));
+  const sectionBodyOffset = Math.max(40, Math.round(102 * scale));
+  const aiFont = Math.max(12, Math.round(26 * scale));
+  const aiTitleFont = Math.max(14, Math.round(29 * scale));
+  const aiLineHeight = Math.max(18, Math.round(38 * scale));
+  const aiBaseHeight = Math.max(56, Math.round(104 * scale));
+  const aiTitleOffset = Math.max(22, Math.round(54 * scale));
+  const aiBodyOffset = Math.max(40, Math.round(100 * scale));
+
+  let totalHeight = 0;
+  for (const section of payload.sections) {
+    ctx.font = `500 ${bodyFont}px ${FONT}`;
+    const lineCount = section.lines.reduce(
+      (count, line) => count + Math.max(1, wrapText(ctx, line, maxTextWidth).length),
+      0,
+    );
+    totalHeight += sectionBaseHeight + lineCount * bodyLineHeight + sectionGap;
+  }
+
+  if (payload.aiInsight) {
+    ctx.font = `500 ${aiFont}px ${FONT}`;
+    const aiLines = wrapText(ctx, payload.aiInsight, maxTextWidth);
+    totalHeight += aiBaseHeight + aiLines.length * aiLineHeight;
+  }
+
+  return {
+    scale,
+    bodyFont,
+    sectionTitleFont,
+    bodyLineHeight,
+    sectionBaseHeight,
+    sectionGap,
+    sectionTitleOffset,
+    sectionBodyOffset,
+    aiFont,
+    aiTitleFont,
+    aiLineHeight,
+    aiBaseHeight,
+    aiTitleOffset,
+    aiBodyOffset,
+    totalHeight,
+  };
+}
+
+function chooseShareLayout(
+  ctx: CanvasRenderingContext2D,
+  payload: HistorySharePayload,
+): ShareCanvasLayout {
+  const availableHeight = HEIGHT - 130 - 410;
+  for (const scale of [1, 0.9, 0.8, 0.7, 0.6, 0.55, 0.5, 0.45, 0.4]) {
+    const layout = measureShareLayout(ctx, payload, scale);
+    if (layout.totalHeight <= availableHeight) return layout;
+  }
+  return measureShareLayout(ctx, payload, 0.4);
+}
+
 export function createHistoryShareCanvas(payload: HistorySharePayload): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
   canvas.width = WIDTH;
@@ -100,66 +185,69 @@ export function createHistoryShareCanvas(payload: HistorySharePayload): HTMLCanv
   ctx.font = `500 28px ${FONT}`;
   ctx.fillText(payload.periodLabel, SIDE + 44, 326);
 
-  const compactForInsight = Boolean(payload.aiInsight);
-  const sectionBodySize = compactForInsight ? 24 : 28;
-  const sectionTitleSize = compactForInsight ? 27 : 30;
-  const sectionLineHeight = compactForInsight ? 34 : 42;
-  const sectionBaseHeight = compactForInsight ? 82 : 120;
-  const sectionGap = compactForInsight ? 14 : 24;
-  const sectionTitleOffset = compactForInsight ? 44 : 54;
-  const sectionBodyOffset = compactForInsight ? 80 : 102;
-
+  const layout = chooseShareLayout(ctx, payload);
+  const maxTextWidth = WIDTH - SIDE * 2 - 88;
   let y = 410;
+
   for (const section of payload.sections) {
-    if (!compactForInsight && y > 1450) break;
+    ctx.font = `500 ${layout.bodyFont}px ${FONT}`;
+    const wrappedLines = section.lines.flatMap((line) =>
+      wrapText(ctx, line, maxTextWidth),
+    );
+    const height =
+      layout.sectionBaseHeight +
+      wrappedLines.length * layout.bodyLineHeight;
+
     ctx.fillStyle = "#ffffff";
-    const lineCount = section.lines.reduce((count, line) => {
-      ctx.font = `500 ${sectionBodySize}px ${FONT}`;
-      return count + Math.max(1, wrapText(ctx, line, WIDTH - SIDE * 2 - 88).length);
-    }, 0);
-    const height = sectionBaseHeight + lineCount * sectionLineHeight;
-    roundedRect(ctx, SIDE, y, WIDTH - SIDE * 2, height, 30);
+    roundedRect(
+      ctx,
+      SIDE,
+      y,
+      WIDTH - SIDE * 2,
+      height,
+      Math.max(16, Math.round(30 * layout.scale)),
+    );
     ctx.fill();
 
     ctx.fillStyle = "#0f7a55";
-    ctx.font = `700 ${sectionTitleSize}px ${FONT}`;
-    ctx.fillText(section.title, SIDE + 36, y + sectionTitleOffset);
+    ctx.font = `700 ${layout.sectionTitleFont}px ${FONT}`;
+    ctx.fillText(section.title, SIDE + 36, y + layout.sectionTitleOffset);
 
     ctx.fillStyle = "#23312b";
-    ctx.font = `500 ${sectionBodySize}px ${FONT}`;
-    let lineY = y + sectionBodyOffset;
-    for (const line of section.lines) {
-      for (const wrapped of wrapText(ctx, line, WIDTH - SIDE * 2 - 88)) {
-        ctx.fillText(wrapped, SIDE + 36, lineY);
-        lineY += sectionLineHeight;
-      }
+    ctx.font = `500 ${layout.bodyFont}px ${FONT}`;
+    let lineY = y + layout.sectionBodyOffset;
+    for (const wrapped of wrappedLines) {
+      ctx.fillText(wrapped, SIDE + 36, lineY);
+      lineY += layout.bodyLineHeight;
     }
-    y += height + sectionGap;
+    y += height + layout.sectionGap;
   }
 
   if (payload.aiInsight) {
+    ctx.font = `500 ${layout.aiFont}px ${FONT}`;
+    const lines = wrapText(ctx, payload.aiInsight, maxTextWidth);
+    const height = layout.aiBaseHeight + lines.length * layout.aiLineHeight;
+
     ctx.fillStyle = "#e8f3ee";
-    const aiBodySize = compactForInsight ? 24 : 26;
-    const aiTitleSize = compactForInsight ? 27 : 29;
-    const aiLineHeight = compactForInsight ? 32 : 38;
-    const aiBaseHeight = compactForInsight ? 84 : 104;
-    const aiTitleOffset = compactForInsight ? 46 : 54;
-    const aiBodyOffset = compactForInsight ? 82 : 100;
-    const lines = (() => {
-      ctx.font = `500 ${aiBodySize}px ${FONT}`;
-      return wrapText(ctx, payload.aiInsight ?? "", WIDTH - SIDE * 2 - 88).slice(0, 7);
-    })();
-    const height = aiBaseHeight + lines.length * aiLineHeight;
-    roundedRect(ctx, SIDE, y, WIDTH - SIDE * 2, height, 30);
+    roundedRect(
+      ctx,
+      SIDE,
+      y,
+      WIDTH - SIDE * 2,
+      height,
+      Math.max(16, Math.round(30 * layout.scale)),
+    );
     ctx.fill();
+
     ctx.fillStyle = "#153d2e";
-    ctx.font = `700 ${aiTitleSize}px ${FONT}`;
-    ctx.fillText("Diewish değerlendirmesi", SIDE + 36, y + aiTitleOffset);
-    ctx.font = `500 ${aiBodySize}px ${FONT}`;
-    let aiY = y + aiBodyOffset;
+    ctx.font = `700 ${layout.aiTitleFont}px ${FONT}`;
+    ctx.fillText("Diewish değerlendirmesi", SIDE + 36, y + layout.aiTitleOffset);
+
+    ctx.font = `500 ${layout.aiFont}px ${FONT}`;
+    let aiY = y + layout.aiBodyOffset;
     for (const line of lines) {
       ctx.fillText(line, SIDE + 36, aiY);
-      aiY += aiLineHeight;
+      aiY += layout.aiLineHeight;
     }
   }
 
