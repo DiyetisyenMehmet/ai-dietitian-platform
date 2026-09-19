@@ -60,7 +60,7 @@ recaptcha_config="$(jq -c '
   | .tollFraudManagedRules = [{"action":"BLOCK","startScore":0.8}]
 ' "$before")"
 
-http_code="$(curl -sS -o "$patch" -w '%{http_code}'   -X PATCH   -H "Authorization: Bearer $(access_token)"   -H "x-goog-user-project: $PROJECT_ID"   -H 'Content-Type: application/json'   -d "$(jq -cn --argjson recaptcha "$recaptcha_config" '{recaptchaConfig:$recaptcha}')"   "https://identitytoolkit.googleapis.com/admin/v2/projects/${PROJECT_ID}/config?updateMask=recaptchaConfig")"
+http_code="$(curl -sS -o "$patch" -w '%{http_code}'   -X PATCH   -H "Authorization: Bearer $(access_token)"   -H "x-goog-user-project: $PROJECT_ID"   -H 'Content-Type: application/json'   -d "$(jq -cn --argjson recaptcha "$recaptcha_config" '{recaptchaConfig:$recaptcha,notification:{defaultLocale:"tr"}}')"   "https://identitytoolkit.googleapis.com/admin/v2/projects/${PROJECT_ID}/config?updateMask=recaptchaConfig,notification.defaultLocale")"
 if [[ "$http_code" != "200" ]]; then
   jq -r '.error.message // "Could not configure staging reCAPTCHA SMS Defense"' "$patch" >&2 2>/dev/null || true
   echo "HTTP $http_code" >&2
@@ -76,9 +76,10 @@ for attempt in {1..30}; do
   threshold_ok="$(jq -r 'any(.recaptchaConfig.tollFraudManagedRules[]?; .action == "BLOCK" and .startScore == 0.8)' "$after")"
   web_key_present="$(jq -r 'any(.recaptchaConfig.recaptchaKeys[]?; .type == "WEB" and ((.key // "") | length > 0))' "$after")"
   tr_still_only="$(jq -r '(.smsRegionConfig.allowlistOnly.allowedRegions // []) | sort == ["TR"]' "$after")"
+  sms_locale="$(jq -r '.notification.defaultLocale // ""' "$after")"
 
-  if [[ "$enforcement" == "AUDIT" && "$toll_fraud" == "true" && "$threshold_ok" == "true" && "$web_key_present" == "true" && "$tr_still_only" == "true" ]]; then
-    echo "Staging SMS Defense verified: AUDIT, threshold=0.8, WEB key provisioned, TR-only SMS policy preserved."
+  if [[ "$enforcement" == "AUDIT" && "$toll_fraud" == "true" && "$threshold_ok" == "true" && "$web_key_present" == "true" && "$tr_still_only" == "true" && "$sms_locale" == "tr" ]]; then
+    echo "Staging SMS Defense verified: AUDIT, threshold=0.8, WEB key provisioned, TR-only SMS policy preserved, default SMS locale=tr."
     exit 0
   fi
   sleep 10
