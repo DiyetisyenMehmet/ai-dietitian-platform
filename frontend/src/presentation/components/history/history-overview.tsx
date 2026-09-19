@@ -13,6 +13,7 @@ import type { LucideIcon } from "lucide-react";
 import type {
   DailyHistoryResponse,
   HistoryComparisonResponse,
+  MetricComparison,
   ObservedNumber,
   PeriodCategoryCompleteness,
 } from "@/domain/history/types";
@@ -247,6 +248,225 @@ export function DailyHistoryOverview({ history }: { history: DailyHistoryRespons
   );
 }
 
+
+type SemanticTone = "positive" | "negative" | "neutral";
+
+function comparisonObservedText(
+  value: ObservedNumber,
+  formatter: (observed: ObservedNumber) => string,
+) {
+  return formatter(value);
+}
+
+function signedNumberText(value: number, unit: string, digits = 0) {
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${numberText(value, digits)}${unit}`;
+}
+
+function changeText(
+  metric: MetricComparison,
+  format: "number" | "water" | "duration" | "weight",
+  unit = "",
+  digits = 0,
+) {
+  if (!metric.comparisonAvailable || metric.absoluteChange === null) return "Karşılaştırılamıyor";
+  if (format === "duration") {
+    if (metric.absoluteChange === 0) return "Değişim yok";
+    return `${metric.absoluteChange > 0 ? "+" : "-"}${durationText(Math.abs(metric.absoluteChange))}`;
+  }
+  if (format === "water") {
+    const absolute = Math.abs(metric.absoluteChange);
+    const text =
+      absolute >= 1000
+        ? `${numberText(absolute / 1000, 1)} L`
+        : `${numberText(absolute)} ml`;
+    return metric.absoluteChange === 0 ? "Değişim yok" : `${metric.absoluteChange > 0 ? "+" : "-"}${text}`;
+  }
+  if (format === "weight") {
+    if (metric.absoluteChange === 0) return "Değişim yok";
+    return `${signedNumberText(metric.absoluteChange, " kg", 1)} ${metric.absoluteChange > 0 ? "artış" : "azalış"}`;
+  }
+  return metric.absoluteChange === 0
+    ? "Değişim yok"
+    : signedNumberText(metric.absoluteChange, unit, digits);
+}
+
+function semanticCardClass(tone: SemanticTone) {
+  if (tone === "positive") {
+    return "border-emerald-200/80 bg-emerald-50/65 dark:border-emerald-900/50 dark:bg-emerald-950/20";
+  }
+  if (tone === "negative") {
+    return "border-rose-200/80 bg-rose-50/65 dark:border-rose-900/50 dark:bg-rose-950/20";
+  }
+  return "border-border/70 bg-card";
+}
+
+function ComparisonMetricCard({
+  title,
+  icon: Icon,
+  currentLabel,
+  previousLabel,
+  currentValue,
+  previousValue,
+  difference,
+  coverage,
+  tone = "neutral",
+}: {
+  title: string;
+  icon: LucideIcon;
+  currentLabel: string;
+  previousLabel: string;
+  currentValue: string;
+  previousValue: string;
+  difference: string;
+  coverage: string;
+  tone?: SemanticTone;
+}) {
+  return (
+    <article className={cn("rounded-[24px] border p-3.5 shadow-sm sm:p-4", semanticCardClass(tone))}>
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <Icon className="size-[18px]" aria-hidden="true" />
+          </span>
+          <h3 className="min-w-0 text-sm font-bold leading-tight">{title}</h3>
+        </div>
+        <span className="shrink-0 rounded-full bg-background/80 px-2.5 py-1 text-[10px] font-semibold text-muted-foreground ring-1 ring-border/60">
+          {coverage}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-3 overflow-hidden rounded-2xl border border-border/60 bg-background/75">
+        {[
+          [currentLabel, currentValue],
+          [previousLabel, previousValue],
+          ["Fark", difference],
+        ].map(([label, value], index) => (
+          <div
+            key={label}
+            className={cn(
+              "min-w-0 px-2 py-3 text-center sm:px-3",
+              index > 0 && "border-l border-border/60",
+            )}
+          >
+            <p className="min-h-7 break-words text-[9px] font-medium leading-tight text-muted-foreground sm:text-[10px]">
+              {label}
+            </p>
+            <p className="mt-1 break-words text-xs font-bold leading-tight tabular-nums sm:text-sm">
+              {value}
+            </p>
+          </div>
+        ))}
+      </div>
+    </article>
+  );
+}
+
+function PeriodComparisonSection({ comparison }: { comparison: HistoryComparisonResponse }) {
+  const week = comparison.periodType === "WEEK";
+  const currentLabel = week ? "Bu hafta" : "Bu ay";
+  const previousLabel = week ? "Geçen hafta" : "Geçen ay";
+  const previousFullLabel = week ? "Geçen haftanın aynı dönemi" : "Geçen ayın aynı dönemi";
+  const current = comparison.completeness.current;
+
+  const calories = comparison.metrics.nutrition.averageCaloriesPerQuantifiedDay;
+  const protein = comparison.metrics.nutrition.averageProteinGPerQuantifiedDay;
+  const water = comparison.metrics.water.averageMlPerRecordedDay;
+  const activity = comparison.metrics.activity.totalActiveMinutes;
+  const sleep = comparison.metrics.sleep.averageDurationPerRecordedNight;
+  const weight = comparison.metrics.weight.lastMeasurementKg;
+
+  return (
+    <section className="space-y-3" aria-label="Dönem karşılaştırması">
+      <div className="flex flex-col gap-1 px-0.5 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-base font-bold">Karşılaştırma</h2>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {currentLabel} ↔ {previousFullLabel}
+          </p>
+        </div>
+        <p className="text-[10px] text-muted-foreground">
+          Fark değeri matematiksel değişimi gösterir; hedef bağlamı yoksa iyi/kötü olarak renklendirilmez.
+        </p>
+      </div>
+
+      <div className="space-y-3">
+        <ComparisonMetricCard
+          title="Günlük Ortalama Kalori"
+          icon={Flame}
+          currentLabel={currentLabel}
+          previousLabel={previousLabel}
+          currentValue={comparisonObservedText(calories.current, (v) => observedText(v, " kcal"))}
+          previousValue={comparisonObservedText(calories.previous, (v) => observedText(v, " kcal"))}
+          difference={changeText(calories, "number", " kcal")}
+          coverage={coverageText(current.nutrition)}
+        />
+        <ComparisonMetricCard
+          title="Günlük Ortalama Protein"
+          icon={UtensilsCrossed}
+          currentLabel={currentLabel}
+          previousLabel={previousLabel}
+          currentValue={comparisonObservedText(protein.current, (v) => observedText(v, " g", 1))}
+          previousValue={comparisonObservedText(protein.previous, (v) => observedText(v, " g", 1))}
+          difference={changeText(protein, "number", " g", 1)}
+          coverage={coverageText(current.nutrition)}
+        />
+        <ComparisonMetricCard
+          title="Günlük Ortalama Su"
+          icon={Droplets}
+          currentLabel={currentLabel}
+          previousLabel={previousLabel}
+          currentValue={comparisonObservedText(water.current, waterText)}
+          previousValue={comparisonObservedText(water.previous, waterText)}
+          difference={changeText(water, "water")}
+          coverage={coverageText(current.water)}
+        />
+        <ComparisonMetricCard
+          title="Toplam Hareket Süresi"
+          icon={Activity}
+          currentLabel={currentLabel}
+          previousLabel={previousLabel}
+          currentValue={comparisonObservedText(activity.current, observedDuration)}
+          previousValue={comparisonObservedText(activity.previous, observedDuration)}
+          difference={changeText(activity, "duration")}
+          coverage={coverageText(current.activity)}
+        />
+        <ComparisonMetricCard
+          title="Ortalama Uyku Süresi"
+          icon={Moon}
+          currentLabel={currentLabel}
+          previousLabel={previousLabel}
+          currentValue={comparisonObservedText(sleep.current, observedDuration)}
+          previousValue={comparisonObservedText(sleep.previous, observedDuration)}
+          difference={changeText(sleep, "duration")}
+          coverage={coverageText(current.sleep)}
+        />
+        <ComparisonMetricCard
+          title="Kilo"
+          icon={Scale}
+          currentLabel={currentLabel}
+          previousLabel={previousLabel}
+          currentValue={comparisonObservedText(weight.current, (v) => observedText(v, " kg", 1))}
+          previousValue={comparisonObservedText(weight.previous, (v) => observedText(v, " kg", 1))}
+          difference={changeText(weight, "weight")}
+          coverage={`${current.weight.measurementCount} ölçüm`}
+        />
+      </div>
+
+      {[
+        current.nutrition,
+        current.water,
+        current.activity,
+        current.sleep,
+      ].some((value) => value.status === "PARTIAL") && (
+        <p className="rounded-2xl bg-muted/50 px-3 py-2.5 text-[11px] leading-relaxed text-muted-foreground">
+          Karşılaştırma kayıt kapsamı nedeniyle sınırlı olabilir.
+        </p>
+      )}
+    </section>
+  );
+}
+
 export function PeriodHistoryOverview({ comparison }: { comparison: HistoryComparisonResponse }) {
   const current = comparison.completeness.current;
   const weight = comparison.metrics.weight.netChangeKg.current;
@@ -277,6 +497,8 @@ export function PeriodHistoryOverview({ comparison }: { comparison: HistoryCompa
           <MetricCard label="Kilo Değişimi" value={weightText} helper={`${current.weight.measurementCount} ölçüm`} icon={Scale} tone="weight" />
         </div>
       </section>
+
+      <PeriodComparisonSection comparison={comparison} />
 
       <SectionCard icon="calendar" title="Kayıt Kapsamı" className="rounded-[26px] shadow-sm">
         <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
