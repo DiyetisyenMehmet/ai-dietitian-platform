@@ -22,6 +22,7 @@ jobs:
           bash -n scripts/bootstrap-staging-fcm-gcp.sh
           bash -n scripts/bootstrap-staging-auth-gcp.sh
           bash -n scripts/bootstrap-staging-sms-defense-gcp.sh
+          bash -n scripts/configure-staging-sms-defense.sh
           bash -n scripts/configure-staging-auth.sh
 
       - name: Assert staging isolation contract
@@ -32,6 +33,7 @@ jobs:
           script=scripts/bootstrap-staging-gcp.sh
           auth_bootstrap=scripts/bootstrap-staging-auth-gcp.sh
           sms_defense_bootstrap=scripts/bootstrap-staging-sms-defense-gcp.sh
+          sms_defense_runtime=scripts/configure-staging-sms-defense.sh
           fcm_bootstrap=scripts/bootstrap-staging-fcm-gcp.sh
           auth_runtime=scripts/configure-staging-auth.sh
           auth_alternatives=frontend/src/presentation/components/auth/auth-alternatives.tsx
@@ -117,6 +119,15 @@ jobs:
           grep -q 'useSmsTollFraudProtection = true' "$sms_defense_bootstrap"
           grep -Fq '"startScore":0.8' "$sms_defense_bootstrap"
           grep -Fq 'sort == ["TR"]' "$sms_defense_bootstrap"
+
+          grep -q 'EXPECTED_PROJECT_ID="project-a2e260c1-839d-4f1d-b90"' "$sms_defense_runtime"
+          grep -q 'MODE="${DIEWISH_SMS_DEFENSE_MODE:-AUDIT}"' "$sms_defense_runtime"
+          grep -q 'START_SCORE="${DIEWISH_SMS_DEFENSE_START_SCORE:-0.8}"' "$sms_defense_runtime"
+          grep -q 'recaptchaenterprise.googleapis.com' "$sms_defense_runtime"
+          grep -q 'phoneEnforcementState = "AUDIT"' "$sms_defense_runtime"
+          grep -q 'useSmsTollFraudProtection = true' "$sms_defense_runtime"
+          grep -Fq '"startScore":0.8' "$sms_defense_runtime"
+          grep -Fq 'sort == ["TR"]' "$sms_defense_runtime"
 
           if grep -Eq 'wild-dawn-63542383|production|prod-' "$sms_defense_bootstrap"; then
             # The script may print the literal safety word "production"; reject
