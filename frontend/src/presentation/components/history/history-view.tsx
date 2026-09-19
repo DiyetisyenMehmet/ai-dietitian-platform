@@ -26,7 +26,6 @@ import {
 } from "@/application/history/history-store";
 import type { HistoryMode } from "@/domain/history/types";
 import { EmptyState } from "@/presentation/components/feedback/empty-state";
-import { SectionCard } from "@/presentation/components/health/section-card";
 import { HistoryShareDialog } from "@/presentation/components/history/history-share-dialog";
 import {
   DailyHistoryOverview,
