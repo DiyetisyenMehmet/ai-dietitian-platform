@@ -355,7 +355,7 @@ test("History daily/period UI keeps data visible when AI fails and share default
 
   await page.getByRole("button", { name: "Haftalık" }).click();
   await expect(page.getByText("Haftalık Özet", { exact: true })).toBeVisible();
-  await expect(page.getByText("Günlük Ortalama Kalori", { exact: true })).toBeVisible();
+  await expect(page.getByText("Günlük Ortalama Kalori", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("2/3 gün kayıt", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("7 sa 30 dk", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Karşılaştırma", { exact: true })).toBeVisible();
