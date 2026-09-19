@@ -16,7 +16,7 @@ const messages: Record<string, string> = {
   "auth/missing-app-credential": "Güvenlik doğrulaması başlatılamadı. Lütfen sayfayı yenileyip tekrar deneyin.",
   "auth/app-not-authorized": "Bu adres için telefonla giriş henüz etkin değil. Lütfen destek ekibine bildirin.",
   "auth/billing-not-enabled": "SMS hizmeti proje yapılandırması nedeniyle kullanılamıyor. Lütfen destek ekibine bildirin.",
-  "auth/error-code:-39": "SMS hizmeti isteği reddetti. Lütfen destek ekibine bildirin.",
+  "auth/error-code:-39": "Bu telefon operatörüne şu anda doğrulama SMS’i gönderilemiyor. Lütfen daha sonra tekrar deneyin veya Google/e-posta ile giriş yapın.",
   "auth/internal-error": "SMS hizmetinde geçici bir sorun oluştu. Lütfen daha sonra tekrar deneyin.",
   "auth/too-many-requests": "Çok fazla deneme yapıldı. Bir süre bekleyip tekrar deneyin.",
   "auth/quota-exceeded": "SMS hizmeti şu anda kullanılamıyor. Lütfen daha sonra tekrar deneyin.",
