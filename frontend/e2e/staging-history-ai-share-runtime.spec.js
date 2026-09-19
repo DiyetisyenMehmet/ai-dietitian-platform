@@ -335,7 +335,7 @@ test("Stage4B-2 real AI cache isolation share and web acceptance", async ({ page
   for (const name of [/Öğün isimleri/, /^Uyku/, /^Kilo/, /Diewish değerlendirmesi/]) {
     await dialog.getByRole("checkbox", { name }).check();
   }
-  await expect(dialog.getByText(privateData.privateMeal, { exact: true })).toBeVisible();
+  await expect(dialog.getByText(/Öğünler:/)).toContainText(privateData.privateMeal);
   await page.evaluate(() => { window.__stage4Canvas = []; });
   await dialog.getByRole("button", { name: "Paylaş", exact: true }).click();
   await expect(dialog).toHaveCount(0);
