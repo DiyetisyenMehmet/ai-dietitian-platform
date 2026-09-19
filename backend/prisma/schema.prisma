@@ -60,6 +60,7 @@ model User {
   notifications           Notification[]
   notificationPreference  NotificationPreference?
   activities              Activity[]
+  historyInsights          HistoryInsight[]
 
   @@map("users")
 }
@@ -794,4 +795,37 @@ model Activity {
 
   @@index([userId, loggedAt])
   @@map("activities")
+}
+
+
+enum HistoryInsightScope {
+  DAY
+  WEEK
+  MONTH
+}
+
+enum HistoryInsightSource {
+  AI
+  RULE_BASED
+}
+
+model HistoryInsight {
+  id          String               @id @default(uuid())
+  userId      String
+  user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scope       HistoryInsightScope
+  periodKey   String
+  timezone    String
+  contextHash String
+  content     Json
+  source      HistoryInsightSource
+  provider    String?
+  model       String?
+  generatedAt DateTime
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  @@unique([userId, scope, periodKey, timezone])
+  @@index([userId, scope, updatedAt])
+  @@map("history_insights")
 }
