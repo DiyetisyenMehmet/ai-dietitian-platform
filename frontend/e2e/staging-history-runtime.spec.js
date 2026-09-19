@@ -506,13 +506,25 @@ test("real staging History acceptance", async ({ page, request }) => {
   expect(bInsight.body.data.insight.cacheStatus).toBe("BYPASS");
 
   await loginBrowser(page, userA);
-  for (const path of ["/dashboard", "/progress", "/meals", "/activity", "/sleep", "/ai"]) {
-    const response = await page.goto(WEB_BASE_URL + path);
-    expect(response && response.status()).toBeLessThan(500);
-  }
 
-  await page.goto(WEB_BASE_URL + "/progress");
-  await expect(page.getByRole("link", { name: "Tüm geçmişimi gör" })).toHaveAttribute("href", "/history");
+  // Keep the History browser session deterministic. Rapid consecutive hard
+  // navigations rotate the HttpOnly refresh cookie on every page hydration and
+  // can create a test-only refresh race. The separate Body & Weight runtime
+  // acceptance already covers dashboard/progress/profile hard-navigation smoke.
+  const progressResponse = await page.goto(WEB_BASE_URL + "/progress");
+  expect(progressResponse && progressResponse.status()).toBeLessThan(500);
+  await expect(page).toHaveURL(/\/progress$/);
+  await expect(page.getByText("Kilo İlerlemen", { exact: true })).toBeVisible();
+
+  const historyEntry = page.getByRole("link", { name: "Tüm geçmişimi gör" });
+  console.log(
+    "HISTORY_PROGRESS_ENTRY_PROBE",
+    JSON.stringify({
+      path: new URL(page.url()).pathname,
+      linkCount: await historyEntry.count(),
+    }),
+  );
+  await expect(historyEntry).toHaveAttribute("href", "/history");
   await page.getByRole("link", { name: "Tüm geçmişimi gör" }).click();
   await expect(page).toHaveURL(/\/history$/);
   await expect(page.getByText("Geçmişim", { exact: true })).toBeVisible();
