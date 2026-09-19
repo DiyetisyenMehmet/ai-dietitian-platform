@@ -65,6 +65,16 @@ def main():
             }),
             "useSmsBotScore": config.get("recaptchaConfig", {}).get("useSmsBotScore", False),
         })
+    recaptcha_service = get(
+        "recaptcha-enterprise-service",
+        f"https://serviceusage.googleapis.com/v1/projects/{PROJECT_NUMBER}/services/recaptchaenterprise.googleapis.com",
+    )
+    if recaptcha_service is not None:
+        report("recaptcha-enterprise-service", {
+            "state": recaptcha_service.get("state", "UNKNOWN"),
+            "service": recaptcha_service.get("config", {}).get("name", "recaptchaenterprise.googleapis.com"),
+        })
+
     google = get("google-provider", f"https://identitytoolkit.googleapis.com/admin/v2/projects/{PROJECT}/defaultSupportedIdpConfigs/google.com")
     if google is not None:
         report("google-provider", {"enabled": google.get("enabled", False), "clientConfigured": bool(google.get("clientId"))})
