@@ -414,7 +414,13 @@ export function HistoryView() {
     );
   };
 
-  const canMoveNext = Boolean(today && selectedDate && selectedDate < today);
+  const nextCandidate =
+    selectedDate && today
+      ? mode === "MONTH"
+        ? shiftCalendarMonth(selectedDate, 1)
+        : shiftCalendarDate(selectedDate, 1)
+      : "";
+  const canMoveNext = Boolean(today && nextCandidate && nextCandidate <= today);
 
   const buildSharePayload = React.useCallback(
     (options: HistoryShareOptions) => {
