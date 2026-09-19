@@ -79,10 +79,7 @@ def main():
     # testIamPermissions does not grant or mutate permissions.
     bootstrap_permissions = [
         "serviceusage.services.enable",
-        "serviceusage.services.get",
-        "resourcemanager.projects.getIamPolicy",
         "resourcemanager.projects.setIamPolicy",
-        "identitytoolkit.configs.update",
     ]
     try:
         request = urllib.request.Request(
