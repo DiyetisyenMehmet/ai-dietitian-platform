@@ -325,12 +325,15 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await page.goto(`${WEB_BASE_URL}/history`);
   await expect(page.getByText("Geçmişim", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Günlük" })).toBeVisible();
-  await expect(page.getByText("650 kcal", { exact: true })).toBeVisible();
+  await expect(page.getByText("650 kcal", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Toplam Kalori", { exact: true })).toBeVisible();
+  await expect(page.getByText("Toplam Hareket Süresi", { exact: true })).toBeVisible();
+  await expect(page.getByText("Günlük Zaman Akışı", { exact: true })).toBeVisible();
   await expect(page.getByText("Kayıt yok", { exact: true }).first()).toBeVisible();
   await expect(page.getByRole("button", { name: "Sonraki dönem" })).toBeDisabled();
 
   await expect(page.getByText(/AI unavailable for UI test/)).toBeVisible();
-  await expect(page.getByText("650 kcal", { exact: true })).toBeVisible();
+  await expect(page.getByText("650 kcal", { exact: true }).first()).toBeVisible();
   await page.getByRole("button", { name: "Tekrar dene" }).click();
   await expect(page.getByText("Test değerlendirmesi hazır.")).toBeVisible();
 
@@ -351,11 +354,14 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await dialog.getByRole("button", { name: "Kapat" }).click();
 
   await page.getByRole("button", { name: "Haftalık" }).click();
-  await expect(page.getByText(/karşılaştırma sınırlı olabilir/)).toBeVisible();
-  await expect(page.getByText("Ortalama kalori")).toBeVisible();
+  await expect(page.getByText("Haftalık Özet", { exact: true })).toBeVisible();
+  await expect(page.getByText("Günlük Ortalama Kalori", { exact: true })).toBeVisible();
+  await expect(page.getByText("2/3 gün kayıt", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("7 sa 30 dk", { exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Aylık" }).click();
-  await expect(page.getByText("Dönem karşılaştırması")).toBeVisible();
+  await expect(page.getByText("Aylık Özet", { exact: true })).toBeVisible();
+  await expect(page.getByText("2/19 gün kayıt", { exact: true }).first()).toBeVisible();
 
   await page.evaluate(() => document.documentElement.classList.add("dark"));
   expect(await page.evaluate(() => document.documentElement.classList.contains("dark"))).toBe(true);
