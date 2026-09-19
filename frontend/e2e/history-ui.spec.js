@@ -397,6 +397,38 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await expect(dialog.locator("pre")).not.toContainText("Geçmiş test öğünü");
   await dialog.getByRole("button", { name: "Kapat" }).click();
 
+  await page.evaluate(() => {
+    window.__nativeHistoryVisual = null;
+    window.__nativeHistoryText = null;
+    window.DiewishShare = {
+      isAvailable: () => true,
+      sharePng: (base64Png, filename, text) => {
+        window.__nativeHistoryVisual = { base64Length: base64Png.length, filename, text };
+      },
+      shareText: (text, title) => {
+        window.__nativeHistoryText = { text, title };
+      },
+    };
+  });
+
+  await page.getByRole("button", { name: "Günü paylaş" }).click();
+  dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
+  await dialog.getByRole("button", { name: "Görseli Paylaş" }).click();
+  const nativeVisual = await page.evaluate(() => window.__nativeHistoryVisual);
+  expect(nativeVisual.base64Length).toBeGreaterThan(100);
+  expect(nativeVisual.filename).toMatch(/\.png$/);
+  expect(nativeVisual.text).toContain("650 kcal");
+  expect(nativeVisual.text).not.toContain("History Browser User");
+
+  await page.getByRole("button", { name: "Günü paylaş" }).click();
+  dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
+  await dialog.getByRole("button", { name: "Yazı olarak paylaş" }).click();
+  await dialog.getByRole("button", { name: "Yazıyı Paylaş" }).click();
+  const nativeText = await page.evaluate(() => window.__nativeHistoryText);
+  expect(nativeText.text).toContain("650 kcal");
+  expect(nativeText.text).not.toContain("History Browser User");
+  await page.evaluate(() => { delete window.DiewishShare; });
+
   await page.getByRole("button", { name: "Haftalık" }).click();
   await expect(page.getByText("Haftalık Özet", { exact: true })).toBeVisible();
   await expect(page.getByText("Günlük Ortalama Kalori", { exact: true }).first()).toBeVisible();
