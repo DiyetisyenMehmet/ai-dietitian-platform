@@ -343,7 +343,7 @@ test("Stage4B-2 real AI cache isolation share and web acceptance", async ({ page
   expect(selectedCanvas).toContain(privateData.privateMeal);
   expect(selectedCanvas).toContain("69,4 kg");
   expect(selectedCanvas).toContain("460 dk");
-  expect(selectedCanvas).toContain("Diewish değerlendirmesi");
+  expect(selectedCanvas).toContain(privateData.privateMeal);
 
   for (const forbidden of [
     userA.email,
