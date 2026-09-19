@@ -98,6 +98,14 @@ function dayHistory(date, timezone) {
           proteinG: 35,
           carbsG: 75,
           fatG: 20,
+        }, {
+          id: "meal-ui-long",
+          name: "Uzun paylaşım metni taşma kontrolü için hazırlanan çok uzun öğün açıklaması",
+          loggedAt: "2026-09-19T10:05:00.000Z",
+          calories: null,
+          proteinG: null,
+          carbsG: null,
+          fatG: null,
         }],
         totals: {
           calories: observed(650),
@@ -391,8 +399,12 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await page.getByRole("button", { name: "Günü paylaş" }).click();
   dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
   await dialog.getByRole("checkbox", { name: /Öğün isimleri/ }).check();
+  const longPreview = dialog.getByText(/Uzun paylaşım metni taşma kontrolü/, { exact: false }).first();
+  await expect(longPreview).toBeVisible();
+  expect(await longPreview.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
   await dialog.getByRole("button", { name: "Yazı olarak paylaş" }).click();
   await expect(dialog.locator("pre")).toContainText("Geçmiş test öğünü");
+  await expect(dialog.locator("pre")).toContainText("Uzun paylaşım metni taşma kontrolü");
   await dialog.getByRole("checkbox", { name: /Öğün isimleri/ }).uncheck();
   await expect(dialog.locator("pre")).not.toContainText("Geçmiş test öğünü");
   await dialog.getByRole("button", { name: "Kapat" }).click();
@@ -503,4 +515,9 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await page.evaluate(() => document.documentElement.classList.add("dark"));
   expect(await page.evaluate(() => document.documentElement.classList.contains("dark"))).toBe(true);
   await expect(page.getByText("Geçmişim", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Ayı paylaş" }).click();
+  dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
+  await expect(dialog.getByText("Görsel önizleme", { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+  await dialog.getByRole("button", { name: "Kapat" }).click();
 });
