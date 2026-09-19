@@ -195,7 +195,7 @@ function DailySummary({ history }: { history: DailyHistoryResponse }) {
                   </span>
                 </div>
                 {meal.items.map((item) => (
-                  <p key={item.id} className="mt-1 text-xs text-muted-foreground">
+                  <p key={item.id} className="mt-1 break-words text-xs text-muted-foreground">
                     {item.name ?? "Besin adı belirtilmedi"}
                     {item.calories !== null ? ` • ${Math.round(item.calories)} kcal` : ""}
                   </p>
@@ -273,8 +273,8 @@ function Timeline({ history }: { history: DailyHistoryResponse }) {
                 {formatTime(event.timestamp)}
               </div>
               <div className="min-w-0">
-                <p className="text-sm font-medium">{title}</p>
-                <p className="text-xs text-muted-foreground">{subtitle}</p>
+                <p className="break-words text-sm font-medium">{title}</p>
+                <p className="break-words text-xs text-muted-foreground">{subtitle}</p>
               </div>
             </li>
           );

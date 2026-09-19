@@ -115,7 +115,7 @@ export function HistoryShareDialog({ open, onClose, buildPayload }: HistoryShare
                 <div key={section.title} className="rounded-2xl bg-background p-3">
                   <p className="text-sm font-semibold">{section.title}</p>
                   {section.lines.map((line) => (
-                    <p key={line} className="mt-1 text-xs text-muted-foreground">
+                    <p key={line} className="mt-1 break-words text-xs text-muted-foreground">
                       {line}
                     </p>
                   ))}
@@ -125,7 +125,7 @@ export function HistoryShareDialog({ open, onClose, buildPayload }: HistoryShare
             {payload.aiInsight && (
               <div className="rounded-2xl bg-primary/10 p-3">
                 <p className="text-sm font-semibold text-primary">Diewish değerlendirmesi</p>
-                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                <p className="mt-1 break-words text-xs leading-relaxed text-muted-foreground">
                   {payload.aiInsight}
                 </p>
               </div>
