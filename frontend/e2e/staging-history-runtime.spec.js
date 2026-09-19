@@ -34,7 +34,7 @@ async function grantRequiredConsents(request, token) {
   }
 }
 
-async function createOnboardedUser(request, prefix) {
+async function createOnboardedUser(request, prefix, probeInvalidWorkSchedule = false) {
   const runId = String(Date.now()) + "." + Math.random().toString(16).slice(2);
   const email = prefix + "." + runId + "@example.com";
   const fullName = prefix.includes("-a") ? "Stage4 History User A" : "Stage4 History User B";
@@ -48,27 +48,57 @@ async function createOnboardedUser(request, prefix) {
   const userId = registration.body.data.user.id;
 
   await grantRequiredConsents(request, token);
+
+  const onboardingPayload = {
+    fullName,
+    dateOfBirth: "1990-05-20",
+    gender: "PREFER_NOT_TO_SAY",
+    heightCm: 175,
+    currentWeightKg: 70,
+    targetWeightKg: 65,
+    activityLevel: "MODERATE",
+    healthConditions: [],
+    allergies: [],
+    dietaryPreference: "OMNIVORE",
+    dailyWaterGoalMl: 2500,
+    workScheduleType: "REGULAR",
+    usualWakeTime: "07:00",
+    usualSleepTime: "23:00",
+  };
+
+  if (probeInvalidWorkSchedule) {
+    const invalid = await apiJson(request, "post", "/onboarding", {
+      token,
+      data: { ...onboardingPayload, workScheduleType: "DAY_SHIFT" },
+    });
+    const safeDetails = Array.isArray(invalid.body?.error?.details)
+      ? invalid.body.error.details.map((item) => ({
+          field: item?.field ?? null,
+          message: item?.message ?? null,
+        }))
+      : [];
+    console.log(
+      "ONBOARDING_CONTRACT_PROBE",
+      JSON.stringify({
+        status: invalid.response.status(),
+        code: invalid.body?.error?.code ?? null,
+        message: invalid.body?.error?.message ?? null,
+        details: safeDetails,
+      }),
+    );
+    expect(invalid.response.status()).toBe(422);
+    expect(invalid.body?.success).toBe(false);
+    expect(invalid.body?.error?.code).toBe("UNPROCESSABLE_ENTITY");
+    expect(safeDetails.some((item) => item.field === "workScheduleType")).toBe(true);
+  }
+
   const onboarding = await apiJson(request, "post", "/onboarding", {
     token,
-    data: {
-      fullName,
-      dateOfBirth: "1990-05-20",
-      gender: "PREFER_NOT_TO_SAY",
-      heightCm: 175,
-      currentWeightKg: 70,
-      targetWeightKg: 65,
-      activityLevel: "MODERATE",
-      healthConditions: [],
-      allergies: [],
-      dietaryPreference: "OMNIVORE",
-      dailyWaterGoalMl: 2500,
-      workScheduleType: "DAY_SHIFT",
-      usualWakeTime: "07:00",
-      usualSleepTime: "23:00",
-    },
+    data: onboardingPayload,
   });
   expect(onboarding.response.status()).toBe(200);
   expect(onboarding.body.success).toBe(true);
+  expect(onboarding.body.data.onboardingCompleted).toBe(true);
   return { email, fullName, token, userId };
 }
 
@@ -123,7 +153,7 @@ test("real staging History acceptance", async ({ page, request }) => {
   const pageErrors = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
 
-  const userA = await createOnboardedUser(request, "stage4-history-a");
+  const userA = await createOnboardedUser(request, "stage4-history-a", true);
   const userB = await createOnboardedUser(request, "stage4-history-b");
 
   const empty = await historyDay(request, userA.token, "2026-09-01");
