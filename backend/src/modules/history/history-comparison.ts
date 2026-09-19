@@ -20,7 +20,6 @@ import {
   type SourceResult,
 } from "./history.service";
 import type {
-  HistoryCategoryStatus,
   HistoryComparisonMode,
   HistoryComparisonResponse,
   HistoryPeriodType,
