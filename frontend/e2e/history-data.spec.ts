@@ -192,18 +192,23 @@ test("calendar helpers clamp month edges and preserve date-only arithmetic", () 
   expect(shiftCalendarMonth("2028-03-31", -1)).toBe("2028-02-29");
 });
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolver) => {
+    resolve = resolver;
+  });
+  return { promise, resolve };
+}
+
 test("rapid date switching ignores the older request when it resolves last", async () => {
   historyStore.reset();
   const original = historyClient.getDay;
-  let resolveFirst: ((value: { history: DailyHistoryResponse }) => void) | null = null;
-  let resolveSecond: ((value: { history: DailyHistoryResponse }) => void) | null = null;
+  const firstDeferred = deferred<{ history: DailyHistoryResponse }>();
+  const secondDeferred = deferred<{ history: DailyHistoryResponse }>();
 
-  Reflect.set(historyClient, "getDay", (date: string) => {
-    return new Promise<{ history: DailyHistoryResponse }>((resolve) => {
-      if (date === "2026-09-10") resolveFirst = resolve;
-      else resolveSecond = resolve;
-    });
-  });
+  Reflect.set(historyClient, "getDay", (date: string) =>
+    date === "2026-09-10" ? firstDeferred.promise : secondDeferred.promise,
+  );
 
   try {
     const first = historyStore.load({
@@ -219,9 +224,9 @@ test("rapid date switching ignores the older request when it resolves last", asy
       timezone: "Europe/Istanbul",
     });
 
-    resolveSecond?.({ history: day("2026-09-11") });
+    secondDeferred.resolve({ history: day("2026-09-11") });
     await second;
-    resolveFirst?.({ history: day("2026-09-10") });
+    firstDeferred.resolve({ history: day("2026-09-10") });
     await first;
 
     const state = historyStore.getSnapshot();
