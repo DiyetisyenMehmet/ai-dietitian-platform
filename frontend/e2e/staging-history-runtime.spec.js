@@ -649,6 +649,10 @@ test("real staging History acceptance", async ({ page, request }) => {
   await expect(secondDialog.getByText(privateMeal)).toBeVisible();
   await page.evaluate(() => { window.__historyCanvasText = []; });
   await secondDialog.getByRole("button", { name: "Paylaş", exact: true }).click();
+  // The share handler intentionally continues asynchronously after the click
+  // event returns. Wait for the successful Web Share result to close this
+  // dialog before changing navigator.share for the fallback-path test.
+  await expect(secondDialog).toHaveCount(0);
   const selectedCanvasText = await page.evaluate(() => window.__historyCanvasText.join("\n"));
   expect(selectedCanvasText).toContain(privateMeal);
   expect(selectedCanvasText).toContain("69,4 kg");

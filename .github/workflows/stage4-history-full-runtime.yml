@@ -1,0 +1,103 @@
+name: Stage4 History Full Runtime
+
+on:
+  push:
+    branches:
+      - feature/staging-preview
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: diewish-stage4-history-full-runtime
+  cancel-in-progress: false
+
+env:
+  APPLICATION_SHA: 45782e6fd23d79635372835422622db83a3051e6
+  PROJECT_ID: project-a2e260c1-839d-4f1d-b90
+  REGION: europe-west1
+  WIF_PROVIDER: projects/730419163638/locations/global/workloadIdentityPools/github-actions/providers/diewish-staging
+  DEPLOY_SERVICE_ACCOUNT: diewish-staging-deployer@project-a2e260c1-839d-4f1d-b90.iam.gserviceaccount.com
+  BACKEND_SERVICE: diewish-backend-staging
+  FRONTEND_SERVICE: diewish-frontend-staging
+  STAGING_WEB_URL: https://staging.diewish.com
+
+jobs:
+  history-full-runtime:
+    if: ${{ contains(github.event.head_commit.message, '[stage4-full]') }}
+    name: Validate full History on deployed application SHA
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    environment: staging
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate staging-only contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$BACKEND_SERVICE" == *-staging ]]
+          [[ "$FRONTEND_SERVICE" == *-staging ]]
+          [[ "$DEPLOY_SERVICE_ACCOUNT" == diewish-staging-deployer@* ]]
+          [[ "$WIF_PROVIDER" == *diewish-staging* ]]
+          [[ "$STAGING_WEB_URL" == "https://staging.diewish.com" ]]
+
+      - name: Authenticate to isolated staging Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Verify deployed application SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected_suffix=":${APPLICATION_SHA}"
+          backend_image="$(gcloud run services describe "$BACKEND_SERVICE" --project "$PROJECT_ID" --region "$REGION" --format='value(spec.template.spec.containers[0].image)')"
+          frontend_image="$(gcloud run services describe "$FRONTEND_SERVICE" --project "$PROJECT_ID" --region "$REGION" --format='value(spec.template.spec.containers[0].image)')"
+          [[ "$backend_image" == *"$expected_suffix" ]]
+          [[ "$frontend_image" == *"$expected_suffix" ]]
+          echo "APPLICATION_SHA_MATCH=${APPLICATION_SHA}"
+          curl --fail --silent --show-error "${STAGING_WEB_URL}/api/health" >/dev/null
+          curl --fail --silent --show-error "${STAGING_WEB_URL}/history" >/dev/null
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend test dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run full real staging History acceptance
+        working-directory: frontend
+        env:
+          E2E_WEB_BASE_URL: ${{ env.STAGING_WEB_URL }}
+          E2E_API_BASE_URL: ${{ env.STAGING_WEB_URL }}/api
+        run: npx playwright test e2e/staging-history-runtime.spec.js --workers=1 --reporter=line
+
+      - name: Verify History log safety
+        shell: bash
+        run: |
+          set -euo pipefail
+          since="$(date -u -d '30 minutes ago' +'%Y-%m-%dT%H:%M:%SZ')"
+          logs="$(gcloud logging read             "resource.type=cloud_run_revision AND resource.labels.service_name=\"${BACKEND_SERVICE}\" AND timestamp>=\"${since}\""             --project "$PROJECT_ID"             --limit 1000             --format=json || true)"
+          if grep -Eiq 'STAGE4_HISTORY_PRIVATE_|stage4-history-a\.|stage4-history-b\.' <<<"$logs"; then
+            echo "Sensitive Stage4 History test data appeared in backend logs." >&2
+            exit 1
+          fi
+          echo "History log-safety scan passed."
