@@ -458,6 +458,10 @@ function PeriodComparisonSection({ comparison }: { comparison: HistoryComparison
         current.water,
         current.activity,
         current.sleep,
+        comparison.completeness.previous.nutrition,
+        comparison.completeness.previous.water,
+        comparison.completeness.previous.activity,
+        comparison.completeness.previous.sleep,
       ].some((value) => value.status === "PARTIAL") && (
         <p className="rounded-2xl bg-muted/50 px-3 py-2.5 text-[11px] leading-relaxed text-muted-foreground">
           Karşılaştırma kayıt kapsamı nedeniyle sınırlı olabilir.
