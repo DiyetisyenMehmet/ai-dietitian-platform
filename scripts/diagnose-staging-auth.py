@@ -75,6 +75,33 @@ def main():
             "service": recaptcha_service.get("config", {}).get("name", "recaptchaenterprise.googleapis.com"),
         })
 
+    # Read-only IAM capability probe for the one-time SMS Defense bootstrap.
+    # testIamPermissions does not grant or mutate permissions.
+    bootstrap_permissions = [
+        "serviceusage.services.enable",
+        "serviceusage.services.get",
+        "resourcemanager.projects.getIamPolicy",
+        "resourcemanager.projects.setIamPolicy",
+        "identitytoolkit.configs.update",
+    ]
+    try:
+        request = urllib.request.Request(
+            f"https://cloudresourcemanager.googleapis.com/v1/projects/{PROJECT}:testIamPermissions",
+            data=json.dumps({"permissions": bootstrap_permissions}).encode("utf-8"),
+            headers={**headers, "Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=25) as response:
+            granted = set(json.load(response).get("permissions", []))
+        report("sms-defense-bootstrap-permissions", {
+            "granted": sorted(granted),
+            "missing": [permission for permission in bootstrap_permissions if permission not in granted],
+        })
+    except urllib.error.HTTPError as error:
+        report("sms-defense-bootstrap-permissions", {"state": "UNKNOWN", "httpStatus": error.code})
+    except (urllib.error.URLError, TimeoutError, ValueError):
+        report("sms-defense-bootstrap-permissions", {"state": "UNKNOWN", "reason": "request-failed"})
+
     google = get("google-provider", f"https://identitytoolkit.googleapis.com/admin/v2/projects/{PROJECT}/defaultSupportedIdpConfigs/google.com")
     if google is not None:
         report("google-provider", {"enabled": google.get("enabled", False), "clientConfigured": bool(google.get("clientId"))})
