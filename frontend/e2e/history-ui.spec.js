@@ -444,6 +444,14 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await expect(page.getByText(/Karşılaştırma kayıt kapsamı nedeniyle sınırlı olabilir/)).toBeVisible();
   await page.getByRole("button", { name: "Haftayı paylaş" }).click();
   dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
+  await expect(dialog.getByText("Görsel önizleme", { exact: true })).toBeVisible();
+  await dialog.getByRole("button", { name: "Görseli Paylaş" }).click();
+  shares = await page.evaluate(() => window.__historyShares);
+  expect(shares.at(-1).fileCount).toBe(1);
+  expect(shares.at(-1).fileType).toBe("image/png");
+
+  await page.getByRole("button", { name: "Haftayı paylaş" }).click();
+  dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
   await dialog.getByRole("button", { name: "Yazı olarak paylaş" }).click();
   await expect(dialog.locator("pre")).toContainText("Bu hafta ↔ Geçen haftanın aynı dönemi");
   await expect(dialog.locator("pre")).toContainText("Günlük Ortalama Kalori");
@@ -455,6 +463,14 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await expect(page.getByText("2/19 gün kayıt", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Bu ay ↔ Geçen ayın aynı dönemi", { exact: true })).toBeVisible();
   await expect(page.getByText("Geçen ay", { exact: true }).first()).toBeVisible();
+  await page.getByRole("button", { name: "Ayı paylaş" }).click();
+  dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
+  await expect(dialog.getByText("Görsel önizleme", { exact: true })).toBeVisible();
+  await dialog.getByRole("button", { name: "Görseli Paylaş" }).click();
+  shares = await page.evaluate(() => window.__historyShares);
+  expect(shares.at(-1).fileCount).toBe(1);
+  expect(shares.at(-1).fileType).toBe("image/png");
+
   await page.getByRole("button", { name: "Ayı paylaş" }).click();
   dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
   await dialog.getByRole("button", { name: "Yazı olarak paylaş" }).click();
