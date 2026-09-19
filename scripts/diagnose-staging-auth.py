@@ -57,6 +57,12 @@ def main():
             "smsRegionConfig": config.get("smsRegionConfig", {}),
             "authorizedDomains": config.get("authorizedDomains", []),
             "phoneEnforcementState": config.get("recaptchaConfig", {}).get("phoneEnforcementState", "OFF"),
+            "useSmsTollFraudProtection": config.get("recaptchaConfig", {}).get("useSmsTollFraudProtection", False),
+            "tollFraudManagedRules": config.get("recaptchaConfig", {}).get("tollFraudManagedRules", []),
+            "recaptchaKeyTypes": sorted({
+                item.get("type") for item in config.get("recaptchaConfig", {}).get("recaptchaKeys", [])
+                if item.get("type")
+            }),
             "useSmsBotScore": config.get("recaptchaConfig", {}).get("useSmsBotScore", False),
         })
     google = get("google-provider", f"https://identitytoolkit.googleapis.com/admin/v2/projects/{PROJECT}/defaultSupportedIdpConfigs/google.com")
@@ -109,6 +115,72 @@ def main():
                 "windowHours": 24, "state": "DATA" if series else "NO_DATA", "partial": bool(metrics.get("nextPageToken")),
                 "series": [{"region": item.get("metric", {}).get("labels", {}).get("region_code"), "total": sum(float(point.get("value", {}).get("int64Value", point.get("value", {}).get("doubleValue", 0))) for point in item.get("points", []))} for item in series],
             })
+
+    # Official Identity Platform reCAPTCHA telemetry. Report only aggregate
+    # counts/distributions and a narrow allowlist of non-PII labels.
+    safe_metric_label_keys = {
+        "verdict", "token_status", "status", "provider", "client_type",
+        "recaptcha_action", "type", "tenant_name",
+    }
+
+    def summarize_recaptcha_series(items):
+        summaries = []
+        for item in items:
+            labels = {
+                key: value for key, value in item.get("metric", {}).get("labels", {}).items()
+                if key in safe_metric_label_keys
+            }
+            points = item.get("points", [])
+            total = 0
+            numeric = False
+            distributions = []
+            for point in points:
+                value = point.get("value", {})
+                if "int64Value" in value:
+                    total += int(value["int64Value"])
+                    numeric = True
+                elif "doubleValue" in value:
+                    total += float(value["doubleValue"])
+                    numeric = True
+                elif "distributionValue" in value:
+                    distribution = value["distributionValue"]
+                    distributions.append({
+                        "count": distribution.get("count"),
+                        "mean": distribution.get("mean"),
+                        "bucketCounts": distribution.get("bucketCounts", []),
+                        "explicitBounds": distribution.get("bucketOptions", {}).get("explicitBuckets", {}).get("bounds", []),
+                    })
+            summary = {"labels": labels, "pointCount": len(points)}
+            if numeric:
+                summary["total"] = total
+            if distributions:
+                summary["distributions"] = distributions
+            summaries.append(summary)
+        return summaries
+
+    for label, metric in (
+        ("recaptcha-verdict-count", "identitytoolkit.googleapis.com/recaptcha/verdict_count"),
+        ("recaptcha-token-count", "identitytoolkit.googleapis.com/recaptcha/token_count"),
+        ("recaptcha-sms-tf-risk-scores", "identitytoolkit.googleapis.com/recaptcha/sms_tf_risk_scores"),
+    ):
+        series, complete = collection(
+            label,
+            f"https://monitoring.googleapis.com/v3/projects/{PROJECT}/timeSeries",
+            "timeSeries",
+            {
+                "filter": f'metric.type="{metric}"',
+                "interval.startTime": start.isoformat(),
+                "interval.endTime": end.isoformat(),
+                "view": "FULL",
+                "pageSize": 1000,
+            },
+        )
+        report(label, {
+            "windowHours": 24,
+            "state": "DATA" if series else "NO_DATA" if complete else "UNKNOWN",
+            "partial": not complete,
+            "series": summarize_recaptcha_series(series),
+        })
 
     for label, metric, resource in (
         ("identity-api-requests", "serviceruntime.googleapis.com/api/request_count", "consumed_api"),
