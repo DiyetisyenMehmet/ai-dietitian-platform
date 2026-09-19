@@ -3,7 +3,8 @@ import type { Request, Response } from "express";
 import { ApiError } from "../../utils/api-error";
 import { sendSuccess } from "../../utils/api-response";
 import { asyncHandler } from "../../utils/async-handler";
-import type { HistoryDayQuery } from "./history.schemas";
+import { historyComparisonService } from "./history-comparison";
+import type { HistoryComparisonQuery, HistoryDayQuery } from "./history.schemas";
 import { historyService } from "./history.service";
 
 function requireUserId(req: Request): string {
@@ -16,5 +17,16 @@ export const historyController = {
     const query = req.query as unknown as HistoryDayQuery;
     const history = await historyService.getDay(requireUserId(req), query.date, query.timezone);
     sendSuccess(res, { history });
+  }),
+
+  comparison: asyncHandler(async (req: Request, res: Response) => {
+    const query = req.query as unknown as HistoryComparisonQuery;
+    const comparison = await historyComparisonService.getComparison(
+      requireUserId(req),
+      query.period === "week" ? "WEEK" : "MONTH",
+      query.referenceDate,
+      query.timezone,
+    );
+    sendSuccess(res, { comparison });
   }),
 };

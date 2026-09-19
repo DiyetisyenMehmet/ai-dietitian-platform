@@ -31,7 +31,7 @@ const EVENT_PRIORITY: Record<HistoryTimelineEvent["type"], number> = {
   SLEEP: 50,
 };
 
-type SourceResult<T> =
+export type SourceResult<T> =
   | { status: "OK"; value: T }
   | { status: "UNAVAILABLE"; value: null };
 
