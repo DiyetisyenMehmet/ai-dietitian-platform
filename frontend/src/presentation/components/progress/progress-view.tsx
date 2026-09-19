@@ -1,6 +1,6 @@
 "use client";
 
-import * as React from "react";
+import * as React from "react";\nimport Link from "next/link";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
 
@@ -293,7 +293,15 @@ export function ProgressView() {
         </div>
       </SectionCard>
 
-      <SectionCard icon="calendar" title="Geçmiş">
+      <SectionCard
+        icon="calendar"
+        title="Geçmiş"
+        action={
+          <Button asChild type="button" variant="ghost" size="sm">
+            <Link href="/history">Tüm geçmişimi gör</Link>
+          </Button>
+        }
+      >
         {history.length === 0 ? (
           <EmptyState
             icon={healthIcon("calendar")}

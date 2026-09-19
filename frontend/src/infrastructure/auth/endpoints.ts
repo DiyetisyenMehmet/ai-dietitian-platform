@@ -55,3 +55,10 @@ export const BLOOD_TEST_ENDPOINTS = {
   /** GET the authenticated user's blood-test analyses (newest first). */
   analyses: "/blood-tests/analyses",
 } as const;
+
+
+export const HISTORY_ENDPOINTS = {
+  day: "/history/day",
+  comparison: "/history/comparison",
+  insight: "/history/insight",
+} as const;
