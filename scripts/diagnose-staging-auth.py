@@ -64,6 +64,9 @@ def main():
                 if item.get("type")
             }),
             "useSmsBotScore": config.get("recaptchaConfig", {}).get("useSmsBotScore", False),
+            "notificationDefaultLocale": config.get("notification", {}).get("defaultLocale"),
+            "smsUseDeviceLocale": config.get("notification", {}).get("sendSms", {}).get("useDeviceLocale"),
+            "smsTemplateContent": config.get("notification", {}).get("sendSms", {}).get("smsTemplate", {}).get("content"),
         })
     recaptcha_service = get(
         "recaptcha-enterprise-service",
