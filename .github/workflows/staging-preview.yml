@@ -7,6 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
   id-token: write
 
@@ -33,10 +34,10 @@ env:
 
 jobs:
   deploy-staging:
-    # [stage4-release] is deliberately inert on the first push. It can only
-    # deploy when this exact workflow run is manually re-run after that SHA's
-    # required CI gates have already completed successfully.
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (contains(github.event.head_commit.message, '[deploy-staging]') || (github.run_attempt > 1 && contains(github.event.head_commit.message, '[stage4-release]')))) }}
+    # [stage4-release] may start this workflow immediately, but no staging
+    # resource is touched until the exact-SHA Hardening + Staging Config gates
+    # below are both completed successfully.
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (contains(github.event.head_commit.message, '[deploy-staging]') || contains(github.event.head_commit.message, '[stage4-release]'))) }}
     name: Deploy isolated staging
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -44,6 +45,57 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Wait for exact-SHA pre-deploy CI gates
+        if: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[stage4-release]') }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          required=("Hardening CI" "Staging Config CI")
+
+          for attempt in {1..180}; do
+            runs="$(curl --fail --silent --show-error \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${GITHUB_SHA}&per_page=100")"
+
+            ready=1
+            for workflow_name in "${required[@]}"; do
+              record="$(jq -c --arg name "${workflow_name}" '
+                [.workflow_runs[]
+                  | select(.name == $name)
+                  | {status, conclusion, run_attempt, updated_at}]
+                | sort_by(.run_attempt, .updated_at)
+                | last // empty
+              ' <<<"${runs}")"
+
+              if [[ -z "${record}" ]]; then
+                ready=0
+                continue
+              fi
+
+              status="$(jq -r '.status' <<<"${record}")"
+              conclusion="$(jq -r '.conclusion // ""' <<<"${record}")"
+              if [[ "${status}" == "completed" && "${conclusion}" != "success" ]]; then
+                echo "Pre-deploy gate failed: ${workflow_name} => ${conclusion}" >&2
+                exit 1
+              fi
+              if [[ "${status}" != "completed" || "${conclusion}" != "success" ]]; then
+                ready=0
+              fi
+            done
+
+            if [[ "${ready}" == "1" ]]; then
+              echo "Exact-SHA pre-deploy gates passed for ${GITHUB_SHA}."
+              exit 0
+            fi
+            sleep 5
+          done
+
+          echo "Timed out waiting for exact-SHA pre-deploy gates." >&2
+          exit 1
 
       - name: Validate staging contract
         shell: bash

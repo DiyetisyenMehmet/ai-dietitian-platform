@@ -24,10 +24,9 @@ env:
 
 jobs:
   weight-runtime:
-    # Same green-gated release path as staging-preview.yml. The first
-    # [stage4-release] push stays skipped; the exact-SHA job is re-run only
-    # after deployment of that SHA has completed.
-    if: ${{ contains(github.event.head_commit.message, '[deploy-staging]') || (github.run_attempt > 1 && contains(github.event.head_commit.message, '[stage4-release]')) }}
+    # Runtime may start alongside the release workflow, but its first guarded
+    # action waits until both staging Cloud Run services are running this exact SHA.
+    if: ${{ contains(github.event.head_commit.message, '[deploy-staging]') || contains(github.event.head_commit.message, '[stage4-release]') }}
     name: Validate Body Weight on exact staging SHA
     runs-on: ubuntu-latest
     timeout-minutes: 35
