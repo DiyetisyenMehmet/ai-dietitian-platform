@@ -337,8 +337,23 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await page.getByRole("button", { name: "Tekrar dene" }).click();
   await expect(page.getByText("Test değerlendirmesi hazır.")).toBeVisible();
 
+  await page.evaluate(() => {
+    window.__historyShares = [];
+    Object.defineProperty(navigator, "canShare", { configurable: true, value: () => true });
+    Object.defineProperty(navigator, "share", {
+      configurable: true,
+      value: async (data) => {
+        window.__historyShares.push({
+          fileCount: data.files ? data.files.length : 0,
+          fileType: data.files && data.files[0] ? data.files[0].type : null,
+          text: data.text || "",
+        });
+      },
+    });
+  });
+
   await page.getByRole("button", { name: "Günü paylaş" }).click();
-  const dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
+  let dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Görsel olarak paylaş" })).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Yazı olarak paylaş" })).toBeVisible();
@@ -352,11 +367,31 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await expect(dialog.getByRole("checkbox", { name: /Diewish değerlendirmesi/ })).not.toBeChecked();
   await expect(dialog.getByText("Geçmiş test öğünü")).toHaveCount(0);
 
-  await dialog.getByRole("checkbox", { name: /Öğün isimleri/ }).check();
-  await expect(dialog.getByText(/Geçmiş test öğünü/)).toBeVisible();
+  await dialog.getByRole("button", { name: "Görseli Paylaş" }).click();
+  await expect(dialog).toHaveCount(0);
+  let shares = await page.evaluate(() => window.__historyShares);
+  expect(shares.at(-1).fileCount).toBe(1);
+  expect(shares.at(-1).fileType).toBe("image/png");
+
+  await page.getByRole("button", { name: "Günü paylaş" }).click();
+  dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
   await dialog.getByRole("button", { name: "Yazı olarak paylaş" }).click();
   await expect(dialog.getByText("Yazı önizleme", { exact: true })).toBeVisible();
   await expect(dialog.locator("pre")).toContainText("650 kcal");
+  await expect(dialog.locator("pre")).not.toContainText("Geçmiş test öğünü");
+  await expect(dialog.locator("pre")).not.toContainText("69,8 kg");
+  await dialog.getByRole("button", { name: "Yazıyı Paylaş" }).click();
+  await expect(dialog).toHaveCount(0);
+  shares = await page.evaluate(() => window.__historyShares);
+  expect(shares.at(-1).fileCount).toBe(0);
+  expect(shares.at(-1).text).toContain("650 kcal");
+  expect(shares.at(-1).text).not.toContain("Geçmiş test öğünü");
+  expect(shares.at(-1).text).not.toContain("69,8 kg");
+
+  await page.getByRole("button", { name: "Günü paylaş" }).click();
+  dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
+  await dialog.getByRole("checkbox", { name: /Öğün isimleri/ }).check();
+  await dialog.getByRole("button", { name: "Yazı olarak paylaş" }).click();
   await expect(dialog.locator("pre")).toContainText("Geçmiş test öğünü");
   await dialog.getByRole("checkbox", { name: /Öğün isimleri/ }).uncheck();
   await expect(dialog.locator("pre")).not.toContainText("Geçmiş test öğünü");
@@ -375,6 +410,12 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await expect(page.getByText("+2,1 L", { exact: true })).toBeVisible();
   await expect(page.getByText("-0,3 kg azalış", { exact: true })).toBeVisible();
   await expect(page.getByText(/Karşılaştırma kayıt kapsamı nedeniyle sınırlı olabilir/)).toBeVisible();
+  await page.getByRole("button", { name: "Haftayı paylaş" }).click();
+  dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
+  await dialog.getByRole("button", { name: "Yazı olarak paylaş" }).click();
+  await expect(dialog.locator("pre")).toContainText("Bu hafta ↔ Geçen haftanın aynı dönemi");
+  await expect(dialog.locator("pre")).toContainText("Günlük Ortalama Kalori");
+  await dialog.getByRole("button", { name: "Kapat" }).click();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 
   await page.getByRole("button", { name: "Aylık" }).click();
@@ -382,6 +423,11 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await expect(page.getByText("2/19 gün kayıt", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Bu ay ↔ Geçen ayın aynı dönemi", { exact: true })).toBeVisible();
   await expect(page.getByText("Geçen ay", { exact: true }).first()).toBeVisible();
+  await page.getByRole("button", { name: "Ayı paylaş" }).click();
+  dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
+  await dialog.getByRole("button", { name: "Yazı olarak paylaş" }).click();
+  await expect(dialog.locator("pre")).toContainText("Bu ay ↔ Geçen ayın aynı dönemi");
+  await dialog.getByRole("button", { name: "Kapat" }).click();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 
   await page.evaluate(() => document.documentElement.classList.add("dark"));
