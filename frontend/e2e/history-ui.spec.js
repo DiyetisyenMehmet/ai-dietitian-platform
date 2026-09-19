@@ -340,6 +340,9 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await page.getByRole("button", { name: "Günü paylaş" }).click();
   const dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
   await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Görsel olarak paylaş" })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Yazı olarak paylaş" })).toBeVisible();
+  await expect(dialog.getByText("Story • 1080×1920", { exact: true })).toBeVisible();
   await expect(dialog.getByRole("checkbox", { name: /Kalori ve makrolar/ })).toBeChecked();
   await expect(dialog.getByRole("checkbox", { name: /^Su/ })).toBeChecked();
   await expect(dialog.getByRole("checkbox", { name: /Aktivite/ })).toBeChecked();
@@ -351,6 +354,12 @@ test("History daily/period UI keeps data visible when AI fails and share default
 
   await dialog.getByRole("checkbox", { name: /Öğün isimleri/ }).check();
   await expect(dialog.getByText(/Geçmiş test öğünü/)).toBeVisible();
+  await dialog.getByRole("button", { name: "Yazı olarak paylaş" }).click();
+  await expect(dialog.getByText("Yazı önizleme", { exact: true })).toBeVisible();
+  await expect(dialog.locator("pre")).toContainText("650 kcal");
+  await expect(dialog.locator("pre")).toContainText("Geçmiş test öğünü");
+  await dialog.getByRole("checkbox", { name: /Öğün isimleri/ }).uncheck();
+  await expect(dialog.locator("pre")).not.toContainText("Geçmiş test öğünü");
   await dialog.getByRole("button", { name: "Kapat" }).click();
 
   await page.getByRole("button", { name: "Haftalık" }).click();
