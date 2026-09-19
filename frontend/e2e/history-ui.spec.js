@@ -442,13 +442,24 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await expect(page.getByText("+2,1 L", { exact: true })).toBeVisible();
   await expect(page.getByText("-0,3 kg azalış", { exact: true })).toBeVisible();
   await expect(page.getByText(/Karşılaştırma kayıt kapsamı nedeniyle sınırlı olabilir/)).toBeVisible();
+  await page.evaluate(() => {
+    window.__nativeHistoryVisual = null;
+    window.DiewishShare = {
+      isAvailable: () => true,
+      sharePng: (base64Png, filename, text) => {
+        window.__nativeHistoryVisual = { base64Length: base64Png.length, filename, text };
+      },
+      shareText: () => {},
+    };
+  });
   await page.getByRole("button", { name: "Haftayı paylaş" }).click();
   dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
   await expect(dialog.getByText("Görsel önizleme", { exact: true })).toBeVisible();
   await dialog.getByRole("button", { name: "Görseli Paylaş" }).click();
-  shares = await page.evaluate(() => window.__historyShares);
-  expect(shares.at(-1).fileCount).toBe(1);
-  expect(shares.at(-1).fileType).toBe("image/png");
+  const weeklyVisual = await page.evaluate(() => window.__nativeHistoryVisual);
+  expect(weeklyVisual.base64Length).toBeGreaterThan(100);
+  expect(weeklyVisual.filename).toMatch(/\.png$/);
+  await page.evaluate(() => { delete window.DiewishShare; });
 
   await page.getByRole("button", { name: "Haftayı paylaş" }).click();
   dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
@@ -463,13 +474,24 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await expect(page.getByText("2/19 gün kayıt", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Bu ay ↔ Geçen ayın aynı dönemi", { exact: true })).toBeVisible();
   await expect(page.getByText("Geçen ay", { exact: true }).first()).toBeVisible();
+  await page.evaluate(() => {
+    window.__nativeHistoryVisual = null;
+    window.DiewishShare = {
+      isAvailable: () => true,
+      sharePng: (base64Png, filename, text) => {
+        window.__nativeHistoryVisual = { base64Length: base64Png.length, filename, text };
+      },
+      shareText: () => {},
+    };
+  });
   await page.getByRole("button", { name: "Ayı paylaş" }).click();
   dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
   await expect(dialog.getByText("Görsel önizleme", { exact: true })).toBeVisible();
   await dialog.getByRole("button", { name: "Görseli Paylaş" }).click();
-  shares = await page.evaluate(() => window.__historyShares);
-  expect(shares.at(-1).fileCount).toBe(1);
-  expect(shares.at(-1).fileType).toBe("image/png");
+  const monthlyVisual = await page.evaluate(() => window.__nativeHistoryVisual);
+  expect(monthlyVisual.base64Length).toBeGreaterThan(100);
+  expect(monthlyVisual.filename).toMatch(/\.png$/);
+  await page.evaluate(() => { delete window.DiewishShare; });
 
   await page.getByRole("button", { name: "Ayı paylaş" }).click();
   dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
