@@ -305,11 +305,14 @@ test("Stage4B-2 real AI cache isolation share and web acceptance", async ({ page
   await expect(dialog.getByText(privateData.privateMeal)).toHaveCount(0);
 
   await dialog.getByRole("checkbox", { name: /Öğün isimleri/ }).check();
-  await expect(dialog.getByText(privateData.privateMeal, { exact: true })).toBeVisible();
+  await expect(dialog.getByText(new RegExp(privateData.privateMeal.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\await expect(dialog.getByText(new RegExp(privateData.privateMeal.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\await expect(dialog.getByText(privateData.privateMeal, { exact: true })).toBeVisible();")))).toBeVisible();
   await expect(dialog.getByText(privateData.longMeal, { exact: true })).toBeVisible();
   expect(await dialog.getByText(privateData.longMeal, { exact: true }).evaluate(
     (el) => el.scrollWidth <= el.clientWidth,
-  )).toBe(true);
+  )).toBe(true);")))).toBeVisible();
+  const mealNamesLine = dialog.getByText(/Öğünler:/);
+  await expect(mealNamesLine).toContainText(privateData.longMeal);
+  expect(await mealNamesLine.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
   await dialog.getByRole("checkbox", { name: /Öğün isimleri/ }).uncheck();
   await expect(dialog.getByText(privateData.privateMeal)).toHaveCount(0);
 
