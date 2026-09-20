@@ -5,6 +5,7 @@ import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
+  Leaf,
   RefreshCw,
   Share2,
   Sparkles,
@@ -108,15 +109,7 @@ export function HistoryView() {
       return;
     }
     void historyStore.loadInsight({ userId, mode, date: selectedDate, timezone });
-  }, [
-    expectedKey,
-    mode,
-    selectedDate,
-    state.dataStatus,
-    state.requestKey,
-    timezone,
-    userId,
-  ]);
+  }, [expectedKey, mode, selectedDate, state.dataStatus, state.requestKey, timezone, userId]);
 
   const move = (delta: number) => {
     setSelectedDate((current) =>
@@ -160,17 +153,26 @@ export function HistoryView() {
   const dataReady = keyMatches && state.dataStatus === "success";
 
   return (
-    <div className="space-y-5 pb-2">
-      <div className="grid grid-cols-3 gap-1 rounded-2xl bg-muted/70 p-1">
+    <div className="space-y-4 pb-2">
+      <header className="flex items-start justify-between gap-4 px-1">
+        <h1 className="text-[28px] font-extrabold tracking-[-0.04em] sm:text-3xl">Geçmişim</h1>
+        <p className="max-w-[150px] pt-0.5 text-right text-[11px] leading-[1.35] text-slate-500 dark:text-slate-400 sm:text-xs">
+          Geçmişine bak,
+          <br />
+          daha iyi bir sen için ilham al.
+        </p>
+      </header>
+
+      <div className="grid grid-cols-3 gap-1 rounded-full border border-border/60 bg-muted/35 p-1">
         {(Object.keys(MODE_LABEL) as HistoryMode[]).map((item) => (
           <button
             key={item}
             type="button"
             onClick={() => setMode(item)}
             className={cn(
-              "min-h-10 rounded-xl px-3 py-2 text-sm font-semibold transition",
+              "min-h-9 rounded-full px-3 py-1.5 text-sm font-semibold transition",
               mode === item
-                ? "bg-background text-primary shadow-sm ring-1 ring-border/60"
+                ? "bg-emerald-100/80 text-emerald-950 shadow-sm dark:bg-emerald-900/45 dark:text-emerald-100"
                 : "text-muted-foreground",
             )}
           >
@@ -179,38 +181,47 @@ export function HistoryView() {
         ))}
       </div>
 
-      <section className="rounded-[26px] border border-border/70 bg-card p-4 shadow-sm">
-        <div className="flex items-center gap-3">
-          <Button type="button" size="icon" variant="ghost" onClick={() => move(-1)} aria-label="Önceki dönem">
-            <ChevronLeft aria-hidden="true" />
-          </Button>
-          <div className="min-w-0 flex-1 text-center">
-            <p className="truncate text-base font-bold tracking-tight">
-              {selectedDate ? formatDateOnly(selectedDate) : "Tarih hazırlanıyor"}
-            </p>
-            {selectedDate && (
-              <p className="mt-0.5 text-[11px] text-muted-foreground">
-                {new Intl.DateTimeFormat("tr-TR", { timeZone: "UTC", weekday: "long" }).format(
-                  new Date(`${selectedDate}T12:00:00.000Z`),
-                )}
+      <section className="space-y-2.5">
+        <div className="grid grid-cols-[minmax(0,1fr)_92px] gap-2">
+          <div className="flex min-h-[54px] items-center rounded-[17px] border border-border/70 bg-card px-1.5 shadow-[0_1px_2px_rgba(15,23,42,0.025)]">
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="size-9 shrink-0"
+              onClick={() => move(-1)}
+              aria-label="Önceki dönem"
+            >
+              <ChevronLeft className="size-5" aria-hidden="true" />
+            </Button>
+            <CalendarDays className="ml-1 size-5 shrink-0 text-emerald-500" aria-hidden="true" />
+            <div className="min-w-0 flex-1 text-center">
+              <p className="truncate text-[13px] font-bold tracking-tight sm:text-sm">
+                {selectedDate ? formatDateOnly(selectedDate) : "Tarih hazırlanıyor"}
               </p>
-            )}
+              {selectedDate && (
+                <p className="mt-0.5 text-[10px] capitalize text-muted-foreground">
+                  {new Intl.DateTimeFormat("tr-TR", { timeZone: "UTC", weekday: "long" }).format(
+                    new Date(`${selectedDate}T12:00:00.000Z`),
+                  )}
+                </p>
+              )}
+            </div>
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="size-9 shrink-0"
+              onClick={() => move(1)}
+              disabled={!canMoveNext}
+              aria-label="Sonraki dönem"
+            >
+              <ChevronRight className="size-5" aria-hidden="true" />
+            </Button>
           </div>
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            onClick={() => move(1)}
-            disabled={!canMoveNext}
-            aria-label="Sonraki dönem"
-          >
-            <ChevronRight aria-hidden="true" />
-          </Button>
-        </div>
 
-        <div className="mt-3 flex justify-center">
-          <label className="relative inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-xl border border-border bg-background px-3 text-xs font-semibold shadow-sm">
-            <CalendarDays className="size-4 text-primary" aria-hidden="true" />
+          <label className="relative inline-flex min-h-[54px] cursor-pointer items-center justify-center gap-1.5 rounded-[17px] border border-border/70 bg-card px-2 text-xs font-semibold shadow-[0_1px_2px_rgba(15,23,42,0.025)]">
+            <CalendarDays className="size-5 text-emerald-500" aria-hidden="true" />
             Takvim
             <Input
               type="date"
@@ -224,7 +235,7 @@ export function HistoryView() {
         </div>
 
         {mode === "DAY" && today && (
-          <div className="mt-3 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="grid grid-cols-4 gap-1.5">
             {[
               ["Bugün", today],
               ["Dün", shiftCalendarDate(today, -1)],
@@ -236,10 +247,10 @@ export function HistoryView() {
                 type="button"
                 onClick={() => setSelectedDate(date)}
                 className={cn(
-                  "min-h-9 shrink-0 rounded-full border px-3 text-xs font-medium",
+                  "min-h-9 min-w-0 rounded-full border px-1 text-[10px] font-medium sm:text-xs",
                   selectedDate === date
-                    ? "border-primary/30 bg-primary/10 text-primary"
-                    : "border-border bg-background text-muted-foreground",
+                    ? "border-emerald-200 bg-emerald-100/80 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/45 dark:text-emerald-200"
+                    : "border-transparent bg-muted/55 text-muted-foreground",
                 )}
               >
                 {label}
@@ -268,16 +279,33 @@ export function HistoryView() {
       ) : (
         <>
           {mode === "DAY" && state.daily && <DailyHistoryOverview history={state.daily} />}
-          {mode !== "DAY" && state.comparison && <PeriodHistoryOverview comparison={state.comparison} />}
+          {mode !== "DAY" && state.comparison && (
+            <PeriodHistoryOverview comparison={state.comparison} />
+          )}
 
-          <section className="rounded-[26px] border border-emerald-200/70 bg-gradient-to-br from-emerald-50 via-background to-sky-50 p-4 shadow-sm dark:border-emerald-900/50 dark:from-emerald-950/25 dark:via-card dark:to-sky-950/20 sm:p-5">
-            <div className="mb-3 flex items-center gap-3">
-              <span className="flex size-10 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-300">
+          <section className="relative overflow-hidden rounded-[21px] border border-emerald-200/70 bg-gradient-to-br from-emerald-50/90 via-background to-cyan-50/90 p-3.5 shadow-[0_2px_10px_rgba(16,185,129,0.06)] dark:border-emerald-900/50 dark:from-emerald-950/35 dark:via-card dark:to-sky-950/25 sm:p-4">
+            <Leaf
+              className="pointer-events-none absolute -bottom-4 right-1 size-20 rotate-[-18deg] text-emerald-300/25 dark:text-emerald-500/10"
+              strokeWidth={1.3}
+              aria-hidden="true"
+            />
+            <div className="relative mb-2 flex items-center gap-2.5">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/45 dark:text-emerald-300">
                 <Sparkles className="size-5" aria-hidden="true" />
               </span>
-              <div>
-                <h2 className="text-sm font-bold">Diewish Değerlendirmesi</h2>
-                <p className="text-[11px] text-muted-foreground">Kaydettiğin verilere göre kısa özet</p>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <h2 className="text-[13px] font-bold">
+                    {mode === "DAY"
+                      ? "Diewish Günlük Değerlendirmesi"
+                      : mode === "WEEK"
+                        ? "Diewish Haftalık Değerlendirmesi"
+                        : "Diewish Aylık Değerlendirmesi"}
+                  </h2>
+                  <span className="rounded-full bg-emerald-200/70 px-2 py-0.5 text-[9px] font-bold text-emerald-700 dark:bg-emerald-800/60 dark:text-emerald-200">
+                    AI
+                  </span>
+                </div>
               </div>
             </div>
             {state.insightStatus === "loading" || state.insightStatus === "idle" ? (
@@ -289,7 +317,8 @@ export function HistoryView() {
             ) : state.insightStatus === "error" ? (
               <div>
                 <p className="text-sm text-muted-foreground">
-                  {state.insightError ?? "Değerlendirme şu anda alınamadı. Geçmiş verilerin kullanılmaya devam ediyor."}
+                  {state.insightError ??
+                    "Değerlendirme şu anda alınamadı. Geçmiş verilerin kullanılmaya devam ediyor."}
                 </p>
                 <Button
                   type="button"
@@ -308,10 +337,12 @@ export function HistoryView() {
               </div>
             ) : (
               <div>
-                <p className="break-words text-sm leading-6 text-foreground/85">{state.insight?.content.text}</p>
+                <p className="relative break-words text-[12px] leading-5 text-foreground/75 sm:text-sm">
+                  {state.insight?.content.text}
+                </p>
                 {state.insight?.generatedBy === "FALLBACK" && (
                   <p className="mt-2 text-[11px] text-muted-foreground">
-                    AI servisi kullanılamadığında güvenli temel değerlendirme gösterildi.
+                    Güvenli temel değerlendirme gösteriliyor.
                   </p>
                 )}
               </div>
@@ -320,7 +351,7 @@ export function HistoryView() {
 
           <Button
             type="button"
-            className="min-h-12 w-full rounded-2xl"
+            className="min-h-[54px] w-full rounded-full border-0 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-400 text-sm font-bold text-white shadow-[0_8px_20px_rgba(20,184,166,0.18)] hover:from-emerald-600 hover:via-teal-600 hover:to-cyan-500"
             disabled={!dataReady}
             onClick={() => setShareOpen(true)}
           >

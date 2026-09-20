@@ -86,34 +86,39 @@ function dayHistory(date, timezone) {
     nutrition: {
       sourceStatus: "OK",
       status: "RECORDED",
-      meals: [{
-        mealType: "LUNCH",
-        occurrenceRecorded: true,
-        nutritionKnown: true,
-        items: [{
-          id: "meal-ui",
-          name: "Geçmiş test öğünü",
-          loggedAt: "2026-09-19T10:00:00.000Z",
-          calories: 650,
-          proteinG: 35,
-          carbsG: 75,
-          fatG: 20,
-        }, {
-          id: "meal-ui-long",
-          name: "Uzun paylaşım metni taşma kontrolü için hazırlanan çok uzun öğün açıklaması",
-          loggedAt: "2026-09-19T10:05:00.000Z",
-          calories: null,
-          proteinG: null,
-          carbsG: null,
-          fatG: null,
-        }],
-        totals: {
-          calories: observed(650),
-          proteinG: observed(35),
-          carbsG: observed(75),
-          fatG: observed(20),
+      meals: [
+        {
+          mealType: "LUNCH",
+          occurrenceRecorded: true,
+          nutritionKnown: true,
+          items: [
+            {
+              id: "meal-ui",
+              name: "Geçmiş test öğünü",
+              loggedAt: "2026-09-19T10:00:00.000Z",
+              calories: 650,
+              proteinG: 35,
+              carbsG: 75,
+              fatG: 20,
+            },
+            {
+              id: "meal-ui-long",
+              name: "Uzun paylaşım metni taşma kontrolü için hazırlanan çok uzun öğün açıklaması",
+              loggedAt: "2026-09-19T10:05:00.000Z",
+              calories: null,
+              proteinG: null,
+              carbsG: null,
+              fatG: null,
+            },
+          ],
+          totals: {
+            calories: observed(650),
+            proteinG: observed(35),
+            carbsG: observed(75),
+            fatG: observed(20),
+          },
         },
-      }],
+      ],
       totals: {
         calories: observed(650),
         proteinG: observed(35),
@@ -132,16 +137,18 @@ function dayHistory(date, timezone) {
     activity: {
       sourceStatus: "OK",
       status: "RECORDED",
-      entries: [{
-        id: "activity-ui",
-        type: "WALKING",
-        name: "Yürüyüş",
-        durationMinutes: 30,
-        distanceKm: 2.5,
-        perceivedIntensity: null,
-        caloriesBurned: null,
-        loggedAt: "2026-09-19T14:00:00.000Z",
-      }],
+      entries: [
+        {
+          id: "activity-ui",
+          type: "WALKING",
+          name: "Yürüyüş",
+          durationMinutes: 30,
+          distanceKm: 2.5,
+          perceivedIntensity: null,
+          caloriesBurned: null,
+          loggedAt: "2026-09-19T14:00:00.000Z",
+        },
+      ],
       totalActiveMinutes: observed(30),
       totalDistanceKm: observed(2.5),
       totalCaloriesBurned: { state: "UNKNOWN", value: null },
@@ -186,7 +193,11 @@ function dayHistory(date, timezone) {
       sleep: { status: "NONE" },
       weight: { status: "RECORDED", measurementCount: 1 },
     },
-    meta: { partialResponse: false, unavailableSources: [], generatedAt: "2026-09-19T15:00:00.000Z" },
+    meta: {
+      partialResponse: false,
+      unavailableSources: [],
+      generatedAt: "2026-09-19T15:00:00.000Z",
+    },
   };
 }
 
@@ -262,13 +273,19 @@ function comparison(periodType, referenceDate, timezone) {
         weight: { sourceStatus: "OK", measurementCount: 2 },
       },
     },
-    meta: { partialResponse: false, unavailableSources: [], generatedAt: "2026-09-19T15:00:00.000Z" },
+    meta: {
+      partialResponse: false,
+      unavailableSources: [],
+      generatedAt: "2026-09-19T15:00:00.000Z",
+    },
   };
 }
 
 test.use({ viewport: { width: 390, height: 844 } });
 
-test("History daily/period UI keeps data visible when AI fails and share defaults are private", async ({ page }) => {
+test("History daily/period UI keeps data visible when AI fails and share defaults are private", async ({
+  page,
+}) => {
   await onboard(page);
 
   let insightCalls = 0;
@@ -291,7 +308,9 @@ test("History daily/period UI keeps data visible when AI fails and share default
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(success({ comparison: comparison(periodType, referenceDate, timezone) })),
+      body: JSON.stringify(
+        success({ comparison: comparison(periodType, referenceDate, timezone) }),
+      ),
     });
   });
 
@@ -311,31 +330,40 @@ test("History daily/period UI keeps data visible when AI fails and share default
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(success({
-        insight: {
-          scope: "DAY",
-          periodKey: "2026-09-19",
-          timezone: "UTC",
-          content: { text: "Test değerlendirmesi hazır." },
-          generatedBy: "AI",
-          cacheStatus: "MISS",
-          provider: "test",
-          model: "test",
-          generatedAt: "2026-09-19T15:00:00.000Z",
-        },
-      })),
+      body: JSON.stringify(
+        success({
+          insight: {
+            scope: "DAY",
+            periodKey: "2026-09-19",
+            timezone: "UTC",
+            content: { text: "Test değerlendirmesi hazır." },
+            generatedBy: "AI",
+            cacheStatus: "MISS",
+            provider: "test",
+            model: "test",
+            generatedAt: "2026-09-19T15:00:00.000Z",
+          },
+        }),
+      ),
     });
   });
 
   await page.goto(`${WEB_BASE_URL}/progress`);
-  await expect(page.getByRole("link", { name: "Tüm geçmişimi gör" })).toHaveAttribute("href", "/history");
-
-  await page.goto(`${WEB_BASE_URL}/history`);
+  await expect(page.getByRole("link", { name: "Tüm geçmişimi gör" })).toHaveAttribute(
+    "href",
+    "/history",
+  );
+  await page.getByRole("link", { name: "Tüm geçmişimi gör" }).click();
+  await expect(page).toHaveURL(/\/history$/);
   await expect(page.getByText("Geçmişim", { exact: true })).toBeVisible();
+  await expect(page.getByText("Geçmişine bak,", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Günlük" })).toBeVisible();
+  await expect(page.getByText("Takvim", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Bugün" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Dün" })).toBeVisible();
   await expect(page.getByText("650 kcal", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("Toplam Kalori", { exact: true })).toBeVisible();
-  await expect(page.getByText("Toplam Hareket Süresi", { exact: true })).toBeVisible();
+  await expect(page.getByText("Toplam kalori", { exact: true })).toBeVisible();
+  await expect(page.getByText("Aktivite süresi", { exact: true })).toBeVisible();
   await expect(page.getByText("Günlük Zaman Akışı", { exact: true })).toBeVisible();
   await expect(page.getByText("Kayıt yok", { exact: true }).first()).toBeVisible();
   await expect(page.getByRole("button", { name: "Sonraki dönem" })).toBeDisabled();
@@ -399,9 +427,13 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await page.getByRole("button", { name: "Günü paylaş" }).click();
   dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
   await dialog.getByRole("checkbox", { name: /Öğün isimleri/ }).check();
-  const longPreview = dialog.getByText(/Uzun paylaşım metni taşma kontrolü/, { exact: false }).first();
+  const longPreview = dialog
+    .getByText(/Uzun paylaşım metni taşma kontrolü/, { exact: false })
+    .first();
   await expect(longPreview).toBeVisible();
-  expect(await longPreview.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  expect(await longPreview.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(
+    true,
+  );
   await dialog.getByRole("button", { name: "Yazı olarak paylaş" }).click();
   await expect(dialog.locator("pre")).toContainText("Geçmiş test öğünü");
   await expect(dialog.locator("pre")).toContainText("Uzun paylaşım metni taşma kontrolü");
@@ -439,21 +471,17 @@ test("History daily/period UI keeps data visible when AI fails and share default
   const nativeText = await page.evaluate(() => window.__nativeHistoryText);
   expect(nativeText.text).toContain("650 kcal");
   expect(nativeText.text).not.toContain("History Browser User");
-  await page.evaluate(() => { delete window.DiewishShare; });
+  await page.evaluate(() => {
+    delete window.DiewishShare;
+  });
 
   await page.getByRole("button", { name: "Haftalık" }).click();
-  await expect(page.getByText("Haftalık Özet", { exact: true })).toBeVisible();
-  await expect(page.getByText("Günlük Ortalama Kalori", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Haftanın Özeti", { exact: true })).toBeVisible();
+  await expect(page.getByText("Ortalama kalori", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("2/3 gün kayıt", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("7 sa 30 dk", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("Karşılaştırma", { exact: true })).toBeVisible();
-  await expect(page.getByText("Bu hafta ↔ Geçen haftanın aynı dönemi", { exact: true })).toBeVisible();
-  await expect(page.getByText("Geçen hafta", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("-100 kcal", { exact: true })).toBeVisible();
-  await expect(page.getByText("0 ml", { exact: true })).toBeVisible();
-  await expect(page.getByText("+2,1 L", { exact: true })).toBeVisible();
-  await expect(page.getByText("-0,3 kg azalış", { exact: true })).toBeVisible();
-  await expect(page.getByText(/Karşılaştırma kayıt kapsamı nedeniyle sınırlı olabilir/)).toBeVisible();
+  await expect(page.getByText("Karşılaştırma", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Geçen hafta", { exact: true })).toHaveCount(0);
   await page.evaluate(() => {
     window.__nativeHistoryVisual = null;
     window.DiewishShare = {
@@ -471,7 +499,9 @@ test("History daily/period UI keeps data visible when AI fails and share default
   const weeklyVisual = await page.evaluate(() => window.__nativeHistoryVisual);
   expect(weeklyVisual.base64Length).toBeGreaterThan(100);
   expect(weeklyVisual.filename).toMatch(/\.png$/);
-  await page.evaluate(() => { delete window.DiewishShare; });
+  await page.evaluate(() => {
+    delete window.DiewishShare;
+  });
 
   await page.getByRole("button", { name: "Haftayı paylaş" }).click();
   dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
@@ -479,13 +509,17 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await expect(dialog.locator("pre")).toContainText("Bu hafta ↔ Geçen haftanın aynı dönemi");
   await expect(dialog.locator("pre")).toContainText("Günlük Ortalama Kalori");
   await dialog.getByRole("button", { name: "Kapat" }).click();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+    ),
+  ).toBe(true);
 
   await page.getByRole("button", { name: "Aylık" }).click();
-  await expect(page.getByText("Aylık Özet", { exact: true })).toBeVisible();
+  await expect(page.getByText("Ayın Özeti", { exact: true })).toBeVisible();
   await expect(page.getByText("2/19 gün kayıt", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("Bu ay ↔ Geçen ayın aynı dönemi", { exact: true })).toBeVisible();
-  await expect(page.getByText("Geçen ay", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Karşılaştırma", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Geçen ay", { exact: true })).toHaveCount(0);
   await page.evaluate(() => {
     window.__nativeHistoryVisual = null;
     window.DiewishShare = {
@@ -503,14 +537,20 @@ test("History daily/period UI keeps data visible when AI fails and share default
   const monthlyVisual = await page.evaluate(() => window.__nativeHistoryVisual);
   expect(monthlyVisual.base64Length).toBeGreaterThan(100);
   expect(monthlyVisual.filename).toMatch(/\.png$/);
-  await page.evaluate(() => { delete window.DiewishShare; });
+  await page.evaluate(() => {
+    delete window.DiewishShare;
+  });
 
   await page.getByRole("button", { name: "Ayı paylaş" }).click();
   dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
   await dialog.getByRole("button", { name: "Yazı olarak paylaş" }).click();
   await expect(dialog.locator("pre")).toContainText("Bu ay ↔ Geçen ayın aynı dönemi");
   await dialog.getByRole("button", { name: "Kapat" }).click();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+    ),
+  ).toBe(true);
 
   await page.evaluate(() => document.documentElement.classList.add("dark"));
   expect(await page.evaluate(() => document.documentElement.classList.contains("dark"))).toBe(true);
@@ -518,6 +558,10 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await page.getByRole("button", { name: "Ayı paylaş" }).click();
   dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
   await expect(dialog.getByText("Görsel önizleme", { exact: true })).toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+    ),
+  ).toBe(true);
   await dialog.getByRole("button", { name: "Kapat" }).click();
 });

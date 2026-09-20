@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 
 export default function HistoryPage() {
   return (
-    <AppShell title="Geçmişim" showBack>
+    <AppShell title="Geçmişim" hideHeader className="pt-4">
       <HistoryView />
     </AppShell>
   );
