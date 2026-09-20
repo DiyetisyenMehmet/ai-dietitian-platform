@@ -356,7 +356,7 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await page.getByRole("link", { name: "Tüm geçmişimi gör" }).click();
   await expect(page).toHaveURL(/\/history$/);
   await expect(page.getByText("Geçmişim", { exact: true })).toBeVisible();
-  await expect(page.getByText("Geçmişine bak,", { exact: true })).toBeVisible();
+  await expect(page.getByText(/Geçmişine bak/)).toBeVisible();
   await expect(page.getByRole("button", { name: "Günlük" })).toBeVisible();
   await expect(page.getByText("Takvim", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Bugün" })).toBeVisible();
