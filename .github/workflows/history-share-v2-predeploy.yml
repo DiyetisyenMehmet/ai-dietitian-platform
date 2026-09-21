@@ -1,0 +1,302 @@
+name: History Share V2 Predeploy Validation
+
+on:
+  push:
+    branches:
+      - feature/history-share-v2
+    paths:
+      - ".github/workflows/history-share-v2-predeploy.yml"
+      - "backend/src/modules/history/**"
+      - "frontend/src/application/history/**"
+      - "frontend/src/presentation/components/history/**"
+      - "frontend/e2e/history-*.spec.*"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Targeted History predeploy validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: diewish
+          POSTGRES_PASSWORD: diewish
+          POSTGRES_DB: diewish
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U diewish -d diewish"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://diewish:diewish@127.0.0.1:5432/diewish?schema=public
+      JWT_ACCESS_SECRET: history-share-v2-local-access-secret-1234567890
+      JWT_REFRESH_SECRET: history-share-v2-local-refresh-secret-123456789
+      CORS_ORIGIN: http://127.0.0.1:3000,http://localhost:3000
+      TRUST_PROXY_HOPS: "0"
+      APP_WEB_URL: http://127.0.0.1:3000
+      LOG_LEVEL: silent
+      NEXT_PUBLIC_API_BASE_URL: http://127.0.0.1:4000/api
+      NEXT_PUBLIC_SITE_URL: http://127.0.0.1:3000
+      E2E_WEB_BASE_URL: http://127.0.0.1:3000
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Source gate and diff check
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "928c6d477ab0e2a4ac519d279617fbdf0c62194b" || {
+            echo "Validation workflow must run against requested History V2 source commit plus only this validation workflow commit." >&2
+            parent="$(git rev-parse HEAD^)"
+            test "$parent" = "928c6d477ab0e2a4ac519d279617fbdf0c62194b"
+          }
+          git merge-base --is-ancestor 212a740d2ae216f47675d94d8df150e77e1ab090 HEAD
+          git diff --check 212a740d2ae216f47675d94d8df150e77e1ab090...HEAD
+          test -z "$(git status --porcelain)"
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Generate Prisma client
+        working-directory: backend
+        run: npx prisma generate
+
+      - name: Backend type-check
+        working-directory: backend
+        run: npm run type-check
+
+      - name: History AI/core targeted tests
+        working-directory: backend
+        run: >
+          node --import tsx --test
+          src/modules/history/history-time.test.ts
+          src/modules/history/history-normalization.test.ts
+          src/modules/history/history-comparison.test.ts
+          src/modules/history/history-ai.test.ts
+
+      - name: Backend Prettier check
+        working-directory: backend
+        run: npm run format:check
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Frontend type-check
+        working-directory: frontend
+        run: npm run type-check
+
+      - name: History share/comparison/privacy tests
+        working-directory: frontend
+        run: >
+          npx playwright test
+          e2e/history-data.spec.ts
+          e2e/history-comparison-presentation.spec.ts
+          e2e/history-share-parity.spec.ts
+          e2e/history-final-ux.spec.ts
+          --workers=1 --reporter=line
+
+      - name: Frontend Prettier check
+        working-directory: frontend
+        run: npm run format:check
+
+      - name: Install Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Apply local database migrations
+        working-directory: backend
+        run: npx prisma migrate deploy
+
+      - name: Start local backend
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run dev > /tmp/history-backend.log 2>&1 &
+          echo $! > /tmp/history-backend.pid
+          for attempt in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:4000/api/health >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/history-backend.log
+          exit 1
+
+      - name: Start local frontend
+        working-directory: frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run dev -- --hostname 127.0.0.1 > /tmp/history-frontend.log 2>&1 &
+          echo $! > /tmp/history-frontend.pid
+          for attempt in {1..90}; do
+            if curl --fail --silent http://127.0.0.1:3000/register >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/history-frontend.log
+          exit 1
+
+      - name: Prepare browser evidence instrumentation
+        working-directory: frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p test-results/history-share-v2-evidence
+          node <<'NODE'
+          const fs = require("node:fs");
+          const path = "e2e/history-ui.spec.js";
+          let source = fs.readFileSync(path, "utf8");
+
+          source = source.replace(
+            'const { test, expect } = require("@playwright/test");',
+            'const { test, expect } = require("@playwright/test");\nconst fs = require("node:fs");',
+          );
+
+          source = source.replaceAll(
+            'window.__nativeHistoryVisual = { base64Length: base64Png.length, filename, text };',
+            'window.__nativeHistoryVisual = { base64Length: base64Png.length, base64Png, filename, text };',
+          );
+
+          source = source.replace(
+            'await expect(dialog.getByText("Story • 1080×1920", { exact: true })).toBeVisible();',
+            'await expect(dialog.getByText("Story • 1080×1920", { exact: true })).toBeVisible();\n' +
+              '  const dailyPreview390 = dialog.getByRole("img", { name: /Diewish paylaşım görseli önizlemesi/ });\n' +
+              '  await expect(dailyPreview390).toBeVisible();\n' +
+              '  await dailyPreview390.screenshot({ path: "test-results/history-share-v2-evidence/daily-preview-390x844.png" });',
+          );
+
+          source = source.replace(
+            'const nativeVisual = await page.evaluate(() => window.__nativeHistoryVisual);',
+            'const nativeVisual = await page.evaluate(() => window.__nativeHistoryVisual);\n' +
+              '  fs.writeFileSync("test-results/history-share-v2-evidence/daily-export.png", Buffer.from(nativeVisual.base64Png, "base64"));',
+          );
+
+          source = source.replace(
+            'const weeklyComparisonVisual = await page.evaluate(() => window.__nativeHistoryVisual);',
+            'const weeklyComparisonVisual = await page.evaluate(() => window.__nativeHistoryVisual);\n' +
+              '  fs.writeFileSync("test-results/history-share-v2-evidence/weekly-comparison-export.png", Buffer.from(weeklyComparisonVisual.base64Png, "base64"));',
+          );
+
+          source = source.replace(
+            'await expect(dialog.getByText("Görsel önizleme", { exact: true })).toBeVisible();\n  await dialog.getByRole("button", { name: "Görseli Paylaş" }).click();\n  const weeklyVisual',
+            'await expect(dialog.getByText("Görsel önizleme", { exact: true })).toBeVisible();\n' +
+              '  await dialog.getByRole("img", { name: /Diewish paylaşım görseli önizlemesi/ }).screenshot({ path: "test-results/history-share-v2-evidence/weekly-preview-390x844.png" });\n' +
+              '  await dialog.getByRole("button", { name: "Görseli Paylaş" }).click();\n' +
+              '  const weeklyVisual',
+          );
+          source = source.replace(
+            'const weeklyVisual = await page.evaluate(() => window.__nativeHistoryVisual);',
+            'const weeklyVisual = await page.evaluate(() => window.__nativeHistoryVisual);\n' +
+              '  fs.writeFileSync("test-results/history-share-v2-evidence/weekly-export.png", Buffer.from(weeklyVisual.base64Png, "base64"));',
+          );
+
+          source = source.replace(
+            'await expect(dialog.getByText("Görsel önizleme", { exact: true })).toBeVisible();\n  await dialog.getByRole("button", { name: "Görseli Paylaş" }).click();\n  const monthlyVisual',
+            'await expect(dialog.getByText("Görsel önizleme", { exact: true })).toBeVisible();\n' +
+              '  await dialog.getByRole("img", { name: /Diewish paylaşım görseli önizlemesi/ }).screenshot({ path: "test-results/history-share-v2-evidence/monthly-preview-390x844.png" });\n' +
+              '  await dialog.getByRole("button", { name: "Görseli Paylaş" }).click();\n' +
+              '  const monthlyVisual',
+          );
+          source = source.replace(
+            'const monthlyVisual = await page.evaluate(() => window.__nativeHistoryVisual);',
+            'const monthlyVisual = await page.evaluate(() => window.__nativeHistoryVisual);\n' +
+              '  fs.writeFileSync("test-results/history-share-v2-evidence/monthly-export.png", Buffer.from(monthlyVisual.base64Png, "base64"));',
+          );
+
+          const mobileAnchor =
+            'await page.setViewportSize({ width: 412, height: 915 });\n' +
+            '  await page.getByRole("button", { name: "Günlük" }).click();\n' +
+            '  await expect(page.getByText("Günün Özeti", { exact: true })).toBeVisible();\n' +
+            '  await page.getByRole("button", { name: "Karşılaştır" }).click();';
+
+          const mobileReplacement =
+            'await page.setViewportSize({ width: 412, height: 915 });\n' +
+            '  await page.getByRole("button", { name: "Günlük" }).click();\n' +
+            '  await expect(page.getByText("Günün Özeti", { exact: true })).toBeVisible();\n' +
+            '  await page.getByRole("button", { name: "Günü paylaş" }).click();\n' +
+            '  dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });\n' +
+            '  await expect(dialog).toBeVisible();\n' +
+            '  await expect(dialog.getByRole("button", { name: "Görsel olarak paylaş" })).toBeVisible();\n' +
+            '  await expect(dialog.getByRole("button", { name: "Yazı olarak paylaş" })).toBeVisible();\n' +
+            '  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);\n' +
+            '  await dialog.getByRole("img", { name: /Diewish paylaşım görseli önizlemesi/ }).screenshot({ path: "test-results/history-share-v2-evidence/daily-preview-412x915-dark.png" });\n' +
+            '  await dialog.getByRole("button", { name: "Kapat" }).click();\n' +
+            '  await page.getByRole("button", { name: "Karşılaştır" }).click();';
+
+          if (!source.includes(mobileAnchor)) throw new Error("412 viewport instrumentation anchor missing");
+          source = source.replace(mobileAnchor, mobileReplacement);
+
+          fs.writeFileSync(path, source);
+          NODE
+
+      - name: Browser-backed History/share acceptance
+        working-directory: frontend
+        run: npx playwright test e2e/history-ui.spec.js --workers=1 --reporter=line
+
+      - name: Validate exported PNG dimensions
+        working-directory: frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require("node:fs");
+          const path = require("node:path");
+          const dir = "test-results/history-share-v2-evidence";
+          const exports = fs.readdirSync(dir).filter((name) => name.endsWith("-export.png"));
+          if (exports.length < 4) throw new Error(`Expected at least 4 PNG exports, found ${exports.length}`);
+          for (const name of exports) {
+            const bytes = fs.readFileSync(path.join(dir, name));
+            if (bytes.toString("hex", 0, 8) !== "89504e470d0a1a0a") {
+              throw new Error(`${name}: invalid PNG signature`);
+            }
+            const width = bytes.readUInt32BE(16);
+            const height = bytes.readUInt32BE(20);
+            if (width !== 1080 || height !== 1920) {
+              throw new Error(`${name}: expected 1080x1920, got ${width}x${height}`);
+            }
+            console.log(`${name}: ${width}x${height}, ${bytes.length} bytes`);
+          }
+          NODE
+
+      - name: Confirm repository source remained clean after validation
+        if: always()
+        shell: bash
+        run: |
+          git checkout -- frontend/e2e/history-ui.spec.js || true
+          git status --short
+          git diff --check 212a740d2ae216f47675d94d8df150e77e1ab090...HEAD
+
+      - name: Upload visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: history-share-v2-predeploy-evidence
+          path: |
+            frontend/test-results/history-share-v2-evidence
+            /tmp/history-backend.log
+            /tmp/history-frontend.log
+          if-no-files-found: warn
+          retention-days: 7
