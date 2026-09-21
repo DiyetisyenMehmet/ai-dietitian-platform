@@ -401,7 +401,12 @@ function estimateAiHeight(ctx: CanvasRenderingContext2D, scene: HistoryShareScen
   return Math.min(dense ? 220 : 300, 78 + Math.max(2, lines.length) * (dense ? 24 : 27));
 }
 
-function drawAi(ctx: CanvasRenderingContext2D, scene: HistoryShareScene, y: number, height: number): void {
+function drawAi(
+  ctx: CanvasRenderingContext2D,
+  scene: HistoryShareScene,
+  y: number,
+  height: number,
+): void {
   if (!scene.aiInsight) return;
   const dense = scene.density === "dense";
   const x = OUTER + SHEET;
@@ -422,9 +427,7 @@ function drawAi(ctx: CanvasRenderingContext2D, scene: HistoryShareScene, y: numb
   ctx.font = `500 ${dense ? 17 : 19}px ${FONT}`;
   const maxLines = Math.max(2, Math.floor((height - 74) / (dense ? 24 : 27)));
   const lines = fitLines(ctx, scene.aiInsight, width - 60, maxLines);
-  lines.forEach((line, index) =>
-    ctx.fillText(line, x + 30, y + 76 + index * (dense ? 24 : 27)),
-  );
+  lines.forEach((line, index) => ctx.fillText(line, x + 30, y + 76 + index * (dense ? 24 : 27)));
 }
 
 function drawFooter(ctx: CanvasRenderingContext2D, scene: HistoryShareScene): void {
