@@ -294,7 +294,6 @@ test("mismatched insight scope and missing comparison records cannot leak into s
   expect(serialized).not.toContain("Infinity");
 });
 
-
 test("Share Visual V2 keeps the deterministic story export contract", () => {
   expect(HISTORY_SHARE_EXPORT_SIZE).toEqual({ width: 1080, height: 1920 });
 
@@ -310,24 +309,20 @@ test("Share Visual V2 keeps the deterministic story export contract", () => {
   );
   expect(buildHistoryShareScene(weekly).heading).toBe("Haftanın Özeti");
   expect(buildHistoryShareScene(monthly).heading).toBe("Ayın Özeti");
-  expect(buildHistoryShareScene(weekly).cards.every((card) => card.layout === "summary")).toBe(true);
-  expect(buildHistoryShareScene(monthly).cards.every((card) => card.layout === "summary")).toBe(true);
+  expect(buildHistoryShareScene(weekly).cards.every((card) => card.layout === "summary")).toBe(
+    true,
+  );
+  expect(buildHistoryShareScene(monthly).cards.every((card) => card.layout === "summary")).toBe(
+    true,
+  );
 });
 
 test("Share Visual V2 keeps comparison scenes distinct from normal period scenes", () => {
   const weekly = buildHistoryShareScene(
-    buildComparisonHistorySharePayload(
-      comparison("WEEK"),
-      DEFAULT_HISTORY_SHARE_OPTIONS,
-      null,
-    ),
+    buildComparisonHistorySharePayload(comparison("WEEK"), DEFAULT_HISTORY_SHARE_OPTIONS, null),
   );
   const monthly = buildHistoryShareScene(
-    buildComparisonHistorySharePayload(
-      comparison("MONTH"),
-      DEFAULT_HISTORY_SHARE_OPTIONS,
-      null,
-    ),
+    buildComparisonHistorySharePayload(comparison("MONTH"), DEFAULT_HISTORY_SHARE_OPTIONS, null),
   );
 
   expect(weekly.heading).toBe("Haftalık Karşılaştırma");
@@ -383,7 +378,12 @@ test("long optional AI content is visually bounded while text share keeps the pe
   const fullAi = "Uzun Türkçe değerlendirme metni ".repeat(80).trim();
   const payload = buildComparisonHistorySharePayload(
     comparison("MONTH"),
-    { ...DEFAULT_HISTORY_SHARE_OPTIONS, includeSleep: true, includeWeight: true, includeAiInsight: true },
+    {
+      ...DEFAULT_HISTORY_SHARE_OPTIONS,
+      includeSleep: true,
+      includeWeight: true,
+      includeAiInsight: true,
+    },
     insight("MONTH", fullAi),
   );
   const scene = buildHistoryShareScene(payload);
