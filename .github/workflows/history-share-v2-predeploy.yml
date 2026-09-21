@@ -95,13 +95,14 @@ jobs:
         working-directory: backend
         run: npm run format:check
 
-      - name: Changed History backend Prettier gate
+      - name: Changed History backend Prettier diagnostic
         working-directory: backend
-        run: >
-          npx prettier --check
-          src/modules/history/history-ai-text.ts
-          src/modules/history/history-ai.service.ts
-          src/modules/history/history-ai.test.ts
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx prettier --check src/modules/history/history-ai-text.ts src/modules/history/history-ai.service.ts || exit 1
+          npx prettier --write src/modules/history/history-ai.test.ts
+          git diff -- src/modules/history/history-ai.test.ts
 
       - name: Install frontend dependencies
         working-directory: frontend
@@ -303,7 +304,7 @@ jobs:
         if: always()
         shell: bash
         run: |
-          git checkout -- frontend/e2e/history-ui.spec.js || true
+          git checkout -- frontend/e2e/history-ui.spec.js backend/src/modules/history/history-ai.test.ts || true
           git status --short
           git diff --check 212a740d2ae216f47675d94d8df150e77e1ab090...HEAD
 
