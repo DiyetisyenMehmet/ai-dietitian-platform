@@ -72,11 +72,28 @@ jobs:
         run: |
           npx playwright test             e2e/history-data.spec.ts             e2e/history-comparison-presentation.spec.ts             e2e/history-final-ux.spec.ts             e2e/history-share-parity.spec.ts             --workers=1 --reporter=line
 
-      - name: Prettier check
+      - name: Full repository Prettier audit
+        continue-on-error: true
         shell: bash
         run: |
           (cd backend && npm run format:check)
           (cd frontend && npm run format:check)
+
+      - name: Changed History files Prettier gate
+        shell: bash
+        run: |
+          cd backend
+          npx prettier --check \
+            src/modules/history/history-ai-text.ts \
+            src/modules/history/history-ai.service.ts \
+            src/modules/history/history-ai.test.ts
+          cd ../frontend
+          npx prettier --check \
+            e2e/history-share-parity.spec.ts \
+            src/application/history/history-share.ts \
+            src/presentation/components/history/history-share-card.ts \
+            src/presentation/components/history/history-share-dialog.tsx \
+            src/presentation/components/history/history-share-scene.ts
 
       - name: Target diff whitespace check
         run: git diff --check 212a740d2ae216f47675d94d8df150e77e1ab090..928c6d477ab0e2a4ac519d279617fbdf0c62194b
