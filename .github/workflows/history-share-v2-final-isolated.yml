@@ -1,0 +1,89 @@
+name: History Share V2 Final Isolated Validation
+
+on:
+  push:
+    branches:
+      - validation/history-share-v2-final-47f824
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      NEXT_TELEMETRY_DISABLED: 1
+      E2E_WEB_BASE_URL: http://127.0.0.1:3000
+      NEXT_PUBLIC_API_BASE_URL: http://127.0.0.1:4000/api
+      NEXT_PUBLIC_SITE_URL: http://127.0.0.1:3000
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Confirm exact feature source ancestry
+        shell: bash
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor 47f824766eac31c294d070d6078cb0396c44daee HEAD
+          test "$(git rev-parse 47f824766eac31c294d070d6078cb0396c44daee^{tree})" = "514a8d5115e05865ba2401bba429f4da77538801"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Exact AI encoding safety vectors
+        working-directory: backend
+        run: |
+          npm ci
+          node --import tsx --test src/modules/history/history-ai-predeploy.test.ts
+
+      - name: Prepare frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run type-check
+          sudo find /etc/apt/sources.list.d -maxdepth 1 -type f -iname '*google*chrome*' -delete
+          npx playwright install --with-deps chromium
+
+      - name: Start isolated frontend
+        working-directory: frontend
+        run: |
+          npm run dev -- --hostname 127.0.0.1 > /tmp/history-share-v2-final-frontend.log 2>&1 &
+          echo $! > /tmp/history-share-v2-final-frontend.pid
+          for attempt in {1..90}; do
+            if curl --fail --silent http://127.0.0.1:3000/__history-share-validation/daily >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/history-share-v2-final-frontend.log
+          exit 1
+
+      - name: Browser render and PNG acceptance
+        working-directory: frontend
+        run: npx playwright test e2e/history-share-v2-predeploy.spec.ts --workers=1 --reporter=line
+
+      - name: Upload Share V2 visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: history-share-v2-final-visual-evidence
+          path: |
+            frontend/e2e-artifacts/history-share-v2/
+            /tmp/history-share-v2-final-frontend.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Stop isolated frontend
+        if: always()
+        run: |
+          if [ -f /tmp/history-share-v2-final-frontend.pid ]; then
+            kill "$(cat /tmp/history-share-v2-final-frontend.pid)" || true
+          fi
