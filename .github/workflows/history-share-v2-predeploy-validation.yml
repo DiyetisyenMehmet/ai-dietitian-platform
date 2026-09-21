@@ -41,6 +41,10 @@ jobs:
 
       - name: History AI and comparison targeted tests
         working-directory: backend
+        env:
+          DATABASE_URL: postgresql://history:history@127.0.0.1:5432/history_validation
+          JWT_ACCESS_SECRET: history-validation-access-secret-1234567890
+          JWT_REFRESH_SECRET: history-validation-refresh-secret-1234567890
         run: >-
           node --import tsx --test
           src/modules/history/history-ai.test.ts
@@ -123,8 +127,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: history-share-v2-predeploy-evidence
-          path: |
-            frontend/test-results/history-share-v2-evidence
-            /tmp/history-share-v2-next.log
+          path: frontend/test-results/history-share-v2-evidence
           if-no-files-found: warn
           retention-days: 7
