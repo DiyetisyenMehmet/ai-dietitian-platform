@@ -19,7 +19,7 @@ test("renders all five Share V2 scenes at 390x844 without horizontal overflow", 
   await page.setViewportSize({ width: 390, height: 844 });
 
   for (const [mode, heading] of modes) {
-    await page.goto(`${BASE_URL}/__history-share-validation/${mode}`);
+    await page.goto(`${BASE_URL}/history-share-validation/${mode}`);
     const dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
     const preview = dialog.getByRole("img", { name: new RegExp(heading) });
 
@@ -58,7 +58,7 @@ test("daily privacy defaults exclude optional content from the actual preview sc
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto(`${BASE_URL}/__history-share-validation/daily`);
+  await page.goto(`${BASE_URL}/history-share-validation/daily`);
 
   const dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
   const preview = dialog.getByRole("img", { name: /Günün Özeti/ });
@@ -121,7 +121,7 @@ test("all optional content wraps inside the scene and exports a real 1080x1920 P
   });
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto(`${BASE_URL}/__history-share-validation/daily`);
+  await page.goto(`${BASE_URL}/history-share-validation/daily`);
   const dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
 
   for (const name of ["Öğün isimleri", "Uyku", "Kilo", "Diewish değerlendirmesi"]) {
@@ -177,7 +177,7 @@ for (const viewport of [
     page,
   }) => {
     await page.setViewportSize(viewport);
-    await page.goto(`${BASE_URL}/__history-share-validation/daily`);
+    await page.goto(`${BASE_URL}/history-share-validation/daily`);
 
     const dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
     await expect(dialog).toBeVisible();

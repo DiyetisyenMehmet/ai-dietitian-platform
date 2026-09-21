@@ -58,7 +58,7 @@ jobs:
           npm run dev -- --hostname 127.0.0.1 > /tmp/history-share-v2-final-frontend.log 2>&1 &
           echo $! > /tmp/history-share-v2-final-frontend.pid
           for attempt in {1..90}; do
-            if curl --fail --silent http://127.0.0.1:3000/__history-share-validation/daily >/dev/null; then
+            if curl --fail --silent http://127.0.0.1:3000/history-share-validation/daily >/dev/null; then
               exit 0
             fi
             sleep 1
