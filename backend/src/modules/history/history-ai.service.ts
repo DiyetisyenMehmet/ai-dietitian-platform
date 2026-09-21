@@ -5,6 +5,7 @@ import { logger } from "../../lib/logger";
 import { DISCLAIMER } from "../blood-test-analysis/constants";
 import { getAIAdapter } from "../blood-test-analysis/ai-adapter/ai-adapter.factory";
 import { historyComparisonService } from "./history-comparison";
+import { normalizeHistoryInsightText } from "./history-ai-text";
 import { historyRepository } from "./history.repository";
 import { historyService } from "./history.service";
 import type {
@@ -15,7 +16,7 @@ import type {
   ObservedNumber,
 } from "./history.types";
 
-const CONTEXT_VERSION = "history-insight-v2";
+export const HISTORY_INSIGHT_HISTORY_INSIGHT_CONTEXT_VERSION = "history-insight-v3";
 const MAX_INSIGHT_LENGTH = 2400;
 
 type InsightContext = DailyInsightContext | PeriodInsightContext;
@@ -94,7 +95,7 @@ export function shouldBypassHistoryInsightCache(partial: boolean, noData: boolea
 
 function dailyContext(history: DailyHistoryResponse): DailyInsightContext {
   return {
-    contextVersion: CONTEXT_VERSION,
+    contextVersion: HISTORY_INSIGHT_CONTEXT_VERSION,
     scope: "DAY",
     date: history.date,
     timezone: history.timezone,
@@ -142,7 +143,7 @@ function periodContext(
   comparison: HistoryComparisonResponse,
 ): PeriodInsightContext {
   return {
-    contextVersion: CONTEXT_VERSION,
+    contextVersion: HISTORY_INSIGHT_CONTEXT_VERSION,
     scope,
     timezone: comparison.timezone,
     comparisonMode: comparison.comparisonMode,
@@ -165,9 +166,10 @@ function comparisonPeriodKey(
 }
 
 export function sanitizeHistoryInsightText(value: string): string {
-  const text = value.trim();
-  if (!text.endsWith(DISCLAIMER)) return text;
-  return text.slice(0, -DISCLAIMER.length).trim();
+  const text = normalizeHistoryInsightText(value);
+  const disclaimer = normalizeHistoryInsightText(DISCLAIMER);
+  if (!text.endsWith(disclaimer)) return text;
+  return text.slice(0, -disclaimer.length).trim();
 }
 
 function parseCachedContent(value: unknown): { text: string } | null {
@@ -278,7 +280,7 @@ async function generateAndCache(input: {
   }
 
   const contextHash = createHistoryContextHash({
-    contextVersion: CONTEXT_VERSION,
+    contextVersion: HISTORY_INSIGHT_CONTEXT_VERSION,
     scope: input.scope,
     timezone: input.timezone,
     periodKey: input.periodKey,

@@ -9,6 +9,11 @@ import {
   shouldBypassHistoryInsightCache,
 } from "./history-ai.service";
 import { DISCLAIMER } from "../blood-test-analysis/constants";
+import {
+  decodeHtmlCharacterReferencesOnce,
+  normalizeHistoryInsightText,
+  repairUtf8MojibakeOnce,
+} from "./history-ai-text";
 import type { DailyHistoryResponse } from "./history.types";
 
 test("context hash is stable across object key insertion order", () => {
@@ -81,4 +86,38 @@ test("history AI receives only an authoritative available water goal", () => {
     historyWaterGoalForInsight(historyWithGoal({ state: "KNOWN_VALUE", value: 500 }, false)),
     null,
   );
+});
+
+
+test("history AI normalizes HTML entities and Turkish Unicode exactly once", () => {
+  assert.equal(
+    normalizeHistoryInsightText(
+      "Bug&#252;nk&#252; kay&#305;tlar&#305;na g&#246;re su &amp; aktivite dengeli. &#128154;",
+    ),
+    "Bugünkü kayıtlarına göre su & aktivite dengeli. 💚",
+  );
+  assert.equal(normalizeHistoryInsightText("&quot;İyi&quot; &#39;ilerleme&#39;"), '"İyi" \'ilerleme\'');
+  assert.equal(decodeHtmlCharacterReferencesOnce("&amp;lt;script&amp;gt;"), "&lt;script&gt;");
+});
+
+test("history AI repairs a single valid UTF-8/Windows-1252 mojibake layer", () => {
+  assert.equal(
+    repairUtf8MojibakeOnce("BugÃ¼nkÃ¼ kayÄ±tlarÄ±na gÃ¶re ilerleme iyi."),
+    "Bugünkü kayıtlarına göre ilerleme iyi.",
+  );
+  assert.equal(repairUtf8MojibakeOnce("Normal Türkçe metin değişmez."), "Normal Türkçe metin değişmez.");
+});
+
+test("history AI keeps decoded markup as plain text data and preserves line breaks", () => {
+  const normalized = normalizeHistoryInsightText(
+    "&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;\r\n<img onerror=alert(1)>",
+  );
+  assert.equal(normalized, '<script>alert("x")</script>\n<img onerror=alert(1)>');
+  assert.equal(normalized.includes("&lt;script&gt;"), false);
+});
+
+test("history insight sanitizer removes the disclaimer after normalization", () => {
+  const encoded = "Bug&#252;nk&#252; kay&#305;tlar&#305;na g&#246;re iyi ilerliyor.";
+  const sanitized = sanitizeHistoryInsightText(`${encoded}\n\n${DISCLAIMER}`);
+  assert.equal(sanitized, "Bugünkü kayıtlarına göre iyi ilerliyor.");
 });
