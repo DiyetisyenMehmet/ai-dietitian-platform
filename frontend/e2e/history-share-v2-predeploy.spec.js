@@ -14,7 +14,7 @@ async function openScenario(page, scenario) {
     Object.defineProperty(navigator, "share", { value: undefined, configurable: true });
     Object.defineProperty(navigator, "canShare", { value: undefined, configurable: true });
   });
-  await page.goto(`${BASE}/__history_share_validation/${scenario}`);
+  await page.goto(`${BASE}/history-share-validation/${scenario}`);
   await expect(page.getByRole("dialog")).toBeVisible();
   await expect(page.getByRole("img", { name: /Diewish paylaşım görseli önizlemesi/ })).toBeVisible();
 }

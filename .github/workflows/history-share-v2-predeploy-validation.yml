@@ -111,7 +111,7 @@ jobs:
         run: |
           nohup npm run dev -- --hostname 127.0.0.1 --port 3000 > /tmp/history-share-v2-next.log 2>&1 &
           for attempt in {1..90}; do
-            if curl --fail --silent http://127.0.0.1:3000/__history_share_validation/daily >/dev/null; then
+            if curl --fail --silent http://127.0.0.1:3000/history-share-validation/daily >/dev/null; then
               exit 0
             fi
             sleep 2
