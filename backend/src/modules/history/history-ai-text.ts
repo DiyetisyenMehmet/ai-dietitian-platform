@@ -3,7 +3,7 @@ const NAMED_CHARACTER_REFERENCES: Readonly<Record<string, string>> = Object.free
   APOS: "'",
   GT: ">",
   LT: "<",
-  QUOT: '"\"',
+  QUOT: '"',
   amp: "&",
   apos: "'",
   gt: ">",

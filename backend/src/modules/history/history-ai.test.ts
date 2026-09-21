@@ -137,7 +137,7 @@ test("history insight cache version invalidates pre-normalization cache hashes",
 
 test("HTML character-reference normalization preserves case-sensitive Turkish entities", () => {
   assert.equal(
-    decodeHtmlCharacterReferencesOnce("&Ccedil; &ccedil; &Ouml; &ouml; &Uuml; &uuml; &AMP;"),
-    "Ç ç Ö ö Ü ü &",
+    decodeHtmlCharacterReferencesOnce("&Ccedil; &ccedil; &Ouml; &ouml; &Uuml; &uuml; &AMP; &QUOT;"),
+    'Ç ç Ö ö Ü ü & "',
   );
 });
