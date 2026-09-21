@@ -50,14 +50,13 @@ const OPTION_ROWS: Array<{
 ];
 
 const PREVIEW_TONE: Record<HistoryShareVisualTone, string> = {
-  nutrition: "border-orange-200/70 bg-orange-50/80 dark:border-orange-900/50 dark:bg-orange-950/20",
-  protein:
-    "border-emerald-200/70 bg-emerald-50/80 dark:border-emerald-900/50 dark:bg-emerald-950/20",
-  water: "border-sky-200/70 bg-sky-50/80 dark:border-sky-900/50 dark:bg-sky-950/20",
-  activity: "border-teal-200/70 bg-teal-50/80 dark:border-teal-900/50 dark:bg-teal-950/20",
-  sleep: "border-indigo-200/70 bg-indigo-50/80 dark:border-indigo-900/50 dark:bg-indigo-950/20",
-  weight: "border-rose-200/70 bg-rose-50/80 dark:border-rose-900/50 dark:bg-rose-950/20",
-  neutral: "border-border bg-card",
+  nutrition: "border-orange-200/80 bg-orange-50/90",
+  protein: "border-emerald-200/80 bg-emerald-50/90",
+  water: "border-sky-200/80 bg-sky-50/90",
+  activity: "border-teal-200/80 bg-teal-50/90",
+  sleep: "border-indigo-200/80 bg-indigo-50/90",
+  weight: "border-rose-200/80 bg-rose-50/90",
+  neutral: "border-slate-200 bg-slate-50",
 };
 
 function VisualPreview({ payload }: { payload: HistorySharePayload }) {

@@ -1,4 +1,9 @@
 const NAMED_CHARACTER_REFERENCES: Readonly<Record<string, string>> = Object.freeze({
+  AMP: "&",
+  APOS: "'",
+  GT: ">",
+  LT: "<",
+  QUOT: '"\"',
   amp: "&",
   apos: "'",
   gt: ">",
@@ -75,7 +80,7 @@ function characterReference(codePoint: number): string | null {
  */
 export function decodeHtmlCharacterReferencesOnce(value: string): string {
   return value.replace(
-    /&(?:#x([0-9a-f]+)|#([0-9]+)|([a-z][a-z0-9]+));/gi,
+    /&(?:#[xX]([0-9a-fA-F]+)|#([0-9]+)|([A-Za-z][A-Za-z0-9]+));/g,
     (match, hex: string | undefined, decimal: string | undefined, named: string | undefined) => {
       if (hex) return characterReference(Number.parseInt(hex, 16)) ?? match;
       if (decimal) return characterReference(Number.parseInt(decimal, 10)) ?? match;

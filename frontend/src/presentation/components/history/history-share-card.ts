@@ -446,7 +446,7 @@ function normalCardGridHeight(scene: HistoryShareScene, available: number): numb
   const rows = Math.max(1, scene.cardRows);
   const gap = scene.density === "dense" ? 16 : 20;
   const min = scene.density === "dense" ? 158 : scene.density === "balanced" ? 190 : 220;
-  const max = scene.density === "dense" ? 205 : scene.density === "balanced" ? 260 : 340;
+  const max = scene.density === "dense" ? 205 : scene.density === "balanced" ? 280 : 420;
   const fit = (available - gap * (rows - 1)) / rows;
   const cardHeight = Math.max(min, Math.min(max, fit));
   return rows * cardHeight + gap * (rows - 1);

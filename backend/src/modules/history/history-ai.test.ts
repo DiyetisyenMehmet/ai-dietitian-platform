@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  HISTORY_INSIGHT_CONTEXT_VERSION,
   canonicalHistoryContext,
   createHistoryContextHash,
   historyWaterGoalForInsight,
@@ -120,4 +121,23 @@ test("history insight sanitizer removes the disclaimer after normalization", () 
   const encoded = "Bug&#252;nk&#252; kay&#305;tlar&#305;na g&#246;re iyi ilerliyor.";
   const sanitized = sanitizeHistoryInsightText(`${encoded}\n\n${DISCLAIMER}`);
   assert.equal(sanitized, "Bugünkü kayıtlarına göre iyi ilerliyor.");
+});
+
+
+test("history insight cache version invalidates pre-normalization cache hashes", () => {
+  assert.equal(HISTORY_INSIGHT_CONTEXT_VERSION, "history-insight-v3");
+  assert.notEqual(
+    createHistoryContextHash({ contextVersion: "history-insight-v2", sample: "same-source" }),
+    createHistoryContextHash({
+      contextVersion: HISTORY_INSIGHT_CONTEXT_VERSION,
+      sample: "same-source",
+    }),
+  );
+});
+
+test("HTML character-reference normalization preserves case-sensitive Turkish entities", () => {
+  assert.equal(
+    decodeHtmlCharacterReferencesOnce("&Ccedil; &ccedil; &Ouml; &ouml; &Uuml; &uuml; &AMP;"),
+    "Ç ç Ö ö Ü ü &",
+  );
 });
