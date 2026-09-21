@@ -13,6 +13,7 @@ import {
 import { Button } from "@/presentation/components/ui/button";
 import { cn } from "@/shared/lib/utils";
 import { historyPayloadText, shareHistoryText, shareHistoryVisual } from "./history-share-card";
+import { buildHistoryShareScene } from "./history-share-scene";
 
 interface HistoryShareDialogProps {
   open: boolean;
@@ -60,103 +61,132 @@ const PREVIEW_TONE: Record<HistoryShareVisualTone, string> = {
 };
 
 function VisualPreview({ payload }: { payload: HistorySharePayload }) {
-  const comparisonLayout = payload.kind === "comparison";
-  const mealNames = payload.sections
-    .flatMap((section) => section.lines)
-    .find((line) => line.startsWith("Öğünler:"));
+  const scene = React.useMemo(() => buildHistoryShareScene(payload), [payload]);
+  const comparisonLayout = scene.kind === "comparison";
+  const dense = scene.density === "dense";
 
   return (
-    <div className="overflow-hidden rounded-[28px] border border-border bg-slate-50 p-3 shadow-sm dark:bg-slate-950/40">
-      <div className="rounded-[24px] bg-emerald-700 p-4 text-white">
-        <p className="text-[10px] font-bold tracking-[0.18em]">DIEWISH</p>
-        <h3 className="mt-2 text-base font-bold">{payload.title.replace("Diewish • ", "")}</h3>
-        <p className="mt-1 text-xs text-emerald-50/90">{payload.periodLabel}</p>
-      </div>
+    <div
+      role="img"
+      aria-label={scene.ariaLabel}
+      className="aspect-[9/16] w-full overflow-hidden rounded-[28px] border border-emerald-100 bg-[linear-gradient(145deg,#e7f6ef,#f2f8f5_55%,#edf5ff)] p-[3.5%] shadow-sm"
+    >
+      <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-[24px] bg-white p-[4%] shadow-[0_8px_24px_rgba(15,23,42,0.08)]">
+        <div className="shrink-0 rounded-[22px] bg-[linear-gradient(135deg,#087a55,#0f9f72)] p-[4%] text-white">
+          <p className="text-[9px] font-extrabold tracking-[0.2em]">{scene.brand}</p>
+          <h3 className="mt-[2%] text-[15px] font-extrabold leading-tight">{scene.heading}</h3>
+          <p className="mt-[1.5%] text-[9px] font-medium text-emerald-50/90">
+            {scene.periodLabel}
+          </p>
+          {scene.comparisonLabel && (
+            <p className="mt-[2%] rounded-full bg-white/15 px-2.5 py-1 text-[7px] font-semibold text-emerald-50">
+              {scene.comparisonLabel}
+            </p>
+          )}
+        </div>
 
-      {payload.comparisonLabel && (
-        <p className="mt-3 rounded-2xl bg-emerald-500/10 px-3 py-2 text-[11px] font-medium text-emerald-800 dark:text-emerald-200">
-          {payload.comparisonLabel}
-        </p>
-      )}
-
-      <div className={cn("mt-3 gap-2.5", comparisonLayout ? "space-y-2.5" : "grid grid-cols-2")}>
-        {payload.visualCards.map((card) => (
+        <div
+          className={cn(
+            "min-h-0 flex-1 py-[3%]",
+            scene.density === "sparse" ? "flex flex-col justify-evenly" : "flex flex-col justify-center",
+          )}
+        >
           <div
-            key={`${card.title}-${card.currentValue ?? card.value ?? ""}`}
-            className={cn("min-w-0 rounded-[20px] border p-3", PREVIEW_TONE[card.tone])}
+            className={cn(
+              comparisonLayout
+                ? "space-y-2"
+                : scene.normalColumns === 1
+                  ? "grid grid-cols-1 gap-2"
+                  : "grid grid-cols-2 gap-2",
+            )}
           >
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-[11px] font-semibold leading-tight">{card.title}</p>
-                {card.description && (
-                  <p className="mt-1 text-[8px] leading-tight text-muted-foreground">
-                    {card.description}
+            {scene.cards.map((card) => (
+              <div
+                key={`${card.title}-${card.currentValue ?? card.value ?? ""}`}
+                className={cn(
+                  "min-w-0 rounded-[18px] border p-2.5",
+                  PREVIEW_TONE[card.tone],
+                  !comparisonLayout && scene.density === "sparse" && "min-h-24",
+                )}
+              >
+                <div className="flex items-start justify-between gap-1.5">
+                  <p className="min-w-0 text-[9px] font-bold leading-tight text-slate-700">
+                    {card.title}
                   </p>
+                  {card.coverage && (
+                    <span className="shrink-0 rounded-full bg-white/85 px-1.5 py-0.5 text-[6px] font-medium text-slate-500">
+                      {card.coverage}
+                    </span>
+                  )}
+                </div>
+
+                {card.layout === "summary" ? (
+                  <div className="flex min-h-11 items-center">
+                    <p className="break-words text-[13px] font-extrabold leading-tight text-slate-900">
+                      {card.value ?? "—"}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="mt-1.5 grid grid-cols-3 overflow-hidden rounded-xl border border-slate-200 bg-white/85">
+                    {[
+                      [card.currentLabel ?? "Bu dönem", card.currentValue ?? "—"],
+                      [card.previousLabel ?? "Önceki dönem", card.previousValue ?? "—"],
+                      ["Fark", card.difference ?? "—"],
+                    ].map(([label, value], index) => (
+                      <div
+                        key={label}
+                        className={cn(
+                          "min-w-0 px-1 py-1.5 text-center",
+                          index > 0 && "border-l border-slate-200",
+                        )}
+                      >
+                        <p className="min-h-4 break-words text-[6px] font-medium leading-tight text-slate-500">
+                          {label}
+                        </p>
+                        <p className="mt-0.5 break-words text-[8px] font-extrabold leading-tight text-slate-900">
+                          {value}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {!dense && card.description && (
+                  <p className="mt-1 text-[6px] leading-tight text-slate-500">{card.description}</p>
+                )}
+                {card.note && (
+                  <p className="mt-1 text-[6px] leading-tight text-slate-500">{card.note}</p>
                 )}
               </div>
-              {card.coverage && (
-                <span className="shrink-0 rounded-full bg-background/80 px-2 py-0.5 text-[8px] text-muted-foreground">
-                  {card.coverage}
-                </span>
-              )}
-            </div>
-
-            {card.layout === "summary" ? (
-              <p className="mt-2 break-words text-sm font-bold">{card.value}</p>
-            ) : (
-              <div className="mt-2 grid grid-cols-3 overflow-hidden rounded-xl border border-border/60 bg-background/80">
-                {[
-                  [card.currentLabel ?? "Bu dönem", card.currentValue ?? "—"],
-                  [card.previousLabel ?? "Önceki dönem", card.previousValue ?? "—"],
-                  ["Fark", card.difference ?? "—"],
-                ].map(([label, value], index) => (
-                  <div
-                    key={label}
-                    className={cn(
-                      "min-w-0 px-1.5 py-2 text-center",
-                      index > 0 && "border-l border-border/60",
-                    )}
-                  >
-                    <p className="min-h-6 break-words text-[8px] leading-tight text-muted-foreground">
-                      {label}
-                    </p>
-                    <p className="mt-1 break-words text-[10px] font-bold leading-tight">{value}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-            {card.note && (
-              <p className="mt-2 text-[8px] leading-snug text-muted-foreground">{card.note}</p>
-            )}
+            ))}
           </div>
-        ))}
+
+          {scene.details.map((detail) => (
+            <div key={detail.title} className="mt-2 rounded-2xl border border-slate-200 bg-slate-50 p-2.5">
+              <p className="text-[8px] font-extrabold text-emerald-700">{detail.title}</p>
+              <p className="mt-1 break-words text-[7px] leading-relaxed text-slate-600">
+                {detail.lines.join(" • ")}
+              </p>
+            </div>
+          ))}
+
+          {scene.aiInsight && (
+            <div className="mt-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-2.5">
+              <p className="text-[8px] font-extrabold text-emerald-700">Diewish değerlendirmesi</p>
+              <p className="mt-1 whitespace-pre-line break-words text-[7px] leading-relaxed text-slate-600">
+                {scene.aiInsight}
+              </p>
+            </div>
+          )}
+        </div>
+
+        <p className="shrink-0 rounded-full bg-slate-100 px-3 py-1.5 text-[6px] font-semibold leading-tight text-slate-500">
+          {scene.footer}
+        </p>
       </div>
-
-      {mealNames && (
-        <div className="mt-3 rounded-2xl border border-border bg-background/85 p-3">
-          <p className="text-[11px] font-semibold">Öğünler</p>
-          <p className="mt-1 break-words text-[10px] leading-relaxed text-muted-foreground">
-            {mealNames.replace(/^Öğünler:\s*/, "")}
-          </p>
-        </div>
-      )}
-
-      {payload.aiInsight && (
-        <div className="mt-3 rounded-2xl bg-emerald-500/10 p-3">
-          <p className="text-[11px] font-semibold text-emerald-800 dark:text-emerald-200">
-            Diewish değerlendirmesi
-          </p>
-          <p className="mt-1 break-words text-[10px] leading-relaxed text-muted-foreground">
-            {payload.aiInsight}
-          </p>
-        </div>
-      )}
-
-      <p className="mt-3 text-[9px] leading-relaxed text-muted-foreground">{payload.footer}</p>
     </div>
   );
 }
-
 export function HistoryShareDialog({ open, onClose, buildPayload }: HistoryShareDialogProps) {
   const [options, setOptions] = React.useState<HistoryShareOptions>(DEFAULT_HISTORY_SHARE_OPTIONS);
   const [mode, setMode] = React.useState<ShareMode>("visual");
@@ -200,7 +230,7 @@ export function HistoryShareDialog({ open, onClose, buildPayload }: HistoryShare
       aria-modal="true"
       aria-label="Geçmiş paylaşım önizlemesi"
     >
-      <div className="max-h-[92dvh] w-full max-w-xl overflow-y-auto rounded-t-3xl border border-border bg-background p-5 shadow-xl sm:rounded-3xl">
+      <div className="max-h-[92dvh] w-full max-w-xl overflow-x-hidden overflow-y-auto rounded-t-3xl border border-border bg-background p-4 shadow-xl sm:rounded-3xl sm:p-5">
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold">Paylaşım</h2>
@@ -220,7 +250,7 @@ export function HistoryShareDialog({ open, onClose, buildPayload }: HistoryShare
             aria-pressed={mode === "visual"}
             onClick={() => setMode("visual")}
             className={cn(
-              "flex min-h-11 items-center justify-center gap-2 rounded-xl border px-3 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              "flex min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-xl border px-2 text-xs font-semibold leading-tight transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:gap-2 sm:px-3 sm:text-sm",
               mode === "visual"
                 ? "border-primary/35 bg-background text-foreground shadow-sm ring-1 ring-primary/10 dark:border-primary/50 dark:bg-card"
                 : "border-transparent text-muted-foreground hover:bg-background/55 hover:text-foreground",
@@ -234,7 +264,7 @@ export function HistoryShareDialog({ open, onClose, buildPayload }: HistoryShare
             aria-pressed={mode === "text"}
             onClick={() => setMode("text")}
             className={cn(
-              "flex min-h-11 items-center justify-center gap-2 rounded-xl border px-3 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              "flex min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-xl border px-2 text-xs font-semibold leading-tight transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:gap-2 sm:px-3 sm:text-sm",
               mode === "text"
                 ? "border-primary/35 bg-background text-foreground shadow-sm ring-1 ring-primary/10 dark:border-primary/50 dark:bg-card"
                 : "border-transparent text-muted-foreground hover:bg-background/55 hover:text-foreground",

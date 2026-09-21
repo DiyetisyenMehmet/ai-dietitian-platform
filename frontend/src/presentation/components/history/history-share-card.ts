@@ -3,6 +3,12 @@ import type {
   HistoryShareVisualCard,
   HistoryShareVisualTone,
 } from "@/application/history/history-share";
+import {
+  buildHistoryShareScene,
+  distributeVerticalSpace,
+  type HistoryShareScene,
+  type HistoryShareSceneDetail,
+} from "./history-share-scene";
 
 interface NativeShareBridge {
   isAvailable(): boolean;
@@ -12,19 +18,22 @@ interface NativeShareBridge {
 
 export type HistoryShareResult = "shared" | "copied" | "downloaded" | "cancelled";
 
-const WIDTH = 1080;
-const HEIGHT = 1920;
-const SIDE = 64;
-const FONT = "Arial, sans-serif";
+export const HISTORY_SHARE_EXPORT_SIZE = Object.freeze({ width: 1080, height: 1920 });
 
-const TONE: Record<HistoryShareVisualTone, { fill: string; accent: string }> = {
-  nutrition: { fill: "#fff7ed", accent: "#ea580c" },
-  protein: { fill: "#ecfdf5", accent: "#059669" },
-  water: { fill: "#eff6ff", accent: "#0284c7" },
-  activity: { fill: "#f0fdfa", accent: "#0f766e" },
-  sleep: { fill: "#eef2ff", accent: "#4f46e5" },
-  weight: { fill: "#fff1f2", accent: "#e11d48" },
-  neutral: { fill: "#f8fafc", accent: "#475569" },
+const WIDTH = HISTORY_SHARE_EXPORT_SIZE.width;
+const HEIGHT = HISTORY_SHARE_EXPORT_SIZE.height;
+const OUTER = 48;
+const SHEET = 54;
+const FONT = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+
+const TONE: Record<HistoryShareVisualTone, { fill: string; accent: string; soft: string }> = {
+  nutrition: { fill: "#fff7ed", accent: "#ea580c", soft: "#fed7aa" },
+  protein: { fill: "#ecfdf5", accent: "#059669", soft: "#a7f3d0" },
+  water: { fill: "#eff6ff", accent: "#0284c7", soft: "#bae6fd" },
+  activity: { fill: "#f0fdfa", accent: "#0f766e", soft: "#99f6e4" },
+  sleep: { fill: "#eef2ff", accent: "#4f46e5", soft: "#c7d2fe" },
+  weight: { fill: "#fff1f2", accent: "#e11d48", soft: "#fecdd3" },
+  neutral: { fill: "#f8fafc", accent: "#475569", soft: "#e2e8f0" },
 };
 
 function roundedRect(
@@ -66,13 +75,14 @@ function splitLongToken(ctx: CanvasRenderingContext2D, token: string, maxWidth: 
   return chunks;
 }
 
-function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
+function wrapParagraph(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
   const words = text
     .trim()
     .split(/\s+/)
     .filter(Boolean)
     .flatMap((word) => splitLongToken(ctx, word, maxWidth));
   if (words.length === 0) return [];
+
   const lines: string[] = [];
   let current = words[0];
   for (let index = 1; index < words.length; index += 1) {
@@ -87,16 +97,106 @@ function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number)
   return lines;
 }
 
-function visualDetailLines(payload: HistorySharePayload): Array<{ title: string; text: string }> {
-  const details: Array<{ title: string; text: string }> = [];
-  for (const section of payload.sections) {
-    for (const line of section.lines) {
-      if (line.startsWith("Öğünler:")) {
-        details.push({ title: "Öğünler", text: line.replace(/^Öğünler:\s*/, "") });
-      }
-    }
+function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
+  const paragraphs = text.replace(/\r\n?/g, "\n").split("\n");
+  const lines: string[] = [];
+  paragraphs.forEach((paragraph, index) => {
+    const wrapped = wrapParagraph(ctx, paragraph, maxWidth);
+    if (wrapped.length > 0) lines.push(...wrapped);
+    if (index < paragraphs.length - 1 && lines.length > 0) lines.push("");
+  });
+  return lines;
+}
+
+function fitLines(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+  maxLines: number,
+): string[] {
+  const lines = wrapText(ctx, text, maxWidth);
+  if (lines.length <= maxLines) return lines;
+  const visible = lines.slice(0, maxLines);
+  const last = visible[maxLines - 1] ?? "";
+  visible[maxLines - 1] = last.endsWith("…") ? last : `${last.replace(/[\s.,;:!?-]+$/, "")}…`;
+  return visible;
+}
+
+function drawBackground(ctx: CanvasRenderingContext2D): void {
+  const background = ctx.createLinearGradient(0, 0, WIDTH, HEIGHT);
+  background.addColorStop(0, "#e7f6ef");
+  background.addColorStop(0.55, "#f2f8f5");
+  background.addColorStop(1, "#edf5ff");
+  ctx.fillStyle = background;
+  ctx.fillRect(0, 0, WIDTH, HEIGHT);
+
+  ctx.globalAlpha = 0.35;
+  ctx.fillStyle = "#bbf7d0";
+  ctx.beginPath();
+  ctx.arc(WIDTH - 82, 180, 190, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#bfdbfe";
+  ctx.beginPath();
+  ctx.arc(80, HEIGHT - 120, 220, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
+function drawSheet(ctx: CanvasRenderingContext2D): void {
+  ctx.shadowColor = "rgba(15, 23, 42, 0.12)";
+  ctx.shadowBlur = 34;
+  ctx.shadowOffsetY = 14;
+  ctx.fillStyle = "#ffffff";
+  roundedRect(ctx, OUTER, OUTER, WIDTH - OUTER * 2, HEIGHT - OUTER * 2, 52);
+  ctx.fill();
+  ctx.shadowColor = "transparent";
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetY = 0;
+}
+
+function drawHeader(ctx: CanvasRenderingContext2D, scene: HistoryShareScene): number {
+  const x = OUTER + SHEET;
+  const width = WIDTH - (OUTER + SHEET) * 2;
+  const y = OUTER + SHEET;
+  const height = scene.comparisonLabel ? 272 : 232;
+
+  const gradient = ctx.createLinearGradient(x, y, x + width, y + height);
+  gradient.addColorStop(0, "#087a55");
+  gradient.addColorStop(1, "#0f9f72");
+  ctx.fillStyle = gradient;
+  roundedRect(ctx, x, y, width, height, 38);
+  ctx.fill();
+
+  ctx.fillStyle = "rgba(255,255,255,0.18)";
+  ctx.beginPath();
+  ctx.arc(x + width - 44, y + 44, 118, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = "#ffffff";
+  ctx.font = `800 30px ${FONT}`;
+  ctx.letterSpacing = "2px";
+  ctx.fillText(scene.brand, x + 38, y + 55);
+  ctx.letterSpacing = "0px";
+
+  ctx.font = `800 45px ${FONT}`;
+  const heading = fitLines(ctx, scene.heading, width - 76, 2);
+  heading.forEach((line, index) => ctx.fillText(line, x + 38, y + 121 + index * 50));
+
+  ctx.font = `500 24px ${FONT}`;
+  ctx.fillStyle = "#dcfce7";
+  ctx.fillText(scene.periodLabel, x + 38, y + height - 36);
+
+  if (scene.comparisonLabel) {
+    ctx.fillStyle = "rgba(255,255,255,0.14)";
+    roundedRect(ctx, x + 38, y + height - 86, width - 76, 40, 20);
+    ctx.fill();
+    ctx.fillStyle = "#ecfdf5";
+    ctx.font = `600 18px ${FONT}`;
+    const label = fitLines(ctx, scene.comparisonLabel, width - 110, 1)[0] ?? "";
+    ctx.fillText(label, x + 55, y + height - 59);
   }
-  return details;
+
+  return y + height;
 }
 
 function drawSummaryCard(
@@ -106,51 +206,62 @@ function drawSummaryCard(
   y: number,
   width: number,
   height: number,
+  dense: boolean,
 ): void {
   const tone = TONE[card.tone];
   ctx.fillStyle = tone.fill;
-  roundedRect(ctx, x, y, width, height, 32);
+  roundedRect(ctx, x, y, width, height, 34);
   ctx.fill();
+
+  ctx.strokeStyle = tone.soft;
+  ctx.lineWidth = 2;
+  roundedRect(ctx, x, y, width, height, 34);
+  ctx.stroke();
 
   ctx.fillStyle = tone.accent;
-  roundedRect(ctx, x + 28, y + 26, 46, 46, 15);
+  roundedRect(ctx, x + 28, y + 28, 50, 50, 17);
+  ctx.fill();
+  ctx.fillStyle = "#ffffff";
+  ctx.beginPath();
+  ctx.arc(x + 53, y + 53, 7, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.fillStyle = "#64748b";
-  ctx.font = `600 23px ${FONT}`;
-  const titleLines = wrapText(ctx, card.title, width - 118).slice(0, 1);
-  titleLines.forEach((line, index) => ctx.fillText(line, x + 92, y + 48 + index * 27));
+  ctx.fillStyle = "#475569";
+  ctx.font = `700 ${dense ? 20 : 22}px ${FONT}`;
+  const titleWidth = card.coverage ? width - 260 : width - 126;
+  const titleLines = fitLines(ctx, card.title, Math.max(120, titleWidth), 2);
+  titleLines.forEach((line, index) => ctx.fillText(line, x + 96, y + 49 + index * 23));
 
-  let descriptionX = x + 28;
   if (card.coverage) {
-    ctx.font = `600 17px ${FONT}`;
-    const badgeWidth = Math.min(205, ctx.measureText(card.coverage).width + 28);
+    ctx.font = `600 16px ${FONT}`;
+    const badgeWidth = Math.min(200, ctx.measureText(card.coverage).width + 30);
     ctx.fillStyle = "#ffffff";
-    roundedRect(ctx, x + 28, y + 62, badgeWidth, 32, 16);
+    roundedRect(ctx, x + width - badgeWidth - 24, y + 26, badgeWidth, 36, 18);
     ctx.fill();
     ctx.fillStyle = "#64748b";
-    ctx.fillText(card.coverage, x + 42, y + 84);
-    descriptionX += badgeWidth + 12;
-  }
-
-  if (card.description) {
-    ctx.fillStyle = "#64748b";
-    ctx.font = `500 18px ${FONT}`;
-    const description = wrapText(ctx, card.description, x + width - 28 - descriptionX).slice(0, 1);
-    description.forEach((line) => ctx.fillText(line, descriptionX, y + 84));
+    ctx.fillText(card.coverage, x + width - badgeWidth - 9, y + 50);
   }
 
   ctx.fillStyle = "#0f172a";
-  ctx.font = `700 38px ${FONT}`;
-  const value = card.value ?? "—";
-  const valueLines = wrapText(ctx, value, width - 56).slice(0, 2);
-  valueLines.forEach((line, index) => ctx.fillText(line, x + 28, y + 134 + index * 42));
+  ctx.font = `800 ${dense ? 34 : 42}px ${FONT}`;
+  const valueLines = fitLines(ctx, card.value ?? "—", width - 56, 2);
+  const valueBase = y + Math.max(124, height * 0.58);
+  valueLines.forEach((line, index) => ctx.fillText(line, x + 28, valueBase + index * 44));
+
+  if (card.description && height >= 215) {
+    ctx.fillStyle = "#64748b";
+    ctx.font = `500 17px ${FONT}`;
+    const description = fitLines(ctx, card.description, width - 56, 2);
+    description.forEach((line, index) =>
+      ctx.fillText(line, x + 28, y + height - (card.note ? 62 : 30) - index * 20),
+    );
+  }
 
   if (card.note) {
     ctx.fillStyle = "#64748b";
-    ctx.font = `500 17px ${FONT}`;
-    const noteLines = wrapText(ctx, card.note, width - 56).slice(0, 1);
-    noteLines.forEach((line) => ctx.fillText(line, x + 28, y + height - 18));
+    ctx.font = `500 16px ${FONT}`;
+    const note = fitLines(ctx, card.note, width - 56, 1)[0];
+    if (note) ctx.fillText(note, x + 28, y + height - 22);
   }
 }
 
@@ -161,36 +272,36 @@ function drawComparisonCard(
   y: number,
   width: number,
   height: number,
+  dense: boolean,
 ): void {
   const tone = TONE[card.tone];
   ctx.fillStyle = tone.fill;
   roundedRect(ctx, x, y, width, height, 32);
   ctx.fill();
+  ctx.strokeStyle = tone.soft;
+  ctx.lineWidth = 2;
+  roundedRect(ctx, x, y, width, height, 32);
+  ctx.stroke();
 
   ctx.fillStyle = "#0f172a";
-  ctx.font = `700 29px ${FONT}`;
-  ctx.fillText(card.title, x + 32, y + 46);
-
-  if (card.description) {
-    ctx.fillStyle = "#64748b";
-    ctx.font = `500 18px ${FONT}`;
-    ctx.fillText(card.description, x + 32, y + 70);
-  }
+  ctx.font = `800 ${dense ? 23 : 27}px ${FONT}`;
+  const title = fitLines(ctx, card.title, width - 300, 1)[0] ?? card.title;
+  ctx.fillText(title, x + 28, y + 43);
 
   if (card.coverage) {
-    ctx.font = `600 19px ${FONT}`;
-    const badgeWidth = Math.min(250, ctx.measureText(card.coverage).width + 34);
+    ctx.font = `600 16px ${FONT}`;
+    const badgeWidth = Math.min(230, ctx.measureText(card.coverage).width + 30);
     ctx.fillStyle = "#ffffff";
-    roundedRect(ctx, x + width - badgeWidth - 28, y + 22, badgeWidth, 42, 21);
+    roundedRect(ctx, x + width - badgeWidth - 24, y + 20, badgeWidth, 36, 18);
     ctx.fill();
     ctx.fillStyle = "#64748b";
-    ctx.fillText(card.coverage, x + width - badgeWidth - 11, y + 49);
+    ctx.fillText(card.coverage, x + width - badgeWidth - 9, y + 44);
   }
 
-  const innerX = x + 28;
-  const innerY = y + 74;
-  const innerWidth = width - 56;
-  const innerHeight = height - (card.note ? 104 : 88);
+  const innerX = x + 24;
+  const innerY = y + 68;
+  const innerWidth = width - 48;
+  const innerHeight = Math.max(82, height - (card.note ? 110 : 90));
   const columnWidth = innerWidth / 3;
 
   ctx.fillStyle = "#ffffff";
@@ -202,8 +313,8 @@ function drawComparisonCard(
   for (let index = 1; index < 3; index += 1) {
     const lineX = innerX + columnWidth * index;
     ctx.beginPath();
-    ctx.moveTo(lineX, innerY + 16);
-    ctx.lineTo(lineX, innerY + innerHeight - 16);
+    ctx.moveTo(lineX, innerY + 14);
+    ctx.lineTo(lineX, innerY + innerHeight - 14);
     ctx.stroke();
   }
 
@@ -214,157 +325,251 @@ function drawComparisonCard(
   ];
 
   columns.forEach(([label, value], index) => {
-    const left = innerX + columnWidth * index;
-    const center = left + columnWidth / 2;
+    const center = innerX + columnWidth * index + columnWidth / 2;
     ctx.textAlign = "center";
     ctx.fillStyle = "#64748b";
-    ctx.font = `600 18px ${FONT}`;
-    const labelLines = wrapText(ctx, label, columnWidth - 24).slice(0, 1);
-    labelLines.forEach((line, lineIndex) =>
-      ctx.fillText(line, center, innerY + 21 + lineIndex * 22),
-    );
-
+    ctx.font = `700 16px ${FONT}`;
+    const labelLine = fitLines(ctx, label, columnWidth - 20, 1)[0] ?? "";
+    ctx.fillText(labelLine, center, innerY + 28);
     ctx.fillStyle = "#0f172a";
-    ctx.font = `700 25px ${FONT}`;
-    const valueLines = wrapText(ctx, value, columnWidth - 24).slice(0, 2);
+    ctx.font = `800 ${dense ? 22 : 25}px ${FONT}`;
+    const valueLines = fitLines(ctx, value, columnWidth - 22, 2);
     valueLines.forEach((line, lineIndex) =>
-      ctx.fillText(line, center, innerY + 49 + lineIndex * 24),
+      ctx.fillText(line, center, innerY + 59 + lineIndex * 26),
     );
   });
   ctx.textAlign = "start";
 
   if (card.note) {
     ctx.fillStyle = "#64748b";
-    ctx.font = `500 17px ${FONT}`;
-    const noteLines = wrapText(ctx, card.note, width - 64).slice(0, 1);
-    noteLines.forEach((line) => ctx.fillText(line, x + 32, y + height - 16));
+    ctx.font = `500 15px ${FONT}`;
+    const note = fitLines(ctx, card.note, width - 56, 1)[0];
+    if (note) ctx.fillText(note, x + 28, y + height - 19);
   }
 }
 
-function drawDetailCard(
+function estimateDetailHeight(
   ctx: CanvasRenderingContext2D,
-  title: string,
-  text: string,
-  y: number,
-  maxHeight: number,
+  detail: HistoryShareSceneDetail,
+  dense: boolean,
 ): number {
-  const width = WIDTH - SIDE * 2;
-  const sizes = [24, 22, 20, 18];
-  let fontSize = sizes[0];
-  let lineHeight = 34;
-  let lines: string[] = [];
-  for (const size of sizes) {
-    const candidateLineHeight = size + 10;
-    ctx.font = `500 ${size}px ${FONT}`;
-    const candidateLines = wrapText(ctx, text, width - 64);
-    fontSize = size;
-    lineHeight = candidateLineHeight;
-    lines = candidateLines;
-    if (92 + candidateLines.length * candidateLineHeight <= maxHeight) break;
-  }
-  const visible = lines.slice(0, Math.max(1, Math.floor((maxHeight - 92) / lineHeight)));
-  const height = Math.min(maxHeight, 92 + visible.length * lineHeight);
+  ctx.font = `500 ${dense ? 17 : 19}px ${FONT}`;
+  const width = WIDTH - (OUTER + SHEET) * 2 - 64;
+  const lines = detail.lines.flatMap((line) => wrapText(ctx, line, width));
+  return Math.min(dense ? 154 : 196, 72 + Math.max(1, lines.length) * (dense ? 24 : 27));
+}
 
-  ctx.fillStyle = "#ffffff";
-  roundedRect(ctx, SIDE, y, width, height, 30);
+function drawDetail(
+  ctx: CanvasRenderingContext2D,
+  detail: HistoryShareSceneDetail,
+  y: number,
+  height: number,
+  dense: boolean,
+): void {
+  const x = OUTER + SHEET;
+  const width = WIDTH - (OUTER + SHEET) * 2;
+  ctx.fillStyle = "#f8fafc";
+  roundedRect(ctx, x, y, width, height, 28);
   ctx.fill();
-  ctx.fillStyle = "#0f7a55";
-  ctx.font = `700 26px ${FONT}`;
-  ctx.fillText(title, SIDE + 32, y + 42);
+  ctx.strokeStyle = "#e2e8f0";
+  ctx.lineWidth = 2;
+  roundedRect(ctx, x, y, width, height, 28);
+  ctx.stroke();
+
+  ctx.fillStyle = "#087a55";
+  ctx.font = `800 ${dense ? 20 : 23}px ${FONT}`;
+  ctx.fillText(detail.title, x + 30, y + 38);
+
   ctx.fillStyle = "#334155";
-  ctx.font = `500 ${fontSize}px ${FONT}`;
-  visible.forEach((line, index) => ctx.fillText(line, SIDE + 32, y + 82 + index * lineHeight));
-  return height;
+  ctx.font = `500 ${dense ? 17 : 19}px ${FONT}`;
+  let lineY = y + 70;
+  const maxLines = dense ? 3 : 4;
+  const content = detail.lines.join(" • ");
+  const lines = fitLines(ctx, content, width - 60, maxLines);
+  lines.forEach((line) => {
+    ctx.fillText(line, x + 30, lineY);
+    lineY += dense ? 24 : 27;
+  });
+}
+
+function estimateAiHeight(ctx: CanvasRenderingContext2D, scene: HistoryShareScene): number {
+  if (!scene.aiInsight) return 0;
+  const dense = scene.density === "dense";
+  ctx.font = `500 ${dense ? 17 : 19}px ${FONT}`;
+  const width = WIDTH - (OUTER + SHEET) * 2 - 64;
+  const lines = wrapText(ctx, scene.aiInsight, width);
+  return Math.min(dense ? 220 : 300, 78 + Math.max(2, lines.length) * (dense ? 24 : 27));
+}
+
+function drawAi(ctx: CanvasRenderingContext2D, scene: HistoryShareScene, y: number, height: number): void {
+  if (!scene.aiInsight) return;
+  const dense = scene.density === "dense";
+  const x = OUTER + SHEET;
+  const width = WIDTH - (OUTER + SHEET) * 2;
+  ctx.fillStyle = "#ecfdf5";
+  roundedRect(ctx, x, y, width, height, 30);
+  ctx.fill();
+  ctx.strokeStyle = "#a7f3d0";
+  ctx.lineWidth = 2;
+  roundedRect(ctx, x, y, width, height, 30);
+  ctx.stroke();
+
+  ctx.fillStyle = "#087a55";
+  ctx.font = `800 ${dense ? 20 : 23}px ${FONT}`;
+  ctx.fillText("Diewish değerlendirmesi", x + 30, y + 40);
+
+  ctx.fillStyle = "#334155";
+  ctx.font = `500 ${dense ? 17 : 19}px ${FONT}`;
+  const maxLines = Math.max(2, Math.floor((height - 74) / (dense ? 24 : 27)));
+  const lines = fitLines(ctx, scene.aiInsight, width - 60, maxLines);
+  lines.forEach((line, index) =>
+    ctx.fillText(line, x + 30, y + 76 + index * (dense ? 24 : 27)),
+  );
+}
+
+function drawFooter(ctx: CanvasRenderingContext2D, scene: HistoryShareScene): void {
+  const x = OUTER + SHEET;
+  const y = HEIGHT - OUTER - SHEET - 70;
+  const width = WIDTH - (OUTER + SHEET) * 2;
+
+  ctx.fillStyle = "#f1f5f9";
+  roundedRect(ctx, x, y, width, 56, 28);
+  ctx.fill();
+
+  ctx.fillStyle = "#64748b";
+  ctx.font = `600 17px ${FONT}`;
+  const line = fitLines(ctx, scene.footer, width - 44, 1)[0] ?? "Diewish";
+  ctx.fillText(line, x + 22, y + 35);
+}
+
+function normalCardGridHeight(scene: HistoryShareScene, available: number): number {
+  const rows = Math.max(1, scene.cardRows);
+  const gap = scene.density === "dense" ? 16 : 20;
+  const min = scene.density === "dense" ? 158 : scene.density === "balanced" ? 190 : 220;
+  const max = scene.density === "dense" ? 205 : scene.density === "balanced" ? 260 : 340;
+  const fit = (available - gap * (rows - 1)) / rows;
+  const cardHeight = Math.max(min, Math.min(max, fit));
+  return rows * cardHeight + gap * (rows - 1);
+}
+
+function drawNormalCards(
+  ctx: CanvasRenderingContext2D,
+  scene: HistoryShareScene,
+  y: number,
+  gridHeight: number,
+): void {
+  if (scene.cards.length === 0) return;
+  const dense = scene.density === "dense";
+  const gap = dense ? 16 : 20;
+  const columns = scene.normalColumns;
+  const rows = Math.max(1, scene.cardRows);
+  const width = WIDTH - (OUTER + SHEET) * 2;
+  const cardWidth = (width - gap * (columns - 1)) / columns;
+  const cardHeight = (gridHeight - gap * (rows - 1)) / rows;
+  const x0 = OUTER + SHEET;
+
+  scene.cards.forEach((card, index) => {
+    const row = Math.floor(index / columns);
+    const column = index % columns;
+    drawSummaryCard(
+      ctx,
+      card,
+      x0 + column * (cardWidth + gap),
+      y + row * (cardHeight + gap),
+      cardWidth,
+      cardHeight,
+      dense,
+    );
+  });
+}
+
+function comparisonCardsHeight(scene: HistoryShareScene, available: number): number {
+  const count = Math.max(1, scene.cards.length);
+  const gap = scene.density === "dense" ? 14 : 18;
+  const min = scene.density === "dense" ? 145 : 170;
+  const max = scene.density === "sparse" ? 245 : scene.density === "balanced" ? 210 : 176;
+  const fit = (available - gap * (count - 1)) / count;
+  const cardHeight = Math.max(min, Math.min(max, fit));
+  return count * cardHeight + gap * (count - 1);
+}
+
+function drawComparisonCards(
+  ctx: CanvasRenderingContext2D,
+  scene: HistoryShareScene,
+  y: number,
+  totalHeight: number,
+): void {
+  if (scene.cards.length === 0) return;
+  const dense = scene.density === "dense";
+  const gap = dense ? 14 : 18;
+  const count = scene.cards.length;
+  const cardHeight = (totalHeight - gap * (count - 1)) / count;
+  const x = OUTER + SHEET;
+  const width = WIDTH - (OUTER + SHEET) * 2;
+
+  scene.cards.forEach((card, index) => {
+    drawComparisonCard(ctx, card, x, y + index * (cardHeight + gap), width, cardHeight, dense);
+  });
 }
 
 export function createHistoryShareCanvas(payload: HistorySharePayload): HTMLCanvasElement {
+  const scene = buildHistoryShareScene(payload);
   const canvas = document.createElement("canvas");
   canvas.width = WIDTH;
   canvas.height = HEIGHT;
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Canvas is unavailable.");
 
-  ctx.fillStyle = "#f8fafc";
-  ctx.fillRect(0, 0, WIDTH, HEIGHT);
+  drawBackground(ctx);
+  drawSheet(ctx);
+  const headerBottom = drawHeader(ctx, scene);
 
-  ctx.fillStyle = "#0f7a55";
-  roundedRect(ctx, SIDE, 64, WIDTH - SIDE * 2, 250, 42);
-  ctx.fill();
+  const contentTop = headerBottom + 18;
+  const footerTop = HEIGHT - OUTER - SHEET - 82;
+  const contentHeight = footerTop - contentTop;
+  const dense = scene.density === "dense";
 
-  ctx.fillStyle = "#ffffff";
-  ctx.font = `700 34px ${FONT}`;
-  ctx.fillText("DIEWISH", SIDE + 42, 126);
-  ctx.font = `700 46px ${FONT}`;
-  const title = payload.title.replace("Diewish • ", "");
-  wrapText(ctx, title, WIDTH - SIDE * 2 - 84)
-    .slice(0, 2)
-    .forEach((line, index) => ctx.fillText(line, SIDE + 42, 194 + index * 50));
+  const detailHeights = scene.details.map((detail) => estimateDetailHeight(ctx, detail, dense));
+  const aiHeight = estimateAiHeight(ctx, scene);
+  const fixedExtras = detailHeights.reduce((sum, height) => sum + height, 0) + aiHeight;
+  const minimumGaps = (scene.details.length + (scene.aiInsight ? 1 : 0)) * (dense ? 12 : 16);
+  const cardAvailable = Math.max(280, contentHeight - fixedExtras - minimumGaps);
 
-  ctx.font = `500 25px ${FONT}`;
-  ctx.fillText(payload.periodLabel, SIDE + 42, 282);
+  const cardsHeight =
+    scene.kind === "comparison"
+      ? comparisonCardsHeight(scene, cardAvailable)
+      : normalCardGridHeight(scene, cardAvailable);
 
-  let y = 350;
-  if (payload.comparisonLabel) {
-    ctx.fillStyle = "#e8f3ee";
-    roundedRect(ctx, SIDE, y, WIDTH - SIDE * 2, 64, 24);
-    ctx.fill();
-    ctx.fillStyle = "#155e49";
-    ctx.font = `600 22px ${FONT}`;
-    ctx.fillText(payload.comparisonLabel, SIDE + 28, y + 40);
-    y += 88;
+  const blockHeights = [
+    ...(scene.cards.length > 0 ? [cardsHeight] : []),
+    ...detailHeights,
+    ...(scene.aiInsight ? [aiHeight] : []),
+  ];
+  const spacing = distributeVerticalSpace(contentHeight, blockHeights, dense ? 10 : 16);
+
+  let y = contentTop + spacing.before;
+  let blockIndex = 0;
+
+  if (scene.cards.length > 0) {
+    if (scene.kind === "comparison") drawComparisonCards(ctx, scene, y, cardsHeight);
+    else drawNormalCards(ctx, scene, y, cardsHeight);
+    y += cardsHeight;
+    blockIndex += 1;
+    if (blockIndex < blockHeights.length) y += spacing.between;
   }
 
-  const details = visualDetailLines(payload);
-  const aiReserve = payload.aiInsight ? 340 : 0;
-  const detailReserve = details.length > 0 ? 240 : 0;
-  const footerReserve = 90;
-  const available = HEIGHT - y - aiReserve - detailReserve - footerReserve;
+  scene.details.forEach((detail, index) => {
+    drawDetail(ctx, detail, y, detailHeights[index], dense);
+    y += detailHeights[index];
+    blockIndex += 1;
+    if (blockIndex < blockHeights.length) y += spacing.between;
+  });
 
-  if (payload.kind === "normal") {
-    const gap = 22;
-    const cardWidth = (WIDTH - SIDE * 2 - gap) / 2;
-    const rows = Math.max(1, Math.ceil(payload.visualCards.length / 2));
-    const cardHeight = Math.max(170, Math.min(195, (available - gap * (rows - 1)) / rows));
-    payload.visualCards.forEach((card, index) => {
-      const row = Math.floor(index / 2);
-      const column = index % 2;
-      const x = SIDE + column * (cardWidth + gap);
-      const cardY = y + row * (cardHeight + gap);
-      drawSummaryCard(ctx, card, x, cardY, cardWidth, cardHeight);
-    });
-    y += rows * cardHeight + Math.max(0, rows - 1) * gap + 24;
-  } else {
-    const gap = 18;
-    const count = Math.max(1, payload.visualCards.length);
-    const cardHeight = Math.max(160, Math.min(225, (available - gap * (count - 1)) / count));
-    payload.visualCards.forEach((card, index) => {
-      drawComparisonCard(
-        ctx,
-        card,
-        SIDE,
-        y + index * (cardHeight + gap),
-        WIDTH - SIDE * 2,
-        cardHeight,
-      );
-    });
-    y += count * cardHeight + Math.max(0, count - 1) * gap + 22;
+  if (scene.aiInsight) {
+    drawAi(ctx, scene, y, aiHeight);
   }
 
-  for (const detail of details.slice(0, 1)) {
-    const height = drawDetailCard(ctx, detail.title, detail.text, y, 230);
-    y += height + 18;
-  }
-
-  if (payload.aiInsight && y < HEIGHT - 160) {
-    const maxHeight = Math.max(120, HEIGHT - y - 112);
-    drawDetailCard(ctx, "Diewish değerlendirmesi", payload.aiInsight, y, Math.min(360, maxHeight));
-  }
-
-  ctx.fillStyle = "#64748b";
-  ctx.font = `500 20px ${FONT}`;
-  const footerLines = wrapText(ctx, payload.footer, WIDTH - SIDE * 2).slice(0, 2);
-  footerLines.forEach((line, index) => ctx.fillText(line, SIDE, HEIGHT - 66 + index * 24));
-
+  drawFooter(ctx, scene);
   return canvas;
 }
 
@@ -379,17 +584,13 @@ export function historyPayloadText(payload: HistorySharePayload): string {
           : `${payload.periodLabel} Diewish ay özetim 🌿`;
 
   const lines = [heading, ""];
-  if (payload.comparisonLabel) {
-    lines.push(payload.comparisonLabel, "");
-  }
+  if (payload.comparisonLabel) lines.push(payload.comparisonLabel, "");
   for (const section of payload.sections) {
     lines.push(section.title);
     for (const line of section.lines) lines.push(line);
     lines.push("");
   }
-  if (payload.aiInsight) {
-    lines.push("Diewish değerlendirmesi", payload.aiInsight, "");
-  }
+  if (payload.aiInsight) lines.push("Diewish değerlendirmesi", payload.aiInsight, "");
   lines.push("Diewish ile ilerlememi takip ediyorum.");
   return lines.join("\n").trim();
 }

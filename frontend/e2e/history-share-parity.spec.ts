@@ -11,7 +11,14 @@ import type {
   MetricComparison,
   ObservedNumber,
 } from "../src/domain/history/types";
-import { historyPayloadText } from "../src/presentation/components/history/history-share-card";
+import {
+  HISTORY_SHARE_EXPORT_SIZE,
+  historyPayloadText,
+} from "../src/presentation/components/history/history-share-card";
+import {
+  buildHistoryShareScene,
+  distributeVerticalSpace,
+} from "../src/presentation/components/history/history-share-scene";
 
 function observed(value: number): ObservedNumber {
   return { state: value === 0 ? "KNOWN_ZERO" : "KNOWN_VALUE", value };
@@ -285,4 +292,113 @@ test("mismatched insight scope and missing comparison records cannot leak into s
   expect(serialized).not.toContain("WRONG SCOPE INSIGHT");
   expect(serialized).not.toContain("NaN");
   expect(serialized).not.toContain("Infinity");
+});
+
+
+test("Share Visual V2 keeps the deterministic story export contract", () => {
+  expect(HISTORY_SHARE_EXPORT_SIZE).toEqual({ width: 1080, height: 1920 });
+
+  const weekly = buildPeriodHistorySharePayload(
+    comparison("WEEK"),
+    DEFAULT_HISTORY_SHARE_OPTIONS,
+    null,
+  );
+  const monthly = buildPeriodHistorySharePayload(
+    comparison("MONTH"),
+    DEFAULT_HISTORY_SHARE_OPTIONS,
+    null,
+  );
+  expect(buildHistoryShareScene(weekly).heading).toBe("Haftanın Özeti");
+  expect(buildHistoryShareScene(monthly).heading).toBe("Ayın Özeti");
+  expect(buildHistoryShareScene(weekly).cards.every((card) => card.layout === "summary")).toBe(true);
+  expect(buildHistoryShareScene(monthly).cards.every((card) => card.layout === "summary")).toBe(true);
+});
+
+test("Share Visual V2 keeps comparison scenes distinct from normal period scenes", () => {
+  const weekly = buildHistoryShareScene(
+    buildComparisonHistorySharePayload(
+      comparison("WEEK"),
+      DEFAULT_HISTORY_SHARE_OPTIONS,
+      null,
+    ),
+  );
+  const monthly = buildHistoryShareScene(
+    buildComparisonHistorySharePayload(
+      comparison("MONTH"),
+      DEFAULT_HISTORY_SHARE_OPTIONS,
+      null,
+    ),
+  );
+
+  expect(weekly.heading).toBe("Haftalık Karşılaştırma");
+  expect(monthly.heading).toBe("Aylık Karşılaştırma");
+  expect(weekly.cards.every((card) => card.layout === "comparison")).toBe(true);
+  expect(monthly.cards.every((card) => card.layout === "comparison")).toBe(true);
+  expect(weekly.cards[0]).toMatchObject({
+    currentLabel: "Bu hafta",
+    previousLabel: "Geçen hafta",
+  });
+  expect(monthly.cards[0]).toMatchObject({
+    currentLabel: "Bu ay",
+    previousLabel: "Geçen ay",
+  });
+});
+
+test("visual scene is built only from the privacy-filtered immutable payload", () => {
+  const source = comparison("WEEK") as HistoryComparisonResponse & {
+    fullName?: string;
+    email?: string;
+    phone?: string;
+    internalId?: string;
+  };
+  source.fullName = "PII_SENTINEL_NAME";
+  source.email = "pii@example.com";
+  source.phone = "+900000000000";
+  source.internalId = "PII_INTERNAL_ID";
+
+  const payload = buildComparisonHistorySharePayload(
+    source,
+    DEFAULT_HISTORY_SHARE_OPTIONS,
+    insight("WEEK", "AI_SENTINEL"),
+  );
+  const scene = buildHistoryShareScene(payload);
+  const serialized = JSON.stringify(scene);
+
+  expect(Object.isFrozen(payload)).toBe(true);
+  expect(Object.isFrozen(scene)).toBe(true);
+  expect(serialized).not.toContain("PII_SENTINEL_NAME");
+  expect(serialized).not.toContain("pii@example.com");
+  expect(serialized).not.toContain("+900000000000");
+  expect(serialized).not.toContain("PII_INTERNAL_ID");
+  expect(serialized).not.toContain("AI_SENTINEL");
+  expect(scene.cards.map((card) => card.tone)).toEqual([
+    "nutrition",
+    "protein",
+    "water",
+    "activity",
+  ]);
+});
+
+test("long optional AI content is visually bounded while text share keeps the permitted full text", () => {
+  const fullAi = "Uzun Türkçe değerlendirme metni ".repeat(80).trim();
+  const payload = buildComparisonHistorySharePayload(
+    comparison("MONTH"),
+    { ...DEFAULT_HISTORY_SHARE_OPTIONS, includeSleep: true, includeWeight: true, includeAiInsight: true },
+    insight("MONTH", fullAi),
+  );
+  const scene = buildHistoryShareScene(payload);
+  const text = historyPayloadText(payload);
+
+  expect(scene.density).toBe("dense");
+  expect(scene.aiInsight?.endsWith("…")).toBe(true);
+  expect((scene.aiInsight?.length ?? 0) < fullAi.length).toBe(true);
+  expect(text).toContain(fullAi);
+});
+
+test("sparse share content distributes unused vertical space symmetrically", () => {
+  const spacing = distributeVerticalSpace(1200, [280, 280], 18);
+  expect(spacing.before).toBeGreaterThan(18);
+  expect(spacing.before).toBe(spacing.between);
+  expect(spacing.before).toBe(spacing.after);
+  expect(spacing.before * 3 + 560).toBeCloseTo(1200, 5);
 });

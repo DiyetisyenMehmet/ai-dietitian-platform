@@ -276,7 +276,7 @@ export function buildDailyHistorySharePayload(
   return freezePayload({
     kind: "normal",
     scope: "DAY",
-    title: "Diewish • Gün Özeti",
+    title: "Diewish • Günün Özeti",
     periodLabel: formatDateOnly(history.date),
     comparisonLabel: null,
     visualCards,
