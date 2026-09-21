@@ -78,11 +78,10 @@ jobs:
 
       - name: Changed History backend Prettier
         working-directory: backend
-        run: >-
-          npx prettier --check
-          src/modules/history/history-ai-text.ts
-          src/modules/history/history-ai.service.ts
-          src/modules/history/history-ai.test.ts
+        run: |
+          npx prettier --write             src/modules/history/history-ai-text.ts             src/modules/history/history-ai.service.ts             src/modules/history/history-ai.test.ts
+          git diff -- src/modules/history/history-ai-text.ts src/modules/history/history-ai.service.ts src/modules/history/history-ai.test.ts
+          git diff --quiet -- src/modules/history/history-ai-text.ts src/modules/history/history-ai.service.ts src/modules/history/history-ai.test.ts
 
       - name: Full frontend Prettier baseline audit
         continue-on-error: true
