@@ -361,6 +361,7 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await expect(page.getByText("Takvim", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Bugün" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Dün" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Karşılaştır" })).toBeVisible();
   await expect(page.getByText("650 kcal", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Toplam kalori", { exact: true })).toBeVisible();
   await expect(page.getByText("Aktivite süresi", { exact: true })).toBeVisible();
@@ -482,6 +483,23 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await expect(page.getByText("7 sa 30 dk", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Karşılaştırma", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Geçen hafta", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Önceki dönem" }).click();
+  const selectedWeeklyDate = (await page.getByTestId("history-selected-date").textContent()) || "";
+  await page.getByRole("button", { name: "Karşılaştır" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Karşılaştırma" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Haftalık karşılaştırma" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(page.getByLabel("Dönem karşılaştırması")).toBeVisible();
+  await expect(page.getByTestId("history-selected-date")).toHaveText(selectedWeeklyDate);
+  await page.getByRole("button", { name: "Önceki dönem" }).click();
+  await expect(page.getByTestId("history-selected-date")).not.toHaveText(selectedWeeklyDate);
+  await expect(page.getByLabel("Dönem karşılaştırması")).toBeVisible();
+  await page.getByRole("button", { name: "Normal geçmişe dön" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Geçmişim" })).toBeVisible();
+  await expect(page.getByText("Haftanın Özeti", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("history-selected-date")).toHaveText(selectedWeeklyDate);
   await page.evaluate(() => {
     window.__nativeHistoryVisual = null;
     window.DiewishShare = {
@@ -552,6 +570,18 @@ test("History daily/period UI keeps data visible when AI fails and share default
     ),
   ).toBe(true);
 
+  const selectedMonthlyDate = (await page.getByTestId("history-selected-date").textContent()) || "";
+  await page.getByRole("button", { name: "Karşılaştır" }).click();
+  await expect(page.getByRole("button", { name: "Aylık karşılaştırma" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(page.getByLabel("Dönem karşılaştırması")).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole("heading", { level: 1, name: "Geçmişim" })).toBeVisible();
+  await expect(page.getByText("Ayın Özeti", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("history-selected-date")).toHaveText(selectedMonthlyDate);
+
   await page.evaluate(() => document.documentElement.classList.add("dark"));
   expect(await page.evaluate(() => document.documentElement.classList.contains("dark"))).toBe(true);
   await expect(page.getByText("Geçmişim", { exact: true })).toBeVisible();
@@ -564,4 +594,14 @@ test("History daily/period UI keeps data visible when AI fails and share default
     ),
   ).toBe(true);
   await dialog.getByRole("button", { name: "Kapat" }).click();
+
+  await page.getByRole("button", { name: "Günlük" }).click();
+  await expect(page.getByText("Günün Özeti", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Karşılaştır" }).click();
+  await expect(page.getByRole("button", { name: "Haftalık karşılaştırma" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await page.getByRole("button", { name: "Normal geçmişe dön" }).click();
+  await expect(page.getByText("Günün Özeti", { exact: true })).toBeVisible();
 });
