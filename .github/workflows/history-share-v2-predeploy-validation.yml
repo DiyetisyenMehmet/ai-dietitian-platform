@@ -91,13 +91,10 @@ jobs:
 
       - name: Changed History frontend Prettier
         working-directory: frontend
-        run: >-
-          npx prettier --check
-          e2e/history-share-parity.spec.ts
-          src/application/history/history-share.ts
-          src/presentation/components/history/history-share-card.ts
-          src/presentation/components/history/history-share-dialog.tsx
-          src/presentation/components/history/history-share-scene.ts
+        run: |
+          npx prettier --write             e2e/history-share-parity.spec.ts             src/application/history/history-share.ts             src/presentation/components/history/history-share-card.ts             src/presentation/components/history/history-share-dialog.tsx             src/presentation/components/history/history-share-scene.ts
+          git diff -- e2e/history-share-parity.spec.ts src/application/history/history-share.ts src/presentation/components/history/history-share-card.ts src/presentation/components/history/history-share-dialog.tsx src/presentation/components/history/history-share-scene.ts
+          git diff --quiet -- e2e/history-share-parity.spec.ts src/application/history/history-share.ts src/presentation/components/history/history-share-card.ts src/presentation/components/history/history-share-dialog.tsx src/presentation/components/history/history-share-scene.ts
 
       - name: Diff check
         run: git diff --check 212a740d2ae216f47675d94d8df150e77e1ab090...origin/feature/history-share-v2
