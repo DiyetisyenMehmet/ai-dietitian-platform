@@ -98,7 +98,26 @@ test("empty successful day stays NO_RECORD instead of becoming zero", () => {
   assert.equal(history.activity.totalActiveMinutes.state, "NO_RECORD");
   assert.equal(history.sleep.totalDurationMinutes.state, "NO_RECORD");
   assert.equal(history.weight.measurement, null);
+  assert.equal(history.water.currentGoalMl.state, "UNKNOWN");
+  assert.equal(history.water.historicalGoalComparisonAvailable, false);
   assert.equal(history.meta.partialResponse, false);
+});
+
+test("today uses the owner's authoritative water goal without backfilling past days", () => {
+  const history = buildDailyHistory(
+    {
+      date: "2026-09-10",
+      timezone: "Europe/Istanbul",
+      fromUtc: new Date("2026-09-09T21:00:00.000Z"),
+      toUtcExclusive: new Date("2026-09-10T21:00:00.000Z"),
+      isToday: true,
+      generatedAt: BASE,
+    },
+    emptySnapshot(),
+  );
+
+  assert.deepEqual(history.water.currentGoalMl, { state: "KNOWN_VALUE", value: 2500 });
+  assert.equal(history.water.historicalGoalComparisonAvailable, true);
 });
 
 test("bare meal check-in records occurrence without manufacturing nutrition", () => {

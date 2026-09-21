@@ -1,4 +1,5 @@
 import * as React from "react";
+import Link from "next/link";
 import {
   Activity,
   CalendarDays,
@@ -27,6 +28,7 @@ import {
   weightComparisonPresentation,
   type ComparisonValueFormat,
 } from "@/application/history/history-comparison-format";
+import { dailyHistoryMetricRoute } from "@/application/history/history-navigation";
 import { cn } from "@/shared/lib/utils";
 
 type Tone = "nutrition" | "protein" | "water" | "activity" | "sleep" | "weight";
@@ -135,21 +137,26 @@ function MetricCard({
   helper,
   icon: Icon,
   tone,
+  href,
+  ariaLabel,
 }: {
   label: string;
   value: string;
   helper?: string;
   icon: LucideIcon;
   tone: Tone;
+  href?: string;
+  ariaLabel?: string;
 }) {
   const palette = CARD_TONE[tone];
-  return (
-    <article
-      className={cn(
-        "flex min-h-[82px] min-w-0 items-center gap-2 rounded-[19px] border px-2.5 py-2.5 shadow-[0_1px_2px_rgba(15,23,42,0.025)] sm:px-3",
-        palette.card,
-      )}
-    >
+  const className = cn(
+    "flex min-h-[82px] min-w-0 items-center gap-2 rounded-[19px] border px-2.5 py-2.5 shadow-[0_1px_2px_rgba(15,23,42,0.025)] sm:px-3",
+    href &&
+      "cursor-pointer transition-[transform,box-shadow,border-color] hover:border-foreground/15 hover:shadow-sm active:scale-[0.985] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60 focus-visible:ring-offset-2",
+    palette.card,
+  );
+  const content = (
+    <>
       <span
         className={cn(
           "flex size-10 shrink-0 items-center justify-center rounded-full sm:size-11",
@@ -162,16 +169,26 @@ function MetricCard({
         <p className="text-[11px] font-medium leading-tight text-foreground/80 sm:text-xs">
           {label}
         </p>
-        <p className="mt-1 break-words text-[16px] font-extrabold leading-[1.08] tracking-[-0.025em] sm:text-[18px]">
+        <p className="mt-1 break-normal text-[15px] font-extrabold leading-[1.12] tracking-[-0.025em] [hyphens:none] sm:text-[18px]">
           {value}
         </p>
         {helper && <p className="mt-1 text-[10px] text-muted-foreground">{helper}</p>}
       </div>
-      <ChevronRight
-        className="size-4 shrink-0 text-slate-500 dark:text-slate-400"
-        aria-hidden="true"
-      />
-    </article>
+      {href && (
+        <ChevronRight
+          className="size-4 shrink-0 text-slate-500 dark:text-slate-400"
+          aria-hidden="true"
+        />
+      )}
+    </>
+  );
+
+  return href ? (
+    <Link href={href} aria-label={ariaLabel ?? `${label} detayını aç`} className={className}>
+      {content}
+    </Link>
+  ) : (
+    <article className={className}>{content}</article>
   );
 }
 
@@ -196,11 +213,19 @@ export function DailyHistoryOverview({ history }: { history: DailyHistoryRespons
 
   if (empty) {
     return (
-      <EmptyState
-        icon={CalendarDays}
-        title="Bu gün için henüz kayıt bulunmuyor"
-        description="Beslenme, su, hareket, uyku veya kilo kaydı eklediğinde günün özeti burada oluşur."
-      />
+      <div className="space-y-5">
+        <EmptyState
+          icon={CalendarDays}
+          title="Bu gün için henüz kayıt bulunmuyor"
+          description="Beslenme, su, hareket, uyku veya kilo kaydı eklediğinde günün özeti burada oluşur."
+        />
+        <section>
+          <SectionHeading title="Öğünler" />
+          <p className="rounded-[18px] border border-dashed border-border/80 bg-muted/25 px-3.5 py-3 text-[12px] text-muted-foreground">
+            Bu gün için öğün kaydı bulunmuyor.
+          </p>
+        </section>
+      </div>
     );
   }
 
@@ -239,6 +264,8 @@ export function DailyHistoryOverview({ history }: { history: DailyHistoryRespons
             value={observedText(history.nutrition.totals.calories, " kcal")}
             icon={Flame}
             tone="nutrition"
+            href={dailyHistoryMetricRoute(history, "calories") ?? undefined}
+            ariaLabel="Toplam kalori için beslenme kayıtlarını aç"
           />
           <MetricCard
             label="Protein"
@@ -250,49 +277,64 @@ export function DailyHistoryOverview({ history }: { history: DailyHistoryRespons
             )}
             icon={UtensilsCrossed}
             tone="protein"
+            href={dailyHistoryMetricRoute(history, "protein") ?? undefined}
+            ariaLabel="Protein için beslenme kayıtlarını aç"
           />
           <MetricCard
             label="Su"
             value={waterText(history.water.totalMl)}
             icon={Droplets}
             tone="water"
+            href={dailyHistoryMetricRoute(history, "water") ?? undefined}
+            ariaLabel="Su takip ekranını aç"
           />
           <MetricCard
             label="Aktivite süresi"
             value={observedDuration(history.activity.totalActiveMinutes)}
             icon={Activity}
             tone="activity"
+            href={dailyHistoryMetricRoute(history, "activity") ?? undefined}
+            ariaLabel="Aktivite kayıtlarını aç"
           />
           <MetricCard
             label="Uyku"
             value={observedDuration(history.sleep.totalDurationMinutes, "Uyku kaydı yok")}
             icon={Moon}
             tone="sleep"
+            href={dailyHistoryMetricRoute(history, "sleep") ?? undefined}
+            ariaLabel="Uyku kayıtlarını aç"
           />
-          <MetricCard label="Kilo" value={weight} icon={Scale} tone="weight" />
+          <MetricCard
+            label="Kilo"
+            value={weight}
+            icon={Scale}
+            tone="weight"
+            href={dailyHistoryMetricRoute(history, "weight") ?? undefined}
+            ariaLabel="Kilo kayıtlarını aç"
+          />
         </div>
       </section>
 
-      {history.nutrition.meals.length > 0 && (
-        <section>
-          <SectionHeading
-            title="Öğünler"
-            action={
-              history.nutrition.meals.length > 3 ? (
-                <button
-                  type="button"
-                  className="flex items-center text-xs font-medium text-slate-500 hover:text-primary dark:text-slate-400"
-                  onClick={() => setShowAllMeals((value) => !value)}
-                >
-                  {showAllMeals ? "Daha az" : "Tümünü Gör"}
-                  <ChevronRight
-                    className={cn("size-4 transition-transform", showAllMeals && "rotate-90")}
-                    aria-hidden="true"
-                  />
-                </button>
-              ) : null
-            }
-          />
+      <section>
+        <SectionHeading
+          title="Öğünler"
+          action={
+            history.nutrition.meals.length > 3 ? (
+              <button
+                type="button"
+                className="flex items-center text-xs font-medium text-slate-500 hover:text-primary dark:text-slate-400"
+                onClick={() => setShowAllMeals((value) => !value)}
+              >
+                {showAllMeals ? "Daha az" : "Tümünü Gör"}
+                <ChevronRight
+                  className={cn("size-4 transition-transform", showAllMeals && "rotate-90")}
+                  aria-hidden="true"
+                />
+              </button>
+            ) : null
+          }
+        />
+        {history.nutrition.meals.length > 0 ? (
           <div className="space-y-2">
             {visibleMeals.map((meal) => {
               const first = meal.items[0];
@@ -330,13 +372,16 @@ export function DailyHistoryOverview({ history }: { history: DailyHistoryRespons
                       ? `${numberText(meal.totals.calories.value)} kcal`
                       : "Besin değeri yok"}
                   </p>
-                  <ChevronRight className="size-4 shrink-0 text-slate-500" aria-hidden="true" />
                 </article>
               );
             })}
           </div>
-        </section>
-      )}
+        ) : (
+          <p className="rounded-[18px] border border-dashed border-border/80 bg-muted/25 px-3.5 py-3 text-[12px] text-muted-foreground">
+            Bu gün için öğün kaydı bulunmuyor.
+          </p>
+        )}
+      </section>
 
       {history.timeline.length > 0 && (
         <section>
@@ -358,8 +403,8 @@ export function DailyHistoryOverview({ history }: { history: DailyHistoryRespons
               ) : null
             }
           />
-          <div className="overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <ol className="relative flex w-max min-w-full justify-between gap-1 px-0.5">
+          <div className="max-w-full touch-pan-x snap-x snap-proximity overflow-x-auto overscroll-x-contain pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <ol className="relative flex w-max min-w-full justify-between gap-2 pl-1 pr-4">
               {visibleTimeline.length > 1 && (
                 <span
                   className="absolute left-[43px] right-[43px] top-5 border-t-2 border-dotted border-slate-200 dark:border-slate-700"
@@ -400,7 +445,10 @@ export function DailyHistoryOverview({ history }: { history: DailyHistoryRespons
                 const Icon = row[2] as LucideIcon;
                 const palette = CARD_TONE[row[3] as Tone];
                 return (
-                  <li key={event.id} className="relative z-10 w-[86px] shrink-0 text-center">
+                  <li
+                    key={event.id}
+                    className="relative z-10 w-[82px] shrink-0 snap-start text-center"
+                  >
                     <span
                       className={cn(
                         "mx-auto flex size-10 items-center justify-center rounded-full ring-4 ring-background",

@@ -217,10 +217,13 @@ export function HistoryShareDialog({ open, onClose, buildPayload }: HistoryShare
         <div className="mt-4 grid grid-cols-2 gap-2 rounded-2xl bg-muted/70 p-1">
           <button
             type="button"
+            aria-pressed={mode === "visual"}
             onClick={() => setMode("visual")}
             className={cn(
-              "flex min-h-11 items-center justify-center gap-2 rounded-xl px-3 text-sm font-semibold transition",
-              mode === "visual" ? "bg-background text-primary shadow-sm" : "text-muted-foreground",
+              "flex min-h-11 items-center justify-center gap-2 rounded-xl border px-3 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              mode === "visual"
+                ? "border-primary/35 bg-background text-foreground shadow-sm ring-1 ring-primary/10 dark:border-primary/50 dark:bg-card"
+                : "border-transparent text-muted-foreground hover:bg-background/55 hover:text-foreground",
             )}
           >
             <ImageIcon className="size-4" aria-hidden="true" />
@@ -228,10 +231,13 @@ export function HistoryShareDialog({ open, onClose, buildPayload }: HistoryShare
           </button>
           <button
             type="button"
+            aria-pressed={mode === "text"}
             onClick={() => setMode("text")}
             className={cn(
-              "flex min-h-11 items-center justify-center gap-2 rounded-xl px-3 text-sm font-semibold transition",
-              mode === "text" ? "bg-background text-primary shadow-sm" : "text-muted-foreground",
+              "flex min-h-11 items-center justify-center gap-2 rounded-xl border px-3 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              mode === "text"
+                ? "border-primary/35 bg-background text-foreground shadow-sm ring-1 ring-primary/10 dark:border-primary/50 dark:bg-card"
+                : "border-transparent text-muted-foreground hover:bg-background/55 hover:text-foreground",
             )}
           >
             <FileText className="size-4" aria-hidden="true" />

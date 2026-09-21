@@ -4,8 +4,12 @@ import test from "node:test";
 import {
   canonicalHistoryContext,
   createHistoryContextHash,
+  historyWaterGoalForInsight,
+  sanitizeHistoryInsightText,
   shouldBypassHistoryInsightCache,
 } from "./history-ai.service";
+import { DISCLAIMER } from "../blood-test-analysis/constants";
+import type { DailyHistoryResponse } from "./history.types";
 
 test("context hash is stable across object key insertion order", () => {
   const first = {
@@ -44,4 +48,37 @@ test("partial or unavailable source state bypasses persistent insight cache", ()
   assert.equal(shouldBypassHistoryInsightCache(true, false), true);
   assert.equal(shouldBypassHistoryInsightCache(false, true), true);
   assert.equal(shouldBypassHistoryInsightCache(false, false), false);
+});
+
+test("history insight removes the adapter's blood-test disclaimer at its boundary", () => {
+  const turkishHistoryText = "Bugünkü kayıtlarına göre su tüketimin düzenli ilerliyor.";
+  const sanitized = sanitizeHistoryInsightText(`${turkishHistoryText}\n\n${DISCLAIMER}`);
+
+  assert.equal(sanitized, turkishHistoryText);
+  assert.equal(sanitized.includes("Diewish provides educational"), false);
+  assert.equal(sanitized.includes("Blood-test values"), false);
+});
+
+function historyWithGoal(
+  currentGoalMl: DailyHistoryResponse["water"]["currentGoalMl"],
+  historicalGoalComparisonAvailable: boolean,
+): DailyHistoryResponse {
+  return {
+    water: { currentGoalMl, historicalGoalComparisonAvailable },
+  } as DailyHistoryResponse;
+}
+
+test("history AI receives only an authoritative available water goal", () => {
+  assert.deepEqual(
+    historyWaterGoalForInsight(historyWithGoal({ state: "KNOWN_VALUE", value: 2500 }, true)),
+    { state: "KNOWN_VALUE", value: 2500 },
+  );
+  assert.equal(
+    historyWaterGoalForInsight(historyWithGoal({ state: "UNKNOWN", value: null }, false)),
+    null,
+  );
+  assert.equal(
+    historyWaterGoalForInsight(historyWithGoal({ state: "KNOWN_VALUE", value: 500 }, false)),
+    null,
+  );
 });

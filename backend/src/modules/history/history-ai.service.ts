@@ -1,11 +1,8 @@
 import { createHash } from "node:crypto";
-import {
-  HistoryInsightScope,
-  HistoryInsightSource,
-  type Prisma,
-} from "@prisma/client";
+import { HistoryInsightScope, HistoryInsightSource, type Prisma } from "@prisma/client";
 
 import { logger } from "../../lib/logger";
+import { DISCLAIMER } from "../blood-test-analysis/constants";
 import { getAIAdapter } from "../blood-test-analysis/ai-adapter/ai-adapter.factory";
 import { historyComparisonService } from "./history-comparison";
 import { historyRepository } from "./history.repository";
@@ -18,7 +15,7 @@ import type {
   ObservedNumber,
 } from "./history.types";
 
-const CONTEXT_VERSION = "history-insight-v1";
+const CONTEXT_VERSION = "history-insight-v2";
 const MAX_INSIGHT_LENGTH = 2400;
 
 type InsightContext = DailyInsightContext | PeriodInsightContext;
@@ -110,9 +107,7 @@ function dailyContext(history: DailyHistoryResponse): DailyInsightContext {
     water: {
       status: history.water.status,
       totalMl: history.water.totalMl,
-      currentGoalMl: history.water.historicalGoalComparisonAvailable
-        ? history.water.currentGoalMl
-        : null,
+      currentGoalMl: historyWaterGoalForInsight(history),
     },
     activity: {
       status: history.activity.status,
@@ -132,6 +127,14 @@ function dailyContext(history: DailyHistoryResponse): DailyInsightContext {
       measurementKg: history.weight.measurement?.weightKg ?? null,
     },
   };
+}
+
+export function historyWaterGoalForInsight(history: DailyHistoryResponse): ObservedNumber | null {
+  const goal = history.water.currentGoalMl;
+  if (!history.water.historicalGoalComparisonAvailable) return null;
+  if (goal.state !== "KNOWN_ZERO" && goal.state !== "KNOWN_VALUE") return null;
+  if (goal.value === null || !Number.isFinite(goal.value) || goal.value <= 0) return null;
+  return goal;
 }
 
 function periodContext(
@@ -161,10 +164,18 @@ function comparisonPeriodKey(
   return `${scope}:${comparison.currentPeriod.localStartDate}`;
 }
 
+export function sanitizeHistoryInsightText(value: string): string {
+  const text = value.trim();
+  if (!text.endsWith(DISCLAIMER)) return text;
+  return text.slice(0, -DISCLAIMER.length).trim();
+}
+
 function parseCachedContent(value: unknown): { text: string } | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const text = (value as Record<string, unknown>).text;
-  return typeof text === "string" && text.trim() ? { text: text.trim() } : null;
+  if (typeof text !== "string") return null;
+  const sanitized = sanitizeHistoryInsightText(text);
+  return sanitized ? { text: sanitized } : null;
 }
 
 function hasDailyData(history: DailyHistoryResponse): boolean {
@@ -209,6 +220,8 @@ function promptFor(scope: HistoryInsightScopeName, context: InsightContext): str
     "YALNIZ verilen veriyi kullan. Olmayan veya UNAVAILABLE/NO_RECORD/UNKNOWN veriyi uydurma.",
     "PARTIAL veya LIMITED kayıt kapsamını açıkça belirt; kesin genelleme yapma.",
     "Tanı, tedavi, ilaç, doz veya kesin tıbbi sonuç verme.",
+    "İngilizce veya generic medikal disclaimer ekleme; blood-test/tahlil metni yazma.",
+    "Su hedefi yalnız currentGoalMl açıkça mevcutsa kullanılabilir. currentGoalMl null ise hedefi uydurma ve hedefin tamamlandığını söyleme.",
     "Kalori, kilo veya başka bir metriğin artmasını/azalmasını hedef bağlamı yokken otomatik iyi/kötü sayma.",
     "Kullanıcıyı suçlayan veya utandıran dil kullanma.",
     "En fazla 4 kısa cümle kullan.",
@@ -311,7 +324,7 @@ async function generateAndCache(input: {
         history: [],
         message: promptFor(input.scope, input.context),
       });
-      const text = output.reply.trim().slice(0, MAX_INSIGHT_LENGTH);
+      const text = sanitizeHistoryInsightText(output.reply).slice(0, MAX_INSIGHT_LENGTH).trim();
       if (!text) throw new Error("History AI returned an empty insight.");
 
       const stored = await historyRepository.upsertInsight({

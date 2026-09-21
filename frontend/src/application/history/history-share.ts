@@ -76,6 +76,32 @@ export const DEFAULT_HISTORY_SHARE_OPTIONS: HistoryShareOptions = {
   includeAiInsight: false,
 };
 
+export function hasDailyHistoryShareData(history: DailyHistoryResponse): boolean {
+  return history.timeline.length > 0;
+}
+
+function completenessHasRecords(
+  completeness: HistoryComparisonResponse["completeness"]["current"],
+): boolean {
+  return (
+    completeness.nutrition.recordedDays > 0 ||
+    completeness.water.recordedDays > 0 ||
+    completeness.activity.recordedDays > 0 ||
+    completeness.sleep.recordedDays > 0 ||
+    completeness.weight.measurementCount > 0
+  );
+}
+
+export function hasPeriodHistoryShareData(
+  comparison: HistoryComparisonResponse,
+  includePrevious = false,
+): boolean {
+  return (
+    completenessHasRecords(comparison.completeness.current) ||
+    (includePrevious && completenessHasRecords(comparison.completeness.previous))
+  );
+}
+
 function usable(observed: ObservedNumber): observed is ObservedNumber & { value: number } {
   return (
     observed.value !== null &&

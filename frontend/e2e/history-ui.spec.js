@@ -180,6 +180,27 @@ function dayHistory(date, timezone) {
         sourceId: "activity-ui",
         payload: { type: "WALKING", name: "Yürüyüş", durationMinutes: 30 },
       },
+      {
+        id: "activity:activity-ui-2",
+        type: "ACTIVITY",
+        timestamp: "2026-09-19T15:00:00.000Z",
+        sourceId: "activity-ui-2",
+        payload: { type: "WALKING", name: "Kısa yürüyüş", durationMinutes: 10 },
+      },
+      {
+        id: "activity:activity-ui-3",
+        type: "ACTIVITY",
+        timestamp: "2026-09-19T16:00:00.000Z",
+        sourceId: "activity-ui-3",
+        payload: { type: "WALKING", name: "Park yürüyüşü", durationMinutes: 15 },
+      },
+      {
+        id: "activity:activity-ui-4",
+        type: "ACTIVITY",
+        timestamp: "2026-09-19T17:00:00.000Z",
+        sourceId: "activity-ui-4",
+        payload: { type: "WALKING", name: "Son yürüyüş", durationMinutes: 20 },
+      },
     ],
     completeness: {
       nutrition: {
@@ -199,6 +220,41 @@ function dayHistory(date, timezone) {
       generatedAt: "2026-09-19T15:00:00.000Z",
     },
   };
+}
+
+function emptyDayHistory(date, timezone) {
+  const history = dayHistory(date, timezone);
+  history.nutrition.status = "NONE";
+  history.nutrition.meals = [];
+  history.nutrition.totals = {
+    calories: { state: "NO_RECORD", value: null },
+    proteinG: { state: "NO_RECORD", value: null },
+    carbsG: { state: "NO_RECORD", value: null },
+    fatG: { state: "NO_RECORD", value: null },
+  };
+  history.water.status = "NONE";
+  history.water.totalMl = { state: "NO_RECORD", value: null };
+  history.water.logs = [];
+  history.activity.status = "NONE";
+  history.activity.entries = [];
+  history.activity.totalActiveMinutes = { state: "NO_RECORD", value: null };
+  history.activity.totalDistanceKm = { state: "NO_RECORD", value: null };
+  history.activity.totalCaloriesBurned = { state: "NO_RECORD", value: null };
+  history.sleep.status = "NONE";
+  history.sleep.entries = [];
+  history.sleep.totalDurationMinutes = { state: "NO_RECORD", value: null };
+  history.sleep.averageQuality = { state: "NO_RECORD", value: null };
+  history.weight.status = "NONE";
+  history.weight.measurement = null;
+  history.timeline = [];
+  history.completeness.nutrition.status = "NONE";
+  history.completeness.nutrition.mealTypesRecorded = [];
+  history.completeness.nutrition.nutritionBearingEntries = 0;
+  history.completeness.water.status = "NONE";
+  history.completeness.activity.status = "NONE";
+  history.completeness.sleep.status = "NONE";
+  history.completeness.weight = { status: "NONE", measurementCount: 0 };
+  return history;
 }
 
 function comparison(periodType, referenceDate, timezone) {
@@ -289,6 +345,7 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await onboard(page);
 
   let insightCalls = 0;
+  let serveEmptyDay = false;
   await page.route("**/api/history/day**", async (route) => {
     const url = new URL(route.request().url());
     const date = url.searchParams.get("date") || "2026-09-19";
@@ -296,7 +353,11 @@ test("History daily/period UI keeps data visible when AI fails and share default
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(success({ history: dayHistory(date, timezone) })),
+      body: JSON.stringify(
+        success({
+          history: serveEmptyDay ? emptyDayHistory(date, timezone) : dayHistory(date, timezone),
+        }),
+      ),
     });
   });
 
@@ -368,11 +429,50 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await expect(page.getByText("Günlük Zaman Akışı", { exact: true })).toBeVisible();
   await expect(page.getByText("Kayıt yok", { exact: true }).first()).toBeVisible();
   await expect(page.getByRole("button", { name: "Sonraki dönem" })).toBeDisabled();
+  await expect(
+    page.getByRole("link", { name: "Toplam kalori için beslenme kayıtlarını aç" }),
+  ).toHaveAttribute("href", "/meals");
+  await expect(
+    page.getByRole("link", { name: "Protein için beslenme kayıtlarını aç" }),
+  ).toHaveAttribute("href", "/meals");
+  await expect(page.getByRole("link", { name: "Aktivite kayıtlarını aç" })).toHaveAttribute(
+    "href",
+    "/activity",
+  );
+  await expect(page.getByRole("link", { name: "Kilo kayıtlarını aç" })).toHaveAttribute(
+    "href",
+    "/progress",
+  );
+  await expect(page.getByRole("link", { name: "Su takip ekranını aç" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Uyku kayıtlarını aç" })).toHaveCount(0);
+
+  const dailySummary = page.locator("section").filter({ hasText: "Günün Özeti" }).first();
+  await expect(dailySummary.locator("svg.lucide-chevron-right")).toHaveCount(4);
+
+  await page.getByRole("button", { name: "Tümünü Gör" }).last().click();
+  const lastTimelineEvent = page.getByText("Son yürüyüş", { exact: true });
+  await lastTimelineEvent.scrollIntoViewIfNeeded();
+  await expect(lastTimelineEvent).toBeVisible();
+  expect(
+    await lastTimelineEvent.evaluate(
+      (element) => element.getBoundingClientRect().right <= document.documentElement.clientWidth,
+    ),
+  ).toBe(true);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+    ),
+  ).toBe(true);
 
   await expect(page.getByText(/AI unavailable for UI test/)).toBeVisible();
   await expect(page.getByText("650 kcal", { exact: true }).first()).toBeVisible();
   await page.getByRole("button", { name: "Tekrar dene" }).click();
   await expect(page.getByText("Test değerlendirmesi hazır.")).toBeVisible();
+  await expect(
+    page.getByText("Bu değerlendirme yalnızca kaydettiğin verilere dayanır."),
+  ).toBeVisible();
+  await expect(page.getByText(/Diewish provides educational/i)).toHaveCount(0);
+  await expect(page.getByText(/Blood-test values/i)).toHaveCount(0);
 
   await page.evaluate(() => {
     window.__historyShares = [];
@@ -394,6 +494,14 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Görsel olarak paylaş" })).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Yazı olarak paylaş" })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Görsel olarak paylaş" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(dialog.getByRole("button", { name: "Yazı olarak paylaş" })).toHaveAttribute(
+    "aria-pressed",
+    "false",
+  );
   await expect(dialog.getByText("Story • 1080×1920", { exact: true })).toBeVisible();
   await expect(dialog.getByRole("checkbox", { name: /Kalori ve makrolar/ })).toBeChecked();
   await expect(dialog.getByRole("checkbox", { name: /^Su/ })).toBeChecked();
@@ -413,6 +521,10 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await page.getByRole("button", { name: "Günü paylaş" }).click();
   dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
   await dialog.getByRole("button", { name: "Yazı olarak paylaş" }).click();
+  await expect(dialog.getByRole("button", { name: "Yazı olarak paylaş" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
   await expect(dialog.getByText("Yazı önizleme", { exact: true })).toBeVisible();
   await expect(dialog.locator("pre")).toContainText("650 kcal");
   await expect(dialog.locator("pre")).not.toContainText("Geçmiş test öğünü");
@@ -483,6 +595,8 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await expect(page.getByText("7 sa 30 dk", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Karşılaştırma", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Geçen hafta", { exact: true })).toHaveCount(0);
+  const weeklySummary = page.locator("section").filter({ hasText: "Haftanın Özeti" }).first();
+  await expect(weeklySummary.locator("svg.lucide-chevron-right")).toHaveCount(0);
   await page.getByRole("button", { name: "Önceki dönem" }).click();
   const selectedWeeklyDate = (await page.getByTestId("history-selected-date").textContent()) || "";
   await page.getByRole("button", { name: "Karşılaştır" }).click();
@@ -508,6 +622,7 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await expect(weeklyActivity.getByText("+20 dk", { exact: true })).toBeVisible();
   await expect(weeklyComparison.getByText("NaN", { exact: false })).toHaveCount(0);
   await expect(weeklyComparison.getByText("Infinity", { exact: false })).toHaveCount(0);
+  await expect(weeklyComparison.locator("svg.lucide-chevron-right")).toHaveCount(0);
   await page.evaluate(() => {
     window.__nativeHistoryVisual = null;
     window.DiewishShare = {
@@ -581,6 +696,8 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await expect(page.getByText("2/19 gün kayıt", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Karşılaştırma", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Geçen ay", { exact: true })).toHaveCount(0);
+  const monthlySummary = page.locator("section").filter({ hasText: "Ayın Özeti" }).first();
+  await expect(monthlySummary.locator("svg.lucide-chevron-right")).toHaveCount(0);
   await page.evaluate(() => {
     window.__nativeHistoryVisual = null;
     window.DiewishShare = {
@@ -632,6 +749,7 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await expect(monthlyCalories.getByText("Geçen ay", { exact: true })).toBeVisible();
   await expect(monthlyCalories.getByText("Fark", { exact: true })).toBeVisible();
   await expect(monthlyCalories.getByText("2/19 gün kayıt", { exact: true })).toBeVisible();
+  await expect(monthlyComparison.locator("svg.lucide-chevron-right")).toHaveCount(0);
   await page.getByRole("button", { name: "Karşılaştırmayı paylaş" }).click();
   dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
   await expect(dialog.getByText("Bu ay", { exact: true }).first()).toBeVisible();
@@ -685,4 +803,16 @@ test("History daily/period UI keeps data visible when AI fails and share default
   ).toBe(true);
   await page.getByRole("button", { name: "Normal geçmişe dön" }).click();
   await expect(page.getByText("Günün Özeti", { exact: true })).toBeVisible();
+
+  serveEmptyDay = true;
+  await page.getByRole("button", { name: "Dün" }).click();
+  await expect(page.getByText("Bu gün için henüz kayıt bulunmuyor", { exact: true })).toBeVisible();
+  await expect(page.getByText("Öğünler", { exact: true })).toBeVisible();
+  await expect(page.getByText("Bu gün için öğün kaydı bulunmuyor.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Günü paylaş" })).toBeDisabled();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+    ),
+  ).toBe(true);
 });

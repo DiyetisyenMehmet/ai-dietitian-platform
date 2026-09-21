@@ -17,6 +17,8 @@ import {
   buildComparisonHistorySharePayload,
   buildDailyHistorySharePayload,
   buildPeriodHistorySharePayload,
+  hasDailyHistoryShareData,
+  hasPeriodHistoryShareData,
   type HistoryShareOptions,
 } from "@/application/history/history-share";
 import {
@@ -240,6 +242,13 @@ export function HistoryView() {
 
   const keyMatches = expectedKey !== null && state.requestKey === expectedKey;
   const dataReady = keyMatches && state.dataStatus === "success";
+  const shareAvailable =
+    dataReady &&
+    (viewMode === "COMPARISON"
+      ? Boolean(state.comparison && hasPeriodHistoryShareData(state.comparison, true))
+      : normalMode === "DAY"
+        ? Boolean(state.daily && hasDailyHistoryShareData(state.daily))
+        : Boolean(state.comparison && hasPeriodHistoryShareData(state.comparison)));
   const activeComparison = dataReady ? state.comparison : null;
   const comparisonPeriodText = activeComparison
     ? formatCompactPeriod(
@@ -494,7 +503,7 @@ export function HistoryView() {
               <Button
                 type="button"
                 className="min-h-[52px] w-full rounded-full border-0 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-400 text-sm font-bold text-white shadow-[0_8px_20px_rgba(20,184,166,0.18)] hover:from-emerald-600 hover:via-teal-600 hover:to-cyan-500"
-                disabled={!dataReady}
+                disabled={!shareAvailable}
                 onClick={() => setShareOpen(true)}
               >
                 <Share2 aria-hidden="true" />
@@ -572,6 +581,9 @@ export function HistoryView() {
                     <p className="relative break-words text-[12px] leading-5 text-foreground/75 sm:text-sm">
                       {state.insight?.content.text}
                     </p>
+                    <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground sm:text-[11px]">
+                      Bu değerlendirme yalnızca kaydettiğin verilere dayanır.
+                    </p>
                     {state.insight?.generatedBy === "FALLBACK" && (
                       <p className="mt-2 text-[11px] text-muted-foreground">
                         Güvenli temel değerlendirme gösteriliyor.
@@ -584,7 +596,7 @@ export function HistoryView() {
               <Button
                 type="button"
                 className="min-h-[54px] w-full rounded-full border-0 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-400 text-sm font-bold text-white shadow-[0_8px_20px_rgba(20,184,166,0.18)] hover:from-emerald-600 hover:via-teal-600 hover:to-cyan-500"
-                disabled={!dataReady}
+                disabled={!shareAvailable}
                 onClick={() => setShareOpen(true)}
               >
                 <Share2 aria-hidden="true" />
