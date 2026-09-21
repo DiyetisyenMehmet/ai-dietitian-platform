@@ -89,7 +89,6 @@ test("history AI receives only an authoritative available water goal", () => {
   );
 });
 
-
 test("history AI normalizes HTML entities and Turkish Unicode exactly once", () => {
   assert.equal(
     normalizeHistoryInsightText(
@@ -97,7 +96,10 @@ test("history AI normalizes HTML entities and Turkish Unicode exactly once", () 
     ),
     "Bugünkü kayıtlarına göre su & aktivite dengeli. 💚",
   );
-  assert.equal(normalizeHistoryInsightText("&quot;İyi&quot; &#39;ilerleme&#39;"), '"İyi" \'ilerleme\'');
+  assert.equal(
+    normalizeHistoryInsightText("&quot;İyi&quot; &#39;ilerleme&#39;"),
+    "\"İyi\" 'ilerleme'",
+  );
   assert.equal(decodeHtmlCharacterReferencesOnce("&amp;lt;script&amp;gt;"), "&lt;script&gt;");
 });
 
@@ -106,7 +108,10 @@ test("history AI repairs a single valid UTF-8/Windows-1252 mojibake layer", () =
     repairUtf8MojibakeOnce("BugÃ¼nkÃ¼ kayÄ±tlarÄ±na gÃ¶re ilerleme iyi."),
     "Bugünkü kayıtlarına göre ilerleme iyi.",
   );
-  assert.equal(repairUtf8MojibakeOnce("Normal Türkçe metin değişmez."), "Normal Türkçe metin değişmez.");
+  assert.equal(
+    repairUtf8MojibakeOnce("Normal Türkçe metin değişmez."),
+    "Normal Türkçe metin değişmez.",
+  );
 });
 
 test("history AI keeps decoded markup as plain text data and preserves line breaks", () => {
@@ -122,7 +127,6 @@ test("history insight sanitizer removes the disclaimer after normalization", () 
   const sanitized = sanitizeHistoryInsightText(`${encoded}\n\n${DISCLAIMER}`);
   assert.equal(sanitized, "Bugünkü kayıtlarına göre iyi ilerliyor.");
 });
-
 
 test("history insight cache version invalidates pre-normalization cache hashes", () => {
   assert.equal(HISTORY_INSIGHT_CONTEXT_VERSION, "history-insight-v3");
