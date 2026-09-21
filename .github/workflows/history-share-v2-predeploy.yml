@@ -1,0 +1,125 @@
+name: History Share V2 Pre-Deploy Validation
+
+on:
+  push:
+    branches:
+      - validation/history-share-v2-predeploy
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DATABASE_URL: postgresql://diewish:diewish@127.0.0.1:5432/diewish_validation?schema=public
+      NEXT_TELEMETRY_DISABLED: 1
+      NEXT_PUBLIC_API_BASE_URL: http://127.0.0.1:4000/api
+      NEXT_PUBLIC_SITE_URL: http://127.0.0.1:3000
+      E2E_WEB_BASE_URL: http://127.0.0.1:3000
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Confirm validation source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor 212a740d2ae216f47675d94d8df150e77e1ab090 928c6d477ab0e2a4ac519d279617fbdf0c62194b
+          test "$(git rev-parse 928c6d477ab0e2a4ac519d279617fbdf0c62194b^{tree})" = "67a1c04a2664e2b7ad7ad5b29124b0f8a4119c3b"
+          test "$(git rev-list --count 212a740d2ae216f47675d94d8df150e77e1ab090..928c6d477ab0e2a4ac519d279617fbdf0c62194b)" = "5"
+          test "$(git rev-list --count 928c6d477ab0e2a4ac519d279617fbdf0c62194b..212a740d2ae216f47675d94d8df150e77e1ab090)" = "0"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Backend install and Prisma client
+        working-directory: backend
+        run: |
+          npm ci
+          npx prisma generate
+
+      - name: Backend type-check
+        working-directory: backend
+        run: npm run type-check
+
+      - name: History AI and domain targeted tests
+        working-directory: backend
+        run: |
+          node --import tsx --test             src/modules/history/history-ai.test.ts             src/modules/history/history-comparison.test.ts             src/modules/history/history-normalization.test.ts             src/modules/history/history-time.test.ts
+
+      - name: Frontend install
+        working-directory: frontend
+        run: npm ci
+
+      - name: Frontend type-check
+        working-directory: frontend
+        run: npm run type-check
+
+      - name: History share comparison privacy tests
+        working-directory: frontend
+        run: |
+          npx playwright test             e2e/history-data.spec.ts             e2e/history-comparison-presentation.spec.ts             e2e/history-final-ux.spec.ts             e2e/history-share-parity.spec.ts             --workers=1 --reporter=line
+
+      - name: Prettier check
+        shell: bash
+        run: |
+          (cd backend && npm run format:check)
+          (cd frontend && npm run format:check)
+
+      - name: Target diff whitespace check
+        run: git diff --check 212a740d2ae216f47675d94d8df150e77e1ab090..928c6d477ab0e2a4ac519d279617fbdf0c62194b
+
+      - name: Install Chromium
+        working-directory: frontend
+        run: |
+          sudo find /etc/apt/sources.list.d -maxdepth 1 -type f -iname '*google*chrome*' -delete
+          npx playwright install --with-deps chromium
+
+      - name: Start validation frontend
+        working-directory: frontend
+        run: |
+          npm run dev -- -H 127.0.0.1 -p 3000 > /tmp/diewish-history-share-v2-frontend.log 2>&1 &
+          echo $! > /tmp/diewish-history-share-v2-frontend.pid
+
+      - name: Wait for validation frontend
+        run: |
+          set -euo pipefail
+          for attempt in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:3000/__history-share-validation/daily >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/diewish-history-share-v2-frontend.log
+          exit 1
+
+      - name: Browser-backed Share V2 render and PNG validation
+        working-directory: frontend
+        run: npx playwright test e2e/history-share-v2-predeploy.spec.ts --workers=1 --reporter=line
+
+      - name: Upload visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: history-share-v2-visual-evidence
+          path: frontend/e2e-artifacts/history-share-v2/
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Print frontend log on failure
+        if: failure()
+        run: cat /tmp/diewish-history-share-v2-frontend.log || true
+
+      - name: Stop validation frontend
+        if: always()
+        run: |
+          if [ -f /tmp/diewish-history-share-v2-frontend.pid ]; then
+            kill "$(cat /tmp/diewish-history-share-v2-frontend.pid)" || true
+          fi
