@@ -60,6 +60,32 @@ function formatDateOnly(date: string, options?: Intl.DateTimeFormatOptions): str
   }).format(new Date(`${date}T12:00:00.000Z`));
 }
 
+function formatCompactPeriod(start: string, end: string): string {
+  const startDate = new Date(`${start}T12:00:00.000Z`);
+  const endDate = new Date(`${end}T12:00:00.000Z`);
+  const sameMonth =
+    startDate.getUTCFullYear() === endDate.getUTCFullYear() &&
+    startDate.getUTCMonth() === endDate.getUTCMonth();
+
+  if (sameMonth) {
+    const endLabel = new Intl.DateTimeFormat("tr-TR", {
+      timeZone: "UTC",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    }).format(endDate);
+    return `${startDate.getUTCDate()} – ${endLabel}`;
+  }
+
+  const formatter = new Intl.DateTimeFormat("tr-TR", {
+    timeZone: "UTC",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+  return `${formatter.format(startDate)} – ${formatter.format(endDate)}`;
+}
+
 function LoadingHistory() {
   return (
     <div className="space-y-4" aria-label="Geçmiş yükleniyor">
@@ -210,6 +236,15 @@ export function HistoryView() {
 
   const keyMatches = expectedKey !== null && state.requestKey === expectedKey;
   const dataReady = keyMatches && state.dataStatus === "success";
+  const activeComparison = dataReady ? state.comparison : null;
+  const comparisonPeriodText = activeComparison
+    ? formatCompactPeriod(
+        activeComparison.currentPeriod.localStartDate,
+        activeComparison.currentPeriod.localEndDateInclusive,
+      )
+    : activeDate
+      ? formatDateOnly(activeDate)
+      : "Dönem hazırlanıyor";
 
   return (
     <div className="space-y-4 pb-2">
@@ -244,7 +279,7 @@ export function HistoryView() {
         </>
       ) : (
         <>
-          <header className="flex items-center gap-2 px-0.5">
+          <header className="flex min-h-9 items-center gap-1 px-0.5">
             <Button
               type="button"
               size="icon"
@@ -255,10 +290,7 @@ export function HistoryView() {
             >
               <ChevronLeft className="size-5" aria-hidden="true" />
             </Button>
-            <div>
-              <h1 className="text-2xl font-extrabold tracking-[-0.035em]">Karşılaştırma</h1>
-              <p className="text-[11px] text-muted-foreground">Dönemlerini yan yana incele</p>
-            </div>
+            <p className="text-sm font-semibold text-muted-foreground">Geçmişim</p>
           </header>
 
           <div className="grid grid-cols-2 gap-1 rounded-full border border-border/60 bg-muted/35 p-1">
@@ -280,97 +312,140 @@ export function HistoryView() {
               </button>
             ))}
           </div>
+
+          <div className="flex items-end justify-between gap-2 px-0.5">
+            <div className="min-w-0">
+              <h1 className="truncate text-[17px] font-extrabold tracking-[-0.045em] sm:text-2xl">
+                {comparisonMode === "WEEK" ? "Haftalık" : "Aylık"} Karşılaştırma
+              </h1>
+              <p className="mt-0.5 truncate text-[11px] text-muted-foreground sm:text-xs">
+                {comparisonMode === "WEEK" ? "Bu hafta / Geçen hafta" : "Bu ay / Geçen ay"}
+              </p>
+            </div>
+
+            <div className="flex h-10 w-[174px] shrink-0 items-center rounded-[14px] border border-border/70 bg-card px-0.5 shadow-[0_1px_2px_rgba(15,23,42,0.025)]">
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="size-7 shrink-0"
+                onClick={() => move(-1)}
+                aria-label="Önceki dönem"
+              >
+                <ChevronLeft className="size-4" aria-hidden="true" />
+              </Button>
+              <label className="relative flex min-w-0 flex-1 cursor-pointer items-center justify-center gap-1 text-[10px] font-semibold">
+                <CalendarDays className="size-4 shrink-0 text-emerald-500" aria-hidden="true" />
+                <span className="truncate" data-testid="history-selected-date">
+                  {comparisonPeriodText}
+                </span>
+                <Input
+                  type="date"
+                  aria-label="Karşılaştırma dönemini seç"
+                  max={today || undefined}
+                  value={activeDate}
+                  onChange={(event) => setComparisonDate(event.target.value)}
+                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                />
+              </label>
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="size-7 shrink-0"
+                onClick={() => move(1)}
+                disabled={!canMoveNext}
+                aria-label="Sonraki dönem"
+              >
+                <ChevronRight className="size-4" aria-hidden="true" />
+              </Button>
+            </div>
+          </div>
         </>
       )}
 
-      <section className="space-y-2.5">
-        <div className="grid grid-cols-[minmax(0,1fr)_92px] gap-2">
-          <div className="flex min-h-[54px] items-center rounded-[17px] border border-border/70 bg-card px-1.5 shadow-[0_1px_2px_rgba(15,23,42,0.025)]">
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              className="size-9 shrink-0"
-              onClick={() => move(-1)}
-              aria-label="Önceki dönem"
-            >
-              <ChevronLeft className="size-5" aria-hidden="true" />
-            </Button>
-            <CalendarDays className="ml-1 size-5 shrink-0 text-emerald-500" aria-hidden="true" />
-            <div className="min-w-0 flex-1 text-center">
-              <p
-                className="truncate text-[13px] font-bold tracking-tight sm:text-sm"
-                data-testid="history-selected-date"
-              >
-                {activeDate ? formatDateOnly(activeDate) : "Tarih hazırlanıyor"}
-              </p>
-              {activeDate && (
-                <p className="mt-0.5 text-[10px] capitalize text-muted-foreground">
-                  {new Intl.DateTimeFormat("tr-TR", { timeZone: "UTC", weekday: "long" }).format(
-                    new Date(`${activeDate}T12:00:00.000Z`),
-                  )}
-                </p>
-              )}
-            </div>
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              className="size-9 shrink-0"
-              onClick={() => move(1)}
-              disabled={!canMoveNext}
-              aria-label="Sonraki dönem"
-            >
-              <ChevronRight className="size-5" aria-hidden="true" />
-            </Button>
-          </div>
-
-          <label className="relative inline-flex min-h-[54px] cursor-pointer items-center justify-center gap-1.5 rounded-[17px] border border-border/70 bg-card px-2 text-xs font-semibold shadow-[0_1px_2px_rgba(15,23,42,0.025)]">
-            <CalendarDays className="size-5 text-emerald-500" aria-hidden="true" />
-            Takvim
-            <Input
-              type="date"
-              aria-label="Takvimden tarih seç"
-              max={today || undefined}
-              value={activeDate}
-              onChange={(event) => {
-                if (viewMode === "COMPARISON") {
-                  setComparisonDate(event.target.value);
-                } else {
-                  setSelectedDate(event.target.value);
-                }
-              }}
-              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-            />
-          </label>
-        </div>
-
-        {viewMode === "NORMAL" && normalMode === "DAY" && today && (
-          <div className="grid grid-cols-4 gap-1.5">
-            {[
-              ["Bugün", today],
-              ["Dün", shiftCalendarDate(today, -1)],
-              ["1 hafta önce", shiftCalendarDate(today, -7)],
-              ["1 ay önce", shiftCalendarMonth(today, -1)],
-            ].map(([label, date]) => (
-              <button
-                key={label}
+      {viewMode === "NORMAL" && (
+        <section className="space-y-2.5">
+          <div className="grid grid-cols-[minmax(0,1fr)_92px] gap-2">
+            <div className="flex min-h-[54px] items-center rounded-[17px] border border-border/70 bg-card px-1.5 shadow-[0_1px_2px_rgba(15,23,42,0.025)]">
+              <Button
                 type="button"
-                onClick={() => setSelectedDate(date)}
-                className={cn(
-                  "min-h-9 min-w-0 rounded-full border px-1 text-[10px] font-medium sm:text-xs",
-                  selectedDate === date
-                    ? "border-emerald-200 bg-emerald-100/80 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/45 dark:text-emerald-200"
-                    : "border-transparent bg-muted/55 text-muted-foreground",
-                )}
+                size="icon"
+                variant="ghost"
+                className="size-9 shrink-0"
+                onClick={() => move(-1)}
+                aria-label="Önceki dönem"
               >
-                {label}
-              </button>
-            ))}
-          </div>
-        )}
+                <ChevronLeft className="size-5" aria-hidden="true" />
+              </Button>
+              <CalendarDays className="ml-1 size-5 shrink-0 text-emerald-500" aria-hidden="true" />
+              <div className="min-w-0 flex-1 text-center">
+                <p
+                  className="truncate text-[13px] font-bold tracking-tight sm:text-sm"
+                  data-testid="history-selected-date"
+                >
+                  {activeDate ? formatDateOnly(activeDate) : "Tarih hazırlanıyor"}
+                </p>
+                {activeDate && (
+                  <p className="mt-0.5 text-[10px] capitalize text-muted-foreground">
+                    {new Intl.DateTimeFormat("tr-TR", { timeZone: "UTC", weekday: "long" }).format(
+                      new Date(`${activeDate}T12:00:00.000Z`),
+                    )}
+                  </p>
+                )}
+              </div>
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="size-9 shrink-0"
+                onClick={() => move(1)}
+                disabled={!canMoveNext}
+                aria-label="Sonraki dönem"
+              >
+                <ChevronRight className="size-5" aria-hidden="true" />
+              </Button>
+            </div>
 
-        {viewMode === "NORMAL" && (
+            <label className="relative inline-flex min-h-[54px] cursor-pointer items-center justify-center gap-1.5 rounded-[17px] border border-border/70 bg-card px-2 text-xs font-semibold shadow-[0_1px_2px_rgba(15,23,42,0.025)]">
+              <CalendarDays className="size-5 text-emerald-500" aria-hidden="true" />
+              Takvim
+              <Input
+                type="date"
+                aria-label="Takvimden tarih seç"
+                max={today || undefined}
+                value={activeDate}
+                onChange={(event) => setSelectedDate(event.target.value)}
+                className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+              />
+            </label>
+          </div>
+
+          {normalMode === "DAY" && today && (
+            <div className="grid grid-cols-4 gap-1.5">
+              {[
+                ["Bugün", today],
+                ["Dün", shiftCalendarDate(today, -1)],
+                ["1 hafta önce", shiftCalendarDate(today, -7)],
+                ["1 ay önce", shiftCalendarMonth(today, -1)],
+              ].map(([label, date]) => (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => setSelectedDate(date)}
+                  className={cn(
+                    "min-h-9 min-w-0 rounded-full border px-1 text-[10px] font-medium sm:text-xs",
+                    selectedDate === date
+                      ? "border-emerald-200 bg-emerald-100/80 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/45 dark:text-emerald-200"
+                      : "border-transparent bg-muted/55 text-muted-foreground",
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+
           <div className="flex justify-end">
             <Button
               type="button"
@@ -383,8 +458,8 @@ export function HistoryView() {
               Karşılaştır
             </Button>
           </div>
-        )}
-      </section>
+        </section>
+      )}
 
       {!keyMatches || state.dataStatus === "loading" || !activeDate ? (
         <LoadingHistory />
