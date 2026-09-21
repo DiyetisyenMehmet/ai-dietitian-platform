@@ -1,0 +1,130 @@
+name: History Share V2 Predeploy Validation
+
+on:
+  push:
+    branches:
+      - validation/history-share-v2-928c6d
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Targeted pre-deploy validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Backend install
+        working-directory: backend
+        run: npm ci
+
+      - name: Backend Prisma client
+        working-directory: backend
+        run: npx prisma generate
+
+      - name: Backend type-check
+        working-directory: backend
+        run: npm run type-check
+
+      - name: History AI and comparison targeted tests
+        working-directory: backend
+        run: >-
+          node --import tsx --test
+          src/modules/history/history-ai.test.ts
+          src/modules/history/history-ai-predeploy-validation.test.ts
+          src/modules/history/history-comparison.test.ts
+          src/modules/history/history-normalization.test.ts
+          src/modules/history/history-time.test.ts
+
+      - name: Frontend install
+        working-directory: frontend
+        run: npm ci
+
+      - name: Frontend type-check
+        working-directory: frontend
+        run: npm run type-check
+
+      - name: History share/comparison/privacy tests
+        working-directory: frontend
+        run: >-
+          npx playwright test
+          e2e/history-data.spec.ts
+          e2e/history-comparison-presentation.spec.ts
+          e2e/history-final-ux.spec.ts
+          e2e/history-share-parity.spec.ts
+          --workers=1 --reporter=line
+
+      - name: Backend Prettier
+        working-directory: backend
+        run: npm run format:check
+
+      - name: Frontend Prettier
+        working-directory: frontend
+        run: npm run format:check
+
+      - name: Diff check
+        run: git diff --check 212a740d2ae216f47675d94d8df150e77e1ab090...HEAD
+
+      - name: Install Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Start local frontend validation server
+        working-directory: frontend
+        run: |
+          nohup npm run dev -- --hostname 127.0.0.1 --port 3000 > /tmp/history-share-v2-next.log 2>&1 &
+          for attempt in {1..90}; do
+            if curl --fail --silent http://127.0.0.1:3000/__history_share_validation/daily >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          cat /tmp/history-share-v2-next.log
+          exit 1
+
+      - name: Browser-backed Share V2 validation
+        working-directory: frontend
+        env:
+          E2E_WEB_BASE_URL: http://127.0.0.1:3000
+        run: npx playwright test e2e/history-share-v2-predeploy.spec.js --workers=1 --reporter=line
+
+      - name: Validate exported PNG dimensions
+        working-directory: frontend
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import struct
+          root = Path("test-results/history-share-v2-evidence")
+          files = sorted(root.glob("*-export.png"))
+          assert len(files) >= 6, files
+          for path in files:
+              data = path.read_bytes()
+              assert data[:8] == b"\x89PNG\r\n\x1a\n", path
+              width, height = struct.unpack(">II", data[16:24])
+              assert (width, height) == (1080, 1920), (path, width, height)
+              print(f"{path.name}: {width}x{height} {len(data)} bytes")
+          PY
+
+      - name: Upload visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: history-share-v2-predeploy-evidence
+          path: |
+            frontend/test-results/history-share-v2-evidence
+            /tmp/history-share-v2-next.log
+          if-no-files-found: warn
+          retention-days: 7
