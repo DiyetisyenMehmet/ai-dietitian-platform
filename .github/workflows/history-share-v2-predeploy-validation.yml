@@ -78,10 +78,11 @@ jobs:
 
       - name: Changed History backend Prettier
         working-directory: backend
-        run: |
-          npx prettier --write             src/modules/history/history-ai-text.ts             src/modules/history/history-ai.service.ts             src/modules/history/history-ai.test.ts
-          git diff -- src/modules/history/history-ai-text.ts src/modules/history/history-ai.service.ts src/modules/history/history-ai.test.ts
-          git diff --quiet -- src/modules/history/history-ai-text.ts src/modules/history/history-ai.service.ts src/modules/history/history-ai.test.ts
+        run: >-
+          npx prettier --check
+          src/modules/history/history-ai-text.ts
+          src/modules/history/history-ai.service.ts
+          src/modules/history/history-ai.test.ts
 
       - name: Full frontend Prettier baseline audit
         continue-on-error: true
@@ -99,7 +100,7 @@ jobs:
           src/presentation/components/history/history-share-scene.ts
 
       - name: Diff check
-        run: git diff --check 212a740d2ae216f47675d94d8df150e77e1ab090...HEAD
+        run: git diff --check 212a740d2ae216f47675d94d8df150e77e1ab090...origin/feature/history-share-v2
 
       - name: Install Chromium
         working-directory: frontend
