@@ -74,9 +74,7 @@ function VisualPreview({ payload }: { payload: HistorySharePayload }) {
         <div className="shrink-0 rounded-[22px] bg-[linear-gradient(135deg,#087a55,#0f9f72)] p-[4%] text-white">
           <p className="text-[9px] font-extrabold tracking-[0.2em]">{scene.brand}</p>
           <h3 className="mt-[2%] text-[15px] font-extrabold leading-tight">{scene.heading}</h3>
-          <p className="mt-[1.5%] text-[9px] font-medium text-emerald-50/90">
-            {scene.periodLabel}
-          </p>
+          <p className="mt-[1.5%] text-[9px] font-medium text-emerald-50/90">{scene.periodLabel}</p>
           {scene.comparisonLabel && (
             <p className="mt-[2%] rounded-full bg-white/15 px-2.5 py-1 text-[7px] font-semibold text-emerald-50">
               {scene.comparisonLabel}
@@ -87,7 +85,9 @@ function VisualPreview({ payload }: { payload: HistorySharePayload }) {
         <div
           className={cn(
             "min-h-0 flex-1 py-[3%]",
-            scene.density === "sparse" ? "flex flex-col justify-evenly" : "flex flex-col justify-center",
+            scene.density === "sparse"
+              ? "flex flex-col justify-evenly"
+              : "flex flex-col justify-center",
           )}
         >
           <div
@@ -161,7 +161,10 @@ function VisualPreview({ payload }: { payload: HistorySharePayload }) {
           </div>
 
           {scene.details.map((detail) => (
-            <div key={detail.title} className="mt-2 rounded-2xl border border-slate-200 bg-slate-50 p-2.5">
+            <div
+              key={detail.title}
+              className="mt-2 rounded-2xl border border-slate-200 bg-slate-50 p-2.5"
+            >
               <p className="text-[8px] font-extrabold text-emerald-700">{detail.title}</p>
               <p className="mt-1 break-words text-[7px] leading-relaxed text-slate-600">
                 {detail.lines.join(" • ")}
@@ -229,7 +232,7 @@ export function HistoryShareDialog({ open, onClose, buildPayload }: HistoryShare
       aria-modal="true"
       aria-label="Geçmiş paylaşım önizlemesi"
     >
-      <div className="max-h-[92dvh] w-full max-w-xl overflow-x-hidden overflow-y-auto rounded-t-3xl border border-border bg-background p-4 shadow-xl sm:rounded-3xl sm:p-5">
+      <div className="max-h-[92dvh] w-full max-w-xl overflow-y-auto overflow-x-hidden rounded-t-3xl border border-border bg-background p-4 shadow-xl sm:rounded-3xl sm:p-5">
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold">Paylaşım</h2>
