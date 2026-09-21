@@ -100,7 +100,10 @@ test("history AI normalizes HTML entities and Turkish Unicode exactly once", () 
     normalizeHistoryInsightText("&quot;İyi&quot; &#39;ilerleme&#39;"),
     "\"İyi\" 'ilerleme'",
   );
-  assert.equal(decodeHtmlCharacterReferencesOnce("&amp;lt;script&amp;gt;"), "&lt;script&gt;");
+  assert.equal(
+    decodeHtmlCharacterReferencesOnce("&amp;lt;script&amp;gt;"),
+    "&lt;script&gt;",
+  );
 });
 
 test("history AI repairs a single valid UTF-8/Windows-1252 mojibake layer", () => {
@@ -141,7 +144,9 @@ test("history insight cache version invalidates pre-normalization cache hashes",
 
 test("HTML character-reference normalization preserves case-sensitive Turkish entities", () => {
   assert.equal(
-    decodeHtmlCharacterReferencesOnce("&Ccedil; &ccedil; &Ouml; &ouml; &Uuml; &uuml; &AMP; &QUOT;"),
+    decodeHtmlCharacterReferencesOnce(
+      "&Ccedil; &ccedil; &Ouml; &ouml; &Uuml; &uuml; &AMP; &QUOT;",
+    ),
     'Ç ç Ö ö Ü ü & "',
   );
 });
