@@ -16,7 +16,7 @@ import type {
   ObservedNumber,
 } from "./history.types";
 
-export const HISTORY_INSIGHT_HISTORY_INSIGHT_CONTEXT_VERSION = "history-insight-v3";
+export const HISTORY_INSIGHT_CONTEXT_VERSION = "history-insight-v3";
 const MAX_INSIGHT_LENGTH = 2400;
 
 type InsightContext = DailyInsightContext | PeriodInsightContext;
