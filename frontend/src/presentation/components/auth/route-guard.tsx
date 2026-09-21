@@ -103,7 +103,8 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
     }
   }, [status]);
 
-  const onMarketing = isMarketing(pathname);
+  const onValidationRoute = pathname.startsWith("/history-share-validation/");
+  const onMarketing = isMarketing(pathname) || onValidationRoute;
   const onAuthRoute = isAuthRoute(pathname);
   const onConsent = pathname === CONSENT_ROUTE;
   const onOnboarding = pathname === ONBOARDING_ROUTE;
