@@ -16,6 +16,7 @@ import { useAuth } from "@/application/auth/auth-store";
 import {
   buildComparisonHistorySharePayload,
   buildDailyHistorySharePayload,
+  buildPeriodHistorySharePayload,
   type HistoryShareOptions,
 } from "@/application/history/history-share";
 import {
@@ -212,15 +213,18 @@ export function HistoryView() {
 
   const buildSharePayload = React.useCallback(
     (options: HistoryShareOptions) => {
+      if (viewMode === "COMPARISON" && state.comparison) {
+        return buildComparisonHistorySharePayload(state.comparison, options, state.insight);
+      }
       if (normalMode === "DAY" && state.daily) {
         return buildDailyHistorySharePayload(state.daily, options, state.insight);
       }
       if (state.comparison) {
-        return buildComparisonHistorySharePayload(state.comparison, options, state.insight);
+        return buildPeriodHistorySharePayload(state.comparison, options, state.insight);
       }
       throw new Error("History share payload is unavailable.");
     },
-    [normalMode, state.comparison, state.daily, state.insight],
+    [normalMode, state.comparison, state.daily, state.insight, viewMode],
   );
 
   if (timezoneError) {
@@ -485,7 +489,18 @@ export function HistoryView() {
       ) : (
         <>
           {viewMode === "COMPARISON" && state.comparison ? (
-            <PeriodComparisonSection comparison={state.comparison} />
+            <div className="space-y-4">
+              <PeriodComparisonSection comparison={state.comparison} />
+              <Button
+                type="button"
+                className="min-h-[52px] w-full rounded-full border-0 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-400 text-sm font-bold text-white shadow-[0_8px_20px_rgba(20,184,166,0.18)] hover:from-emerald-600 hover:via-teal-600 hover:to-cyan-500"
+                disabled={!dataReady}
+                onClick={() => setShareOpen(true)}
+              >
+                <Share2 aria-hidden="true" />
+                Karşılaştırmayı paylaş
+              </Button>
+            </div>
           ) : (
             <>
               {normalMode === "DAY" && state.daily && (
@@ -584,7 +599,7 @@ export function HistoryView() {
         </>
       )}
 
-      {viewMode === "NORMAL" && dataReady && (
+      {dataReady && (
         <HistoryShareDialog
           open={shareOpen}
           onClose={() => setShareOpen(false)}

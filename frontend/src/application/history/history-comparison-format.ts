@@ -77,7 +77,7 @@ export function comparisonDeltaText(
   )}`;
 }
 
-function netWeightValueText(observed: ObservedNumber) {
+export function netWeightValueText(observed: ObservedNumber) {
   if (!presentValue(observed)) return "—";
   const sign = observed.value > 0 ? "+" : observed.value < 0 ? "−" : "";
   const text = `${sign}${absoluteValueText(Math.abs(observed.value), "weight")}`;

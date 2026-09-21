@@ -6,7 +6,7 @@ import {
   comparisonMissingNote,
   comparisonValueText,
   weightComparisonPresentation,
-} from "../src/presentation/components/history/history-comparison-presentation";
+} from "../src/application/history/history-comparison-format";
 
 function observed(state: ObservedNumber["state"], value: number | null): ObservedNumber {
   return { state, value };

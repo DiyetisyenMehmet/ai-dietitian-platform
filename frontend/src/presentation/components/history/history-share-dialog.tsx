@@ -12,11 +12,7 @@ import {
 } from "@/application/history/history-share";
 import { Button } from "@/presentation/components/ui/button";
 import { cn } from "@/shared/lib/utils";
-import {
-  historyPayloadText,
-  shareHistoryText,
-  shareHistoryVisual,
-} from "./history-share-card";
+import { historyPayloadText, shareHistoryText, shareHistoryVisual } from "./history-share-card";
 
 interface HistoryShareDialogProps {
   open: boolean;
@@ -31,18 +27,31 @@ const OPTION_ROWS: Array<{
   label: string;
   description: string;
 }> = [
-  { key: "includeNutrition", label: "Kalori ve makrolar", description: "Paylaşıma beslenme özetini ekler." },
+  {
+    key: "includeNutrition",
+    label: "Kalori ve makrolar",
+    description: "Paylaşıma beslenme özetini ekler.",
+  },
   { key: "includeWater", label: "Su", description: "Kaydedilmiş su özetini ekler." },
-  { key: "includeActivity", label: "Aktivite", description: "Hareket süresi ve mevcut aktivite özetini ekler." },
+  {
+    key: "includeActivity",
+    label: "Aktivite",
+    description: "Hareket süresi ve mevcut aktivite özetini ekler.",
+  },
   { key: "includeMealNames", label: "Öğün isimleri", description: "Varsayılan olarak kapalıdır." },
   { key: "includeSleep", label: "Uyku", description: "Varsayılan olarak kapalıdır." },
   { key: "includeWeight", label: "Kilo", description: "Varsayılan olarak kapalıdır." },
-  { key: "includeAiInsight", label: "Diewish değerlendirmesi", description: "Varsayılan olarak kapalıdır." },
+  {
+    key: "includeAiInsight",
+    label: "Diewish değerlendirmesi",
+    description: "Varsayılan olarak kapalıdır.",
+  },
 ];
 
 const PREVIEW_TONE: Record<HistoryShareVisualTone, string> = {
   nutrition: "border-orange-200/70 bg-orange-50/80 dark:border-orange-900/50 dark:bg-orange-950/20",
-  protein: "border-emerald-200/70 bg-emerald-50/80 dark:border-emerald-900/50 dark:bg-emerald-950/20",
+  protein:
+    "border-emerald-200/70 bg-emerald-50/80 dark:border-emerald-900/50 dark:bg-emerald-950/20",
   water: "border-sky-200/70 bg-sky-50/80 dark:border-sky-900/50 dark:bg-sky-950/20",
   activity: "border-teal-200/70 bg-teal-50/80 dark:border-teal-900/50 dark:bg-teal-950/20",
   sleep: "border-indigo-200/70 bg-indigo-50/80 dark:border-indigo-900/50 dark:bg-indigo-950/20",
@@ -51,6 +60,7 @@ const PREVIEW_TONE: Record<HistoryShareVisualTone, string> = {
 };
 
 function VisualPreview({ payload }: { payload: HistorySharePayload }) {
+  const comparisonLayout = payload.kind === "comparison";
   const mealNames = payload.sections
     .flatMap((section) => section.lines)
     .find((line) => line.startsWith("Öğünler:"));
@@ -59,9 +69,7 @@ function VisualPreview({ payload }: { payload: HistorySharePayload }) {
     <div className="overflow-hidden rounded-[28px] border border-border bg-slate-50 p-3 shadow-sm dark:bg-slate-950/40">
       <div className="rounded-[24px] bg-emerald-700 p-4 text-white">
         <p className="text-[10px] font-bold tracking-[0.18em]">DIEWISH</p>
-        <h3 className="mt-2 text-base font-bold">
-          {payload.title.replace("Diewish • ", "")}
-        </h3>
+        <h3 className="mt-2 text-base font-bold">{payload.title.replace("Diewish • ", "")}</h3>
         <p className="mt-1 text-xs text-emerald-50/90">{payload.periodLabel}</p>
       </div>
 
@@ -71,19 +79,21 @@ function VisualPreview({ payload }: { payload: HistorySharePayload }) {
         </p>
       )}
 
-      <div
-        className={cn(
-          "mt-3 gap-2.5",
-          payload.scope === "DAY" ? "grid grid-cols-2" : "space-y-2.5",
-        )}
-      >
+      <div className={cn("mt-3 gap-2.5", comparisonLayout ? "space-y-2.5" : "grid grid-cols-2")}>
         {payload.visualCards.map((card) => (
           <div
             key={`${card.title}-${card.currentValue ?? card.value ?? ""}`}
             className={cn("min-w-0 rounded-[20px] border p-3", PREVIEW_TONE[card.tone])}
           >
             <div className="flex items-start justify-between gap-2">
-              <p className="min-w-0 text-[11px] font-semibold leading-tight">{card.title}</p>
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold leading-tight">{card.title}</p>
+                {card.description && (
+                  <p className="mt-1 text-[8px] leading-tight text-muted-foreground">
+                    {card.description}
+                  </p>
+                )}
+              </div>
               {card.coverage && (
                 <span className="shrink-0 rounded-full bg-background/80 px-2 py-0.5 text-[8px] text-muted-foreground">
                   {card.coverage}
@@ -115,6 +125,9 @@ function VisualPreview({ payload }: { payload: HistorySharePayload }) {
                 ))}
               </div>
             )}
+            {card.note && (
+              <p className="mt-2 text-[8px] leading-snug text-muted-foreground">{card.note}</p>
+            )}
           </div>
         ))}
       </div>
@@ -145,9 +158,7 @@ function VisualPreview({ payload }: { payload: HistorySharePayload }) {
 }
 
 export function HistoryShareDialog({ open, onClose, buildPayload }: HistoryShareDialogProps) {
-  const [options, setOptions] = React.useState<HistoryShareOptions>(
-    DEFAULT_HISTORY_SHARE_OPTIONS,
-  );
+  const [options, setOptions] = React.useState<HistoryShareOptions>(DEFAULT_HISTORY_SHARE_OPTIONS);
   const [mode, setMode] = React.useState<ShareMode>("visual");
   const [sharing, setSharing] = React.useState(false);
 
@@ -170,9 +181,7 @@ export function HistoryShareDialog({ open, onClose, buildPayload }: HistoryShare
     setSharing(true);
     try {
       const result =
-        mode === "visual"
-          ? await shareHistoryVisual(payload)
-          : await shareHistoryText(payload);
+        mode === "visual" ? await shareHistoryVisual(payload) : await shareHistoryText(payload);
 
       if (result === "copied") toast.success("Paylaşım metni panoya kopyalandı.");
       if (result === "downloaded") toast.success("Paylaşım görseli indirildi.");
@@ -196,7 +205,8 @@ export function HistoryShareDialog({ open, onClose, buildPayload }: HistoryShare
           <div>
             <h2 className="text-lg font-semibold">Paylaşım</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Görsel veya yazı paylaşımını seç; gizlilik tercihlerin her ikisinde de aynen uygulanır.
+              Görsel veya yazı paylaşımını seç; gizlilik tercihlerin her ikisinde de aynen
+              uygulanır.
             </p>
           </div>
           <Button type="button" variant="ghost" size="icon" onClick={onClose} aria-label="Kapat">

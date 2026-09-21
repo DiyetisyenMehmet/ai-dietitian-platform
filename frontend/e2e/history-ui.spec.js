@@ -508,6 +508,29 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await expect(weeklyActivity.getByText("+20 dk", { exact: true })).toBeVisible();
   await expect(weeklyComparison.getByText("NaN", { exact: false })).toHaveCount(0);
   await expect(weeklyComparison.getByText("Infinity", { exact: false })).toHaveCount(0);
+  await page.evaluate(() => {
+    window.__nativeHistoryVisual = null;
+    window.DiewishShare = {
+      isAvailable: () => true,
+      sharePng: (base64Png, filename, text) => {
+        window.__nativeHistoryVisual = { base64Length: base64Png.length, filename, text };
+      },
+      shareText: () => {},
+    };
+  });
+  await page.getByRole("button", { name: "Karşılaştırmayı paylaş" }).click();
+  dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
+  await expect(dialog.getByText("Bu hafta", { exact: true }).first()).toBeVisible();
+  await expect(dialog.getByText("Geçen hafta", { exact: true }).first()).toBeVisible();
+  await expect(dialog.getByText("Fark", { exact: true }).first()).toBeVisible();
+  await dialog.getByRole("button", { name: "Görseli Paylaş" }).click();
+  const weeklyComparisonVisual = await page.evaluate(() => window.__nativeHistoryVisual);
+  expect(weeklyComparisonVisual.base64Length).toBeGreaterThan(100);
+  expect(weeklyComparisonVisual.filename).toMatch(/\.png$/);
+  expect(weeklyComparisonVisual.text).toContain("Bu hafta ↔ Geçen haftanın aynı dönemi");
+  await page.evaluate(() => {
+    delete window.DiewishShare;
+  });
   const selectedComparisonPeriod =
     (await page.getByTestId("history-selected-date").textContent()) || "";
   expect(selectedComparisonPeriod).not.toBe("");
@@ -542,8 +565,10 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await page.getByRole("button", { name: "Haftayı paylaş" }).click();
   dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
   await dialog.getByRole("button", { name: "Yazı olarak paylaş" }).click();
-  await expect(dialog.locator("pre")).toContainText("Bu hafta ↔ Geçen haftanın aynı dönemi");
-  await expect(dialog.locator("pre")).toContainText("Günlük Ortalama Kalori");
+  await expect(dialog.locator("pre")).toContainText("Diewish hafta özetim");
+  await expect(dialog.locator("pre")).toContainText("Ortalama Kalori: 1.800 kcal");
+  await expect(dialog.locator("pre")).not.toContainText("Geçen hafta");
+  await expect(dialog.locator("pre")).not.toContainText("Fark:");
   await dialog.getByRole("button", { name: "Kapat" }).click();
   expect(
     await page.evaluate(
@@ -580,7 +605,10 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await page.getByRole("button", { name: "Ayı paylaş" }).click();
   dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
   await dialog.getByRole("button", { name: "Yazı olarak paylaş" }).click();
-  await expect(dialog.locator("pre")).toContainText("Bu ay ↔ Geçen ayın aynı dönemi");
+  await expect(dialog.locator("pre")).toContainText("Diewish ay özetim");
+  await expect(dialog.locator("pre")).toContainText("Ortalama Kalori: 1.800 kcal");
+  await expect(dialog.locator("pre")).not.toContainText("Geçen ay");
+  await expect(dialog.locator("pre")).not.toContainText("Fark:");
   await dialog.getByRole("button", { name: "Kapat" }).click();
   expect(
     await page.evaluate(
@@ -604,6 +632,17 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await expect(monthlyCalories.getByText("Geçen ay", { exact: true })).toBeVisible();
   await expect(monthlyCalories.getByText("Fark", { exact: true })).toBeVisible();
   await expect(monthlyCalories.getByText("2/19 gün kayıt", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Karşılaştırmayı paylaş" }).click();
+  dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
+  await expect(dialog.getByText("Bu ay", { exact: true }).first()).toBeVisible();
+  await expect(dialog.getByText("Geçen ay", { exact: true }).first()).toBeVisible();
+  await expect(dialog.getByText("Fark", { exact: true }).first()).toBeVisible();
+  await dialog.getByRole("button", { name: "Yazı olarak paylaş" }).click();
+  await expect(dialog.locator("pre")).toContainText("Bu ay ↔ Geçen ayın aynı dönemi");
+  await expect(dialog.locator("pre")).toContainText("Bu ay: 1.800 kcal");
+  await expect(dialog.locator("pre")).toContainText("Geçen ay: 1.900 kcal");
+  await expect(dialog.locator("pre")).toContainText("Fark: −100 kcal");
+  await dialog.getByRole("button", { name: "Kapat" }).click();
   await page.goBack();
   await expect(page.getByRole("heading", { level: 1, name: "Geçmişim" })).toBeVisible();
   await expect(page.getByText("Ayın Özeti", { exact: true })).toBeVisible();

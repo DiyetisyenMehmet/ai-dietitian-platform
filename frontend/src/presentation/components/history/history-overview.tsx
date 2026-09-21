@@ -26,7 +26,7 @@ import {
   comparisonValueText,
   weightComparisonPresentation,
   type ComparisonValueFormat,
-} from "@/presentation/components/history/history-comparison-presentation";
+} from "@/application/history/history-comparison-format";
 import { cn } from "@/shared/lib/utils";
 
 type Tone = "nutrition" | "protein" | "water" | "activity" | "sleep" | "weight";

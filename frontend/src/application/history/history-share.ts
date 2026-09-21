@@ -6,6 +6,14 @@ import type {
   ObservedNumber,
   PeriodCategoryCompleteness,
 } from "@/domain/history/types";
+import {
+  comparisonDeltaText,
+  comparisonMissingNote,
+  comparisonValueText,
+  netWeightValueText,
+  weightComparisonPresentation,
+  type ComparisonValueFormat,
+} from "@/application/history/history-comparison-format";
 
 export interface HistoryShareOptions {
   includeNutrition: boolean;
@@ -33,6 +41,7 @@ export type HistoryShareVisualTone =
 
 export interface HistoryShareVisualCard {
   title: string;
+  description?: string;
   tone: HistoryShareVisualTone;
   layout: "summary" | "comparison";
   value?: string;
@@ -42,9 +51,11 @@ export interface HistoryShareVisualCard {
   previousValue?: string;
   difference?: string;
   coverage?: string;
+  note?: string | null;
 }
 
 export interface HistorySharePayload {
+  kind: "normal" | "comparison";
   scope: "DAY" | "WEEK" | "MONTH";
   title: string;
   periodLabel: string;
@@ -68,9 +79,10 @@ export const DEFAULT_HISTORY_SHARE_OPTIONS: HistoryShareOptions = {
 function usable(observed: ObservedNumber): observed is ObservedNumber & { value: number } {
   return (
     observed.value !== null &&
-    observed.state !== "UNAVAILABLE" &&
-    observed.state !== "NO_RECORD" &&
-    observed.state !== "UNKNOWN"
+    Number.isFinite(observed.value) &&
+    (observed.state === "KNOWN_ZERO" ||
+      observed.state === "KNOWN_VALUE" ||
+      observed.state === "PARTIAL_VALUE")
   );
 }
 
@@ -123,41 +135,27 @@ function coverageText(value: PeriodCategoryCompleteness): string {
     : `${value.recordedDays}/${value.expectedDays} gün kayıt`;
 }
 
-function signedNumber(valueToFormat: number, unit: string, digits = 0): string {
-  const sign = valueToFormat > 0 ? "+" : "";
-  return `${sign}${numberText(valueToFormat, digits)}${unit}`;
+function matchingInsight(
+  insight: HistoryInsightResponse | null,
+  scope: HistorySharePayload["scope"],
+) {
+  return insight?.scope === scope ? insight.content.text : null;
 }
 
-function metricDifference(
-  metric: MetricComparison,
-  format: "number" | "water" | "duration" | "weight",
-  unit = "",
-  digits = 0,
-): string {
-  if (!metric.comparisonAvailable || metric.absoluteChange === null) return "Karşılaştırılamıyor";
-  if (metric.absoluteChange === 0) return "Değişim yok";
-
-  if (format === "duration") {
-    return `${metric.absoluteChange > 0 ? "+" : "-"}${durationText(Math.abs(metric.absoluteChange))}`;
-  }
-  if (format === "water") {
-    const absolute = Math.abs(metric.absoluteChange);
-    const formatted =
-      absolute >= 1000
-        ? `${numberText(absolute / 1000, 1)} L`
-        : `${numberText(absolute)} ml`;
-    return `${metric.absoluteChange > 0 ? "+" : "-"}${formatted}`;
-  }
-  if (format === "weight") {
-    return `${signedNumber(metric.absoluteChange, " kg", 1)} ${metric.absoluteChange > 0 ? "artış" : "azalış"}`;
-  }
-  return signedNumber(metric.absoluteChange, unit, digits);
+function periodLabel(comparison: HistoryComparisonResponse) {
+  return comparison.currentPeriod.localStartDate === comparison.currentPeriod.localEndDateInclusive
+    ? formatDateOnly(comparison.currentPeriod.localStartDate)
+    : `${formatDateOnly(comparison.currentPeriod.localStartDate)} – ${formatDateOnly(
+        comparison.currentPeriod.localEndDateInclusive,
+      )}`;
 }
 
 function freezePayload(payload: HistorySharePayload): HistorySharePayload {
   return Object.freeze({
     ...payload,
-    visualCards: payload.visualCards.map((card) => Object.freeze({ ...card })) as HistoryShareVisualCard[],
+    visualCards: payload.visualCards.map((card) =>
+      Object.freeze({ ...card }),
+    ) as HistoryShareVisualCard[],
     sections: payload.sections.map((section) =>
       Object.freeze({
         title: section.title,
@@ -183,7 +181,12 @@ export function buildDailyHistorySharePayload(
     const fat = value(history.nutrition.totals.fatG, " g", 1);
 
     if (calories) {
-      visualCards.push({ title: "Toplam Kalori", tone: "nutrition", layout: "summary", value: calories });
+      visualCards.push({
+        title: "Toplam Kalori",
+        tone: "nutrition",
+        layout: "summary",
+        value: calories,
+      });
       nutritionLines.push(`Kalori: ${calories}`);
     }
     if (protein) {
@@ -216,11 +219,17 @@ export function buildDailyHistorySharePayload(
     const distance = value(history.activity.totalDistanceKm, " km", 1);
     const lines: string[] = [];
     if (duration) {
-      visualCards.push({ title: "Toplam Hareket Süresi", tone: "activity", layout: "summary", value: duration });
+      visualCards.push({
+        title: "Toplam Hareket Süresi",
+        tone: "activity",
+        layout: "summary",
+        value: duration,
+      });
       lines.push(`Hareket: ${duration}`);
     }
     if (distance) lines.push(`Mesafe: ${distance}`);
-    if (history.activity.entries.length > 0) lines.push(`Aktivite kaydı: ${history.activity.entries.length}`);
+    if (history.activity.entries.length > 0)
+      lines.push(`Aktivite kaydı: ${history.activity.entries.length}`);
     if (lines.length > 0) sections.push({ title: "Hareket", lines });
   }
 
@@ -239,44 +248,203 @@ export function buildDailyHistorySharePayload(
   }
 
   return freezePayload({
+    kind: "normal",
     scope: "DAY",
     title: "Diewish • Gün Özeti",
     periodLabel: formatDateOnly(history.date),
     comparisonLabel: null,
     visualCards,
     sections,
-    aiInsight: options.includeAiInsight ? insight?.content.text ?? null : null,
+    aiInsight: options.includeAiInsight ? matchingInsight(insight, "DAY") : null,
     footer: "Diewish ile günümü takip ediyorum • Yalnız seçtiğin kayıtlar paylaşılır",
+  });
+}
+
+function observedNote(observed: ObservedNumber) {
+  if (observed.state === "UNAVAILABLE") return "Veri şu anda alınamıyor.";
+  if (observed.state === "NO_RECORD") return "Kayıt yok.";
+  if (observed.state === "UNKNOWN" || !usable(observed)) return "Değer hesaplanamıyor.";
+  return null;
+}
+
+function normalPeriodCard(
+  title: string,
+  description: string,
+  tone: HistoryShareVisualTone,
+  observed: ObservedNumber,
+  format: ComparisonValueFormat,
+  coverage: string,
+  unit = "",
+  digits = 0,
+): HistoryShareVisualCard {
+  return {
+    title,
+    description,
+    tone,
+    layout: "summary",
+    value: comparisonValueText(observed, format, unit, digits),
+    coverage,
+    note: observedNote(observed),
+  };
+}
+
+function summaryLine(card: HistoryShareVisualCard) {
+  const note = card.note ? ` (${card.note.replace(/\.$/, "")})` : "";
+  return `${card.title}: ${card.value ?? "—"}${note}`;
+}
+
+export function buildPeriodHistorySharePayload(
+  comparison: HistoryComparisonResponse,
+  options: HistoryShareOptions,
+  insight: HistoryInsightResponse | null,
+): HistorySharePayload {
+  const visualCards: HistoryShareVisualCard[] = [];
+  const sections: HistoryShareSection[] = [];
+  const current = comparison.completeness.current;
+  const week = comparison.periodType === "WEEK";
+
+  const add = (sectionTitle: string, card: HistoryShareVisualCard) => {
+    visualCards.push(card);
+    const existing = sections.find((section) => section.title === sectionTitle);
+    if (existing) existing.lines.push(summaryLine(card));
+    else sections.push({ title: sectionTitle, lines: [summaryLine(card)] });
+  };
+
+  if (options.includeNutrition) {
+    add(
+      "Beslenme",
+      normalPeriodCard(
+        "Ortalama Kalori",
+        "Besin değeri bulunan günlerin ortalaması.",
+        "nutrition",
+        comparison.metrics.nutrition.averageCaloriesPerQuantifiedDay.current,
+        "number",
+        coverageText(current.nutrition),
+        " kcal",
+      ),
+    );
+    add(
+      "Beslenme",
+      normalPeriodCard(
+        "Ortalama Protein",
+        "Besin değeri bulunan günlerin ortalaması.",
+        "protein",
+        comparison.metrics.nutrition.averageProteinGPerQuantifiedDay.current,
+        "number",
+        coverageText(current.nutrition),
+        " g",
+        1,
+      ),
+    );
+  }
+
+  if (options.includeWater) {
+    add(
+      "Su",
+      normalPeriodCard(
+        "Ortalama Su",
+        "Su kaydı bulunan günlerin ortalaması.",
+        "water",
+        comparison.metrics.water.averageMlPerRecordedDay.current,
+        "water",
+        coverageText(current.water),
+      ),
+    );
+  }
+
+  if (options.includeActivity) {
+    add(
+      "Hareket",
+      normalPeriodCard(
+        "Toplam Aktivite Süresi",
+        "Dönemde kaydedilen toplam süre.",
+        "activity",
+        comparison.metrics.activity.totalActiveMinutes.current,
+        "duration",
+        coverageText(current.activity),
+      ),
+    );
+  }
+
+  if (options.includeSleep) {
+    add(
+      "Uyku",
+      normalPeriodCard(
+        "Ortalama Uyku Süresi",
+        "Kaydedilen gecelerin ortalaması.",
+        "sleep",
+        comparison.metrics.sleep.averageDurationPerRecordedNight.current,
+        "duration",
+        coverageText(current.sleep),
+      ),
+    );
+  }
+
+  if (options.includeWeight) {
+    const measurementCount = current.weight.measurementCount;
+    const weight = comparison.metrics.weight.netChangeKg.current;
+    const note =
+      current.weight.sourceStatus === "UNAVAILABLE"
+        ? "Ölçüm verisi şu anda alınamıyor."
+        : measurementCount === 0
+          ? "Bu dönemde ölçüm yok."
+          : measurementCount === 1
+            ? "Bu dönemde 1 ölçüm; değişim hesaplanamıyor."
+            : observedNote(weight);
+    const card: HistoryShareVisualCard = {
+      title: "Kilo Değişimi",
+      description: "Dönem içindeki net değişim.",
+      tone: "weight",
+      layout: "summary",
+      value: measurementCount >= 2 ? netWeightValueText(weight) : "—",
+      coverage:
+        current.weight.sourceStatus === "UNAVAILABLE"
+          ? "Ölçüm alınamadı"
+          : `${measurementCount} ölçüm`,
+      note,
+    };
+    add("Kilo", card);
+  }
+
+  return freezePayload({
+    kind: "normal",
+    scope: comparison.periodType,
+    title: week ? "Diewish • Haftanın Özeti" : "Diewish • Ayın Özeti",
+    periodLabel: periodLabel(comparison),
+    comparisonLabel: null,
+    visualCards,
+    sections,
+    aiInsight: options.includeAiInsight ? matchingInsight(insight, comparison.periodType) : null,
+    footer: "Diewish ile dönemimi takip ediyorum • Yalnız seçtiğin kayıtlar paylaşılır",
   });
 }
 
 function comparisonCard(
   title: string,
+  description: string,
   tone: HistoryShareVisualTone,
   metric: MetricComparison,
   currentLabel: string,
   previousLabel: string,
-  currentValue: string | null,
-  previousValue: string | null,
+  currentValue: string,
+  previousValue: string,
   difference: string,
   coverage: string,
-): HistoryShareVisualCard | null {
-  if (!currentValue && !previousValue) return null;
+  note = comparisonMissingNote(metric),
+): HistoryShareVisualCard {
   return {
     title,
+    description,
     tone,
     layout: "comparison",
     currentLabel,
-    currentValue: currentValue ?? "Kayıt yok",
+    currentValue,
     previousLabel,
-    previousValue: previousValue ?? "Kayıt yok",
+    previousValue,
     difference,
     coverage,
+    note,
   };
-}
-
-function comparisonLine(card: HistoryShareVisualCard): string {
-  return `${card.title}: ${card.currentLabel} ${card.currentValue} • ${card.previousLabel} ${card.previousValue} • Fark ${card.difference}`;
 }
 
 export function buildComparisonHistorySharePayload(
@@ -290,118 +458,139 @@ export function buildComparisonHistorySharePayload(
   const currentLabel = week ? "Bu hafta" : "Bu ay";
   const previousLabel = week ? "Geçen hafta" : "Geçen ay";
 
-  const add = (sectionTitle: string, card: HistoryShareVisualCard | null) => {
-    if (!card) return;
+  const add = (card: HistoryShareVisualCard) => {
     visualCards.push(card);
-    const existing = sections.find((section) => section.title === sectionTitle);
-    if (existing) existing.lines.push(comparisonLine(card));
-    else sections.push({ title: sectionTitle, lines: [comparisonLine(card)] });
+    const lines = [
+      `${card.currentLabel ?? "Bu dönem"}: ${card.currentValue ?? "—"}`,
+      `${card.previousLabel ?? "Önceki dönem"}: ${card.previousValue ?? "—"}`,
+      `Fark: ${card.difference ?? "—"}`,
+    ];
+    if (card.note) lines.push(card.note);
+    sections.push({ title: card.title, lines });
   };
 
   if (options.includeNutrition) {
     const calories = comparison.metrics.nutrition.averageCaloriesPerQuantifiedDay;
     const protein = comparison.metrics.nutrition.averageProteinGPerQuantifiedDay;
-    add("Beslenme", comparisonCard(
-      "Günlük Ortalama Kalori",
-      "nutrition",
-      calories,
-      currentLabel,
-      previousLabel,
-      value(calories.current, " kcal"),
-      value(calories.previous, " kcal"),
-      metricDifference(calories, "number", " kcal"),
-      coverageText(comparison.completeness.current.nutrition),
-    ));
-    add("Beslenme", comparisonCard(
-      "Günlük Ortalama Protein",
-      "protein",
-      protein,
-      currentLabel,
-      previousLabel,
-      value(protein.current, " g", 1),
-      value(protein.previous, " g", 1),
-      metricDifference(protein, "number", " g", 1),
-      coverageText(comparison.completeness.current.nutrition),
-    ));
+    add(
+      comparisonCard(
+        "Ortalama Kalori",
+        "Besin değeri bulunan günlerin ortalaması.",
+        "nutrition",
+        calories,
+        currentLabel,
+        previousLabel,
+        comparisonValueText(calories.current, "number", " kcal"),
+        comparisonValueText(calories.previous, "number", " kcal"),
+        comparisonDeltaText(calories, "number", " kcal"),
+        coverageText(comparison.completeness.current.nutrition),
+      ),
+    );
+    add(
+      comparisonCard(
+        "Protein",
+        "Besin değeri bulunan günlerin ortalaması.",
+        "protein",
+        protein,
+        currentLabel,
+        previousLabel,
+        comparisonValueText(protein.current, "number", " g", 1),
+        comparisonValueText(protein.previous, "number", " g", 1),
+        comparisonDeltaText(protein, "number", " g", 1),
+        coverageText(comparison.completeness.current.nutrition),
+      ),
+    );
   }
 
   if (options.includeWater) {
     const water = comparison.metrics.water.averageMlPerRecordedDay;
-    add("Su", comparisonCard(
-      "Günlük Ortalama Su",
-      "water",
-      water,
-      currentLabel,
-      previousLabel,
-      waterValue(water.current),
-      waterValue(water.previous),
-      metricDifference(water, "water"),
-      coverageText(comparison.completeness.current.water),
-    ));
+    add(
+      comparisonCard(
+        "Su",
+        "Su kaydı bulunan günlerin ortalaması.",
+        "water",
+        water,
+        currentLabel,
+        previousLabel,
+        comparisonValueText(water.current, "water"),
+        comparisonValueText(water.previous, "water"),
+        comparisonDeltaText(water, "water"),
+        coverageText(comparison.completeness.current.water),
+      ),
+    );
   }
 
   if (options.includeActivity) {
     const activity = comparison.metrics.activity.totalActiveMinutes;
-    add("Hareket", comparisonCard(
-      "Toplam Hareket Süresi",
-      "activity",
-      activity,
-      currentLabel,
-      previousLabel,
-      durationValue(activity.current),
-      durationValue(activity.previous),
-      metricDifference(activity, "duration"),
-      coverageText(comparison.completeness.current.activity),
-    ));
+    add(
+      comparisonCard(
+        "Toplam Aktivite Süresi",
+        "Dönemde kaydedilen toplam süre.",
+        "activity",
+        activity,
+        currentLabel,
+        previousLabel,
+        comparisonValueText(activity.current, "duration"),
+        comparisonValueText(activity.previous, "duration"),
+        comparisonDeltaText(activity, "duration"),
+        coverageText(comparison.completeness.current.activity),
+      ),
+    );
   }
 
   if (options.includeSleep) {
     const sleep = comparison.metrics.sleep.averageDurationPerRecordedNight;
-    add("Uyku", comparisonCard(
-      "Ortalama Uyku Süresi",
-      "sleep",
-      sleep,
-      currentLabel,
-      previousLabel,
-      durationValue(sleep.current),
-      durationValue(sleep.previous),
-      metricDifference(sleep, "duration"),
-      coverageText(comparison.completeness.current.sleep),
-    ));
+    add(
+      comparisonCard(
+        "Ortalama Uyku Süresi",
+        "Kaydedilen gecelerin ortalaması.",
+        "sleep",
+        sleep,
+        currentLabel,
+        previousLabel,
+        comparisonValueText(sleep.current, "duration"),
+        comparisonValueText(sleep.previous, "duration"),
+        comparisonDeltaText(sleep, "duration"),
+        coverageText(comparison.completeness.current.sleep),
+      ),
+    );
   }
 
   if (options.includeWeight) {
-    const weight = comparison.metrics.weight.lastMeasurementKg;
-    add("Kilo", comparisonCard(
-      "Kilo",
-      "weight",
+    const weight = comparison.metrics.weight.netChangeKg;
+    const weightPresentation = weightComparisonPresentation(
       weight,
-      currentLabel,
-      previousLabel,
-      value(weight.current, " kg", 1),
-      value(weight.previous, " kg", 1),
-      metricDifference(weight, "weight"),
-      `${comparison.completeness.current.weight.measurementCount} ölçüm`,
-    ));
+      comparison.completeness.current.weight.measurementCount,
+      comparison.completeness.previous.weight.measurementCount,
+    );
+    add(
+      comparisonCard(
+        "Kilo Değişimi",
+        "Dönem içindeki net değişim.",
+        "weight",
+        weight,
+        currentLabel,
+        previousLabel,
+        weightPresentation.currentValue,
+        weightPresentation.previousValue,
+        weightPresentation.difference,
+        `${comparison.completeness.current.weight.measurementCount} ölçüm`,
+        weightPresentation.note,
+      ),
+    );
   }
 
-  const label =
-    comparison.currentPeriod.localStartDate === comparison.currentPeriod.localEndDateInclusive
-      ? formatDateOnly(comparison.currentPeriod.localStartDate)
-      : `${formatDateOnly(comparison.currentPeriod.localStartDate)} – ${formatDateOnly(
-          comparison.currentPeriod.localEndDateInclusive,
-        )}`;
-
   return freezePayload({
+    kind: "comparison",
     scope: comparison.periodType,
     title: week ? "Diewish • Haftalık Karşılaştırma" : "Diewish • Aylık Karşılaştırma",
-    periodLabel: label,
+    periodLabel: periodLabel(comparison),
     comparisonLabel: week
       ? "Bu hafta ↔ Geçen haftanın aynı dönemi"
       : "Bu ay ↔ Geçen ayın aynı dönemi",
     visualCards,
     sections,
-    aiInsight: options.includeAiInsight ? insight?.content.text ?? null : null,
+    aiInsight: options.includeAiInsight ? matchingInsight(insight, comparison.periodType) : null,
     footer: "Diewish • Yalnız seçtiğin kayıtlar paylaşılır",
   });
 }

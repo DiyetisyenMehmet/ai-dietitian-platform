@@ -118,14 +118,40 @@ function drawSummaryCard(
 
   ctx.fillStyle = "#64748b";
   ctx.font = `600 23px ${FONT}`;
-  const titleLines = wrapText(ctx, card.title, width - 118).slice(0, 2);
+  const titleLines = wrapText(ctx, card.title, width - 118).slice(0, 1);
   titleLines.forEach((line, index) => ctx.fillText(line, x + 92, y + 48 + index * 27));
+
+  let descriptionX = x + 28;
+  if (card.coverage) {
+    ctx.font = `600 17px ${FONT}`;
+    const badgeWidth = Math.min(205, ctx.measureText(card.coverage).width + 28);
+    ctx.fillStyle = "#ffffff";
+    roundedRect(ctx, x + 28, y + 62, badgeWidth, 32, 16);
+    ctx.fill();
+    ctx.fillStyle = "#64748b";
+    ctx.fillText(card.coverage, x + 42, y + 84);
+    descriptionX += badgeWidth + 12;
+  }
+
+  if (card.description) {
+    ctx.fillStyle = "#64748b";
+    ctx.font = `500 18px ${FONT}`;
+    const description = wrapText(ctx, card.description, x + width - 28 - descriptionX).slice(0, 1);
+    description.forEach((line) => ctx.fillText(line, descriptionX, y + 84));
+  }
 
   ctx.fillStyle = "#0f172a";
   ctx.font = `700 38px ${FONT}`;
   const value = card.value ?? "—";
   const valueLines = wrapText(ctx, value, width - 56).slice(0, 2);
-  valueLines.forEach((line, index) => ctx.fillText(line, x + 28, y + 118 + index * 42));
+  valueLines.forEach((line, index) => ctx.fillText(line, x + 28, y + 134 + index * 42));
+
+  if (card.note) {
+    ctx.fillStyle = "#64748b";
+    ctx.font = `500 17px ${FONT}`;
+    const noteLines = wrapText(ctx, card.note, width - 56).slice(0, 1);
+    noteLines.forEach((line) => ctx.fillText(line, x + 28, y + height - 18));
+  }
 }
 
 function drawComparisonCard(
@@ -145,6 +171,12 @@ function drawComparisonCard(
   ctx.font = `700 29px ${FONT}`;
   ctx.fillText(card.title, x + 32, y + 46);
 
+  if (card.description) {
+    ctx.fillStyle = "#64748b";
+    ctx.font = `500 18px ${FONT}`;
+    ctx.fillText(card.description, x + 32, y + 70);
+  }
+
   if (card.coverage) {
     ctx.font = `600 19px ${FONT}`;
     const badgeWidth = Math.min(250, ctx.measureText(card.coverage).width + 34);
@@ -156,9 +188,9 @@ function drawComparisonCard(
   }
 
   const innerX = x + 28;
-  const innerY = y + 82;
+  const innerY = y + 74;
   const innerWidth = width - 56;
-  const innerHeight = height - 108;
+  const innerHeight = height - (card.note ? 104 : 88);
   const columnWidth = innerWidth / 3;
 
   ctx.fillStyle = "#ffffff";
@@ -187,15 +219,26 @@ function drawComparisonCard(
     ctx.textAlign = "center";
     ctx.fillStyle = "#64748b";
     ctx.font = `600 18px ${FONT}`;
-    const labelLines = wrapText(ctx, label, columnWidth - 24).slice(0, 2);
-    labelLines.forEach((line, lineIndex) => ctx.fillText(line, center, innerY + 36 + lineIndex * 22));
+    const labelLines = wrapText(ctx, label, columnWidth - 24).slice(0, 1);
+    labelLines.forEach((line, lineIndex) =>
+      ctx.fillText(line, center, innerY + 21 + lineIndex * 22),
+    );
 
     ctx.fillStyle = "#0f172a";
     ctx.font = `700 25px ${FONT}`;
     const valueLines = wrapText(ctx, value, columnWidth - 24).slice(0, 2);
-    valueLines.forEach((line, lineIndex) => ctx.fillText(line, center, innerY + 96 + lineIndex * 30));
+    valueLines.forEach((line, lineIndex) =>
+      ctx.fillText(line, center, innerY + 49 + lineIndex * 24),
+    );
   });
   ctx.textAlign = "start";
+
+  if (card.note) {
+    ctx.fillStyle = "#64748b";
+    ctx.font = `500 17px ${FONT}`;
+    const noteLines = wrapText(ctx, card.note, width - 64).slice(0, 1);
+    noteLines.forEach((line) => ctx.fillText(line, x + 32, y + height - 16));
+  }
 }
 
 function drawDetailCard(
@@ -206,10 +249,21 @@ function drawDetailCard(
   maxHeight: number,
 ): number {
   const width = WIDTH - SIDE * 2;
-  ctx.font = `500 24px ${FONT}`;
-  const lines = wrapText(ctx, text, width - 64);
-  const visible = lines.slice(0, Math.max(1, Math.floor((maxHeight - 88) / 34)));
-  const height = Math.min(maxHeight, 92 + visible.length * 34);
+  const sizes = [24, 22, 20, 18];
+  let fontSize = sizes[0];
+  let lineHeight = 34;
+  let lines: string[] = [];
+  for (const size of sizes) {
+    const candidateLineHeight = size + 10;
+    ctx.font = `500 ${size}px ${FONT}`;
+    const candidateLines = wrapText(ctx, text, width - 64);
+    fontSize = size;
+    lineHeight = candidateLineHeight;
+    lines = candidateLines;
+    if (92 + candidateLines.length * candidateLineHeight <= maxHeight) break;
+  }
+  const visible = lines.slice(0, Math.max(1, Math.floor((maxHeight - 92) / lineHeight)));
+  const height = Math.min(maxHeight, 92 + visible.length * lineHeight);
 
   ctx.fillStyle = "#ffffff";
   roundedRect(ctx, SIDE, y, width, height, 30);
@@ -218,8 +272,8 @@ function drawDetailCard(
   ctx.font = `700 26px ${FONT}`;
   ctx.fillText(title, SIDE + 32, y + 42);
   ctx.fillStyle = "#334155";
-  ctx.font = `500 24px ${FONT}`;
-  visible.forEach((line, index) => ctx.fillText(line, SIDE + 32, y + 82 + index * 34));
+  ctx.font = `500 ${fontSize}px ${FONT}`;
+  visible.forEach((line, index) => ctx.fillText(line, SIDE + 32, y + 82 + index * lineHeight));
   return height;
 }
 
@@ -261,16 +315,16 @@ export function createHistoryShareCanvas(payload: HistorySharePayload): HTMLCanv
   }
 
   const details = visualDetailLines(payload);
-  const aiReserve = payload.aiInsight ? 260 : 0;
-  const detailReserve = details.length > 0 ? 190 : 0;
+  const aiReserve = payload.aiInsight ? 340 : 0;
+  const detailReserve = details.length > 0 ? 240 : 0;
   const footerReserve = 90;
   const available = HEIGHT - y - aiReserve - detailReserve - footerReserve;
 
-  if (payload.scope === "DAY") {
+  if (payload.kind === "normal") {
     const gap = 22;
     const cardWidth = (WIDTH - SIDE * 2 - gap) / 2;
     const rows = Math.max(1, Math.ceil(payload.visualCards.length / 2));
-    const cardHeight = Math.max(150, Math.min(190, (available - gap * (rows - 1)) / rows));
+    const cardHeight = Math.max(170, Math.min(195, (available - gap * (rows - 1)) / rows));
     payload.visualCards.forEach((card, index) => {
       const row = Math.floor(index / 2);
       const column = index % 2;
@@ -282,21 +336,28 @@ export function createHistoryShareCanvas(payload: HistorySharePayload): HTMLCanv
   } else {
     const gap = 18;
     const count = Math.max(1, payload.visualCards.length);
-    const cardHeight = Math.max(180, Math.min(225, (available - gap * (count - 1)) / count));
+    const cardHeight = Math.max(160, Math.min(225, (available - gap * (count - 1)) / count));
     payload.visualCards.forEach((card, index) => {
-      drawComparisonCard(ctx, card, SIDE, y + index * (cardHeight + gap), WIDTH - SIDE * 2, cardHeight);
+      drawComparisonCard(
+        ctx,
+        card,
+        SIDE,
+        y + index * (cardHeight + gap),
+        WIDTH - SIDE * 2,
+        cardHeight,
+      );
     });
     y += count * cardHeight + Math.max(0, count - 1) * gap + 22;
   }
 
   for (const detail of details.slice(0, 1)) {
-    const height = drawDetailCard(ctx, detail.title, detail.text, y, 180);
+    const height = drawDetailCard(ctx, detail.title, detail.text, y, 230);
     y += height + 18;
   }
 
   if (payload.aiInsight && y < HEIGHT - 160) {
     const maxHeight = Math.max(120, HEIGHT - y - 112);
-    drawDetailCard(ctx, "Diewish değerlendirmesi", payload.aiInsight, y, Math.min(250, maxHeight));
+    drawDetailCard(ctx, "Diewish değerlendirmesi", payload.aiInsight, y, Math.min(360, maxHeight));
   }
 
   ctx.fillStyle = "#64748b";
@@ -309,11 +370,13 @@ export function createHistoryShareCanvas(payload: HistorySharePayload): HTMLCanv
 
 export function historyPayloadText(payload: HistorySharePayload): string {
   const heading =
-    payload.scope === "DAY"
-      ? `${payload.periodLabel} Diewish gün özetim 🌿`
-      : payload.scope === "WEEK"
-        ? `${payload.periodLabel} Diewish hafta özetim 🌿`
-        : `${payload.periodLabel} Diewish ay özetim 🌿`;
+    payload.kind === "comparison"
+      ? `${payload.periodLabel} Diewish ${payload.scope === "WEEK" ? "haftalık" : "aylık"} karşılaştırmam 🌿`
+      : payload.scope === "DAY"
+        ? `${payload.periodLabel} Diewish gün özetim 🌿`
+        : payload.scope === "WEEK"
+          ? `${payload.periodLabel} Diewish hafta özetim 🌿`
+          : `${payload.periodLabel} Diewish ay özetim 🌿`;
 
   const lines = [heading, ""];
   if (payload.comparisonLabel) {
@@ -344,7 +407,9 @@ function nativeBridge(): NativeShareBridge | undefined {
   return (window as typeof window & { DiewishShare?: NativeShareBridge }).DiewishShare;
 }
 
-export async function shareHistoryVisual(payload: HistorySharePayload): Promise<HistoryShareResult> {
+export async function shareHistoryVisual(
+  payload: HistorySharePayload,
+): Promise<HistoryShareResult> {
   const canvas = createHistoryShareCanvas(payload);
   const filename = `Diewish-gecmisim-${payload.scope.toLowerCase()}.png`;
   const text = historyPayloadText(payload);
@@ -361,7 +426,7 @@ export async function shareHistoryVisual(payload: HistorySharePayload): Promise<
 
   try {
     if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
-      await navigator.share({ title: payload.title, text: payload.periodLabel, files: [file] });
+      await navigator.share({ title: payload.title, text, files: [file] });
       return "shared";
     }
   } catch (error) {
@@ -402,6 +467,8 @@ export async function shareHistoryText(payload: HistorySharePayload): Promise<Hi
 }
 
 /** Backward-compatible visual share entry point. */
-export async function shareHistoryPayload(payload: HistorySharePayload): Promise<HistoryShareResult> {
+export async function shareHistoryPayload(
+  payload: HistorySharePayload,
+): Promise<HistoryShareResult> {
   return shareHistoryVisual(payload);
 }
