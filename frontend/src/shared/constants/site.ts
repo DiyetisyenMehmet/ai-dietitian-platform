@@ -81,6 +81,11 @@ export const MARKETING_ROUTES: readonly string[] = [
   "/health-data-consent",
   "/distance-sales",
   "/delivery-refund",
+  "/history-share-validation/daily",
+  "/history-share-validation/weekly",
+  "/history-share-validation/monthly",
+  "/history-share-validation/weekly-comparison",
+  "/history-share-validation/monthly-comparison",
 ] as const;
 
 /** Primary marketing navigation shown in the public site header. */
