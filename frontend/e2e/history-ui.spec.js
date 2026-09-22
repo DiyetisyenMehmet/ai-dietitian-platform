@@ -367,7 +367,9 @@ test("History daily/period UI keeps data visible when AI fails and share default
 
   let insightCalls = 0;
   let serveEmptyDay = false;
+  let dayHistoryCalls = 0;
   await page.route("**/api/history/day**", async (route) => {
+    dayHistoryCalls += 1;
     const url = new URL(route.request().url());
     const date = url.searchParams.get("date") || "2026-09-19";
     const timezone = url.searchParams.get("timezone") || "UTC";
@@ -839,8 +841,14 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await page.getByRole("button", { name: "Normal geçmişe dön" }).click();
   await expect(page.getByText("Günün Özeti", { exact: true })).toBeVisible();
 
+  serveEmptyDay = false;
+  await page.getByRole("button", { name: "Bugün" }).click();
+  await expect(page.getByText("Günün Özeti", { exact: true })).toBeVisible();
+
+  const dayHistoryCallsBeforeEmptyDay = dayHistoryCalls;
   serveEmptyDay = true;
   await page.getByRole("button", { name: "Dün" }).click();
+  await expect.poll(() => dayHistoryCalls).toBeGreaterThan(dayHistoryCallsBeforeEmptyDay);
   await expect(page.getByText("Bu gün için henüz kayıt bulunmuyor", { exact: true })).toBeVisible();
   await expect(page.getByText("Öğünler", { exact: true })).toBeVisible();
   await expect(page.getByText("Bu gün için öğün kaydı bulunmuyor.", { exact: true })).toBeVisible();
