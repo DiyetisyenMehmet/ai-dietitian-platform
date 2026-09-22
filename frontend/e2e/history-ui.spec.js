@@ -367,9 +367,7 @@ test("History daily/period UI keeps data visible when AI fails and share default
 
   let insightCalls = 0;
   let serveEmptyDay = false;
-  let dayHistoryCalls = 0;
   await page.route("**/api/history/day**", async (route) => {
-    dayHistoryCalls += 1;
     const url = new URL(route.request().url());
     const date = url.searchParams.get("date") || "2026-09-19";
     const timezone = url.searchParams.get("timezone") || "UTC";
@@ -845,10 +843,15 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await page.getByRole("button", { name: "Bugün" }).click();
   await expect(page.getByText("Günün Özeti", { exact: true })).toBeVisible();
 
-  const dayHistoryCallsBeforeEmptyDay = dayHistoryCalls;
   serveEmptyDay = true;
+  const emptyDayResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return url.pathname.endsWith("/api/history/day") && response.status() === 200;
+  });
   await page.getByRole("button", { name: "Dün" }).click();
-  await expect.poll(() => dayHistoryCalls).toBeGreaterThan(dayHistoryCallsBeforeEmptyDay);
+  const emptyDayPayload = await (await emptyDayResponse).json();
+  expect(emptyDayPayload.data.history.nutrition.status).toBe("NONE");
+  expect(emptyDayPayload.data.history.weight.status).toBe("NONE");
   await expect(page.getByText("Bu gün için henüz kayıt bulunmuyor", { exact: true })).toBeVisible();
   await expect(page.getByText("Öğünler", { exact: true })).toBeVisible();
   await expect(page.getByText("Bu gün için öğün kaydı bulunmuyor.", { exact: true })).toBeVisible();
