@@ -256,6 +256,19 @@ test("Web Share caption ON sends only the short generic Diewish caption with PNG
   const preview = await openVisualPreview(page);
   await preview.getByRole("button", { name: "Paylaş" }).click();
 
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as Window & {
+              __shareRecord?: { hasText: boolean; text: string | null; fileCount: number };
+            }
+          ).__shareRecord ?? null,
+      ),
+    )
+    .not.toBeNull();
+
   const record = await page.evaluate(
     () =>
       (
@@ -354,6 +367,19 @@ test("Android bridge contract browser-mock keeps visual caption opt-in", async (
   let preview = await openVisualPreview(page);
   await preview.getByRole("button", { name: "Paylaş" }).click();
 
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as Window & {
+              __nativeRecord?: { base64Length: number; filename: string; text: string };
+            }
+          ).__nativeRecord ?? null,
+      ),
+    )
+    .not.toBeNull();
+
   let record = await page.evaluate(
     () =>
       (
@@ -374,6 +400,19 @@ test("Android bridge contract browser-mock keeps visual caption opt-in", async (
   await dialog.getByRole("checkbox", { name: /Paylaşım mesajı ekle/ }).check();
   preview = await openVisualPreview(page);
   await preview.getByRole("button", { name: "Paylaş" }).click();
+
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as Window & {
+              __nativeRecord?: { base64Length: number; filename: string; text: string };
+            }
+          ).__nativeRecord ?? null,
+      ),
+    )
+    .not.toBeNull();
 
   record = await page.evaluate(
     () =>
