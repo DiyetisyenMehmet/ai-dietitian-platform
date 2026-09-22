@@ -604,7 +604,7 @@ test("History daily/period UI keeps data visible when AI fails and share default
   const nativeVisual = await waitForNativeHistoryVisual(page);
   expect(nativeVisual.base64Length).toBeGreaterThan(100);
   expect(nativeVisual.filename).toMatch(/\.png$/);
-  expect(nativeVisual.text).toContain("650 kcal");
+  expect(nativeVisual.text).toBe("");
   expect(nativeVisual.text).not.toContain("History Browser User");
 
   await page.getByRole("button", { name: "Günü paylaş" }).click();
@@ -674,7 +674,7 @@ test("History daily/period UI keeps data visible when AI fails and share default
   const weeklyComparisonVisual = await waitForNativeHistoryVisual(page);
   expect(weeklyComparisonVisual.base64Length).toBeGreaterThan(100);
   expect(weeklyComparisonVisual.filename).toMatch(/\.png$/);
-  expect(weeklyComparisonVisual.text).toContain("Bu hafta ↔ Geçen haftanın aynı dönemi");
+  expect(weeklyComparisonVisual.text).toBe("");
   await page.evaluate(() => {
     delete window.DiewishShare;
   });
