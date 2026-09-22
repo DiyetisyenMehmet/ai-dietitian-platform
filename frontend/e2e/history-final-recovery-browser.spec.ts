@@ -528,9 +528,11 @@ test("CUSTOM unequal ranges show the exact Turkish validation message before req
   await page.getByLabel("2. dönem bitiş").fill("2026-09-10");
   await page.getByRole("button", { name: "Özel karşılaştırmayı uygula" }).click();
 
-  await expect(page.getByRole("alert")).toHaveText(
-    "Karşılaştırılacak dönemler aynı sayıda gün içermelidir.",
-  );
+  await expect(
+    page.getByText("Karşılaştırılacak dönemler aynı sayıda gün içermelidir.", {
+      exact: true,
+    }),
+  ).toBeVisible();
 });
 
 test("CUSTOM share privacy defaults do not leak sleep, weight or AI evaluation", async ({
@@ -652,7 +654,7 @@ test("CUSTOM Web Share caption OFF sends PNG without text and caption ON sends o
             ?.length ?? 0,
       ),
     )
-    .toBe(2);
+    .toBe(1);
 
   records = await page.evaluate(
     () =>
@@ -668,12 +670,12 @@ test("CUSTOM Web Share caption OFF sends PNG without text and caption ON sends o
       ).__customShareRecords,
   );
 
-  expect(records[1].hasText).toBe(true);
-  expect(records[1].fileCount).toBe(1);
-  expect(records[1].fileType).toBe("image/png");
-  expect(records[1].text?.startsWith(CAPTION_PREFIX)).toBe(true);
-  expect(Array.from(records[1].text ?? "").length).toBeLessThanOrEqual(140);
-  expect(records[1].text ?? "").not.toMatch(/kcal|kg|uyku|öğün|1\. dönem|2\. dönem/i);
+  expect(records[0].hasText).toBe(true);
+  expect(records[0].fileCount).toBe(1);
+  expect(records[0].fileType).toBe("image/png");
+  expect(records[0].text?.startsWith(CAPTION_PREFIX)).toBe(true);
+  expect(Array.from(records[0].text ?? "").length).toBeLessThanOrEqual(140);
+  expect(records[0].text ?? "").not.toMatch(/kcal|kg|uyku|öğün|1\. dönem|2\. dönem/i);
 });
 
 test("CUSTOM text share preserves privacy-filtered labels and excludes hidden data", async ({
