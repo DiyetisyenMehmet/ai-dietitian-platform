@@ -63,6 +63,7 @@ export interface HistorySharePayload {
   visualCards: HistoryShareVisualCard[];
   sections: HistoryShareSection[];
   aiInsight: string | null;
+  motivation: string;
   footer: string;
 }
 
@@ -75,6 +76,73 @@ export const DEFAULT_HISTORY_SHARE_OPTIONS: HistoryShareOptions = {
   includeMealNames: false,
   includeAiInsight: false,
 };
+
+export const HISTORY_VISUAL_SHARE_CAPTION =
+  "Diewish ile ilerlememi takip ediyorum. Küçük adımlar, sürdürülebilir değişimlerin başlangıcıdır. 🌿";
+
+export const HISTORY_MOTIVATION_MAX_CHARACTERS = 190;
+
+const MOTIVATION_COPY = {
+  daily:
+    "Bugün attığın küçük adımlar ilerlemeni görünür kılıyor. Yarın da kaldığın yerden devam edebilirsin.",
+  insufficient:
+    "Bu dönem kayıtların biraz az olabilir; sorun değil. Yeni dönemde birkaç küçük adımla ritmini yeniden yakalayabilirsin.",
+  low:
+    "Bu dönem istediğin ritmi yakalayamamış olabilirsin; sorun değil. Küçük bir adım bile yeniden başlamak için yeterli.",
+  mixed:
+    "Bazı günler daha düzenli, bazıları daha sakin geçmiş olabilir. Önemli olan devam etmek; her küçük adım ilerlemene katkı sağlar.",
+  positive:
+    "Bu dönem güzel bir ritim oluşturmaya başladın. Küçük adımların birikiyor; aynı kararlılıkla devam et.",
+  steady:
+    "Güzel bir dönem geride kaldı. Düzenli kayıtların ritmini görünür kılıyor; bu sürekliliği korumaya devam et.",
+} as const;
+
+function boundedMotivation(value: string): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  const characters = Array.from(normalized);
+  if (characters.length <= HISTORY_MOTIVATION_MAX_CHARACTERS) return normalized;
+  return characters.slice(0, HISTORY_MOTIVATION_MAX_CHARACTERS - 1).join("").trimEnd() + "…";
+}
+
+function categoryCoverage(value: PeriodCategoryCompleteness): number | null {
+  if (value.status === "UNAVAILABLE" || value.expectedDays <= 0) return null;
+  return Math.max(0, Math.min(1, value.recordedDays / value.expectedDays));
+}
+
+export function buildDailyHistoryMotivation(): string {
+  return boundedMotivation(MOTIVATION_COPY.daily);
+}
+
+export function buildPeriodHistoryMotivation(
+  comparison: HistoryComparisonResponse,
+  options: HistoryShareOptions,
+): string {
+  const current = comparison.completeness.current;
+  const ratios: number[] = [];
+  const add = (enabled: boolean, completeness: PeriodCategoryCompleteness) => {
+    if (!enabled) return;
+    const ratio = categoryCoverage(completeness);
+    if (ratio !== null) ratios.push(ratio);
+  };
+
+  add(options.includeNutrition, current.nutrition);
+  add(options.includeWater, current.water);
+  add(options.includeActivity, current.activity);
+  add(options.includeSleep, current.sleep);
+
+  if (ratios.length === 0 || ratios.every((ratio) => ratio === 0)) {
+    return boundedMotivation(MOTIVATION_COPY.insufficient);
+  }
+
+  const average = ratios.reduce((sum, ratio) => sum + ratio, 0) / ratios.length;
+  const minimum = Math.min(...ratios);
+  const maximum = Math.max(...ratios);
+
+  if (average < 0.3) return boundedMotivation(MOTIVATION_COPY.low);
+  if (minimum < 0.4 && maximum >= 0.7) return boundedMotivation(MOTIVATION_COPY.mixed);
+  if (average >= 0.8) return boundedMotivation(MOTIVATION_COPY.steady);
+  return boundedMotivation(MOTIVATION_COPY.positive);
+}
 
 export function hasDailyHistoryShareData(history: DailyHistoryResponse): boolean {
   return history.timeline.length > 0;
@@ -282,7 +350,8 @@ export function buildDailyHistorySharePayload(
     visualCards,
     sections,
     aiInsight: options.includeAiInsight ? matchingInsight(insight, "DAY") : null,
-    footer: "Diewish ile günümü takip ediyorum • Yalnız seçtiğin kayıtlar paylaşılır",
+    motivation: buildDailyHistoryMotivation(),
+    footer: "Yalnız seçtiğin kayıtlar paylaşılır.",
   });
 }
 
@@ -441,7 +510,8 @@ export function buildPeriodHistorySharePayload(
     visualCards,
     sections,
     aiInsight: options.includeAiInsight ? matchingInsight(insight, comparison.periodType) : null,
-    footer: "Diewish ile dönemimi takip ediyorum • Yalnız seçtiğin kayıtlar paylaşılır",
+    motivation: buildPeriodHistoryMotivation(comparison, options),
+    footer: "Yalnız seçtiğin kayıtlar paylaşılır.",
   });
 }
 
@@ -617,6 +687,7 @@ export function buildComparisonHistorySharePayload(
     visualCards,
     sections,
     aiInsight: options.includeAiInsight ? matchingInsight(insight, comparison.periodType) : null,
-    footer: "Diewish • Yalnız seçtiğin kayıtlar paylaşılır",
+    motivation: buildPeriodHistoryMotivation(comparison, options),
+    footer: "Yalnız seçtiğin kayıtlar paylaşılır.",
   });
 }

@@ -13,7 +13,8 @@ function payload(overrides: Partial<HistorySharePayload> = {}): HistorySharePayl
     visualCards: [{ title: "Su", tone: "water", layout: "summary", value: "2,1 L" }],
     sections: [{ title: "Su", lines: ["Kaydedilen su: 2,1 L"] }],
     aiInsight: null,
-    footer: "Diewish • Yalnız seçtiğin kayıtlar paylaşılır",
+    motivation: "Bugün attığın küçük adımlar ilerlemeni görünür kılıyor.",
+    footer: "Yalnız seçtiğin kayıtlar paylaşılır.",
     ...overrides,
   };
 }
@@ -24,6 +25,7 @@ test("only-water selection creates a DOM model containing only water", () => {
   expect(model.cards.map((card) => card.tone)).toEqual(["water"]);
   expect(model.mealNames).toEqual([]);
   expect(model.aiInsight).toBeNull();
+  expect(model.motivation).toContain("küçük adımlar");
   expect(JSON.stringify(model)).not.toContain("Toplam Kalori");
   expect(JSON.stringify(model)).not.toContain("Protein");
 });

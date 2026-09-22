@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 
 import { useAuth } from "@/application/auth/auth-store";
+import { formatComparisonPeriodDateRange } from "@/application/history/history-comparison-format";
 import {
   buildComparisonHistorySharePayload,
   buildDailyHistorySharePayload,
@@ -60,32 +61,6 @@ function formatDateOnly(date: string, options?: Intl.DateTimeFormatOptions): str
     year: "numeric",
     ...options,
   }).format(new Date(`${date}T12:00:00.000Z`));
-}
-
-function formatCompactPeriod(start: string, end: string): string {
-  const startDate = new Date(`${start}T12:00:00.000Z`);
-  const endDate = new Date(`${end}T12:00:00.000Z`);
-  const sameMonth =
-    startDate.getUTCFullYear() === endDate.getUTCFullYear() &&
-    startDate.getUTCMonth() === endDate.getUTCMonth();
-
-  if (sameMonth) {
-    const endLabel = new Intl.DateTimeFormat("tr-TR", {
-      timeZone: "UTC",
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    }).format(endDate);
-    return `${startDate.getUTCDate()} – ${endLabel}`;
-  }
-
-  const formatter = new Intl.DateTimeFormat("tr-TR", {
-    timeZone: "UTC",
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-  return `${formatter.format(startDate)} – ${formatter.format(endDate)}`;
 }
 
 function LoadingHistory() {
@@ -250,13 +225,19 @@ export function HistoryView() {
         : Boolean(state.comparison && hasPeriodHistoryShareData(state.comparison)));
   const activeComparison = dataReady ? state.comparison : null;
   const comparisonPeriodText = activeComparison
-    ? formatCompactPeriod(
+    ? formatComparisonPeriodDateRange(
         activeComparison.currentPeriod.localStartDate,
         activeComparison.currentPeriod.localEndDateInclusive,
       )
     : activeDate
       ? formatDateOnly(activeDate)
       : "Dönem hazırlanıyor";
+  const comparisonPreviousPeriodText = activeComparison
+    ? formatComparisonPeriodDateRange(
+        activeComparison.previousPeriod.localStartDate,
+        activeComparison.previousPeriod.localEndDateInclusive,
+      )
+    : null;
 
   return (
     <div className="space-y-4 pb-2">
@@ -325,17 +306,37 @@ export function HistoryView() {
             ))}
           </div>
 
-          <div className="flex items-end justify-between gap-2 px-0.5">
+          <div className="grid gap-2 px-0.5 sm:grid-cols-[minmax(0,1fr)_174px] sm:items-end">
             <div className="min-w-0">
-              <h1 className="truncate text-[17px] font-extrabold tracking-[-0.045em] sm:text-2xl">
+              <h1 className="text-[17px] font-extrabold tracking-[-0.045em] sm:text-2xl">
                 {comparisonMode === "WEEK" ? "Haftalık" : "Aylık"} Karşılaştırma
               </h1>
-              <p className="mt-0.5 truncate text-[11px] text-muted-foreground sm:text-xs">
-                {comparisonMode === "WEEK" ? "Bu hafta / Geçen hafta" : "Bu ay / Geçen ay"}
-              </p>
+              {activeComparison && comparisonPreviousPeriodText ? (
+                <div
+                  className="mt-1 space-y-0.5 text-[11px] leading-snug text-muted-foreground sm:text-xs"
+                  data-testid="history-comparison-periods"
+                >
+                  <p className="whitespace-normal" data-testid="history-comparison-current-period">
+                    <span className="font-semibold text-foreground/80">
+                      {comparisonMode === "WEEK" ? "Bu hafta" : "Bu ay"}:
+                    </span>{" "}
+                    {comparisonPeriodText}
+                  </p>
+                  <p className="whitespace-normal" data-testid="history-comparison-previous-period">
+                    <span className="font-semibold text-foreground/80">
+                      {comparisonMode === "WEEK" ? "Geçen hafta" : "Geçen ay"}:
+                    </span>{" "}
+                    {comparisonPreviousPeriodText}
+                  </p>
+                </div>
+              ) : (
+                <p className="mt-1 text-[11px] text-muted-foreground sm:text-xs">
+                  Dönem hazırlanıyor
+                </p>
+              )}
             </div>
 
-            <div className="flex h-10 w-[174px] shrink-0 items-center rounded-[14px] border border-border/70 bg-card px-0.5 shadow-[0_1px_2px_rgba(15,23,42,0.025)]">
+            <div className="flex h-10 w-full items-center rounded-[14px] border border-border/70 bg-card px-0.5 shadow-[0_1px_2px_rgba(15,23,42,0.025)] sm:w-[174px]">
               <Button
                 type="button"
                 size="icon"
@@ -348,7 +349,7 @@ export function HistoryView() {
               </Button>
               <label className="relative flex min-w-0 flex-1 cursor-pointer items-center justify-center gap-1 text-[10px] font-semibold">
                 <CalendarDays className="size-4 shrink-0 text-emerald-500" aria-hidden="true" />
-                <span className="truncate" data-testid="history-selected-date">
+                <span className="whitespace-nowrap" data-testid="history-selected-date">
                   {comparisonPeriodText}
                 </span>
                 <Input

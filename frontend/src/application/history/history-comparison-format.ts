@@ -144,3 +144,47 @@ export function weightComparisonPresentation(
     note,
   };
 }
+
+function dateOnly(date: string): Date {
+  return new Date(`${date}T12:00:00.000Z`);
+}
+
+export function formatComparisonPeriodDateRange(start: string, end: string): string {
+  const startDate = dateOnly(start);
+  const endDate = dateOnly(end);
+  const sameYear = startDate.getUTCFullYear() === endDate.getUTCFullYear();
+  const sameMonth = sameYear && startDate.getUTCMonth() === endDate.getUTCMonth();
+
+  if (start === end) {
+    return new Intl.DateTimeFormat("tr-TR", {
+      timeZone: "UTC",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    }).format(startDate);
+  }
+
+  if (sameMonth) {
+    const endLabel = new Intl.DateTimeFormat("tr-TR", {
+      timeZone: "UTC",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    }).format(endDate);
+    return `${startDate.getUTCDate()}–${endLabel}`;
+  }
+
+  const startFormatter = new Intl.DateTimeFormat("tr-TR", {
+    timeZone: "UTC",
+    day: "numeric",
+    month: "long",
+    ...(sameYear ? {} : { year: "numeric" }),
+  });
+  const endFormatter = new Intl.DateTimeFormat("tr-TR", {
+    timeZone: "UTC",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+  return `${startFormatter.format(startDate)}–${endFormatter.format(endDate)}`;
+}

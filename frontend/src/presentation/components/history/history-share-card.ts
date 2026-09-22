@@ -24,6 +24,8 @@ const WIDTH = HISTORY_SHARE_EXPORT_SIZE.width;
 const HEIGHT = HISTORY_SHARE_EXPORT_SIZE.height;
 const OUTER = 48;
 const SHEET = 54;
+const FOOTER_HEIGHT = 124;
+const VISUAL_CAPTION_MAX_CHARACTERS = 140;
 const FONT = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 
 const TONE: Record<HistoryShareVisualTone, { fill: string; accent: string; soft: string }> = {
@@ -432,17 +434,22 @@ function drawAi(
 
 function drawFooter(ctx: CanvasRenderingContext2D, scene: HistoryShareScene): void {
   const x = OUTER + SHEET;
-  const y = HEIGHT - OUTER - SHEET - 70;
+  const y = HEIGHT - OUTER - SHEET - FOOTER_HEIGHT;
   const width = WIDTH - (OUTER + SHEET) * 2;
 
   ctx.fillStyle = "#f1f5f9";
-  roundedRect(ctx, x, y, width, 56, 28);
+  roundedRect(ctx, x, y, width, FOOTER_HEIGHT, 28);
   ctx.fill();
 
+  ctx.fillStyle = "#334155";
+  ctx.font = `700 17px ${FONT}`;
+  const motivationLines = fitLines(ctx, scene.motivation, width - 44, 3);
+  motivationLines.forEach((line, index) => ctx.fillText(line, x + 22, y + 30 + index * 22));
+
   ctx.fillStyle = "#64748b";
-  ctx.font = `600 17px ${FONT}`;
-  const line = fitLines(ctx, scene.footer, width - 44, 1)[0] ?? "Diewish";
-  ctx.fillText(line, x + 22, y + 35);
+  ctx.font = `500 13px ${FONT}`;
+  const privacyLine = fitLines(ctx, scene.footer, width - 44, 1)[0] ?? "Diewish";
+  ctx.fillText(privacyLine, x + 22, y + FOOTER_HEIGHT - 18);
 }
 
 function normalCardGridHeight(scene: HistoryShareScene, available: number): number {
@@ -528,7 +535,7 @@ export function createHistoryShareCanvas(payload: HistorySharePayload): HTMLCanv
   const headerBottom = drawHeader(ctx, scene);
 
   const contentTop = headerBottom + 18;
-  const footerTop = HEIGHT - OUTER - SHEET - 82;
+  const footerTop = HEIGHT - OUTER - SHEET - FOOTER_HEIGHT - 14;
   const contentHeight = footerTop - contentTop;
   const dense = scene.density === "dense";
 
@@ -627,13 +634,30 @@ function blobData(blob: Blob): Promise<string> {
   });
 }
 
-/** Shares an already-rendered PNG without changing native or Web Share contracts. */
+export function normalizeHistoryVisualCaption(caption?: string | null): string {
+  const normalized = (caption ?? "").replace(/\s+/g, " ").trim();
+  return Array.from(normalized).slice(0, VISUAL_CAPTION_MAX_CHARACTERS).join("").trim();
+}
+
+export function buildHistoryWebShareData(
+  payload: HistorySharePayload,
+  file: File,
+  caption?: string | null,
+): ShareData {
+  const text = normalizeHistoryVisualCaption(caption);
+  return text
+    ? { title: payload.title, text, files: [file] }
+    : { title: payload.title, files: [file] };
+}
+
+/** Shares an already-rendered PNG. Visual text is opt-in and short by contract. */
 export async function shareHistoryPngBlob(
   payload: HistorySharePayload,
   blob: Blob,
+  caption?: string | null,
 ): Promise<HistoryShareResult> {
   const filename = `Diewish-gecmisim-${payload.scope.toLowerCase()}.png`;
-  const text = historyPayloadText(payload);
+  const text = normalizeHistoryVisualCaption(caption);
   const nativeShare = nativeBridge();
 
   if (nativeShare?.isAvailable()) {
@@ -645,7 +669,7 @@ export async function shareHistoryPngBlob(
 
   try {
     if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
-      await navigator.share({ title: payload.title, text, files: [file] });
+      await navigator.share(buildHistoryWebShareData(payload, file, text));
       return "shared";
     }
   } catch (error) {
@@ -664,10 +688,11 @@ export async function shareHistoryPngBlob(
 
 export async function shareHistoryVisual(
   payload: HistorySharePayload,
+  caption?: string | null,
 ): Promise<HistoryShareResult> {
   const canvas = createHistoryShareCanvas(payload);
   const blob = await canvasToBlob(canvas);
-  return shareHistoryPngBlob(payload, blob);
+  return shareHistoryPngBlob(payload, blob, caption);
 }
 
 export async function shareHistoryText(payload: HistorySharePayload): Promise<HistoryShareResult> {
@@ -696,6 +721,7 @@ export async function shareHistoryText(payload: HistorySharePayload): Promise<Hi
 /** Backward-compatible visual share entry point. */
 export async function shareHistoryPayload(
   payload: HistorySharePayload,
+  caption?: string | null,
 ): Promise<HistoryShareResult> {
-  return shareHistoryVisual(payload);
+  return shareHistoryVisual(payload, caption);
 }

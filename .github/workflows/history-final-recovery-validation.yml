@@ -1,0 +1,212 @@
+name: History Final Recovery Validation
+
+on:
+  push:
+    branches:
+      - feature/history-final-recovery
+    paths:
+      - ".github/workflows/history-final-recovery-validation.yml"
+      - "frontend/src/application/history/**"
+      - "frontend/src/presentation/components/history/**"
+      - "frontend/e2e/history-*.spec.*"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Targeted History recovery validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      NEXT_PUBLIC_API_BASE_URL: http://127.0.0.1:4000/api
+      NEXT_PUBLIC_SITE_URL: http://127.0.0.1:3000
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Source and diff gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git branch --show-current)" = "feature/history-final-recovery"
+          git merge-base --is-ancestor 6abb3e124592e7958252b1e8450138de156c5ab1 HEAD
+          git diff --check 6abb3e124592e7958252b1e8450138de156c5ab1...HEAD
+          test -z "$(git status --porcelain)"
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Frontend type-check
+        working-directory: frontend
+        run: npm run type-check
+
+      - name: Targeted History tests
+        working-directory: frontend
+        run: >
+          npx playwright test
+          e2e/history-comparison-presentation.spec.ts
+          e2e/history-share-dom.spec.ts
+          e2e/history-share-parity.spec.ts
+          e2e/history-final-ux.spec.ts
+          e2e/history-final-recovery.spec.ts
+          --workers=1 --reporter=line
+
+      - name: Recovery Prettier gate
+        working-directory: frontend
+        run: >
+          npx prettier --check
+          ../.github/workflows/history-final-recovery-validation.yml
+          src/application/history/history-comparison-format.ts
+          src/application/history/history-share.ts
+          src/presentation/components/history/history-share-card.ts
+          src/presentation/components/history/history-share-dialog.tsx
+          src/presentation/components/history/history-share-dom-export.ts
+          src/presentation/components/history/history-share-dom-model.ts
+          src/presentation/components/history/history-share-dom.tsx
+          src/presentation/components/history/history-share-scene.ts
+          src/presentation/components/history/history-view.tsx
+          e2e/history-share-dom.spec.ts
+          e2e/history-final-recovery.spec.ts
+          e2e/history-final-recovery-browser.spec.ts
+
+      - name: Install Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Prepare isolated browser validation route
+        working-directory: frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("src/presentation/components/auth/route-guard.tsx")
+          source = path.read_text()
+          anchor = "const MARKETING_ROUTE_SET = new Set<string>(MARKETING_ROUTES);"
+          replacement = 'const MARKETING_ROUTE_SET = new Set<string>([...MARKETING_ROUTES, "/history-final-recovery-validation"]);'
+          if anchor not in source:
+              raise SystemExit("Route guard anchor missing")
+          path.write_text(source.replace(anchor, replacement, 1))
+          PY
+
+          mkdir -p src/app/history-final-recovery-validation
+          cat > src/app/history-final-recovery-validation/page.tsx <<'EOF'
+          "use client";
+
+          import type { HistorySharePayload } from "@/application/history/history-share";
+          import { HistoryShareDialog } from "@/presentation/components/history/history-share-dialog";
+
+          const payload: HistorySharePayload = {
+            kind: "comparison",
+            scope: "WEEK",
+            title: "Diewish • Haftalık Karşılaştırma",
+            periodLabel: "14–20 Eylül 2026",
+            comparisonLabel: "Bu hafta ↔ Geçen haftanın aynı dönemi",
+            visualCards: [
+              {
+                title: "Ortalama Kalori",
+                tone: "nutrition",
+                layout: "comparison",
+                currentLabel: "Bu hafta",
+                currentValue: "1.840 kcal",
+                previousLabel: "Geçen hafta",
+                previousValue: "1.740 kcal",
+                difference: "+100 kcal",
+                coverage: "5/7 gün kayıt",
+              },
+              {
+                title: "Protein",
+                tone: "protein",
+                layout: "comparison",
+                currentLabel: "Bu hafta",
+                currentValue: "112 g",
+                previousLabel: "Geçen hafta",
+                previousValue: "100 g",
+                difference: "+12 g",
+                coverage: "5/7 gün kayıt",
+              },
+              {
+                title: "Su",
+                tone: "water",
+                layout: "comparison",
+                currentLabel: "Bu hafta",
+                currentValue: "2,1 L",
+                previousLabel: "Geçen hafta",
+                previousValue: "1,9 L",
+                difference: "+200 ml",
+                coverage: "5/7 gün kayıt",
+              },
+              {
+                title: "Toplam Aktivite Süresi",
+                tone: "activity",
+                layout: "comparison",
+                currentLabel: "Bu hafta",
+                currentValue: "4 sa",
+                previousLabel: "Geçen hafta",
+                previousValue: "3 sa 30 dk",
+                difference: "+30 dk",
+                coverage: "5/7 gün kayıt",
+              },
+            ],
+            sections: [
+              { title: "Beslenme", lines: ["Ortalama Kalori: 1.840 kcal", "Protein: 112 g"] },
+              { title: "Su", lines: ["Su: 2,1 L"] },
+              { title: "Hareket", lines: ["Toplam Aktivite Süresi: 4 sa"] },
+            ],
+            aiInsight: null,
+            motivation:
+              "Bu dönem güzel bir ritim oluşturmaya başladın. Küçük adımların birikiyor; aynı kararlılıkla devam et.",
+            footer: "Yalnız seçtiğin kayıtlar paylaşılır.",
+          };
+
+          export default function HistoryFinalRecoveryValidationPage() {
+            return (
+              <HistoryShareDialog open onClose={() => undefined} buildPayload={() => payload} />
+            );
+          }
+          EOF
+
+      - name: Start isolated frontend
+        working-directory: frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run dev -- --hostname 127.0.0.1 > /tmp/history-final-recovery-frontend.log 2>&1 &
+          echo $! > /tmp/history-final-recovery-frontend.pid
+          for attempt in {1..90}; do
+            if curl --fail --silent http://127.0.0.1:3000/history-final-recovery-validation >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/history-final-recovery-frontend.log
+          exit 1
+
+      - name: Browser responsive and share-contract acceptance
+        working-directory: frontend
+        run: >
+          npx playwright test
+          e2e/history-final-recovery-browser.spec.ts
+          --workers=1 --reporter=line
+
+      - name: Restore validation-only instrumentation and confirm clean source
+        if: always()
+        working-directory: frontend
+        shell: bash
+        run: |
+          git checkout -- src/presentation/components/auth/route-guard.tsx || true
+          rm -rf src/app/history-final-recovery-validation
+          git status --short
+          git diff --check 6abb3e124592e7958252b1e8450138de156c5ab1...HEAD
+          test -z "$(git status --porcelain)"
