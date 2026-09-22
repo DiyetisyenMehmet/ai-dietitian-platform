@@ -23,6 +23,10 @@ jobs:
       NEXT_PUBLIC_API_BASE_URL: http://127.0.0.1:4000/api
       NEXT_PUBLIC_SITE_URL: http://127.0.0.1:3000
       E2E_WEB_BASE_URL: http://127.0.0.1:3000
+      NODE_ENV: test
+      DATABASE_URL: postgresql://diewish_test:diewish_test@127.0.0.1:65432/diewish_test?schema=public
+      JWT_ACCESS_SECRET: history-recovery-test-access-secret-000000000000
+      JWT_REFRESH_SECRET: history-recovery-test-refresh-secret-00000000000
 
     steps:
       - uses: actions/checkout@v4
