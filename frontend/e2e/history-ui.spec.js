@@ -6,6 +6,27 @@ function success(data) {
   return { success: true, data };
 }
 
+async function waitForHistoryShareCount(page, expectedCount) {
+  await expect
+    .poll(() => page.evaluate(() => window.__historyShares?.length ?? 0))
+    .toBe(expectedCount);
+  return page.evaluate(() => window.__historyShares);
+}
+
+async function waitForNativeHistoryVisual(page) {
+  await expect
+    .poll(() => page.evaluate(() => window.__nativeHistoryVisual ?? null))
+    .not.toBeNull();
+  return page.evaluate(() => window.__nativeHistoryVisual);
+}
+
+async function waitForNativeHistoryText(page) {
+  await expect
+    .poll(() => page.evaluate(() => window.__nativeHistoryText ?? null))
+    .not.toBeNull();
+  return page.evaluate(() => window.__nativeHistoryText);
+}
+
 async function onboard(page) {
   const email = `history.ui.${Date.now()}.${Math.random().toString(16).slice(2)}@example.com`;
   const password = "HistoryBrowserPass123";
@@ -517,7 +538,7 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await expect(visualPreview.locator('[data-history-share-capture-root="true"]')).toBeVisible();
   await visualPreview.getByRole("button", { name: "Paylaş", exact: true }).click();
   await expect(dialog).toHaveCount(0);
-  let shares = await page.evaluate(() => window.__historyShares);
+  let shares = await waitForHistoryShareCount(page, 1);
   expect(shares.at(-1).fileCount).toBe(1);
   expect(shares.at(-1).fileType).toBe("image/png");
 
@@ -534,7 +555,7 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await expect(dialog.locator("pre")).not.toContainText("69,8 kg");
   await dialog.getByRole("button", { name: "Yazıyı Paylaş" }).click();
   await expect(dialog).toHaveCount(0);
-  shares = await page.evaluate(() => window.__historyShares);
+  shares = await waitForHistoryShareCount(page, 2);
   expect(shares.at(-1).fileCount).toBe(0);
   expect(shares.at(-1).text).toContain("650 kcal");
   expect(shares.at(-1).text).not.toContain("Geçmiş test öğünü");
@@ -580,7 +601,7 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await dialog.getByRole("button", { name: "Önizlemeyi Aç" }).click();
   visualPreview = page.getByRole("dialog", { name: "Görsel paylaşım önizlemesi" });
   await visualPreview.getByRole("button", { name: "Paylaş", exact: true }).click();
-  const nativeVisual = await page.evaluate(() => window.__nativeHistoryVisual);
+  const nativeVisual = await waitForNativeHistoryVisual(page);
   expect(nativeVisual.base64Length).toBeGreaterThan(100);
   expect(nativeVisual.filename).toMatch(/\.png$/);
   expect(nativeVisual.text).toContain("650 kcal");
@@ -590,7 +611,7 @@ test("History daily/period UI keeps data visible when AI fails and share default
   dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
   await dialog.getByRole("button", { name: "Yazı olarak paylaş" }).click();
   await dialog.getByRole("button", { name: "Yazıyı Paylaş" }).click();
-  const nativeText = await page.evaluate(() => window.__nativeHistoryText);
+  const nativeText = await waitForNativeHistoryText(page);
   expect(nativeText.text).toContain("650 kcal");
   expect(nativeText.text).not.toContain("History Browser User");
   await page.evaluate(() => {
@@ -650,7 +671,7 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await expect(visualPreview.getByText("Geçen hafta", { exact: true }).first()).toBeVisible();
   await expect(visualPreview.getByText("Fark", { exact: true }).first()).toBeVisible();
   await visualPreview.getByRole("button", { name: "Paylaş", exact: true }).click();
-  const weeklyComparisonVisual = await page.evaluate(() => window.__nativeHistoryVisual);
+  const weeklyComparisonVisual = await waitForNativeHistoryVisual(page);
   expect(weeklyComparisonVisual.base64Length).toBeGreaterThan(100);
   expect(weeklyComparisonVisual.filename).toMatch(/\.png$/);
   expect(weeklyComparisonVisual.text).toContain("Bu hafta ↔ Geçen haftanın aynı dönemi");
@@ -684,7 +705,7 @@ test("History daily/period UI keeps data visible when AI fails and share default
   visualPreview = page.getByRole("dialog", { name: "Görsel paylaşım önizlemesi" });
   await expect(visualPreview.getByText("Haftanın Özeti", { exact: true }).first()).toBeVisible();
   await visualPreview.getByRole("button", { name: "Paylaş", exact: true }).click();
-  const weeklyVisual = await page.evaluate(() => window.__nativeHistoryVisual);
+  const weeklyVisual = await waitForNativeHistoryVisual(page);
   expect(weeklyVisual.base64Length).toBeGreaterThan(100);
   expect(weeklyVisual.filename).toMatch(/\.png$/);
   await page.evaluate(() => {
@@ -729,7 +750,7 @@ test("History daily/period UI keeps data visible when AI fails and share default
   visualPreview = page.getByRole("dialog", { name: "Görsel paylaşım önizlemesi" });
   await expect(visualPreview.getByText("Ayın Özeti", { exact: true }).first()).toBeVisible();
   await visualPreview.getByRole("button", { name: "Paylaş", exact: true }).click();
-  const monthlyVisual = await page.evaluate(() => window.__nativeHistoryVisual);
+  const monthlyVisual = await waitForNativeHistoryVisual(page);
   expect(monthlyVisual.base64Length).toBeGreaterThan(100);
   expect(monthlyVisual.filename).toMatch(/\.png$/);
   await page.evaluate(() => {
