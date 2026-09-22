@@ -224,19 +224,19 @@ function resolveCustomPeriod(
   parseHistoryDate(endDate);
 
   if (startDate > endDate) {
-    throw ApiError.badRequest("Başlangıç tarihi bitiş tarihinden sonra olamaz.", {
+    throw new ApiError(400, "Başlangıç tarihi bitiş tarihinden sonra olamaz.", {
       code: "HISTORY_CUSTOM_RANGE_ORDER",
     });
   }
   if (endDate > today) {
-    throw ApiError.badRequest("History cannot be requested for a future local date.", {
+    throw new ApiError(400, "History cannot be requested for a future local date.", {
       code: "FUTURE_HISTORY_DATE",
     });
   }
 
   const period = resolvePeriod(startDate, addCalendarDays(endDate, 1), timezone);
   if (period.days > 31) {
-    throw ApiError.badRequest("Her özel dönem en fazla 31 gün içerebilir.", {
+    throw new ApiError(400, "Her özel dönem en fazla 31 gün içerebilir.", {
       code: "HISTORY_CUSTOM_RANGE_TOO_LONG",
     });
   }
@@ -264,7 +264,8 @@ export function resolveCustomHistoryComparisonPeriods(
   );
 
   if (currentPeriod.days !== previousPeriod.days) {
-    throw ApiError.badRequest(
+    throw new ApiError(
+      400,
       "Karşılaştırılacak dönemler aynı sayıda gün içermelidir.",
       { code: "HISTORY_CUSTOM_RANGE_LENGTH_MISMATCH" },
     );
