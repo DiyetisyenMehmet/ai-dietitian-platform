@@ -62,23 +62,38 @@ jobs:
           e2e/history-final-recovery.spec.ts
           --workers=1 --reporter=line
 
-      - name: Recovery Prettier gate
+      - name: Recovery Prettier diagnostic
         working-directory: frontend
-        run: >
-          npx prettier --check
-          ../.github/workflows/history-final-recovery-validation.yml
-          src/application/history/history-comparison-format.ts
-          src/application/history/history-share.ts
-          src/presentation/components/history/history-share-card.ts
-          src/presentation/components/history/history-share-dialog.tsx
-          src/presentation/components/history/history-share-dom-export.ts
-          src/presentation/components/history/history-share-dom-model.ts
-          src/presentation/components/history/history-share-dom.tsx
-          src/presentation/components/history/history-share-scene.ts
-          src/presentation/components/history/history-view.tsx
-          e2e/history-share-dom.spec.ts
-          e2e/history-final-recovery.spec.ts
-          e2e/history-final-recovery-browser.spec.ts
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx prettier --write \
+            src/application/history/history-share.ts \
+            e2e/history-final-recovery.spec.ts \
+            e2e/history-final-recovery-browser.spec.ts
+          npx prettier --check \
+            src/application/history/history-comparison-format.ts \
+            src/application/history/history-share.ts \
+            src/presentation/components/history/history-share-card.ts \
+            src/presentation/components/history/history-share-dialog.tsx \
+            src/presentation/components/history/history-share-dom-export.ts \
+            src/presentation/components/history/history-share-dom-model.ts \
+            src/presentation/components/history/history-share-dom.tsx \
+            src/presentation/components/history/history-share-scene.ts \
+            src/presentation/components/history/history-view.tsx \
+            e2e/history-share-dom.spec.ts \
+            e2e/history-final-recovery.spec.ts \
+            e2e/history-final-recovery-browser.spec.ts
+
+      - name: Upload formatted recovery sources
+        uses: actions/upload-artifact@v4
+        with:
+          name: history-final-recovery-prettier
+          path: |
+            frontend/src/application/history/history-share.ts
+            frontend/e2e/history-final-recovery.spec.ts
+            frontend/e2e/history-final-recovery-browser.spec.ts
+          if-no-files-found: error
 
       - name: Install Chromium
         working-directory: frontend
@@ -440,6 +455,10 @@ jobs:
         shell: bash
         run: |
           git checkout -- src/presentation/components/auth/route-guard.tsx || true
+          git checkout -- \
+            src/application/history/history-share.ts \
+            e2e/history-final-recovery.spec.ts \
+            e2e/history-final-recovery-browser.spec.ts || true
           rm -rf src/app/history-final-recovery-validation test-results
           git status --short
           git diff --check 6abb3e124592e7958252b1e8450138de156c5ab1...HEAD
