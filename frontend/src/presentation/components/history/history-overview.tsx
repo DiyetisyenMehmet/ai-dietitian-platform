@@ -31,32 +31,60 @@ import {
 import { dailyHistoryMetricRoute } from "@/application/history/history-navigation";
 import { cn } from "@/shared/lib/utils";
 
-type Tone = "nutrition" | "protein" | "water" | "activity" | "sleep" | "weight";
+export type HistoryMetricTone =
+  | "nutrition"
+  | "protein"
+  | "water"
+  | "activity"
+  | "sleep"
+  | "weight"
+  | "neutral";
 
-const CARD_TONE: Record<Tone, { card: string; icon: string }> = {
+const CARD_TONE: Record<
+  HistoryMetricTone,
+  { card: string; icon: string; shareCard: string; shareIcon: string }
+> = {
   nutrition: {
     card: "border-rose-100 bg-rose-50/55 dark:border-rose-900/45 dark:bg-rose-950/20",
     icon: "bg-rose-100 text-rose-500 dark:bg-rose-900/40 dark:text-rose-300",
+    shareCard: "border-rose-100 bg-rose-50/70",
+    shareIcon: "bg-rose-100 text-rose-500",
   },
   protein: {
     card: "border-emerald-100 bg-emerald-50/60 dark:border-emerald-900/45 dark:bg-emerald-950/20",
     icon: "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-300",
+    shareCard: "border-emerald-100 bg-emerald-50/75",
+    shareIcon: "bg-emerald-100 text-emerald-600",
   },
   water: {
     card: "border-sky-100 bg-sky-50/60 dark:border-sky-900/45 dark:bg-sky-950/20",
     icon: "bg-sky-100 text-cyan-600 dark:bg-sky-900/40 dark:text-sky-300",
+    shareCard: "border-sky-100 bg-sky-50/80",
+    shareIcon: "bg-sky-100 text-cyan-600",
   },
   activity: {
     card: "border-teal-100 bg-teal-50/60 dark:border-teal-900/45 dark:bg-teal-950/20",
     icon: "bg-teal-100 text-teal-600 dark:bg-teal-900/40 dark:text-teal-300",
+    shareCard: "border-teal-100 bg-teal-50/75",
+    shareIcon: "bg-teal-100 text-teal-600",
   },
   sleep: {
     card: "border-indigo-100 bg-indigo-50/50 dark:border-indigo-900/45 dark:bg-indigo-950/20",
     icon: "bg-indigo-100 text-cyan-700 dark:bg-indigo-900/40 dark:text-indigo-300",
+    shareCard: "border-indigo-100 bg-indigo-50/70",
+    shareIcon: "bg-indigo-100 text-cyan-700",
   },
   weight: {
     card: "border-rose-100 bg-red-50/45 dark:border-rose-900/45 dark:bg-rose-950/20",
     icon: "bg-rose-100 text-rose-500 dark:bg-rose-900/40 dark:text-rose-300",
+    shareCard: "border-rose-100 bg-red-50/60",
+    shareIcon: "bg-rose-100 text-rose-500",
+  },
+  neutral: {
+    card: "border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900/35",
+    icon: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
+    shareCard: "border-slate-200 bg-slate-50",
+    shareIcon: "bg-slate-100 text-slate-600",
   },
 };
 
@@ -131,7 +159,7 @@ function formatDate(date: string) {
   }).format(new Date(`${date}T12:00:00.000Z`));
 }
 
-function MetricCard({
+export function HistoryMetricCard({
   label,
   value,
   helper,
@@ -139,40 +167,59 @@ function MetricCard({
   tone,
   href,
   ariaLabel,
+  variant = "normal",
 }: {
   label: string;
   value: string;
   helper?: string;
   icon: LucideIcon;
-  tone: Tone;
+  tone: HistoryMetricTone;
   href?: string;
   ariaLabel?: string;
+  variant?: "normal" | "share";
 }) {
   const palette = CARD_TONE[tone];
+  const share = variant === "share";
   const className = cn(
     "flex min-h-[82px] min-w-0 items-center gap-2 rounded-[19px] border px-2.5 py-2.5 shadow-[0_1px_2px_rgba(15,23,42,0.025)] sm:px-3",
+    share && "min-h-[94px] gap-3 rounded-[22px] px-3.5 py-3 shadow-sm",
     href &&
+      !share &&
       "cursor-pointer transition-[transform,box-shadow,border-color] hover:border-foreground/15 hover:shadow-sm active:scale-[0.985] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60 focus-visible:ring-offset-2",
-    palette.card,
+    share ? palette.shareCard : palette.card,
   );
   const content = (
     <>
       <span
         className={cn(
           "flex size-10 shrink-0 items-center justify-center rounded-full sm:size-11",
-          palette.icon,
+          share ? palette.shareIcon : palette.icon,
         )}
       >
         <Icon className="size-5" strokeWidth={2.2} aria-hidden="true" />
       </span>
       <div className="min-w-0 flex-1">
-        <p className="text-[11px] font-medium leading-tight text-foreground/80 sm:text-xs">
+        <p
+          className={cn(
+            "text-[11px] font-medium leading-tight text-foreground/80 sm:text-xs",
+            share && "text-[13px] text-slate-600 sm:text-[13px]",
+          )}
+        >
           {label}
         </p>
-        <p className="mt-1 break-normal text-[15px] font-extrabold leading-[1.12] tracking-[-0.025em] [hyphens:none] sm:text-[18px]">
+        <p
+          className={cn(
+            "mt-1 break-normal text-[15px] font-extrabold leading-[1.12] tracking-[-0.025em] [hyphens:none] sm:text-[18px]",
+            share && "whitespace-nowrap text-[17px] text-slate-950 sm:text-[17px]",
+          )}
+        >
           {value}
         </p>
-        {helper && <p className="mt-1 text-[10px] text-muted-foreground">{helper}</p>}
+        {helper && (
+          <p className={cn("mt-1 text-[10px] text-muted-foreground", share && "text-slate-500")}>
+            {helper}
+          </p>
+        )}
       </div>
       {href && (
         <ChevronRight
@@ -183,7 +230,7 @@ function MetricCard({
     </>
   );
 
-  return href ? (
+  return href && !share ? (
     <Link href={href} aria-label={ariaLabel ?? `${label} detayını aç`} className={className}>
       {content}
     </Link>
@@ -192,7 +239,13 @@ function MetricCard({
   );
 }
 
-function SectionHeading({ title, action }: { title: string; action?: React.ReactNode }) {
+export function HistorySectionHeading({
+  title,
+  action,
+}: {
+  title: string;
+  action?: React.ReactNode;
+}) {
   return (
     <div className="mb-2.5 flex min-h-7 items-center justify-between gap-3 px-0.5">
       <h2 className="text-[19px] font-extrabold tracking-[-0.025em] sm:text-xl">{title}</h2>
@@ -220,7 +273,7 @@ export function DailyHistoryOverview({ history }: { history: DailyHistoryRespons
           description="Beslenme, su, hareket, uyku veya kilo kaydı eklediğinde günün özeti burada oluşur."
         />
         <section>
-          <SectionHeading title="Öğünler" />
+          <HistorySectionHeading title="Öğünler" />
           <p className="rounded-[18px] border border-dashed border-border/80 bg-muted/25 px-3.5 py-3 text-[12px] text-muted-foreground">
             Bu gün için öğün kaydı bulunmuyor.
           </p>
@@ -247,7 +300,7 @@ export function DailyHistoryOverview({ history }: { history: DailyHistoryRespons
       )}
 
       <section>
-        <SectionHeading
+        <HistorySectionHeading
           title="Günün Özeti"
           action={
             <span className="flex items-center gap-1 text-right text-[10px] italic text-slate-500 dark:text-slate-400 sm:text-xs">
@@ -259,7 +312,7 @@ export function DailyHistoryOverview({ history }: { history: DailyHistoryRespons
           }
         />
         <div className="grid grid-cols-2 gap-2.5">
-          <MetricCard
+          <HistoryMetricCard
             label="Toplam kalori"
             value={observedText(history.nutrition.totals.calories, " kcal")}
             icon={Flame}
@@ -267,7 +320,7 @@ export function DailyHistoryOverview({ history }: { history: DailyHistoryRespons
             href={dailyHistoryMetricRoute(history, "calories") ?? undefined}
             ariaLabel="Toplam kalori için beslenme kayıtlarını aç"
           />
-          <MetricCard
+          <HistoryMetricCard
             label="Protein"
             value={observedText(
               history.nutrition.totals.proteinG,
@@ -280,7 +333,7 @@ export function DailyHistoryOverview({ history }: { history: DailyHistoryRespons
             href={dailyHistoryMetricRoute(history, "protein") ?? undefined}
             ariaLabel="Protein için beslenme kayıtlarını aç"
           />
-          <MetricCard
+          <HistoryMetricCard
             label="Su"
             value={waterText(history.water.totalMl)}
             icon={Droplets}
@@ -288,7 +341,7 @@ export function DailyHistoryOverview({ history }: { history: DailyHistoryRespons
             href={dailyHistoryMetricRoute(history, "water") ?? undefined}
             ariaLabel="Su takip ekranını aç"
           />
-          <MetricCard
+          <HistoryMetricCard
             label="Aktivite süresi"
             value={observedDuration(history.activity.totalActiveMinutes)}
             icon={Activity}
@@ -296,7 +349,7 @@ export function DailyHistoryOverview({ history }: { history: DailyHistoryRespons
             href={dailyHistoryMetricRoute(history, "activity") ?? undefined}
             ariaLabel="Aktivite kayıtlarını aç"
           />
-          <MetricCard
+          <HistoryMetricCard
             label="Uyku"
             value={observedDuration(history.sleep.totalDurationMinutes, "Uyku kaydı yok")}
             icon={Moon}
@@ -304,7 +357,7 @@ export function DailyHistoryOverview({ history }: { history: DailyHistoryRespons
             href={dailyHistoryMetricRoute(history, "sleep") ?? undefined}
             ariaLabel="Uyku kayıtlarını aç"
           />
-          <MetricCard
+          <HistoryMetricCard
             label="Kilo"
             value={weight}
             icon={Scale}
@@ -316,7 +369,7 @@ export function DailyHistoryOverview({ history }: { history: DailyHistoryRespons
       </section>
 
       <section>
-        <SectionHeading
+        <HistorySectionHeading
           title="Öğünler"
           action={
             history.nutrition.meals.length > 3 ? (
@@ -385,7 +438,7 @@ export function DailyHistoryOverview({ history }: { history: DailyHistoryRespons
 
       {history.timeline.length > 0 && (
         <section>
-          <SectionHeading
+          <HistorySectionHeading
             title="Günlük Zaman Akışı"
             action={
               history.timeline.length > 4 ? (
@@ -443,7 +496,7 @@ export function DailyHistoryOverview({ history }: { history: DailyHistoryRespons
                               "weight",
                             ];
                 const Icon = row[2] as LucideIcon;
-                const palette = CARD_TONE[row[3] as Tone];
+                const palette = CARD_TONE[row[3] as HistoryMetricTone];
                 return (
                   <li
                     key={event.id}
@@ -478,8 +531,19 @@ export function DailyHistoryOverview({ history }: { history: DailyHistoryRespons
 }
 
 const COMPARISON_TONE: Record<
-  Tone,
-  { card: string; icon: string; values: string; badge: string; divider: string }
+  HistoryMetricTone,
+  {
+    card: string;
+    icon: string;
+    values: string;
+    badge: string;
+    divider: string;
+    shareCard: string;
+    shareIcon: string;
+    shareValues: string;
+    shareBadge: string;
+    shareDivider: string;
+  }
 > = {
   nutrition: {
     card: "border-rose-100 bg-rose-50/40 dark:border-rose-900/45 dark:bg-rose-950/20",
@@ -487,6 +551,11 @@ const COMPARISON_TONE: Record<
     values: "bg-white/55 dark:bg-rose-950/25",
     badge: "bg-rose-100/60 dark:bg-rose-900/30",
     divider: "border-rose-200/60 dark:border-rose-900/50",
+    shareCard: "border-rose-100 bg-rose-50/55",
+    shareIcon: "bg-rose-100 text-rose-500",
+    shareValues: "bg-white/80",
+    shareBadge: "bg-rose-100/80",
+    shareDivider: "border-rose-200/70",
   },
   protein: {
     card: "border-emerald-100 bg-emerald-50/45 dark:border-emerald-900/45 dark:bg-emerald-950/20",
@@ -494,6 +563,11 @@ const COMPARISON_TONE: Record<
     values: "bg-white/50 dark:bg-emerald-950/25",
     badge: "bg-emerald-100/60 dark:bg-emerald-900/30",
     divider: "border-emerald-200/60 dark:border-emerald-900/50",
+    shareCard: "border-emerald-100 bg-emerald-50/60",
+    shareIcon: "bg-emerald-100 text-emerald-600",
+    shareValues: "bg-white/80",
+    shareBadge: "bg-emerald-100/80",
+    shareDivider: "border-emerald-200/70",
   },
   water: {
     card: "border-cyan-100 bg-cyan-50/45 dark:border-cyan-900/45 dark:bg-cyan-950/20",
@@ -501,6 +575,11 @@ const COMPARISON_TONE: Record<
     values: "bg-white/50 dark:bg-cyan-950/25",
     badge: "bg-cyan-100/60 dark:bg-cyan-900/30",
     divider: "border-cyan-200/60 dark:border-cyan-900/50",
+    shareCard: "border-cyan-100 bg-cyan-50/60",
+    shareIcon: "bg-cyan-100 text-teal-500",
+    shareValues: "bg-white/80",
+    shareBadge: "bg-cyan-100/80",
+    shareDivider: "border-cyan-200/70",
   },
   activity: {
     card: "border-teal-100 bg-teal-50/45 dark:border-teal-900/45 dark:bg-teal-950/20",
@@ -508,6 +587,11 @@ const COMPARISON_TONE: Record<
     values: "bg-white/50 dark:bg-teal-950/25",
     badge: "bg-teal-100/60 dark:bg-teal-900/30",
     divider: "border-teal-200/60 dark:border-teal-900/50",
+    shareCard: "border-teal-100 bg-teal-50/60",
+    shareIcon: "bg-teal-100 text-teal-600",
+    shareValues: "bg-white/80",
+    shareBadge: "bg-teal-100/80",
+    shareDivider: "border-teal-200/70",
   },
   sleep: {
     card: "border-sky-100 bg-sky-50/40 dark:border-sky-900/45 dark:bg-sky-950/20",
@@ -515,6 +599,11 @@ const COMPARISON_TONE: Record<
     values: "bg-white/50 dark:bg-sky-950/25",
     badge: "bg-sky-100/60 dark:bg-sky-900/30",
     divider: "border-sky-200/60 dark:border-sky-900/50",
+    shareCard: "border-sky-100 bg-sky-50/55",
+    shareIcon: "bg-sky-100 text-teal-600",
+    shareValues: "bg-white/80",
+    shareBadge: "bg-sky-100/80",
+    shareDivider: "border-sky-200/70",
   },
   weight: {
     card: "border-rose-100 bg-red-50/45 dark:border-rose-900/45 dark:bg-rose-950/20",
@@ -522,11 +611,28 @@ const COMPARISON_TONE: Record<
     values: "bg-white/50 dark:bg-rose-950/25",
     badge: "bg-rose-100/60 dark:bg-rose-900/30",
     divider: "border-rose-200/60 dark:border-rose-900/50",
+    shareCard: "border-rose-100 bg-red-50/55",
+    shareIcon: "bg-rose-100 text-rose-500",
+    shareValues: "bg-white/80",
+    shareBadge: "bg-rose-100/80",
+    shareDivider: "border-rose-200/70",
+  },
+  neutral: {
+    card: "border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900/35",
+    icon: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
+    values: "bg-white/60 dark:bg-slate-900/40",
+    badge: "bg-slate-100 dark:bg-slate-800",
+    divider: "border-slate-200 dark:border-slate-700",
+    shareCard: "border-slate-200 bg-slate-50",
+    shareIcon: "bg-slate-100 text-slate-600",
+    shareValues: "bg-white/80",
+    shareBadge: "bg-slate-100",
+    shareDivider: "border-slate-200",
   },
 };
 
-function deltaTextClass(metric: MetricComparison, neutralDelta: boolean) {
-  if (neutralDelta || !metric.comparisonAvailable || metric.absoluteChange === null) {
+function deltaTextClass(metric: MetricComparison | undefined, neutralDelta: boolean) {
+  if (neutralDelta || !metric || !metric.comparisonAvailable || metric.absoluteChange === null) {
     return "text-foreground";
   }
   if (metric.direction === "UP") return "text-teal-600 dark:text-teal-300";
@@ -540,7 +646,7 @@ function comparisonCoverageText(value: PeriodCategoryCompleteness) {
     : `${value.recordedDays}/${value.expectedDays} gün kayıt`;
 }
 
-function ComparisonMetricCard({
+export function HistoryComparisonMetricCard({
   title,
   description,
   icon: Icon,
@@ -554,6 +660,7 @@ function ComparisonMetricCard({
   metric,
   tone,
   neutralDelta = false,
+  variant = "normal",
 }: {
   title: string;
   description: string;
@@ -565,19 +672,26 @@ function ComparisonMetricCard({
   difference: string;
   coverage: string;
   note?: string | null;
-  metric: MetricComparison;
-  tone: Tone;
+  metric?: MetricComparison;
+  tone: HistoryMetricTone;
   neutralDelta?: boolean;
+  variant?: "normal" | "share";
 }) {
   const palette = COMPARISON_TONE[tone];
+  const share = variant === "share";
   return (
-    <article className={cn("overflow-hidden rounded-[22px] border shadow-sm", palette.card)}>
+    <article
+      className={cn(
+        "overflow-hidden rounded-[22px] border shadow-sm",
+        share ? palette.shareCard : palette.card,
+      )}
+    >
       <div className="flex min-h-[72px] items-center justify-between gap-2.5 px-3 py-2.5 sm:px-3.5">
         <div className="flex min-w-0 items-center gap-2.5">
           <span
             className={cn(
               "flex size-11 shrink-0 items-center justify-center rounded-full",
-              palette.icon,
+              share ? palette.shareIcon : palette.icon,
             )}
           >
             <Icon className="size-5" strokeWidth={2.15} aria-hidden="true" />
@@ -586,7 +700,12 @@ function ComparisonMetricCard({
             <h3 className="text-[14px] font-bold leading-tight tracking-[-0.015em] sm:text-[15px]">
               {title}
             </h3>
-            <p className="mt-1 text-[10px] leading-tight text-muted-foreground sm:text-[11px]">
+            <p
+              className={cn(
+                "mt-1 text-[10px] leading-tight text-muted-foreground sm:text-[11px]",
+                share && "text-slate-500",
+              )}
+            >
               {description}
             </p>
           </div>
@@ -594,7 +713,8 @@ function ComparisonMetricCard({
         <span
           className={cn(
             "shrink-0 rounded-full px-2.5 py-1 text-[10px] font-medium text-muted-foreground",
-            palette.badge,
+            share && "text-slate-500",
+            share ? palette.shareBadge : palette.badge,
           )}
         >
           {coverage}
@@ -602,7 +722,10 @@ function ComparisonMetricCard({
       </div>
 
       <div
-        className={cn("mx-2 mb-2 grid grid-cols-3 overflow-hidden rounded-[15px]", palette.values)}
+        className={cn(
+          "mx-2 mb-2 grid grid-cols-3 overflow-hidden rounded-[15px]",
+          share ? palette.shareValues : palette.values,
+        )}
       >
         {[
           [currentLabel, currentValue],
@@ -614,16 +737,22 @@ function ComparisonMetricCard({
             className={cn(
               "min-w-0 px-1.5 py-2.5 text-center sm:px-2",
               index > 0 && "border-l",
-              index > 0 && palette.divider,
+              index > 0 && (share ? palette.shareDivider : palette.divider),
             )}
           >
-            <p className="truncate text-[10px] font-medium leading-tight text-muted-foreground sm:text-[11px]">
+            <p
+              className={cn(
+                "truncate text-[10px] font-medium leading-tight text-muted-foreground sm:text-[11px]",
+                share && "text-slate-500",
+              )}
+            >
               {label}
             </p>
             <p
               className={cn(
                 "mt-1.5 break-words text-[14px] font-extrabold tabular-nums leading-tight tracking-[-0.025em] sm:text-[16px]",
                 index === 2 && deltaTextClass(metric, neutralDelta),
+                share && "text-slate-950",
               )}
             >
               {value}
@@ -631,7 +760,16 @@ function ComparisonMetricCard({
           </div>
         ))}
       </div>
-      {note && <p className="px-3 pb-2.5 text-[10px] leading-snug text-muted-foreground">{note}</p>}
+      {note && (
+        <p
+          className={cn(
+            "px-3 pb-2.5 text-[10px] leading-snug text-muted-foreground",
+            share && "text-slate-500",
+          )}
+        >
+          {note}
+        </p>
+      )}
     </article>
   );
 }
@@ -666,7 +804,7 @@ export function PeriodComparisonSection({ comparison }: { comparison: HistoryCom
   return (
     <section className="space-y-3" aria-label="Dönem karşılaştırması">
       <div className="space-y-3">
-        <ComparisonMetricCard
+        <HistoryComparisonMetricCard
           title="Ortalama kalori"
           description="Besin değeri bulunan günlerin ortalaması."
           icon={Flame}
@@ -681,7 +819,7 @@ export function PeriodComparisonSection({ comparison }: { comparison: HistoryCom
           tone="nutrition"
           neutralDelta
         />
-        <ComparisonMetricCard
+        <HistoryComparisonMetricCard
           title="Protein"
           description="Besin değeri bulunan günlerin ortalaması."
           icon={UtensilsCrossed}
@@ -695,7 +833,7 @@ export function PeriodComparisonSection({ comparison }: { comparison: HistoryCom
           metric={protein}
           tone="protein"
         />
-        <ComparisonMetricCard
+        <HistoryComparisonMetricCard
           title="Su"
           description="Su kaydı bulunan günlerin ortalaması."
           icon={Droplets}
@@ -709,7 +847,7 @@ export function PeriodComparisonSection({ comparison }: { comparison: HistoryCom
           metric={water}
           tone="water"
         />
-        <ComparisonMetricCard
+        <HistoryComparisonMetricCard
           title="Toplam aktivite süresi"
           description="Dönemde kaydedilen toplam süre."
           icon={Activity}
@@ -723,7 +861,7 @@ export function PeriodComparisonSection({ comparison }: { comparison: HistoryCom
           metric={activity}
           tone="activity"
         />
-        <ComparisonMetricCard
+        <HistoryComparisonMetricCard
           title="Ortalama uyku süresi"
           description="Kaydedilen gecelerin ortalaması."
           icon={Moon}
@@ -737,7 +875,7 @@ export function PeriodComparisonSection({ comparison }: { comparison: HistoryCom
           metric={sleep}
           tone="sleep"
         />
-        <ComparisonMetricCard
+        <HistoryComparisonMetricCard
           title="Kilo değişimi"
           description="Dönem içindeki net değişim."
           icon={Scale}
@@ -787,7 +925,7 @@ export function PeriodHistoryOverview({ comparison }: { comparison: HistoryCompa
   return (
     <div className="space-y-4">
       <section>
-        <SectionHeading
+        <HistorySectionHeading
           title={comparison.periodType === "WEEK" ? "Haftanın Özeti" : "Ayın Özeti"}
           action={
             <span className="text-right text-[10px] leading-tight text-muted-foreground">
@@ -797,7 +935,7 @@ export function PeriodHistoryOverview({ comparison }: { comparison: HistoryCompa
           }
         />
         <div className="grid grid-cols-2 gap-2.5">
-          <MetricCard
+          <HistoryMetricCard
             label="Ortalama kalori"
             value={observedText(
               comparison.metrics.nutrition.averageCaloriesPerQuantifiedDay.current,
@@ -807,7 +945,7 @@ export function PeriodHistoryOverview({ comparison }: { comparison: HistoryCompa
             icon={Flame}
             tone="nutrition"
           />
-          <MetricCard
+          <HistoryMetricCard
             label="Ortalama protein"
             value={observedText(
               comparison.metrics.nutrition.averageProteinGPerQuantifiedDay.current,
@@ -819,21 +957,21 @@ export function PeriodHistoryOverview({ comparison }: { comparison: HistoryCompa
             icon={UtensilsCrossed}
             tone="protein"
           />
-          <MetricCard
+          <HistoryMetricCard
             label="Ortalama su"
             value={waterText(comparison.metrics.water.averageMlPerRecordedDay.current)}
             helper={coverageText(current.water)}
             icon={Droplets}
             tone="water"
           />
-          <MetricCard
+          <HistoryMetricCard
             label="Aktivite süresi"
             value={observedDuration(comparison.metrics.activity.totalActiveMinutes.current)}
             helper={coverageText(current.activity)}
             icon={Activity}
             tone="activity"
           />
-          <MetricCard
+          <HistoryMetricCard
             label="Ortalama uyku"
             value={observedDuration(
               comparison.metrics.sleep.averageDurationPerRecordedNight.current,
@@ -843,7 +981,7 @@ export function PeriodHistoryOverview({ comparison }: { comparison: HistoryCompa
             icon={Moon}
             tone="sleep"
           />
-          <MetricCard
+          <HistoryMetricCard
             label="Kilo değişimi"
             value={weightText}
             helper={`${current.weight.measurementCount} ölçüm`}

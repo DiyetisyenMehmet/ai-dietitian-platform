@@ -611,21 +611,36 @@ function nativeBridge(): NativeShareBridge | undefined {
   return (window as typeof window & { DiewishShare?: NativeShareBridge }).DiewishShare;
 }
 
-export async function shareHistoryVisual(
+function blobData(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error ?? new Error("Share image could not be read."));
+    reader.onload = () => {
+      const value = reader.result;
+      if (typeof value !== "string") {
+        reject(new Error("Share image could not be read."));
+        return;
+      }
+      resolve(value.slice(value.indexOf(",") + 1));
+    };
+    reader.readAsDataURL(blob);
+  });
+}
+
+/** Shares an already-rendered PNG without changing native or Web Share contracts. */
+export async function shareHistoryPngBlob(
   payload: HistorySharePayload,
+  blob: Blob,
 ): Promise<HistoryShareResult> {
-  const canvas = createHistoryShareCanvas(payload);
   const filename = `Diewish-gecmisim-${payload.scope.toLowerCase()}.png`;
   const text = historyPayloadText(payload);
   const nativeShare = nativeBridge();
 
   if (nativeShare?.isAvailable()) {
-    const dataUrl = canvas.toDataURL("image/png");
-    nativeShare.sharePng(dataUrl.slice(dataUrl.indexOf(",") + 1), filename, text);
+    nativeShare.sharePng(await blobData(blob), filename, text);
     return "shared";
   }
 
-  const blob = await canvasToBlob(canvas);
   const file = new File([blob], filename, { type: "image/png" });
 
   try {
@@ -645,6 +660,14 @@ export async function shareHistoryVisual(
   anchor.click();
   URL.revokeObjectURL(url);
   return "downloaded";
+}
+
+export async function shareHistoryVisual(
+  payload: HistorySharePayload,
+): Promise<HistoryShareResult> {
+  const canvas = createHistoryShareCanvas(payload);
+  const blob = await canvasToBlob(canvas);
+  return shareHistoryPngBlob(payload, blob);
 }
 
 export async function shareHistoryText(payload: HistorySharePayload): Promise<HistoryShareResult> {

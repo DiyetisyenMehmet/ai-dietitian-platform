@@ -6,10 +6,8 @@ import {
   ChevronLeft,
   ChevronRight,
   GitCompareArrows,
-  Leaf,
   RefreshCw,
   Share2,
-  Sparkles,
 } from "lucide-react";
 
 import { useAuth } from "@/application/auth/auth-store";
@@ -31,6 +29,7 @@ import {
 } from "@/application/history/history-store";
 import type { HistoryMode } from "@/domain/history/types";
 import { EmptyState } from "@/presentation/components/feedback/empty-state";
+import { HistoryEvaluationCard } from "@/presentation/components/history/history-evaluation-card";
 import { HistoryShareDialog } from "@/presentation/components/history/history-share-dialog";
 import {
   DailyHistoryOverview,
@@ -519,31 +518,15 @@ export function HistoryView() {
                 <PeriodHistoryOverview comparison={state.comparison} />
               )}
 
-              <section className="relative overflow-hidden rounded-[21px] border border-emerald-200/70 bg-gradient-to-br from-emerald-50/90 via-background to-cyan-50/90 p-3.5 shadow-[0_2px_10px_rgba(16,185,129,0.06)] dark:border-emerald-900/50 dark:from-emerald-950/35 dark:via-card dark:to-sky-950/25 sm:p-4">
-                <Leaf
-                  className="pointer-events-none absolute -bottom-4 right-1 size-20 rotate-[-18deg] text-emerald-300/25 dark:text-emerald-500/10"
-                  strokeWidth={1.3}
-                  aria-hidden="true"
-                />
-                <div className="relative mb-2 flex items-center gap-2.5">
-                  <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/45 dark:text-emerald-300">
-                    <Sparkles className="size-5" aria-hidden="true" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <h2 className="text-[13px] font-bold">
-                        {normalMode === "DAY"
-                          ? "Diewish Günlük Değerlendirmesi"
-                          : normalMode === "WEEK"
-                            ? "Diewish Haftalık Değerlendirmesi"
-                            : "Diewish Aylık Değerlendirmesi"}
-                      </h2>
-                      <span className="rounded-full bg-emerald-200/70 px-2 py-0.5 text-[9px] font-bold text-emerald-700 dark:bg-emerald-800/60 dark:text-emerald-200">
-                        AI
-                      </span>
-                    </div>
-                  </div>
-                </div>
+              <HistoryEvaluationCard
+                title={
+                  normalMode === "DAY"
+                    ? "Diewish Günlük Değerlendirmesi"
+                    : normalMode === "WEEK"
+                      ? "Diewish Haftalık Değerlendirmesi"
+                      : "Diewish Aylık Değerlendirmesi"
+                }
+              >
                 {state.insightStatus === "loading" || state.insightStatus === "idle" ? (
                   <div className="space-y-2">
                     <Skeleton className="h-4 w-full" />
@@ -591,7 +574,7 @@ export function HistoryView() {
                     )}
                   </div>
                 )}
-              </section>
+              </HistoryEvaluationCard>
 
               <Button
                 type="button"

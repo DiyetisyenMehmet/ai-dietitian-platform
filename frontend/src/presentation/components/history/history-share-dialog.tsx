@@ -1,19 +1,19 @@
 "use client";
 
 import * as React from "react";
-import { FileText, Image as ImageIcon, Share2, X } from "lucide-react";
+import { ArrowLeft, FileText, Image as ImageIcon, Share2, X } from "lucide-react";
 import { toast } from "sonner";
 
 import {
   DEFAULT_HISTORY_SHARE_OPTIONS,
   type HistoryShareOptions,
   type HistorySharePayload,
-  type HistoryShareVisualTone,
 } from "@/application/history/history-share";
 import { Button } from "@/presentation/components/ui/button";
 import { cn } from "@/shared/lib/utils";
-import { historyPayloadText, shareHistoryText, shareHistoryVisual } from "./history-share-card";
-import { buildHistoryShareScene } from "./history-share-scene";
+import { historyPayloadText, shareHistoryText } from "./history-share-card";
+import { HistoryShareDom } from "./history-share-dom";
+import { shareHistoryDomVisual } from "./history-share-dom-export";
 
 interface HistoryShareDialogProps {
   open: boolean;
@@ -49,155 +49,18 @@ const OPTION_ROWS: Array<{
   },
 ];
 
-const PREVIEW_TONE: Record<HistoryShareVisualTone, string> = {
-  nutrition: "border-orange-200/80 bg-orange-50/90",
-  protein: "border-emerald-200/80 bg-emerald-50/90",
-  water: "border-sky-200/80 bg-sky-50/90",
-  activity: "border-teal-200/80 bg-teal-50/90",
-  sleep: "border-indigo-200/80 bg-indigo-50/90",
-  weight: "border-rose-200/80 bg-rose-50/90",
-  neutral: "border-slate-200 bg-slate-50",
-};
-
-function VisualPreview({ payload }: { payload: HistorySharePayload }) {
-  const scene = React.useMemo(() => buildHistoryShareScene(payload), [payload]);
-  const comparisonLayout = scene.kind === "comparison";
-  const dense = scene.density === "dense";
-
-  return (
-    <div
-      role="img"
-      aria-label={scene.ariaLabel}
-      className="aspect-[9/16] w-full overflow-hidden rounded-[28px] border border-emerald-100 bg-[linear-gradient(145deg,#e7f6ef,#f2f8f5_55%,#edf5ff)] p-[3.5%] shadow-sm"
-    >
-      <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-[24px] bg-white p-[4%] shadow-[0_8px_24px_rgba(15,23,42,0.08)]">
-        <div className="shrink-0 rounded-[22px] bg-[linear-gradient(135deg,#087a55,#0f9f72)] p-[4%] text-white">
-          <p className="text-[9px] font-extrabold tracking-[0.2em]">{scene.brand}</p>
-          <h3 className="mt-[2%] text-[15px] font-extrabold leading-tight">{scene.heading}</h3>
-          <p className="mt-[1.5%] text-[9px] font-medium text-emerald-50/90">{scene.periodLabel}</p>
-          {scene.comparisonLabel && (
-            <p className="mt-[2%] rounded-full bg-white/15 px-2.5 py-1 text-[7px] font-semibold text-emerald-50">
-              {scene.comparisonLabel}
-            </p>
-          )}
-        </div>
-
-        <div
-          className={cn(
-            "min-h-0 flex-1 py-[3%]",
-            scene.density === "sparse"
-              ? "flex flex-col justify-evenly"
-              : "flex flex-col justify-center",
-          )}
-        >
-          <div
-            className={cn(
-              comparisonLayout
-                ? "space-y-2"
-                : scene.normalColumns === 1
-                  ? "grid grid-cols-1 gap-2"
-                  : "grid grid-cols-2 gap-2",
-            )}
-          >
-            {scene.cards.map((card) => (
-              <div
-                key={`${card.title}-${card.currentValue ?? card.value ?? ""}`}
-                className={cn(
-                  "min-w-0 rounded-[18px] border p-2.5",
-                  PREVIEW_TONE[card.tone],
-                  !comparisonLayout && scene.density === "sparse" && "min-h-24",
-                )}
-              >
-                <div className="flex items-start justify-between gap-1.5">
-                  <p className="min-w-0 text-[9px] font-bold leading-tight text-slate-700">
-                    {card.title}
-                  </p>
-                  {card.coverage && (
-                    <span className="shrink-0 rounded-full bg-white/85 px-1.5 py-0.5 text-[6px] font-medium text-slate-500">
-                      {card.coverage}
-                    </span>
-                  )}
-                </div>
-
-                {card.layout === "summary" ? (
-                  <div className="flex min-h-11 items-center">
-                    <p className="break-words text-[13px] font-extrabold leading-tight text-slate-900">
-                      {card.value ?? "—"}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="mt-1.5 grid grid-cols-3 overflow-hidden rounded-xl border border-slate-200 bg-white/85">
-                    {[
-                      [card.currentLabel ?? "Bu dönem", card.currentValue ?? "—"],
-                      [card.previousLabel ?? "Önceki dönem", card.previousValue ?? "—"],
-                      ["Fark", card.difference ?? "—"],
-                    ].map(([label, value], index) => (
-                      <div
-                        key={label}
-                        className={cn(
-                          "min-w-0 px-1 py-1.5 text-center",
-                          index > 0 && "border-l border-slate-200",
-                        )}
-                      >
-                        <p className="min-h-4 break-words text-[6px] font-medium leading-tight text-slate-500">
-                          {label}
-                        </p>
-                        <p className="mt-0.5 break-words text-[8px] font-extrabold leading-tight text-slate-900">
-                          {value}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {!dense && card.description && (
-                  <p className="mt-1 text-[6px] leading-tight text-slate-500">{card.description}</p>
-                )}
-                {card.note && (
-                  <p className="mt-1 text-[6px] leading-tight text-slate-500">{card.note}</p>
-                )}
-              </div>
-            ))}
-          </div>
-
-          {scene.details.map((detail) => (
-            <div
-              key={detail.title}
-              className="mt-2 rounded-2xl border border-slate-200 bg-slate-50 p-2.5"
-            >
-              <p className="text-[8px] font-extrabold text-emerald-700">{detail.title}</p>
-              <p className="mt-1 break-words text-[7px] leading-relaxed text-slate-600">
-                {detail.lines.join(" • ")}
-              </p>
-            </div>
-          ))}
-
-          {scene.aiInsight && (
-            <div className="mt-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-2.5">
-              <p className="text-[8px] font-extrabold text-emerald-700">Diewish değerlendirmesi</p>
-              <p className="mt-1 whitespace-pre-line break-words text-[7px] leading-relaxed text-slate-600">
-                {scene.aiInsight}
-              </p>
-            </div>
-          )}
-        </div>
-
-        <p className="shrink-0 rounded-full bg-slate-100 px-3 py-1.5 text-[6px] font-semibold leading-tight text-slate-500">
-          {scene.footer}
-        </p>
-      </div>
-    </div>
-  );
-}
 export function HistoryShareDialog({ open, onClose, buildPayload }: HistoryShareDialogProps) {
   const [options, setOptions] = React.useState<HistoryShareOptions>(DEFAULT_HISTORY_SHARE_OPTIONS);
   const [mode, setMode] = React.useState<ShareMode>("visual");
   const [sharing, setSharing] = React.useState(false);
+  const [visualPreviewOpen, setVisualPreviewOpen] = React.useState(false);
+  const captureRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
     if (open) {
       setOptions(DEFAULT_HISTORY_SHARE_OPTIONS);
       setMode("visual");
+      setVisualPreviewOpen(false);
     }
   }, [open]);
 
@@ -206,16 +69,28 @@ export function HistoryShareDialog({ open, onClose, buildPayload }: HistoryShare
 
   if (!open) return null;
 
-  const empty = payload.sections.length === 0 && !payload.aiInsight;
+  const empty = payload.visualCards.length === 0 && !payload.aiInsight;
 
-  const share = async () => {
+  const shareText = async () => {
     if (sharing || empty) return;
     setSharing(true);
     try {
-      const result =
-        mode === "visual" ? await shareHistoryVisual(payload) : await shareHistoryText(payload);
+      const result = await shareHistoryText(payload);
 
       if (result === "copied") toast.success("Paylaşım metni panoya kopyalandı.");
+      if (result === "shared") onClose();
+    } catch {
+      toast.error("Geçmiş özeti paylaşılamadı. Lütfen tekrar dene.");
+    } finally {
+      setSharing(false);
+    }
+  };
+
+  const shareVisual = async () => {
+    if (sharing || empty || !captureRef.current) return;
+    setSharing(true);
+    try {
+      const result = await shareHistoryDomVisual(captureRef.current, payload);
       if (result === "downloaded") toast.success("Paylaşım görseli indirildi.");
       if (result === "shared") onClose();
     } catch {
@@ -224,6 +99,43 @@ export function HistoryShareDialog({ open, onClose, buildPayload }: HistoryShare
       setSharing(false);
     }
   };
+
+  if (visualPreviewOpen) {
+    return (
+      <div
+        className="fixed inset-0 z-[80] flex flex-col bg-background"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Görsel paylaşım önizlemesi"
+      >
+        <div className="z-10 flex min-h-16 shrink-0 items-center justify-between gap-3 border-b border-border bg-background/95 px-3 py-2 shadow-sm backdrop-blur sm:px-5">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={() => setVisualPreviewOpen(false)}
+            aria-label="Gizlilik seçimlerine dön"
+          >
+            <ArrowLeft aria-hidden="true" />
+          </Button>
+          <div className="min-w-0 text-center">
+            <p className="truncate text-sm font-semibold">Paylaşım önizlemesi</p>
+            <p className="text-[10px] text-muted-foreground">Gördüğün içerik aynen paylaşılır.</p>
+          </div>
+          <Button type="button" size="sm" isLoading={sharing} onClick={() => void shareVisual()}>
+            {!sharing && <Share2 aria-hidden="true" />}
+            Paylaş
+          </Button>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-muted/35 px-2.5 py-4 sm:px-5 sm:py-6">
+          <div className="mx-auto w-full max-w-[430px] overflow-hidden rounded-[26px] shadow-[0_18px_50px_rgba(15,23,42,0.16)]">
+            <HistoryShareDom payload={payload} captureRef={captureRef} />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -305,7 +217,7 @@ export function HistoryShareDialog({ open, onClose, buildPayload }: HistoryShare
               {mode === "visual" ? "Görsel önizleme" : "Yazı önizleme"}
             </p>
             {mode === "visual" && (
-              <span className="text-[10px] text-muted-foreground">Story • 1080×1920</span>
+              <span className="text-[10px] text-muted-foreground">Responsive History UI</span>
             )}
           </div>
 
@@ -314,7 +226,10 @@ export function HistoryShareDialog({ open, onClose, buildPayload }: HistoryShare
               Seçili ve paylaşılabilir bir kayıt bulunmuyor.
             </div>
           ) : mode === "visual" ? (
-            <VisualPreview payload={payload} />
+            <div className="rounded-3xl border border-emerald-200/70 bg-emerald-50/60 p-4 text-sm leading-relaxed text-emerald-950 dark:border-emerald-900/50 dark:bg-emerald-950/25 dark:text-emerald-100">
+              Seçtiğin alanlarla temiz, tam ekran bir Geçmişim önizlemesi hazırlanacak. Paylaşılan
+              PNG bu önizlemeyle aynı içerikten üretilir.
+            </div>
           ) : (
             <pre className="max-h-80 overflow-y-auto whitespace-pre-wrap break-words rounded-3xl border border-border bg-muted/30 p-4 font-sans text-xs leading-relaxed text-foreground">
               {textPreview}
@@ -331,10 +246,13 @@ export function HistoryShareDialog({ open, onClose, buildPayload }: HistoryShare
             className="flex-1"
             isLoading={sharing}
             disabled={empty}
-            onClick={() => void share()}
+            onClick={() => {
+              if (mode === "visual") setVisualPreviewOpen(true);
+              else void shareText();
+            }}
           >
             {!sharing && <Share2 aria-hidden="true" />}
-            {mode === "visual" ? "Görseli Paylaş" : "Yazıyı Paylaş"}
+            {mode === "visual" ? "Önizlemeyi Aç" : "Yazıyı Paylaş"}
           </Button>
         </div>
       </div>

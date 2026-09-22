@@ -502,7 +502,7 @@ test("History daily/period UI keeps data visible when AI fails and share default
     "aria-pressed",
     "false",
   );
-  await expect(dialog.getByText("Story • 1080×1920", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("Responsive History UI", { exact: true })).toBeVisible();
   await expect(dialog.getByRole("checkbox", { name: /Kalori ve makrolar/ })).toBeChecked();
   await expect(dialog.getByRole("checkbox", { name: /^Su/ })).toBeChecked();
   await expect(dialog.getByRole("checkbox", { name: /Aktivite/ })).toBeChecked();
@@ -512,7 +512,10 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await expect(dialog.getByRole("checkbox", { name: /Diewish değerlendirmesi/ })).not.toBeChecked();
   await expect(dialog.getByText("Geçmiş test öğünü")).toHaveCount(0);
 
-  await dialog.getByRole("button", { name: "Görseli Paylaş" }).click();
+  await dialog.getByRole("button", { name: "Önizlemeyi Aç" }).click();
+  let visualPreview = page.getByRole("dialog", { name: "Görsel paylaşım önizlemesi" });
+  await expect(visualPreview.locator('[data-history-share-capture-root="true"]')).toBeVisible();
+  await visualPreview.getByRole("button", { name: "Paylaş", exact: true }).click();
   await expect(dialog).toHaveCount(0);
   let shares = await page.evaluate(() => window.__historyShares);
   expect(shares.at(-1).fileCount).toBe(1);
@@ -540,13 +543,17 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await page.getByRole("button", { name: "Günü paylaş" }).click();
   dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
   await dialog.getByRole("checkbox", { name: /Öğün isimleri/ }).check();
-  const longPreview = dialog
+  await dialog.getByRole("button", { name: "Önizlemeyi Aç" }).click();
+  visualPreview = page.getByRole("dialog", { name: "Görsel paylaşım önizlemesi" });
+  const longPreview = visualPreview
     .getByText(/Uzun paylaşım metni taşma kontrolü/, { exact: false })
     .first();
   await expect(longPreview).toBeVisible();
   expect(await longPreview.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(
     true,
   );
+  await visualPreview.getByRole("button", { name: "Gizlilik seçimlerine dön" }).click();
+  dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
   await dialog.getByRole("button", { name: "Yazı olarak paylaş" }).click();
   await expect(dialog.locator("pre")).toContainText("Geçmiş test öğünü");
   await expect(dialog.locator("pre")).toContainText("Uzun paylaşım metni taşma kontrolü");
@@ -570,7 +577,9 @@ test("History daily/period UI keeps data visible when AI fails and share default
 
   await page.getByRole("button", { name: "Günü paylaş" }).click();
   dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
-  await dialog.getByRole("button", { name: "Görseli Paylaş" }).click();
+  await dialog.getByRole("button", { name: "Önizlemeyi Aç" }).click();
+  visualPreview = page.getByRole("dialog", { name: "Görsel paylaşım önizlemesi" });
+  await visualPreview.getByRole("button", { name: "Paylaş", exact: true }).click();
   const nativeVisual = await page.evaluate(() => window.__nativeHistoryVisual);
   expect(nativeVisual.base64Length).toBeGreaterThan(100);
   expect(nativeVisual.filename).toMatch(/\.png$/);
@@ -635,10 +644,12 @@ test("History daily/period UI keeps data visible when AI fails and share default
   });
   await page.getByRole("button", { name: "Karşılaştırmayı paylaş" }).click();
   dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
-  await expect(dialog.getByText("Bu hafta", { exact: true }).first()).toBeVisible();
-  await expect(dialog.getByText("Geçen hafta", { exact: true }).first()).toBeVisible();
-  await expect(dialog.getByText("Fark", { exact: true }).first()).toBeVisible();
-  await dialog.getByRole("button", { name: "Görseli Paylaş" }).click();
+  await dialog.getByRole("button", { name: "Önizlemeyi Aç" }).click();
+  visualPreview = page.getByRole("dialog", { name: "Görsel paylaşım önizlemesi" });
+  await expect(visualPreview.getByText("Bu hafta", { exact: true }).first()).toBeVisible();
+  await expect(visualPreview.getByText("Geçen hafta", { exact: true }).first()).toBeVisible();
+  await expect(visualPreview.getByText("Fark", { exact: true }).first()).toBeVisible();
+  await visualPreview.getByRole("button", { name: "Paylaş", exact: true }).click();
   const weeklyComparisonVisual = await page.evaluate(() => window.__nativeHistoryVisual);
   expect(weeklyComparisonVisual.base64Length).toBeGreaterThan(100);
   expect(weeklyComparisonVisual.filename).toMatch(/\.png$/);
@@ -669,7 +680,10 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await page.getByRole("button", { name: "Haftayı paylaş" }).click();
   dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
   await expect(dialog.getByText("Görsel önizleme", { exact: true })).toBeVisible();
-  await dialog.getByRole("button", { name: "Görseli Paylaş" }).click();
+  await dialog.getByRole("button", { name: "Önizlemeyi Aç" }).click();
+  visualPreview = page.getByRole("dialog", { name: "Görsel paylaşım önizlemesi" });
+  await expect(visualPreview.getByText("Haftanın Özeti", { exact: true }).first()).toBeVisible();
+  await visualPreview.getByRole("button", { name: "Paylaş", exact: true }).click();
   const weeklyVisual = await page.evaluate(() => window.__nativeHistoryVisual);
   expect(weeklyVisual.base64Length).toBeGreaterThan(100);
   expect(weeklyVisual.filename).toMatch(/\.png$/);
@@ -711,7 +725,10 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await page.getByRole("button", { name: "Ayı paylaş" }).click();
   dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
   await expect(dialog.getByText("Görsel önizleme", { exact: true })).toBeVisible();
-  await dialog.getByRole("button", { name: "Görseli Paylaş" }).click();
+  await dialog.getByRole("button", { name: "Önizlemeyi Aç" }).click();
+  visualPreview = page.getByRole("dialog", { name: "Görsel paylaşım önizlemesi" });
+  await expect(visualPreview.getByText("Ayın Özeti", { exact: true }).first()).toBeVisible();
+  await visualPreview.getByRole("button", { name: "Paylaş", exact: true }).click();
   const monthlyVisual = await page.evaluate(() => window.__nativeHistoryVisual);
   expect(monthlyVisual.base64Length).toBeGreaterThan(100);
   expect(monthlyVisual.filename).toMatch(/\.png$/);
@@ -752,9 +769,6 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await expect(monthlyComparison.locator("svg.lucide-chevron-right")).toHaveCount(0);
   await page.getByRole("button", { name: "Karşılaştırmayı paylaş" }).click();
   dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
-  await expect(dialog.getByText("Bu ay", { exact: true }).first()).toBeVisible();
-  await expect(dialog.getByText("Geçen ay", { exact: true }).first()).toBeVisible();
-  await expect(dialog.getByText("Fark", { exact: true }).first()).toBeVisible();
   await dialog.getByRole("button", { name: "Yazı olarak paylaş" }).click();
   await expect(dialog.locator("pre")).toContainText("Bu ay ↔ Geçen ayın aynı dönemi");
   await expect(dialog.locator("pre")).toContainText("Bu ay: 1.800 kcal");
