@@ -91,10 +91,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - name: Check History browser harness formatting
-        shell: bash
-        run: |
-          set -euo pipefail
-          npx prettier e2e/history-ui.spec.js | diff -u e2e/history-ui.spec.js - || true
+        run: npx prettier --check e2e/history-ui.spec.js
       - name: Check History browser harness whitespace
         shell: bash
         run: |

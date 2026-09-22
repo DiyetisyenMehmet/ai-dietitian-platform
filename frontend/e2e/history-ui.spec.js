@@ -14,16 +14,12 @@ async function waitForHistoryShareCount(page, expectedCount) {
 }
 
 async function waitForNativeHistoryVisual(page) {
-  await expect
-    .poll(() => page.evaluate(() => window.__nativeHistoryVisual ?? null))
-    .not.toBeNull();
+  await expect.poll(() => page.evaluate(() => window.__nativeHistoryVisual ?? null)).not.toBeNull();
   return page.evaluate(() => window.__nativeHistoryVisual);
 }
 
 async function waitForNativeHistoryText(page) {
-  await expect
-    .poll(() => page.evaluate(() => window.__nativeHistoryText ?? null))
-    .not.toBeNull();
+  await expect.poll(() => page.evaluate(() => window.__nativeHistoryText ?? null)).not.toBeNull();
   return page.evaluate(() => window.__nativeHistoryText);
 }
 
