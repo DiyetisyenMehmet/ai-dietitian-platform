@@ -107,7 +107,7 @@ test("Web Share caption OFF sends a PNG without a text field", async ({ page }) 
   const record = await page.evaluate(
     () =>
       (
-        window as Window & {
+        window as unknown as {
           __shareRecord: {
             hasText: boolean;
             text: string | null;
@@ -158,7 +158,7 @@ test("Web Share caption ON sends only the short Diewish caption with the PNG", a
   const record = await page.evaluate(
     () =>
       (
-        window as Window & {
+        window as unknown as {
           __shareRecord: { hasText: boolean; text: string | null; fileCount: number };
         }
       ).__shareRecord,
@@ -173,7 +173,7 @@ test("Web Share caption ON sends only the short Diewish caption with the PNG", a
 
 test("Android bridge receives empty text OFF and short caption ON", async ({ page }) => {
   await page.addInitScript(() => {
-    (window as Window & { DiewishShare?: unknown }).DiewishShare = {
+    (window as unknown as { DiewishShare: unknown }).DiewishShare = {
       isAvailable: () => true,
       shareText: () => undefined,
       sharePng: (_base64: string, _filename: string, text: string) => {
