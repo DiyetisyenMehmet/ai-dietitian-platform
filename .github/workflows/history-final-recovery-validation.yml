@@ -21,6 +21,7 @@ jobs:
     env:
       NEXT_PUBLIC_API_BASE_URL: http://127.0.0.1:4000/api
       NEXT_PUBLIC_SITE_URL: http://127.0.0.1:3000
+      E2E_WEB_BASE_URL: http://127.0.0.1:3000
 
     steps:
       - uses: actions/checkout@v4
@@ -61,29 +62,29 @@ jobs:
           e2e/history-final-recovery.spec.ts
           --workers=1 --reporter=line
 
-      - name: Recovery Prettier diagnostic
+      - name: Recovery Prettier gate
         working-directory: frontend
-        shell: bash
-        run: |
-          set -euo pipefail
-          npx prettier --write             src/application/history/history-share.ts             e2e/history-final-recovery.spec.ts             e2e/history-final-recovery-browser.spec.ts
-          npx prettier --check             ../.github/workflows/history-final-recovery-validation.yml             src/application/history/history-comparison-format.ts             src/application/history/history-share.ts             src/presentation/components/history/history-share-card.ts             src/presentation/components/history/history-share-dialog.tsx             src/presentation/components/history/history-share-dom-export.ts             src/presentation/components/history/history-share-dom-model.ts             src/presentation/components/history/history-share-dom.tsx             src/presentation/components/history/history-share-scene.ts             src/presentation/components/history/history-view.tsx             e2e/history-share-dom.spec.ts             e2e/history-final-recovery.spec.ts             e2e/history-final-recovery-browser.spec.ts
-
-      - name: Upload formatted recovery sources
-        uses: actions/upload-artifact@v4
-        with:
-          name: history-final-recovery-prettier
-          path: |
-            frontend/src/application/history/history-share.ts
-            frontend/e2e/history-final-recovery.spec.ts
-            frontend/e2e/history-final-recovery-browser.spec.ts
-          if-no-files-found: error
+        run: >
+          npx prettier --check
+          ../.github/workflows/history-final-recovery-validation.yml
+          src/application/history/history-comparison-format.ts
+          src/application/history/history-share.ts
+          src/presentation/components/history/history-share-card.ts
+          src/presentation/components/history/history-share-dialog.tsx
+          src/presentation/components/history/history-share-dom-export.ts
+          src/presentation/components/history/history-share-dom-model.ts
+          src/presentation/components/history/history-share-dom.tsx
+          src/presentation/components/history/history-share-scene.ts
+          src/presentation/components/history/history-view.tsx
+          e2e/history-share-dom.spec.ts
+          e2e/history-final-recovery.spec.ts
+          e2e/history-final-recovery-browser.spec.ts
 
       - name: Install Chromium
         working-directory: frontend
         run: npx playwright install --with-deps chromium
 
-      - name: Prepare isolated browser validation route
+      - name: Prepare isolated real-HistoryView browser harness
         working-directory: frontend
         shell: bash
         run: |
@@ -104,75 +105,308 @@ jobs:
           cat > src/app/history-final-recovery-validation/page.tsx <<'EOF'
           "use client";
 
-          import type { HistorySharePayload } from "@/application/history/history-share";
-          import { HistoryShareDialog } from "@/presentation/components/history/history-share-dialog";
+          import { authStore } from "@/application/auth/auth-store";
+          import { historyStore } from "@/application/history/history-store";
+          import { historyClient } from "@/infrastructure/history/history-client";
+          import { HistoryView } from "@/presentation/components/history/history-view";
 
-          const payload: HistorySharePayload = {
-            kind: "comparison",
-            scope: "WEEK",
-            title: "Diewish • Haftalık Karşılaştırma",
-            periodLabel: "14–20 Eylül 2026",
-            comparisonLabel: "Bu hafta ↔ Geçen haftanın aynı dönemi",
-            visualCards: [
-              {
-                title: "Ortalama Kalori",
-                tone: "nutrition",
-                layout: "comparison",
-                currentLabel: "Bu hafta",
-                currentValue: "1.840 kcal",
-                previousLabel: "Geçen hafta",
-                previousValue: "1.740 kcal",
-                difference: "+100 kcal",
-                coverage: "5/7 gün kayıt",
-              },
-              {
-                title: "Protein",
-                tone: "protein",
-                layout: "comparison",
-                currentLabel: "Bu hafta",
-                currentValue: "112 g",
-                previousLabel: "Geçen hafta",
-                previousValue: "100 g",
-                difference: "+12 g",
-                coverage: "5/7 gün kayıt",
-              },
-              {
-                title: "Su",
-                tone: "water",
-                layout: "comparison",
-                currentLabel: "Bu hafta",
-                currentValue: "2,1 L",
-                previousLabel: "Geçen hafta",
-                previousValue: "1,9 L",
-                difference: "+200 ml",
-                coverage: "5/7 gün kayıt",
-              },
-              {
-                title: "Toplam Aktivite Süresi",
-                tone: "activity",
-                layout: "comparison",
-                currentLabel: "Bu hafta",
-                currentValue: "4 sa",
-                previousLabel: "Geçen hafta",
-                previousValue: "3 sa 30 dk",
-                difference: "+30 dk",
-                coverage: "5/7 gün kayıt",
-              },
-            ],
-            sections: [
-              { title: "Beslenme", lines: ["Ortalama Kalori: 1.840 kcal", "Protein: 112 g"] },
-              { title: "Su", lines: ["Su: 2,1 L"] },
-              { title: "Hareket", lines: ["Toplam Aktivite Süresi: 4 sa"] },
-            ],
-            aiInsight: null,
-            motivation:
-              "Bu dönem güzel bir ritim oluşturmaya başladın. Küçük adımların birikiyor; aynı kararlılıkla devam et.",
-            footer: "Yalnız seçtiğin kayıtlar paylaşılır.",
+          const observed = (value: number) => ({
+            state: value === 0 ? ("KNOWN_ZERO" as const) : ("KNOWN_VALUE" as const),
+            value,
+          });
+
+          const metric = (current: number, previous: number) => {
+            const absoluteChange = current - previous;
+            return {
+              current: observed(current),
+              previous: observed(previous),
+              absoluteChange,
+              percentageChange:
+                previous === 0 ? null : (absoluteChange / Math.abs(previous)) * 100,
+              direction:
+                absoluteChange === 0
+                  ? ("UNCHANGED" as const)
+                  : absoluteChange > 0
+                    ? ("UP" as const)
+                    : ("DOWN" as const),
+              comparisonAvailable: true,
+              quality: "FULL" as const,
+            };
           };
+
+          const completeness = (recordedDays: number, expectedDays: number) => ({
+            recordedDays,
+            quantifiedDays: recordedDays,
+            expectedDays,
+            coverageRatio: recordedDays / expectedDays,
+            status:
+              recordedDays === expectedDays
+                ? ("COMPLETE" as const)
+                : recordedDays === 0
+                  ? ("NONE" as const)
+                  : ("PARTIAL" as const),
+          });
+
+          const comparison = (period: "week" | "month") => {
+            const week = period === "week";
+            const expectedDays = week ? 7 : 22;
+            return {
+              periodType: week ? ("WEEK" as const) : ("MONTH" as const),
+              timezone: "Europe/Istanbul",
+              comparisonMode: "EQUAL_ELAPSED_DAYS" as const,
+              currentPeriod: {
+                localStartDate: week ? "2026-09-14" : "2026-09-01",
+                localEndDateInclusive: week ? "2026-09-20" : "2026-09-22",
+                localEndDateExclusive: week ? "2026-09-21" : "2026-09-23",
+                fromUtc: "2026-09-01T00:00:00.000Z",
+                toUtcExclusive: "2026-09-23T00:00:00.000Z",
+                days: expectedDays,
+              },
+              previousPeriod: {
+                localStartDate: week ? "2026-09-07" : "2026-08-01",
+                localEndDateInclusive: week ? "2026-09-13" : "2026-08-22",
+                localEndDateExclusive: week ? "2026-09-14" : "2026-08-23",
+                fromUtc: "2026-08-01T00:00:00.000Z",
+                toUtcExclusive: "2026-09-01T00:00:00.000Z",
+                days: expectedDays,
+              },
+              metrics: {
+                nutrition: {
+                  averageCaloriesPerQuantifiedDay: metric(1840, 1740),
+                  averageProteinGPerQuantifiedDay: metric(112, 100),
+                  averageCarbsGPerQuantifiedDay: metric(200, 190),
+                  averageFatGPerQuantifiedDay: metric(60, 58),
+                  mealOccurrenceCount: metric(12, 11),
+                },
+                water: {
+                  totalMl: metric(10500, 9000),
+                  averageMlPerRecordedDay: metric(2100, 1800),
+                  recordedDays: metric(5, 5),
+                },
+                activity: {
+                  totalActiveMinutes: metric(240, 210),
+                  averageActiveMinutesPerRecordedDay: metric(48, 42),
+                  activityCount: metric(5, 4),
+                  totalDistanceKm: metric(12, 10),
+                  totalCaloriesBurned: metric(600, 500),
+                },
+                sleep: {
+                  recordedNights: metric(5, 4),
+                  totalDurationMinutes: metric(2400, 1800),
+                  averageDurationPerRecordedNight: metric(480, 450),
+                  averageQuality: metric(4, 3.5),
+                },
+                weight: {
+                  measurementCount: metric(2, 2),
+                  firstMeasurementKg: metric(92, 93),
+                  lastMeasurementKg: metric(91.7, 92.4),
+                  netChangeKg: metric(-0.3, -0.6),
+                },
+              },
+              completeness: {
+                current: {
+                  nutrition: completeness(5, expectedDays),
+                  water: completeness(5, expectedDays),
+                  activity: completeness(5, expectedDays),
+                  sleep: completeness(5, expectedDays),
+                  weight: { sourceStatus: "OK" as const, measurementCount: 2 },
+                },
+                previous: {
+                  nutrition: completeness(4, expectedDays),
+                  water: completeness(4, expectedDays),
+                  activity: completeness(4, expectedDays),
+                  sleep: completeness(4, expectedDays),
+                  weight: { sourceStatus: "OK" as const, measurementCount: 2 },
+                },
+              },
+              meta: {
+                partialResponse: false,
+                unavailableSources: [],
+                generatedAt: "2026-09-22T12:00:00.000Z",
+              },
+            };
+          };
+
+          const daily = {
+            date: "2026-09-22",
+            timezone: "Europe/Istanbul",
+            period: {
+              localStartDate: "2026-09-22",
+              localEndDateExclusive: "2026-09-23",
+              fromUtc: "2026-09-21T21:00:00.000Z",
+              toUtcExclusive: "2026-09-22T21:00:00.000Z",
+              days: 1 as const,
+            },
+            nutrition: {
+              sourceStatus: "OK" as const,
+              status: "RECORDED" as const,
+              meals: [
+                {
+                  mealType: "BREAKFAST" as const,
+                  occurrenceRecorded: true,
+                  nutritionKnown: true,
+                  items: [
+                    {
+                      id: "meal-private",
+                      name: "PRIVATE_MEAL_SENTINEL",
+                      loggedAt: "2026-09-22T06:30:00.000Z",
+                      calories: 520,
+                      proteinG: 24,
+                      carbsG: 55,
+                      fatG: 18,
+                    },
+                  ],
+                  totals: {
+                    calories: observed(520),
+                    proteinG: observed(24),
+                    carbsG: observed(55),
+                    fatG: observed(18),
+                  },
+                },
+              ],
+              totals: {
+                calories: observed(1840),
+                proteinG: observed(112),
+                carbsG: observed(205),
+                fatG: observed(61),
+              },
+            },
+            water: {
+              sourceStatus: "OK" as const,
+              status: "RECORDED" as const,
+              totalMl: observed(2100),
+              currentGoalMl: observed(2500),
+              historicalGoalComparisonAvailable: false,
+              logs: [{ id: "water-1", amountMl: 500, loggedAt: "2026-09-22T07:00:00.000Z" }],
+            },
+            activity: {
+              sourceStatus: "OK" as const,
+              status: "RECORDED" as const,
+              entries: [
+                {
+                  id: "activity-1",
+                  type: "WALK",
+                  name: "Yürüyüş",
+                  durationMinutes: 42,
+                  distanceKm: 3.8,
+                  perceivedIntensity: 3,
+                  caloriesBurned: 180,
+                  loggedAt: "2026-09-22T15:00:00.000Z",
+                },
+              ],
+              totalActiveMinutes: observed(42),
+              totalDistanceKm: observed(3.8),
+              totalCaloriesBurned: observed(180),
+            },
+            sleep: {
+              sourceStatus: "OK" as const,
+              status: "RECORDED" as const,
+              entries: [
+                {
+                  id: "sleep-private",
+                  sleepStart: "2026-09-21T20:00:00.000Z",
+                  wakeTime: "2026-09-22T04:00:00.000Z",
+                  durationMinutes: 480,
+                  quality: 4,
+                },
+              ],
+              totalDurationMinutes: observed(480),
+              averageQuality: observed(4),
+            },
+            weight: {
+              sourceStatus: "OK" as const,
+              status: "RECORDED" as const,
+              measurement: {
+                id: "weight-private",
+                weightKg: 91.7,
+                loggedAt: "2026-09-22T05:30:00.000Z",
+              },
+            },
+            timeline: [
+              {
+                id: "meal-private",
+                type: "MEAL" as const,
+                timestamp: "2026-09-22T06:30:00.000Z",
+                sourceId: "meal-private",
+                payload: {
+                  mealType: "BREAKFAST",
+                  name: "PRIVATE_MEAL_SENTINEL",
+                  nutritionKnown: true,
+                },
+              },
+              {
+                id: "water-1",
+                type: "WATER" as const,
+                timestamp: "2026-09-22T07:00:00.000Z",
+                sourceId: "water-1",
+                payload: { amountMl: 500 },
+              },
+            ],
+            completeness: {
+              nutrition: {
+                status: "RECORDED" as const,
+                mealTypesRecorded: ["BREAKFAST"],
+                nutritionBearingEntries: 1,
+                entriesWithUnknownCoreNutrition: 0,
+              },
+              water: { status: "RECORDED" as const },
+              activity: { status: "RECORDED" as const },
+              sleep: { status: "RECORDED" as const },
+              weight: { status: "RECORDED" as const, measurementCount: 1 },
+            },
+            meta: {
+              partialResponse: false,
+              unavailableSources: [],
+              generatedAt: "2026-09-22T12:00:00.000Z",
+            },
+          };
+
+          if (typeof window !== "undefined") {
+            historyStore.reset();
+            authStore.setSession({
+              user: {
+                id: "history-recovery-user",
+                email: "history-recovery@example.com",
+                fullName: "History Recovery",
+                role: "USER",
+                isActive: true,
+                emailVerified: true,
+                onboardingCompleted: true,
+                createdAt: "2026-09-01T00:00:00.000Z",
+              },
+              tokens: {
+                accessToken: "history-recovery-browser-token",
+                tokenType: "Bearer",
+                expiresIn: "1h",
+              },
+            });
+
+            Object.assign(historyClient, {
+              getDay: async () => ({ history: daily }),
+              getComparison: async (period: "week" | "month") => ({
+                comparison: comparison(period),
+              }),
+              getInsight: async (scope: "DAY" | "WEEK" | "MONTH") => ({
+                insight: {
+                  scope,
+                  periodKey: "2026-09-22",
+                  timezone: "Europe/Istanbul",
+                  content: { text: "PRIVATE_AI_SENTINEL" },
+                  generatedBy: "AI" as const,
+                  cacheStatus: "HIT" as const,
+                  provider: "browser-fixture",
+                  model: "browser-fixture",
+                  generatedAt: "2026-09-22T12:00:00.000Z",
+                },
+              }),
+            });
+          }
 
           export default function HistoryFinalRecoveryValidationPage() {
             return (
-              <HistoryShareDialog open onClose={() => undefined} buildPayload={() => payload} />
+              <main className="mx-auto min-h-dvh w-full max-w-xl bg-background p-3">
+                <HistoryView />
+              </main>
             );
           }
           EOF
@@ -185,7 +419,7 @@ jobs:
           npm run dev -- --hostname 127.0.0.1 > /tmp/history-final-recovery-frontend.log 2>&1 &
           echo $! > /tmp/history-final-recovery-frontend.pid
           for attempt in {1..90}; do
-            if curl --fail --silent http://127.0.0.1:3000/history-final-recovery-validation >/dev/null; then
+            if curl --fail --silent "$E2E_WEB_BASE_URL/history-final-recovery-validation" >/dev/null; then
               exit 0
             fi
             sleep 1
@@ -206,7 +440,6 @@ jobs:
         shell: bash
         run: |
           git checkout -- src/presentation/components/auth/route-guard.tsx || true
-          git checkout --             src/application/history/history-share.ts             e2e/history-final-recovery.spec.ts             e2e/history-final-recovery-browser.spec.ts || true
           rm -rf src/app/history-final-recovery-validation test-results
           git status --short
           git diff --check 6abb3e124592e7958252b1e8450138de156c5ab1...HEAD
