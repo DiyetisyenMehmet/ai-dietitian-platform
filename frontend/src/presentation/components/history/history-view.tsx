@@ -11,6 +11,10 @@ import {
 } from "lucide-react";
 
 import { useAuth } from "@/application/auth/auth-store";
+import {
+  type CustomHistoryComparisonInput,
+  validateCustomComparisonInput,
+} from "@/application/history/history-custom-comparison";
 import { formatComparisonPeriodDateRange } from "@/application/history/history-comparison-format";
 import {
   buildComparisonHistorySharePayload,
@@ -21,6 +25,7 @@ import {
   type HistoryShareOptions,
 } from "@/application/history/history-share";
 import {
+  customHistoryRequestKey,
   dateKeyForTimezone,
   historyRequestKey,
   historyStore,
@@ -50,6 +55,7 @@ const MODE_LABEL: Record<HistoryMode, string> = {
 
 type HistoryViewMode = "NORMAL" | "COMPARISON";
 type ComparisonMode = Extract<HistoryMode, "WEEK" | "MONTH">;
+type ComparisonKind = "STANDARD" | "CUSTOM";
 
 const COMPARISON_HISTORY_STATE = "diewish-history-comparison";
 
@@ -61,6 +67,17 @@ function formatDateOnly(date: string, options?: Intl.DateTimeFormatOptions): str
     year: "numeric",
     ...options,
   }).format(new Date(`${date}T12:00:00.000Z`));
+}
+
+function defaultCustomRanges(date: string): CustomHistoryComparisonInput {
+  if (!date) {
+    return { period1Start: "", period1End: "", period2Start: "", period2End: "" };
+  }
+  const period2End = date;
+  const period2Start = shiftCalendarDate(period2End, -6);
+  const period1End = shiftCalendarDate(period2Start, -1);
+  const period1Start = shiftCalendarDate(period1End, -6);
+  return { period1Start, period1End, period2Start, period2End };
 }
 
 function LoadingHistory() {
@@ -79,6 +96,13 @@ export function HistoryView() {
   const [viewMode, setViewMode] = React.useState<HistoryViewMode>("NORMAL");
   const [normalMode, setNormalMode] = React.useState<HistoryMode>("DAY");
   const [comparisonMode, setComparisonMode] = React.useState<ComparisonMode>("WEEK");
+  const [comparisonKind, setComparisonKind] = React.useState<ComparisonKind>("STANDARD");
+  const [customRanges, setCustomRanges] = React.useState<CustomHistoryComparisonInput>(
+    defaultCustomRanges(""),
+  );
+  const [customApplied, setCustomApplied] =
+    React.useState<CustomHistoryComparisonInput | null>(null);
+  const [customValidation, setCustomValidation] = React.useState<string | null>(null);
   const [timezone, setTimezone] = React.useState<string | null>(null);
   const [timezoneError, setTimezoneError] = React.useState(false);
   const [selectedDate, setSelectedDate] = React.useState("");
@@ -101,7 +125,11 @@ export function HistoryView() {
   const openComparison = () => {
     const nextComparisonMode: ComparisonMode = normalMode === "MONTH" ? "MONTH" : "WEEK";
     setComparisonMode(nextComparisonMode);
+    setComparisonKind("STANDARD");
     setComparisonDate(selectedDate);
+    setCustomRanges(defaultCustomRanges(selectedDate));
+    setCustomApplied(null);
+    setCustomValidation(null);
     window.history.pushState(
       {
         ...window.history.state,
@@ -136,15 +164,51 @@ export function HistoryView() {
 
   const today = timezone ? dateKeyForTimezone(timezone) : "";
   const userId = auth.user?.id ?? null;
-  const expectedKey =
+  const standardExpectedKey =
     userId && timezone && activeDate
       ? historyRequestKey(userId, activeMode, activeDate, timezone)
       : null;
+  const customExpectedKey =
+    userId && timezone && customApplied
+      ? customHistoryRequestKey(userId, customApplied, timezone)
+      : null;
+  const expectedKey =
+    viewMode === "COMPARISON" && comparisonKind === "CUSTOM"
+      ? customExpectedKey
+      : standardExpectedKey;
 
   React.useEffect(() => {
     if (!userId || !timezone || !activeDate) return;
+    if (viewMode === "COMPARISON" && comparisonKind === "CUSTOM") return;
     void historyStore.load({ userId, mode: activeMode, date: activeDate, timezone });
-  }, [activeDate, activeMode, timezone, userId]);
+  }, [activeDate, activeMode, comparisonKind, timezone, userId, viewMode]);
+
+  React.useEffect(() => {
+    if (
+      viewMode !== "COMPARISON" ||
+      comparisonKind !== "CUSTOM" ||
+      !userId ||
+      !timezone ||
+      !customApplied ||
+      !customExpectedKey ||
+      state.requestKey === customExpectedKey
+    ) {
+      return;
+    }
+    void historyStore.loadCustomComparison({
+      userId,
+      ranges: customApplied,
+      timezone,
+    });
+  }, [
+    comparisonKind,
+    customApplied,
+    customExpectedKey,
+    state.requestKey,
+    timezone,
+    userId,
+    viewMode,
+  ]);
 
   React.useEffect(() => {
     if (
@@ -169,6 +233,50 @@ export function HistoryView() {
     userId,
     viewMode,
   ]);
+
+  React.useEffect(() => {
+    if (
+      viewMode !== "COMPARISON" ||
+      comparisonKind !== "CUSTOM" ||
+      !userId ||
+      !timezone ||
+      !customApplied ||
+      !customExpectedKey ||
+      state.requestKey !== customExpectedKey ||
+      state.dataStatus !== "success" ||
+      state.insightStatus !== "idle"
+    ) {
+      return;
+    }
+    void historyStore.loadCustomInsight({
+      userId,
+      ranges: customApplied,
+      timezone,
+    });
+  }, [
+    comparisonKind,
+    customApplied,
+    customExpectedKey,
+    state.dataStatus,
+    state.insightStatus,
+    state.requestKey,
+    timezone,
+    userId,
+    viewMode,
+  ]);
+
+  const applyCustomComparison = () => {
+    const validation = validateCustomComparisonInput(customRanges, today || undefined);
+    setCustomValidation(validation);
+    if (validation) return;
+    setShareOpen(false);
+    setCustomApplied({ ...customRanges });
+  };
+
+  const updateCustomRange = (key: keyof CustomHistoryComparisonInput, value: string) => {
+    setCustomRanges((current) => ({ ...current, [key]: value }));
+    setCustomValidation(null);
+  };
 
   const move = (delta: number) => {
     const updateDate = viewMode === "COMPARISON" ? setComparisonDate : setSelectedDate;
@@ -223,6 +331,8 @@ export function HistoryView() {
       : normalMode === "DAY"
         ? Boolean(state.daily && hasDailyHistoryShareData(state.daily))
         : Boolean(state.comparison && hasPeriodHistoryShareData(state.comparison)));
+  const awaitingCustomSelection =
+    viewMode === "COMPARISON" && comparisonKind === "CUSTOM" && !customApplied;
   const activeComparison = dataReady ? state.comparison : null;
   const comparisonPeriodText = activeComparison
     ? formatComparisonPeriodDateRange(
@@ -287,93 +397,203 @@ export function HistoryView() {
           </header>
 
           <div className="grid grid-cols-2 gap-1 rounded-full border border-border/60 bg-muted/35 p-1">
-            {(["WEEK", "MONTH"] as ComparisonMode[]).map((item) => (
+            {(["STANDARD", "CUSTOM"] as ComparisonKind[]).map((item) => (
               <button
                 key={item}
                 type="button"
-                aria-label={`${MODE_LABEL[item]} karşılaştırma`}
-                aria-pressed={comparisonMode === item}
-                onClick={() => setComparisonMode(item)}
+                aria-label={item === "STANDARD" ? "Standart karşılaştırma" : "Özel karşılaştırma"}
+                aria-pressed={comparisonKind === item}
+                onClick={() => {
+                  setComparisonKind(item);
+                  setShareOpen(false);
+                  setCustomValidation(null);
+                }}
                 className={cn(
                   "min-h-9 rounded-full px-3 py-1.5 text-sm font-semibold transition",
-                  comparisonMode === item
+                  comparisonKind === item
                     ? "bg-emerald-100/80 text-emerald-950 shadow-sm dark:bg-emerald-900/45 dark:text-emerald-100"
                     : "text-muted-foreground",
                 )}
               >
-                {MODE_LABEL[item]}
+                {item === "STANDARD" ? "Standart" : "Özel"}
               </button>
             ))}
           </div>
 
-          <div className="grid gap-2 px-0.5 sm:grid-cols-[minmax(0,1fr)_174px] sm:items-end">
-            <div className="min-w-0">
-              <h1 className="text-[17px] font-extrabold tracking-[-0.045em] sm:text-2xl">
-                {comparisonMode === "WEEK" ? "Haftalık" : "Aylık"} Karşılaştırma
-              </h1>
-              {activeComparison && comparisonPreviousPeriodText ? (
+          {comparisonKind === "STANDARD" ? (
+            <>
+              <div className="grid grid-cols-2 gap-1 rounded-full border border-border/60 bg-muted/35 p-1">
+                {(["WEEK", "MONTH"] as ComparisonMode[]).map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    aria-label={`${MODE_LABEL[item]} karşılaştırma`}
+                    aria-pressed={comparisonMode === item}
+                    onClick={() => setComparisonMode(item)}
+                    className={cn(
+                      "min-h-9 rounded-full px-3 py-1.5 text-sm font-semibold transition",
+                      comparisonMode === item
+                        ? "bg-emerald-100/80 text-emerald-950 shadow-sm dark:bg-emerald-900/45 dark:text-emerald-100"
+                        : "text-muted-foreground",
+                    )}
+                  >
+                    {MODE_LABEL[item]}
+                  </button>
+                ))}
+              </div>
+
+              <div className="grid gap-2 px-0.5 sm:grid-cols-[minmax(0,1fr)_174px] sm:items-end">
+                <div className="min-w-0">
+                  <h1 className="text-[17px] font-extrabold tracking-[-0.045em] sm:text-2xl">
+                    {comparisonMode === "WEEK" ? "Haftalık" : "Aylık"} Karşılaştırma
+                  </h1>
+                  {activeComparison && comparisonPreviousPeriodText ? (
+                    <div
+                      className="mt-1 space-y-0.5 text-[11px] leading-snug text-muted-foreground sm:text-xs"
+                      data-testid="history-comparison-periods"
+                    >
+                      <p
+                        className="whitespace-normal"
+                        data-testid="history-comparison-current-period"
+                      >
+                        <span className="font-semibold text-foreground/80">
+                          {comparisonMode === "WEEK" ? "Bu hafta" : "Bu ay"}:
+                        </span>{" "}
+                        {comparisonPeriodText}
+                      </p>
+                      <p
+                        className="whitespace-normal"
+                        data-testid="history-comparison-previous-period"
+                      >
+                        <span className="font-semibold text-foreground/80">
+                          {comparisonMode === "WEEK" ? "Geçen hafta" : "Geçen ay"}:
+                        </span>{" "}
+                        {comparisonPreviousPeriodText}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="mt-1 text-[11px] text-muted-foreground sm:text-xs">
+                      Dönem hazırlanıyor
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex h-10 w-full items-center rounded-[14px] border border-border/70 bg-card px-0.5 shadow-[0_1px_2px_rgba(15,23,42,0.025)] sm:w-[174px]">
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="size-7 shrink-0"
+                    onClick={() => move(-1)}
+                    aria-label="Önceki dönem"
+                  >
+                    <ChevronLeft className="size-4" aria-hidden="true" />
+                  </Button>
+                  <label className="relative flex min-w-0 flex-1 cursor-pointer items-center justify-center gap-1 text-[10px] font-semibold">
+                    <CalendarDays
+                      className="size-4 shrink-0 text-emerald-500"
+                      aria-hidden="true"
+                    />
+                    <span className="whitespace-nowrap" data-testid="history-selected-date">
+                      {comparisonPeriodText}
+                    </span>
+                    <Input
+                      type="date"
+                      aria-label="Karşılaştırma dönemini seç"
+                      max={today || undefined}
+                      value={activeDate}
+                      onChange={(event) => setComparisonDate(event.target.value)}
+                      className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                    />
+                  </label>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="size-7 shrink-0"
+                    onClick={() => move(1)}
+                    disabled={!canMoveNext}
+                    aria-label="Sonraki dönem"
+                  >
+                    <ChevronRight className="size-4" aria-hidden="true" />
+                  </Button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <section
+              className="space-y-3 rounded-[20px] border border-border/70 bg-card p-3 shadow-[0_1px_2px_rgba(15,23,42,0.025)]"
+              data-testid="history-custom-comparison-controls"
+            >
+              {(
+                [
+                  ["1. dönem", "period1Start", "period1End"],
+                  ["2. dönem", "period2Start", "period2End"],
+                ] as const
+              ).map(([label, startKey, endKey]) => (
+                <fieldset key={label} className="space-y-2">
+                  <legend className="text-xs font-bold text-foreground/85">{label}</legend>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="min-w-0 text-[10px] font-medium text-muted-foreground">
+                      Başlangıç
+                      <Input
+                        type="date"
+                        aria-label={`${label} başlangıç`}
+                        max={today || undefined}
+                        value={customRanges[startKey]}
+                        onChange={(event) => updateCustomRange(startKey, event.target.value)}
+                        className="mt-1 min-w-0 text-[11px]"
+                      />
+                    </label>
+                    <label className="min-w-0 text-[10px] font-medium text-muted-foreground">
+                      Bitiş
+                      <Input
+                        type="date"
+                        aria-label={`${label} bitiş`}
+                        max={today || undefined}
+                        value={customRanges[endKey]}
+                        onChange={(event) => updateCustomRange(endKey, event.target.value)}
+                        className="mt-1 min-w-0 text-[11px]"
+                      />
+                    </label>
+                  </div>
+                </fieldset>
+              ))}
+
+              {customValidation && (
+                <p
+                  role="alert"
+                  className="rounded-xl border border-amber-300/60 bg-amber-50 px-3 py-2 text-[11px] font-medium leading-snug text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/35 dark:text-amber-200"
+                >
+                  {customValidation}
+                </p>
+              )}
+
+              <Button type="button" className="w-full rounded-full" onClick={applyCustomComparison}>
+                <GitCompareArrows aria-hidden="true" />
+                Özel karşılaştırmayı uygula
+              </Button>
+
+              {activeComparison?.periodType === "CUSTOM" && comparisonPreviousPeriodText && (
                 <div
-                  className="mt-1 space-y-0.5 text-[11px] leading-snug text-muted-foreground sm:text-xs"
+                  className="space-y-1 border-t border-border/60 pt-3 text-[11px] leading-snug text-muted-foreground sm:text-xs"
                   data-testid="history-comparison-periods"
                 >
+                  <h1 className="text-[17px] font-extrabold tracking-[-0.045em] text-foreground sm:text-2xl">
+                    Özel Karşılaştırma
+                  </h1>
                   <p className="whitespace-normal" data-testid="history-comparison-current-period">
-                    <span className="font-semibold text-foreground/80">
-                      {comparisonMode === "WEEK" ? "Bu hafta" : "Bu ay"}:
-                    </span>{" "}
+                    <span className="font-semibold text-foreground/80">1. dönem:</span>{" "}
                     {comparisonPeriodText}
                   </p>
                   <p className="whitespace-normal" data-testid="history-comparison-previous-period">
-                    <span className="font-semibold text-foreground/80">
-                      {comparisonMode === "WEEK" ? "Geçen hafta" : "Geçen ay"}:
-                    </span>{" "}
+                    <span className="font-semibold text-foreground/80">2. dönem:</span>{" "}
                     {comparisonPreviousPeriodText}
                   </p>
                 </div>
-              ) : (
-                <p className="mt-1 text-[11px] text-muted-foreground sm:text-xs">
-                  Dönem hazırlanıyor
-                </p>
               )}
-            </div>
-
-            <div className="flex h-10 w-full items-center rounded-[14px] border border-border/70 bg-card px-0.5 shadow-[0_1px_2px_rgba(15,23,42,0.025)] sm:w-[174px]">
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                className="size-7 shrink-0"
-                onClick={() => move(-1)}
-                aria-label="Önceki dönem"
-              >
-                <ChevronLeft className="size-4" aria-hidden="true" />
-              </Button>
-              <label className="relative flex min-w-0 flex-1 cursor-pointer items-center justify-center gap-1 text-[10px] font-semibold">
-                <CalendarDays className="size-4 shrink-0 text-emerald-500" aria-hidden="true" />
-                <span className="whitespace-nowrap" data-testid="history-selected-date">
-                  {comparisonPeriodText}
-                </span>
-                <Input
-                  type="date"
-                  aria-label="Karşılaştırma dönemini seç"
-                  max={today || undefined}
-                  value={activeDate}
-                  onChange={(event) => setComparisonDate(event.target.value)}
-                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                />
-              </label>
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                className="size-7 shrink-0"
-                onClick={() => move(1)}
-                disabled={!canMoveNext}
-                aria-label="Sonraki dönem"
-              >
-                <ChevronRight className="size-4" aria-hidden="true" />
-              </Button>
-            </div>
-          </div>
+            </section>
+          )}
         </>
       )}
 
@@ -474,7 +694,13 @@ export function HistoryView() {
         </section>
       )}
 
-      {!keyMatches || state.dataStatus === "loading" || !activeDate ? (
+      {awaitingCustomSelection ? (
+        <EmptyState
+          icon={CalendarDays}
+          title="Karşılaştırmak istediğin dönemleri seç"
+          description="İki dönem aynı sayıda gün içermeli ve her dönem en fazla 31 gün olmalıdır."
+        />
+      ) : !keyMatches || state.dataStatus === "loading" || !activeDate ? (
         <LoadingHistory />
       ) : state.dataStatus === "error" ? (
         <EmptyState
@@ -500,6 +726,51 @@ export function HistoryView() {
           {viewMode === "COMPARISON" && state.comparison ? (
             <div className="space-y-4">
               <PeriodComparisonSection comparison={state.comparison} />
+              {comparisonKind === "CUSTOM" && (
+                <HistoryEvaluationCard title="Diewish Özel Karşılaştırma Değerlendirmesi">
+                  {state.insightStatus === "loading" || state.insightStatus === "idle" ? (
+                    <div className="space-y-2">
+                      <Skeleton className="h-4 w-full" />
+                      <Skeleton className="h-4 w-5/6" />
+                      <Skeleton className="h-4 w-2/3" />
+                    </div>
+                  ) : state.insightStatus === "error" ? (
+                    <div>
+                      <p className="text-sm text-muted-foreground">
+                        {state.insightError ??
+                          "Diewish değerlendirmesi şu anda alınamadı. Karşılaştırma verilerin görüntülenmeye devam ediyor."}
+                      </p>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="mt-3"
+                        onClick={() => {
+                          if (userId && timezone && customApplied) {
+                            void historyStore.loadCustomInsight({
+                              userId,
+                              ranges: customApplied,
+                              timezone,
+                            });
+                          }
+                        }}
+                      >
+                        <RefreshCw aria-hidden="true" />
+                        Tekrar dene
+                      </Button>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="relative break-words text-[12px] leading-5 text-foreground/75 sm:text-sm">
+                        {state.insight?.content.text}
+                      </p>
+                      <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground sm:text-[11px]">
+                        Bu değerlendirme yalnızca seçtiğin dönemlerdeki kayıtlarına dayanır.
+                      </p>
+                    </div>
+                  )}
+                </HistoryEvaluationCard>
+              )}
               <Button
                 type="button"
                 className="min-h-[52px] w-full rounded-full border-0 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-400 text-sm font-bold text-white shadow-[0_8px_20px_rgba(20,184,166,0.18)] hover:from-emerald-600 hover:via-teal-600 hover:to-cyan-500"

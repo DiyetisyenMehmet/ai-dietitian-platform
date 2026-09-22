@@ -2,6 +2,7 @@
 
 import * as React from "react";
 
+import type { CustomHistoryComparisonInput } from "@/application/history/history-custom-comparison";
 import type {
   DailyHistoryResponse,
   HistoryComparisonResponse,
@@ -56,6 +57,22 @@ export function historyRequestKey(
   timezone: string,
 ): string {
   return [userId, mode, date, timezone].join("|");
+}
+
+export function customHistoryRequestKey(
+  userId: string,
+  input: CustomHistoryComparisonInput,
+  timezone: string,
+): string {
+  return [
+    userId,
+    "CUSTOM",
+    input.period1Start,
+    input.period1End,
+    input.period2Start,
+    input.period2End,
+    timezone,
+  ].join("|");
 }
 
 export function calendarDateKey(date = new Date()): string {
@@ -154,6 +171,43 @@ export const historyStore = {
     }
   },
 
+  async loadCustomComparison(input: {
+    userId: string;
+    ranges: CustomHistoryComparisonInput;
+    timezone: string;
+  }): Promise<void> {
+    const requestKey = customHistoryRequestKey(input.userId, input.ranges, input.timezone);
+    const sequence = ++dataSequence;
+    insightSequence += 1;
+
+    setState({
+      requestKey,
+      dataStatus: "loading",
+      insightStatus: "idle",
+      daily: null,
+      comparison: null,
+      insight: null,
+      error: null,
+      insightError: null,
+    });
+
+    try {
+      const { comparison } = await historyClient.getCustomComparison(
+        input.ranges,
+        input.timezone,
+      );
+      if (sequence !== dataSequence) return;
+      setState({ dataStatus: "success", comparison });
+    } catch (error) {
+      if (sequence !== dataSequence) return;
+      setState({
+        dataStatus: "error",
+        error:
+          error instanceof Error ? error.message : "Özel karşılaştırma verileri yüklenemedi.",
+      });
+    }
+  },
+
   async loadInsight(input: {
     userId: string;
     mode: HistoryMode;
@@ -175,6 +229,32 @@ export const historyStore = {
         insightStatus: "error",
         insightError:
           error instanceof Error ? error.message : "Diewish değerlendirmesi şu anda alınamadı.",
+      });
+    }
+  },
+
+  async loadCustomInsight(input: {
+    userId: string;
+    ranges: CustomHistoryComparisonInput;
+    timezone: string;
+  }): Promise<void> {
+    const requestKey = customHistoryRequestKey(input.userId, input.ranges, input.timezone);
+    if (state.requestKey !== requestKey || state.dataStatus !== "success") return;
+
+    const sequence = ++insightSequence;
+    setState({ insightStatus: "loading", insight: null, insightError: null });
+    try {
+      const { insight } = await historyClient.getCustomInsight(input.ranges, input.timezone);
+      if (sequence !== insightSequence || state.requestKey !== requestKey) return;
+      setState({ insightStatus: "success", insight });
+    } catch (error) {
+      if (sequence !== insightSequence || state.requestKey !== requestKey) return;
+      setState({
+        insightStatus: "error",
+        insightError:
+          error instanceof Error
+            ? error.message
+            : "Diewish özel karşılaştırma değerlendirmesi şu anda alınamadı.",
       });
     }
   },

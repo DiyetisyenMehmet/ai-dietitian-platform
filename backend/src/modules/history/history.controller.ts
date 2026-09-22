@@ -26,12 +26,25 @@ export const historyController = {
 
   comparison: asyncHandler(async (req: Request, res: Response) => {
     const query = req.query as unknown as HistoryComparisonQuery;
-    const comparison = await historyComparisonService.getComparison(
-      requireUserId(req),
-      query.period === "week" ? "WEEK" : "MONTH",
-      query.referenceDate,
-      query.timezone,
-    );
+    const userId = requireUserId(req);
+    const comparison =
+      query.mode === "custom"
+        ? await historyComparisonService.getCustomComparison(
+            userId,
+            {
+              period1Start: query.period1Start,
+              period1End: query.period1End,
+              period2Start: query.period2Start,
+              period2End: query.period2End,
+            },
+            query.timezone,
+          )
+        : await historyComparisonService.getComparison(
+            userId,
+            query.period === "week" ? "WEEK" : "MONTH",
+            query.referenceDate,
+            query.timezone,
+          );
     sendSuccess(res, { comparison });
   }),
 
@@ -40,13 +53,24 @@ export const historyController = {
     const userId = requireUserId(req);
     const insight =
       body.scope === "DAY"
-        ? await historyAiService.getDailyInsight(userId, body.date ?? "", body.timezone)
-        : await historyAiService.getPeriodInsight(
-            userId,
-            body.scope,
-            body.referenceDate ?? "",
-            body.timezone,
-          );
+        ? await historyAiService.getDailyInsight(userId, body.date, body.timezone)
+        : body.scope === "CUSTOM"
+          ? await historyAiService.getCustomComparisonInsight(
+              userId,
+              {
+                period1Start: body.period1Start,
+                period1End: body.period1End,
+                period2Start: body.period2Start,
+                period2End: body.period2End,
+              },
+              body.timezone,
+            )
+          : await historyAiService.getPeriodInsight(
+              userId,
+              body.scope,
+              body.referenceDate,
+              body.timezone,
+            );
     sendSuccess(res, { insight });
   }),
 };

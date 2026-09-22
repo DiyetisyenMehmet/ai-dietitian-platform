@@ -1,4 +1,5 @@
 import { apiRequest } from "@/infrastructure/api/http-client";
+import type { CustomHistoryComparisonInput } from "@/application/history/history-custom-comparison";
 import { HISTORY_ENDPOINTS } from "@/infrastructure/auth/endpoints";
 import type {
   DailyHistoryResponse,
@@ -28,6 +29,18 @@ export const historyClient = {
     });
   },
 
+  getCustomComparison(input: CustomHistoryComparisonInput, timezone: string) {
+    return apiRequest<{ comparison: HistoryComparisonResponse }>({
+      path: `${HISTORY_ENDPOINTS.comparison}?${params({
+        mode: "custom",
+        ...input,
+        timezone,
+      })}`,
+      method: "GET",
+      auth: true,
+    });
+  },
+
   getInsight(scope: HistoryMode, date: string, timezone: string) {
     return apiRequest<{ insight: HistoryInsightResponse }>({
       path: HISTORY_ENDPOINTS.insight,
@@ -38,6 +51,19 @@ export const historyClient = {
           ? { scope, date, timezone }
           : { scope, referenceDate: date, timezone },
       ),
+    });
+  },
+
+  getCustomInsight(input: CustomHistoryComparisonInput, timezone: string) {
+    return apiRequest<{ insight: HistoryInsightResponse }>({
+      path: HISTORY_ENDPOINTS.insight,
+      method: "POST",
+      auth: true,
+      body: JSON.stringify({
+        scope: "CUSTOM",
+        ...input,
+        timezone,
+      }),
     });
   },
 } as const;

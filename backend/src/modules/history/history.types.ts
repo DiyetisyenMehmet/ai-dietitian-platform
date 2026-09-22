@@ -186,12 +186,14 @@ export interface DailyHistoryResponse {
 }
 
 
-export type HistoryPeriodType = "WEEK" | "MONTH";
+export type HistoryStandardPeriodType = "WEEK" | "MONTH";
+export type HistoryPeriodType = HistoryStandardPeriodType | "CUSTOM";
 export type HistoryComparisonMode =
   | "FULL_PERIODS"
   | "FULL_CALENDAR_MONTHS"
   | "EQUAL_ELAPSED_DAYS"
-  | "EQUAL_ELAPSED_DAYS_CLAMPED";
+  | "EQUAL_ELAPSED_DAYS_CLAMPED"
+  | "CUSTOM_EQUAL_RANGES";
 
 export type ComparisonDirection = "UP" | "DOWN" | "UNCHANGED" | "UNAVAILABLE";
 export type ComparisonQuality = "FULL" | "LIMITED" | "NONE";
@@ -285,7 +287,7 @@ export interface HistoryComparisonResponse {
 }
 
 
-export type HistoryInsightScopeName = "DAY" | "WEEK" | "MONTH";
+export type HistoryInsightScopeName = "DAY" | "WEEK" | "MONTH" | "CUSTOM";
 export type HistoryInsightCacheStatus = "HIT" | "MISS" | "BYPASS";
 
 export interface HistoryInsightResponse {

@@ -58,7 +58,7 @@ interface DailyInsightContext {
 
 interface PeriodInsightContext {
   contextVersion: string;
-  scope: "WEEK" | "MONTH";
+  scope: "WEEK" | "MONTH" | "CUSTOM";
   timezone: string;
   comparisonMode: HistoryComparisonResponse["comparisonMode"];
   currentPeriod: HistoryComparisonResponse["currentPeriod"];
@@ -139,7 +139,7 @@ export function historyWaterGoalForInsight(history: DailyHistoryResponse): Obser
 }
 
 function periodContext(
-  scope: "WEEK" | "MONTH",
+  scope: "WEEK" | "MONTH" | "CUSTOM",
   comparison: HistoryComparisonResponse,
 ): PeriodInsightContext {
   return {
@@ -158,10 +158,19 @@ function dailyPeriodKey(history: DailyHistoryResponse): string {
   return `DAY:${history.date}`;
 }
 
-function comparisonPeriodKey(
-  scope: "WEEK" | "MONTH",
+export function comparisonPeriodKey(
+  scope: "WEEK" | "MONTH" | "CUSTOM",
   comparison: HistoryComparisonResponse,
 ): string {
+  if (scope === "CUSTOM") {
+    return [
+      "CUSTOM",
+      comparison.currentPeriod.localStartDate,
+      comparison.currentPeriod.localEndDateInclusive,
+      comparison.previousPeriod.localStartDate,
+      comparison.previousPeriod.localEndDateInclusive,
+    ].join(":");
+  }
   return `${scope}:${comparison.currentPeriod.localStartDate}`;
 }
 
@@ -184,14 +193,26 @@ function hasDailyData(history: DailyHistoryResponse): boolean {
   return history.timeline.length > 0;
 }
 
-function hasPeriodData(comparison: HistoryComparisonResponse): boolean {
-  const current = comparison.completeness.current;
+function periodCompletenessHasData(
+  completeness: HistoryComparisonResponse["completeness"]["current"],
+): boolean {
   return (
-    current.nutrition.recordedDays > 0 ||
-    current.water.recordedDays > 0 ||
-    current.activity.recordedDays > 0 ||
-    current.sleep.recordedDays > 0 ||
-    current.weight.measurementCount > 0
+    completeness.nutrition.recordedDays > 0 ||
+    completeness.water.recordedDays > 0 ||
+    completeness.activity.recordedDays > 0 ||
+    completeness.sleep.recordedDays > 0 ||
+    completeness.weight.measurementCount > 0
+  );
+}
+
+function hasPeriodData(comparison: HistoryComparisonResponse): boolean {
+  return periodCompletenessHasData(comparison.completeness.current);
+}
+
+function hasCustomComparisonData(comparison: HistoryComparisonResponse): boolean {
+  return (
+    periodCompletenessHasData(comparison.completeness.current) ||
+    periodCompletenessHasData(comparison.completeness.previous)
   );
 }
 
@@ -215,7 +236,9 @@ function promptFor(scope: HistoryInsightScopeName, context: InsightContext): str
       ? 'Cevaba mümkünse "Bugünkü kayıtlarına göre" veya "Kaydettiğin..." gibi veri kapsamını belirten bir ifadeyle başla.'
       : scope === "WEEK"
         ? 'Karşılaştırmada yalnız verilen dönemleri kullan; kayıt kapsamı sınırlıysa "Geçen haftanın aynı dönemindeki kayıtlara göre" gibi koşullu dil kullan.'
-        : 'Karşılaştırmada "Bu ay şimdiye kadarki kayıtlarında" gibi kapsamı açık ifadeler kullan.';
+        : scope === "MONTH"
+          ? 'Karşılaştırmada "Bu ay şimdiye kadarki kayıtlarında" gibi kapsamı açık ifadeler kullan.'
+          : 'Bu özel karşılaştırmayı yalnız "1. dönem" ve "2. dönem" olarak anlat; hafta/ay varsayımı yapma ve verilen gerçek tarih aralıkları ile kayıt kapsamını esas al.';
 
   return [
     "Aşağıdaki Diewish History özetine göre Türkçe, kısa, destekleyici ve somut bir değerlendirme yaz.",
@@ -423,6 +446,39 @@ export const historyAiService = {
       sourceFingerprint: bundle.sourceFingerprint,
       partial: bundle.comparison.meta.partialResponse,
       noData: !hasPeriodData(bundle.comparison),
+      generatedAt: now,
+    });
+  },
+
+  async getCustomComparisonInsight(
+    userId: string,
+    input: {
+      period1Start: string;
+      period1End: string;
+      period2Start: string;
+      period2End: string;
+    },
+    timezone: string | undefined,
+    now = new Date(),
+  ): Promise<HistoryInsightResponse> {
+    const bundle = await historyComparisonService.getCustomComparisonWithFingerprint(
+      userId,
+      input,
+      timezone,
+      now,
+    );
+    return generateAndCache({
+      userId,
+      scope: "CUSTOM",
+      // Reuse the existing persistence enum without a database migration.
+      // The CUSTOM prefix and complete range identity keep this cache namespace isolated.
+      prismaScope: HistoryInsightScope.WEEK,
+      periodKey: comparisonPeriodKey("CUSTOM", bundle.comparison),
+      timezone: bundle.comparison.timezone,
+      context: periodContext("CUSTOM", bundle.comparison),
+      sourceFingerprint: bundle.sourceFingerprint,
+      partial: bundle.comparison.meta.partialResponse,
+      noData: !hasCustomComparisonData(bundle.comparison),
       generatedAt: now,
     });
   },

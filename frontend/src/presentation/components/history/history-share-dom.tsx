@@ -44,7 +44,8 @@ function tone(card: HistoryShareVisualCard): HistoryMetricTone {
 function evaluationTitle(payload: HistorySharePayload) {
   if (payload.scope === "DAY") return "Diewish Günlük Değerlendirmesi";
   if (payload.scope === "WEEK") return "Diewish Haftalık Değerlendirmesi";
-  return "Diewish Aylık Değerlendirmesi";
+  if (payload.scope === "MONTH") return "Diewish Aylık Değerlendirmesi";
+  return "Diewish Özel Karşılaştırma Değerlendirmesi";
 }
 
 function SummaryCards({ cards }: { cards: HistoryShareVisualCard[] }) {
@@ -156,7 +157,7 @@ export function HistoryShareDom({ payload, captureRef, className }: HistoryShare
           <span>{payload.periodLabel}</span>
         </div>
         {payload.comparisonLabel && (
-          <p className="relative mt-3 inline-flex rounded-full bg-white/15 px-3 py-1.5 text-[11px] font-semibold text-white">
+          <p className="relative mt-3 inline-flex max-w-full whitespace-normal rounded-full bg-white/15 px-3 py-1.5 text-left text-[11px] font-semibold leading-snug text-white">
             {payload.comparisonLabel}
           </p>
         )}

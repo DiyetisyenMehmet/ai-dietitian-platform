@@ -775,9 +775,10 @@ export function HistoryComparisonMetricCard({
 }
 
 export function PeriodComparisonSection({ comparison }: { comparison: HistoryComparisonResponse }) {
+  const custom = comparison.periodType === "CUSTOM";
   const week = comparison.periodType === "WEEK";
-  const currentLabel = week ? "Bu hafta" : "Bu ay";
-  const previousLabel = week ? "Geçen hafta" : "Geçen ay";
+  const currentLabel = custom ? "1. dönem" : week ? "Bu hafta" : "Bu ay";
+  const previousLabel = custom ? "2. dönem" : week ? "Geçen hafta" : "Geçen ay";
   const current = comparison.completeness.current;
   const previous = comparison.completeness.previous;
 
@@ -899,9 +900,11 @@ export function PeriodComparisonSection({ comparison }: { comparison: HistoryCom
       <p className="flex items-start gap-2 px-1 text-[10px] leading-relaxed text-muted-foreground sm:text-[11px]">
         <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
         <span>
-          {(comparison.comparisonMode === "EQUAL_ELAPSED_DAYS" ||
-            comparison.comparisonMode === "EQUAL_ELAPSED_DAYS_CLAMPED") &&
-            "Dönemler aynı sayıda geçen güne göre karşılaştırılır. "}
+          {comparison.comparisonMode === "CUSTOM_EQUAL_RANGES"
+            ? "Özel dönemler aynı sayıda yerel takvim günü üzerinden karşılaştırılır. "
+            : (comparison.comparisonMode === "EQUAL_ELAPSED_DAYS" ||
+                  comparison.comparisonMode === "EQUAL_ELAPSED_DAYS_CLAMPED") &&
+                "Dönemler aynı sayıda geçen güne göre karşılaştırılır. "}
           Fark renkleri yalnız değişimin yönünü gösterir; sağlık sonucu değerlendirmesi değildir.
           Kayıt sayısı düşük olduğunda karşılaştırma sınırlı olabilir.
         </span>

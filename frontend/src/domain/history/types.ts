@@ -182,13 +182,14 @@ export interface PeriodCategoryCompleteness {
 }
 
 export interface HistoryComparisonResponse {
-  periodType: "WEEK" | "MONTH";
+  periodType: "WEEK" | "MONTH" | "CUSTOM";
   timezone: string;
   comparisonMode:
     | "FULL_PERIODS"
     | "FULL_CALENDAR_MONTHS"
     | "EQUAL_ELAPSED_DAYS"
-    | "EQUAL_ELAPSED_DAYS_CLAMPED";
+    | "EQUAL_ELAPSED_DAYS_CLAMPED"
+    | "CUSTOM_EQUAL_RANGES";
   currentPeriod: {
     localStartDate: string;
     localEndDateInclusive: string;
@@ -262,7 +263,7 @@ export interface HistoryComparisonResponse {
 }
 
 export interface HistoryInsightResponse {
-  scope: "DAY" | "WEEK" | "MONTH";
+  scope: "DAY" | "WEEK" | "MONTH" | "CUSTOM";
   periodKey: string;
   timezone: string;
   content: { text: string };

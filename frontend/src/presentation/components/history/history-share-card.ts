@@ -160,7 +160,8 @@ function drawHeader(ctx: CanvasRenderingContext2D, scene: HistoryShareScene): nu
   const x = OUTER + SHEET;
   const width = WIDTH - (OUTER + SHEET) * 2;
   const y = OUTER + SHEET;
-  const height = scene.comparisonLabel ? 272 : 232;
+  const customComparison = scene.scope === "CUSTOM" && Boolean(scene.comparisonLabel);
+  const height = scene.comparisonLabel ? (customComparison ? 306 : 272) : 232;
 
   const gradient = ctx.createLinearGradient(x, y, x + width, y + height);
   gradient.addColorStop(0, "#087a55");
@@ -186,16 +187,32 @@ function drawHeader(ctx: CanvasRenderingContext2D, scene: HistoryShareScene): nu
 
   ctx.font = `500 24px ${FONT}`;
   ctx.fillStyle = "#dcfce7";
-  ctx.fillText(scene.periodLabel, x + 38, y + height - 36);
 
-  if (scene.comparisonLabel) {
+  if (customComparison) {
+    const periodLines = wrapText(ctx, scene.periodLabel, width - 76);
+    periodLines.forEach((line, index) => ctx.fillText(line, x + 38, y + 194 + index * 28));
+
     ctx.fillStyle = "rgba(255,255,255,0.14)";
-    roundedRect(ctx, x + 38, y + height - 86, width - 76, 40, 20);
+    roundedRect(ctx, x + 38, y + 226, width - 76, 58, 20);
     ctx.fill();
     ctx.fillStyle = "#ecfdf5";
     ctx.font = `600 18px ${FONT}`;
-    const label = fitLines(ctx, scene.comparisonLabel, width - 110, 1)[0] ?? "";
-    ctx.fillText(label, x + 55, y + height - 59);
+    const comparisonLines = wrapText(ctx, scene.comparisonLabel ?? "", width - 110);
+    comparisonLines.forEach((line, index) =>
+      ctx.fillText(line, x + 55, y + 250 + index * 21),
+    );
+  } else {
+    ctx.fillText(scene.periodLabel, x + 38, y + height - 36);
+
+    if (scene.comparisonLabel) {
+      ctx.fillStyle = "rgba(255,255,255,0.14)";
+      roundedRect(ctx, x + 38, y + height - 86, width - 76, 40, 20);
+      ctx.fill();
+      ctx.fillStyle = "#ecfdf5";
+      ctx.font = `600 18px ${FONT}`;
+      const label = fitLines(ctx, scene.comparisonLabel, width - 110, 1)[0] ?? "";
+      ctx.fillText(label, x + 55, y + height - 59);
+    }
   }
 
   return y + height;
@@ -586,7 +603,13 @@ export function createHistoryShareCanvas(payload: HistorySharePayload): HTMLCanv
 export function historyPayloadText(payload: HistorySharePayload): string {
   const heading =
     payload.kind === "comparison"
-      ? `${payload.periodLabel} Diewish ${payload.scope === "WEEK" ? "haftalık" : "aylık"} karşılaştırmam 🌿`
+      ? `${payload.periodLabel} Diewish ${
+          payload.scope === "CUSTOM"
+            ? "özel"
+            : payload.scope === "WEEK"
+              ? "haftalık"
+              : "aylık"
+        } karşılaştırmam 🌿`
       : payload.scope === "DAY"
         ? `${payload.periodLabel} Diewish gün özetim 🌿`
         : payload.scope === "WEEK"

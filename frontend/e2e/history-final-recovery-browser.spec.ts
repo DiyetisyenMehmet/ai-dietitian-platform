@@ -428,3 +428,308 @@ test("Android bridge contract browser-mock keeps visual caption opt-in", async (
   expect(Array.from(record.text).length).toBeLessThanOrEqual(140);
   expect(record.text).not.toMatch(/kcal|kg|uyku|öğün|PRIVATE_/i);
 });
+
+
+async function configureCustomComparison(
+  page: Page,
+  ranges = {
+    period1Start: "2026-08-01",
+    period1End: "2026-08-07",
+    period2Start: "2026-09-01",
+    period2End: "2026-09-07",
+  },
+) {
+  await page.getByRole("button", { name: "Karşılaştır" }).click();
+  await page.getByRole("button", { name: "Özel karşılaştırma" }).click();
+
+  await page.getByLabel("1. dönem başlangıç").fill(ranges.period1Start);
+  await page.getByLabel("1. dönem bitiş").fill(ranges.period1End);
+  await page.getByLabel("2. dönem başlangıç").fill(ranges.period2Start);
+  await page.getByLabel("2. dönem bitiş").fill(ranges.period2End);
+  await page.getByRole("button", { name: "Özel karşılaştırmayı uygula" }).click();
+}
+
+async function assertCustomComparisonReady(page: Page) {
+  const current = page.getByTestId("history-comparison-current-period");
+  const previous = page.getByTestId("history-comparison-previous-period");
+
+  await expect(current).toContainText("1. dönem:");
+  await expect(current).toContainText("1–7 Ağustos 2026");
+  await expect(previous).toContainText("2. dönem:");
+  await expect(previous).toContainText("1–7 Eylül 2026");
+
+  const currentBox = await current.boundingBox();
+  const previousBox = await previous.boundingBox();
+  expect(currentBox).not.toBeNull();
+  expect(previousBox).not.toBeNull();
+  expect((previousBox?.y ?? 0) > (currentBox?.y ?? 0)).toBe(true);
+
+  const comparison = page.getByRole("region", { name: "Dönem karşılaştırması" });
+  await expect(comparison).toBeVisible();
+  await expect(comparison).toContainText("1. dönem");
+  await expect(comparison).toContainText("2. dönem");
+  await expect(comparison).toContainText("Fark");
+
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+    ),
+  ).toBe(true);
+}
+
+for (const scenario of [
+  { name: "390x844 LIGHT", width: 390, height: 844, theme: "light" as const },
+  { name: "390x844 DARK", width: 390, height: 844, theme: "dark" as const },
+  { name: "412x915 LIGHT", width: 412, height: 915, theme: "light" as const },
+  { name: "412x915 DARK", width: 412, height: 915, theme: "dark" as const },
+]) {
+  test(`CUSTOM ${scenario.name} keeps controls, full dates, metrics and share preview stable`, async ({
+    page,
+  }) => {
+    await openHistory(page, scenario.width, scenario.height, scenario.theme);
+    await configureCustomComparison(page);
+    await assertCustomComparisonReady(page);
+
+    const controls = page.getByTestId("history-custom-comparison-controls");
+    await expect(controls).toBeVisible();
+
+    const shareButton = page.getByRole("button", { name: "Karşılaştırmayı paylaş" });
+    await expect(shareButton).toBeEnabled();
+    await shareButton.click();
+
+    const dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
+    await expect(dialog.getByRole("checkbox", { name: /Paylaşım mesajı ekle/ })).not.toBeChecked();
+
+    const preview = await openVisualPreview(page);
+    await expect(
+      preview.getByRole("heading", { name: "Özel Karşılaştırma" }).first(),
+    ).toBeVisible();
+    await expect(preview).toContainText("1. dönem: 1–7 Ağustos 2026");
+    await expect(preview).toContainText("2. dönem: 1–7 Eylül 2026");
+    await expect(preview.getByTestId("history-share-motivation")).toBeVisible();
+
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+      ),
+    ).toBe(true);
+  });
+}
+
+test("CUSTOM unequal ranges show the exact Turkish validation message before request", async ({
+  page,
+}) => {
+  await openHistory(page, 390, 844, "light");
+  await page.getByRole("button", { name: "Karşılaştır" }).click();
+  await page.getByRole("button", { name: "Özel karşılaştırma" }).click();
+  await page.getByLabel("1. dönem başlangıç").fill("2026-08-01");
+  await page.getByLabel("1. dönem bitiş").fill("2026-08-07");
+  await page.getByLabel("2. dönem başlangıç").fill("2026-09-01");
+  await page.getByLabel("2. dönem bitiş").fill("2026-09-10");
+  await page.getByRole("button", { name: "Özel karşılaştırmayı uygula" }).click();
+
+  await expect(page.getByRole("alert")).toHaveText(
+    "Karşılaştırılacak dönemler aynı sayıda gün içermelidir.",
+  );
+});
+
+test("CUSTOM share privacy defaults do not leak sleep, weight or AI evaluation", async ({
+  page,
+}) => {
+  await openHistory(page, 390, 844, "light");
+  await configureCustomComparison(page);
+  await assertCustomComparisonReady(page);
+  await page.getByRole("button", { name: "Karşılaştırmayı paylaş" }).click();
+
+  const dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
+  await expect(dialog.getByRole("checkbox", { name: /Uyku/ })).not.toBeChecked();
+  await expect(dialog.getByRole("checkbox", { name: /Kilo/ })).not.toBeChecked();
+  await expect(dialog.getByRole("checkbox", { name: /Diewish değerlendirmesi/ })).not.toBeChecked();
+
+  const preview = await openVisualPreview(page);
+  const rendered = await preview
+    .locator('[data-history-share-capture-root="true"]')
+    .innerText();
+
+  expect(rendered).not.toContain("PRIVATE_CUSTOM_AI_SENTINEL");
+  expect(rendered).not.toContain("91,7 kg");
+  expect(rendered).not.toContain("Ortalama Uyku Süresi");
+  expect(rendered).not.toContain("Kilo Değişimi");
+
+  const motivation = await preview.getByTestId("history-share-motivation").innerText();
+  expect(motivation).not.toMatch(/PRIVATE_|91[,.]7|uyku|kilo/i);
+});
+
+test("CUSTOM Web Share caption OFF sends PNG without text and caption ON sends only short copy", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "canShare", {
+      configurable: true,
+      value: () => true,
+    });
+    Object.defineProperty(navigator, "share", {
+      configurable: true,
+      value: async (data: ShareData) => {
+        const records =
+          (window as Window & {
+            __customShareRecords?: Array<{
+              hasText: boolean;
+              text: string | null;
+              fileCount: number;
+              fileType: string | null;
+            }>;
+          }).__customShareRecords ?? [];
+        records.push({
+          hasText: Object.prototype.hasOwnProperty.call(data, "text"),
+          text: data.text ?? null,
+          fileCount: data.files?.length ?? 0,
+          fileType: data.files?.[0]?.type ?? null,
+        });
+        (
+          window as Window & {
+            __customShareRecords?: typeof records;
+          }
+        ).__customShareRecords = records;
+      },
+    });
+  });
+
+  await openHistory(page, 390, 844, "light");
+  await configureCustomComparison(page);
+  await assertCustomComparisonReady(page);
+  await page.getByRole("button", { name: "Karşılaştırmayı paylaş" }).click();
+
+  let preview = await openVisualPreview(page);
+  await preview.getByRole("button", { name: "Paylaş" }).click();
+
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as Window & { __customShareRecords?: unknown[] }).__customShareRecords
+            ?.length ?? 0,
+      ),
+    )
+    .toBe(1);
+
+  let records = await page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          __customShareRecords: Array<{
+            hasText: boolean;
+            text: string | null;
+            fileCount: number;
+            fileType: string | null;
+          }>;
+        }
+      ).__customShareRecords,
+  );
+
+  expect(records[0]).toMatchObject({
+    hasText: false,
+    text: null,
+    fileCount: 1,
+    fileType: "image/png",
+  });
+
+  await page.goto(VALIDATION_URL);
+  await configureCustomComparison(page);
+  await assertCustomComparisonReady(page);
+  await page.getByRole("button", { name: "Karşılaştırmayı paylaş" }).click();
+
+  const dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
+  await dialog.getByRole("checkbox", { name: /Paylaşım mesajı ekle/ }).check();
+  preview = await openVisualPreview(page);
+  await preview.getByRole("button", { name: "Paylaş" }).click();
+
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as Window & { __customShareRecords?: unknown[] }).__customShareRecords
+            ?.length ?? 0,
+      ),
+    )
+    .toBe(2);
+
+  records = await page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          __customShareRecords: Array<{
+            hasText: boolean;
+            text: string | null;
+            fileCount: number;
+            fileType: string | null;
+          }>;
+        }
+      ).__customShareRecords,
+  );
+
+  expect(records[1].hasText).toBe(true);
+  expect(records[1].fileCount).toBe(1);
+  expect(records[1].fileType).toBe("image/png");
+  expect(records[1].text?.startsWith(CAPTION_PREFIX)).toBe(true);
+  expect(Array.from(records[1].text ?? "").length).toBeLessThanOrEqual(140);
+  expect(records[1].text ?? "").not.toMatch(/kcal|kg|uyku|öğün|1\. dönem|2\. dönem/i);
+});
+
+test("CUSTOM text share preserves privacy-filtered labels and excludes hidden data", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "share", {
+      configurable: true,
+      value: async (data: ShareData) => {
+        (
+          window as Window & {
+            __customTextShare?: { text: string | null; fileCount: number };
+          }
+        ).__customTextShare = {
+          text: data.text ?? null,
+          fileCount: data.files?.length ?? 0,
+        };
+      },
+    });
+  });
+
+  await openHistory(page, 390, 844, "light");
+  await configureCustomComparison(page);
+  await assertCustomComparisonReady(page);
+  await page.getByRole("button", { name: "Karşılaştırmayı paylaş" }).click();
+
+  const dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
+  await dialog.getByRole("button", { name: "Yazı olarak paylaş" }).click();
+
+  const previewText = await dialog.locator("pre").innerText();
+  expect(previewText).toContain("Diewish özel karşılaştırmam");
+  expect(previewText).toContain("1. dönem");
+  expect(previewText).toContain("2. dönem");
+  expect(previewText).not.toContain("PRIVATE_CUSTOM_AI_SENTINEL");
+  expect(previewText).not.toContain("91,7 kg");
+  expect(previewText).not.toContain("Ortalama Uyku Süresi");
+
+  await dialog.getByRole("button", { name: "Yazıyı Paylaş" }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as Window & { __customTextShare?: unknown }).__customTextShare ?? null,
+      ),
+    )
+    .not.toBeNull();
+
+  const record = await page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          __customTextShare: { text: string | null; fileCount: number };
+        }
+      ).__customTextShare,
+  );
+  expect(record.fileCount).toBe(0);
+  expect(record.text).toContain("Diewish özel karşılaştırmam");
+  expect(record.text ?? "").not.toMatch(/PRIVATE_CUSTOM_AI_SENTINEL|91[,.]7 kg|Ortalama Uyku/);
+});

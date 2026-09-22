@@ -6,6 +6,7 @@ on:
       - feature/history-final-recovery
     paths:
       - ".github/workflows/history-final-recovery-validation.yml"
+      - "backend/src/modules/history/**"
       - "frontend/src/application/history/**"
       - "frontend/src/presentation/components/history/**"
       - "frontend/e2e/history-*.spec.*"
@@ -32,7 +33,9 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: |
+            frontend/package-lock.json
+            backend/package-lock.json
 
       - name: Source and diff gate
         shell: bash
@@ -42,6 +45,22 @@ jobs:
           git merge-base --is-ancestor 6abb3e124592e7958252b1e8450138de156c5ab1 HEAD
           git diff --check 6abb3e124592e7958252b1e8450138de156c5ab1...HEAD
           test -z "$(git status --porcelain)"
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Backend type-check
+        working-directory: backend
+        run: npm run type-check
+
+      - name: Targeted backend History tests
+        working-directory: backend
+        run: >
+          node --import tsx --test
+          src/modules/history/history-time.test.ts
+          src/modules/history/history-comparison.test.ts
+          src/modules/history/history-ai.test.ts
 
       - name: Install frontend dependencies
         working-directory: frontend
@@ -60,20 +79,58 @@ jobs:
           e2e/history-share-parity.spec.ts
           e2e/history-final-ux.spec.ts
           e2e/history-final-recovery.spec.ts
+          e2e/history-custom-comparison.spec.ts
           --workers=1 --reporter=line
 
-      - name: Recovery Prettier diagnostic
+      - name: Backend History Prettier diagnostic
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx prettier --write \
+            src/modules/history/history.schemas.ts \
+            src/modules/history/history.types.ts \
+            src/modules/history/history.controller.ts \
+            src/modules/history/history-comparison.ts \
+            src/modules/history/history-ai.service.ts \
+            src/modules/history/history-comparison.test.ts \
+            src/modules/history/history-ai.test.ts
+          npx prettier --check \
+            src/modules/history/history.schemas.ts \
+            src/modules/history/history.types.ts \
+            src/modules/history/history.controller.ts \
+            src/modules/history/history-comparison.ts \
+            src/modules/history/history-ai.service.ts \
+            src/modules/history/history-comparison.test.ts \
+            src/modules/history/history-ai.test.ts
+
+      - name: Frontend History Prettier diagnostic
         working-directory: frontend
         shell: bash
         run: |
           set -euo pipefail
           npx prettier --write \
+            src/application/history/history-custom-comparison.ts \
             src/application/history/history-share.ts \
+            src/application/history/history-store.ts \
+            src/domain/history/types.ts \
+            src/infrastructure/history/history-client.ts \
+            src/presentation/components/history/history-overview.tsx \
+            src/presentation/components/history/history-share-card.ts \
+            src/presentation/components/history/history-share-dom-model.ts \
+            src/presentation/components/history/history-share-dom.tsx \
+            src/presentation/components/history/history-view.tsx \
+            e2e/history-custom-comparison.spec.ts \
             e2e/history-final-recovery.spec.ts \
             e2e/history-final-recovery-browser.spec.ts
           npx prettier --check \
             src/application/history/history-comparison-format.ts \
+            src/application/history/history-custom-comparison.ts \
             src/application/history/history-share.ts \
+            src/application/history/history-store.ts \
+            src/domain/history/types.ts \
+            src/infrastructure/history/history-client.ts \
+            src/presentation/components/history/history-overview.tsx \
             src/presentation/components/history/history-share-card.ts \
             src/presentation/components/history/history-share-dialog.tsx \
             src/presentation/components/history/history-share-dom-export.ts \
@@ -81,16 +138,36 @@ jobs:
             src/presentation/components/history/history-share-dom.tsx \
             src/presentation/components/history/history-share-scene.ts \
             src/presentation/components/history/history-view.tsx \
-            e2e/history-share-dom.spec.ts \
+            e2e/history-comparison-presentation.spec.ts \
+            e2e/history-custom-comparison.spec.ts \
             e2e/history-final-recovery.spec.ts \
-            e2e/history-final-recovery-browser.spec.ts
+            e2e/history-final-recovery-browser.spec.ts \
+            e2e/history-share-dom.spec.ts \
+            e2e/history-share-parity.spec.ts
 
-      - name: Upload formatted recovery sources
+      - name: Upload formatted Recovery 2 sources
         uses: actions/upload-artifact@v4
         with:
-          name: history-final-recovery-prettier
+          name: history-final-recovery-2-prettier
           path: |
+            backend/src/modules/history/history.schemas.ts
+            backend/src/modules/history/history.types.ts
+            backend/src/modules/history/history.controller.ts
+            backend/src/modules/history/history-comparison.ts
+            backend/src/modules/history/history-ai.service.ts
+            backend/src/modules/history/history-comparison.test.ts
+            backend/src/modules/history/history-ai.test.ts
+            frontend/src/application/history/history-custom-comparison.ts
             frontend/src/application/history/history-share.ts
+            frontend/src/application/history/history-store.ts
+            frontend/src/domain/history/types.ts
+            frontend/src/infrastructure/history/history-client.ts
+            frontend/src/presentation/components/history/history-overview.tsx
+            frontend/src/presentation/components/history/history-share-card.ts
+            frontend/src/presentation/components/history/history-share-dom-model.ts
+            frontend/src/presentation/components/history/history-share-dom.tsx
+            frontend/src/presentation/components/history/history-view.tsx
+            frontend/e2e/history-custom-comparison.spec.ts
             frontend/e2e/history-final-recovery.spec.ts
             frontend/e2e/history-final-recovery-browser.spec.ts
           if-no-files-found: error
@@ -238,6 +315,87 @@ jobs:
                 partialResponse: false,
                 unavailableSources: [],
                 generatedAt: "2026-09-22T12:00:00.000Z",
+              },
+            };
+          };
+
+          const addFixtureDays = (date: string, days: number) => {
+            const value = new Date(`${date}T12:00:00.000Z`);
+            value.setUTCDate(value.getUTCDate() + days);
+            return value.toISOString().slice(0, 10);
+          };
+
+          const fixtureRangeDays = (start: string, end: string) => {
+            let cursor = start;
+            let days = 1;
+            while (cursor < end) {
+              cursor = addFixtureDays(cursor, 1);
+              days += 1;
+            }
+            return days;
+          };
+
+          const customComparison = (input: {
+            period1Start: string;
+            period1End: string;
+            period2Start: string;
+            period2End: string;
+          }) => {
+            const base = comparison("week");
+            const days = fixtureRangeDays(input.period1Start, input.period1End);
+            const category = (value: ReturnType<typeof completeness>) => {
+              const recordedDays = Math.min(value.recordedDays, days);
+              const quantifiedDays = Math.min(value.quantifiedDays, recordedDays);
+              return {
+                ...value,
+                recordedDays,
+                quantifiedDays,
+                expectedDays: days,
+                coverageRatio: recordedDays / days,
+                status:
+                  recordedDays === 0
+                    ? ("NONE" as const)
+                    : recordedDays === days
+                      ? ("COMPLETE" as const)
+                      : ("PARTIAL" as const),
+              };
+            };
+
+            return {
+              ...base,
+              periodType: "CUSTOM" as const,
+              comparisonMode: "CUSTOM_EQUAL_RANGES" as const,
+              currentPeriod: {
+                localStartDate: input.period1Start,
+                localEndDateInclusive: input.period1End,
+                localEndDateExclusive: addFixtureDays(input.period1End, 1),
+                fromUtc: `${input.period1Start}T00:00:00.000Z`,
+                toUtcExclusive: `${addFixtureDays(input.period1End, 1)}T00:00:00.000Z`,
+                days,
+              },
+              previousPeriod: {
+                localStartDate: input.period2Start,
+                localEndDateInclusive: input.period2End,
+                localEndDateExclusive: addFixtureDays(input.period2End, 1),
+                fromUtc: `${input.period2Start}T00:00:00.000Z`,
+                toUtcExclusive: `${addFixtureDays(input.period2End, 1)}T00:00:00.000Z`,
+                days,
+              },
+              completeness: {
+                current: {
+                  ...base.completeness.current,
+                  nutrition: category(base.completeness.current.nutrition),
+                  water: category(base.completeness.current.water),
+                  activity: category(base.completeness.current.activity),
+                  sleep: category(base.completeness.current.sleep),
+                },
+                previous: {
+                  ...base.completeness.previous,
+                  nutrition: category(base.completeness.previous.nutrition),
+                  water: category(base.completeness.previous.water),
+                  activity: category(base.completeness.previous.activity),
+                  sleep: category(base.completeness.previous.sleep),
+                },
               },
             };
           };
@@ -401,12 +559,44 @@ jobs:
               getComparison: async (period: "week" | "month") => ({
                 comparison: comparison(period),
               }),
+              getCustomComparison: async (input: {
+                period1Start: string;
+                period1End: string;
+                period2Start: string;
+                period2End: string;
+              }) => ({
+                comparison: customComparison(input),
+              }),
               getInsight: async (scope: "DAY" | "WEEK" | "MONTH") => ({
                 insight: {
                   scope,
                   periodKey: "2026-09-22",
                   timezone: "Europe/Istanbul",
                   content: { text: "PRIVATE_AI_SENTINEL" },
+                  generatedBy: "AI" as const,
+                  cacheStatus: "HIT" as const,
+                  provider: "browser-fixture",
+                  model: "browser-fixture",
+                  generatedAt: "2026-09-22T12:00:00.000Z",
+                },
+              }),
+              getCustomInsight: async (input: {
+                period1Start: string;
+                period1End: string;
+                period2Start: string;
+                period2End: string;
+              }) => ({
+                insight: {
+                  scope: "CUSTOM" as const,
+                  periodKey: [
+                    "CUSTOM",
+                    input.period1Start,
+                    input.period1End,
+                    input.period2Start,
+                    input.period2End,
+                  ].join(":"),
+                  timezone: "Europe/Istanbul",
+                  content: { text: "PRIVATE_CUSTOM_AI_SENTINEL" },
                   generatedBy: "AI" as const,
                   cacheStatus: "HIT" as const,
                   provider: "browser-fixture",
@@ -456,7 +646,24 @@ jobs:
         run: |
           git checkout -- src/presentation/components/auth/route-guard.tsx || true
           git checkout -- \
+            ../backend/src/modules/history/history.schemas.ts \
+            ../backend/src/modules/history/history.types.ts \
+            ../backend/src/modules/history/history.controller.ts \
+            ../backend/src/modules/history/history-comparison.ts \
+            ../backend/src/modules/history/history-ai.service.ts \
+            ../backend/src/modules/history/history-comparison.test.ts \
+            ../backend/src/modules/history/history-ai.test.ts \
+            src/application/history/history-custom-comparison.ts \
             src/application/history/history-share.ts \
+            src/application/history/history-store.ts \
+            src/domain/history/types.ts \
+            src/infrastructure/history/history-client.ts \
+            src/presentation/components/history/history-overview.tsx \
+            src/presentation/components/history/history-share-card.ts \
+            src/presentation/components/history/history-share-dom-model.ts \
+            src/presentation/components/history/history-share-dom.tsx \
+            src/presentation/components/history/history-view.tsx \
+            e2e/history-custom-comparison.spec.ts \
             e2e/history-final-recovery.spec.ts \
             e2e/history-final-recovery-browser.spec.ts || true
           rm -rf src/app/history-final-recovery-validation test-results

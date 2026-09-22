@@ -10,6 +10,7 @@ import {
   comparisonDeltaText,
   comparisonMissingNote,
   comparisonValueText,
+  formatComparisonPeriodDateRange,
   netWeightValueText,
   weightComparisonPresentation,
   type ComparisonValueFormat,
@@ -56,7 +57,7 @@ export interface HistoryShareVisualCard {
 
 export interface HistorySharePayload {
   kind: "normal" | "comparison";
-  scope: "DAY" | "WEEK" | "MONTH";
+  scope: "DAY" | "WEEK" | "MONTH" | "CUSTOM";
   title: string;
   periodLabel: string;
   comparisonLabel: string | null;
@@ -236,12 +237,23 @@ function matchingInsight(
   return insight?.scope === scope ? insight.content.text : null;
 }
 
-function periodLabel(comparison: HistoryComparisonResponse) {
-  return comparison.currentPeriod.localStartDate === comparison.currentPeriod.localEndDateInclusive
-    ? formatDateOnly(comparison.currentPeriod.localStartDate)
-    : `${formatDateOnly(comparison.currentPeriod.localStartDate)} – ${formatDateOnly(
-        comparison.currentPeriod.localEndDateInclusive,
+function resolvedPeriodLabel(period: HistoryComparisonResponse["currentPeriod"]) {
+  return period.localStartDate === period.localEndDateInclusive
+    ? formatDateOnly(period.localStartDate)
+    : `${formatDateOnly(period.localStartDate)} – ${formatDateOnly(
+        period.localEndDateInclusive,
       )}`;
+}
+
+function periodLabel(comparison: HistoryComparisonResponse) {
+  return resolvedPeriodLabel(comparison.currentPeriod);
+}
+
+function compactResolvedPeriodLabel(period: HistoryComparisonResponse["currentPeriod"]) {
+  return formatComparisonPeriodDateRange(
+    period.localStartDate,
+    period.localEndDateInclusive,
+  );
 }
 
 function freezePayload(payload: HistorySharePayload): HistorySharePayload {
@@ -550,9 +562,10 @@ export function buildComparisonHistorySharePayload(
 ): HistorySharePayload {
   const visualCards: HistoryShareVisualCard[] = [];
   const sections: HistoryShareSection[] = [];
+  const custom = comparison.periodType === "CUSTOM";
   const week = comparison.periodType === "WEEK";
-  const currentLabel = week ? "Bu hafta" : "Bu ay";
-  const previousLabel = week ? "Geçen hafta" : "Geçen ay";
+  const currentLabel = custom ? "1. dönem" : week ? "Bu hafta" : "Bu ay";
+  const previousLabel = custom ? "2. dönem" : week ? "Geçen hafta" : "Geçen ay";
 
   const add = (card: HistoryShareVisualCard) => {
     visualCards.push(card);
@@ -679,11 +692,19 @@ export function buildComparisonHistorySharePayload(
   return freezePayload({
     kind: "comparison",
     scope: comparison.periodType,
-    title: week ? "Diewish • Haftalık Karşılaştırma" : "Diewish • Aylık Karşılaştırma",
-    periodLabel: periodLabel(comparison),
-    comparisonLabel: week
-      ? "Bu hafta ↔ Geçen haftanın aynı dönemi"
-      : "Bu ay ↔ Geçen ayın aynı dönemi",
+    title: custom
+      ? "Diewish • Özel Karşılaştırma"
+      : week
+        ? "Diewish • Haftalık Karşılaştırma"
+        : "Diewish • Aylık Karşılaştırma",
+    periodLabel: custom
+      ? `1. dönem: ${compactResolvedPeriodLabel(comparison.currentPeriod)}`
+      : periodLabel(comparison),
+    comparisonLabel: custom
+      ? `2. dönem: ${compactResolvedPeriodLabel(comparison.previousPeriod)}`
+      : week
+        ? "Bu hafta ↔ Geçen haftanın aynı dönemi"
+        : "Bu ay ↔ Geçen ayın aynı dönemi",
     visualCards,
     sections,
     aiInsight: options.includeAiInsight ? matchingInsight(insight, comparison.periodType) : null,

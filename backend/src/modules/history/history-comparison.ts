@@ -24,6 +24,7 @@ import type {
   HistoryComparisonResponse,
   HistoryPeriodType,
   HistorySource,
+  HistoryStandardPeriodType,
   MetricComparison,
   ObservedNumber,
   PeriodCategoryCompleteness,
@@ -37,6 +38,13 @@ interface ComparisonPeriods {
   comparisonMode: HistoryComparisonMode;
   currentPeriod: ResolvedHistoryPeriod;
   previousPeriod: ResolvedHistoryPeriod;
+}
+
+export interface CustomHistoryComparisonInput {
+  period1Start: string;
+  period1End: string;
+  period2Start: string;
+  period2End: string;
 }
 
 interface PeriodRows {
@@ -145,7 +153,7 @@ function resolvePeriod(
 }
 
 export function resolveHistoryComparisonPeriods(
-  periodType: HistoryPeriodType,
+  periodType: HistoryStandardPeriodType,
   referenceDate: string,
   timezone: string | undefined,
   now = new Date(),
@@ -203,6 +211,71 @@ export function resolveHistoryComparisonPeriods(
     comparisonMode: "FULL_CALENDAR_MONTHS",
     currentPeriod: resolvePeriod(currentMonthStart, shiftMonth(currentMonthStart, 1), zone),
     previousPeriod: resolvePeriod(previousMonthStart, currentMonthStart, zone),
+  };
+}
+
+function resolveCustomPeriod(
+  startDate: string,
+  endDate: string,
+  timezone: string,
+  today: string,
+): ResolvedHistoryPeriod {
+  parseHistoryDate(startDate);
+  parseHistoryDate(endDate);
+
+  if (startDate > endDate) {
+    throw ApiError.badRequest("Başlangıç tarihi bitiş tarihinden sonra olamaz.", {
+      code: "HISTORY_CUSTOM_RANGE_ORDER",
+    });
+  }
+  if (endDate > today) {
+    throw ApiError.badRequest("History cannot be requested for a future local date.", {
+      code: "FUTURE_HISTORY_DATE",
+    });
+  }
+
+  const period = resolvePeriod(startDate, addCalendarDays(endDate, 1), timezone);
+  if (period.days > 31) {
+    throw ApiError.badRequest("Her özel dönem en fazla 31 gün içerebilir.", {
+      code: "HISTORY_CUSTOM_RANGE_TOO_LONG",
+    });
+  }
+  return period;
+}
+
+export function resolveCustomHistoryComparisonPeriods(
+  input: CustomHistoryComparisonInput,
+  timezone: string | undefined,
+  now = new Date(),
+): ComparisonPeriods {
+  const zone = canonicalizeHistoryTimezone(timezone);
+  const today = dateKeyInTimezone(now, zone);
+  const currentPeriod = resolveCustomPeriod(
+    input.period1Start,
+    input.period1End,
+    zone,
+    today,
+  );
+  const previousPeriod = resolveCustomPeriod(
+    input.period2Start,
+    input.period2End,
+    zone,
+    today,
+  );
+
+  if (currentPeriod.days !== previousPeriod.days) {
+    throw ApiError.badRequest(
+      "Karşılaştırılacak dönemler aynı sayıda gün içermelidir.",
+      { code: "HISTORY_CUSTOM_RANGE_LENGTH_MISMATCH" },
+    );
+  }
+
+  return {
+    periodType: "CUSTOM",
+    timezone: zone,
+    comparisonMode: "CUSTOM_EQUAL_RANGES",
+    currentPeriod,
+    previousPeriod,
   };
 }
 
@@ -721,10 +794,73 @@ function periodRowsFingerprint(rows: PeriodRows): unknown {
   };
 }
 
+async function loadPeriodRows(
+  userId: string,
+  period: ResolvedHistoryPeriod,
+): Promise<PeriodRows> {
+  const from = new Date(period.fromUtc);
+  const to = new Date(period.toUtcExclusive);
+  const [meals, water, activities, sleep, weights] = await Promise.allSettled([
+    trackingRepository.listMealLogsRange(userId, from, to),
+    trackingRepository.listWaterLogsRange(userId, from, to),
+    activityRepository.listActivitiesRange(userId, from, to),
+    sleepRepository.listRange(userId, from, to),
+    trackingRepository.listWeightLogsRange(userId, from, to),
+  ]);
+  return {
+    meals: settled(meals),
+    water: settled(water),
+    activities: settled(activities),
+    sleep: settled(sleep),
+    weights: settled(weights),
+  };
+}
+
+function unavailableSourcesAcrossPeriods(
+  current: PeriodRows,
+  previous: PeriodRows,
+): HistorySource[] {
+  const unavailableSources: HistorySource[] = [];
+  if (current.meals.status === "UNAVAILABLE" || previous.meals.status === "UNAVAILABLE") {
+    unavailableSources.push("nutrition");
+  }
+  if (current.water.status === "UNAVAILABLE" || previous.water.status === "UNAVAILABLE") {
+    unavailableSources.push("water");
+  }
+  if (
+    current.activities.status === "UNAVAILABLE" ||
+    previous.activities.status === "UNAVAILABLE"
+  ) {
+    unavailableSources.push("activity");
+  }
+  if (current.sleep.status === "UNAVAILABLE" || previous.sleep.status === "UNAVAILABLE") {
+    unavailableSources.push("sleep");
+  }
+  if (current.weights.status === "UNAVAILABLE" || previous.weights.status === "UNAVAILABLE") {
+    unavailableSources.push("weight");
+  }
+  return unavailableSources;
+}
+
+function allPeriodQueriesUnavailable(current: PeriodRows, previous: PeriodRows): boolean {
+  return [
+    current.meals,
+    current.water,
+    current.activities,
+    current.sleep,
+    current.weights,
+    previous.meals,
+    previous.water,
+    previous.activities,
+    previous.sleep,
+    previous.weights,
+  ].every((source) => source.status === "UNAVAILABLE");
+}
+
 export const historyComparisonService = {
   async getComparison(
     userId: string,
-    periodType: HistoryPeriodType,
+    periodType: HistoryStandardPeriodType,
     referenceDate: string,
     timezone: string | undefined,
     now = new Date(),
@@ -741,7 +877,7 @@ export const historyComparisonService = {
 
   async getComparisonWithFingerprint(
     userId: string,
-    periodType: HistoryPeriodType,
+    periodType: HistoryStandardPeriodType,
     referenceDate: string,
     timezone: string | undefined,
     now = new Date(),
@@ -814,6 +950,74 @@ export const historyComparisonService = {
     return {
       comparison,
       sourceFingerprint: {
+        current: periodRowsFingerprint(currentRows),
+        previous: periodRowsFingerprint(previousRows),
+      },
+    };
+  },
+
+  async getCustomComparison(
+    userId: string,
+    input: CustomHistoryComparisonInput,
+    timezone: string | undefined,
+    now = new Date(),
+  ): Promise<HistoryComparisonResponse> {
+    const bundle = await historyComparisonService.getCustomComparisonWithFingerprint(
+      userId,
+      input,
+      timezone,
+      now,
+    );
+    return bundle.comparison;
+  },
+
+  async getCustomComparisonWithFingerprint(
+    userId: string,
+    input: CustomHistoryComparisonInput,
+    timezone: string | undefined,
+    now = new Date(),
+  ): Promise<{ comparison: HistoryComparisonResponse; sourceFingerprint: unknown }> {
+    const periods = resolveCustomHistoryComparisonPeriods(input, timezone, now);
+    const [currentRows, previousRows] = await Promise.all([
+      loadPeriodRows(userId, periods.currentPeriod),
+      loadPeriodRows(userId, periods.previousPeriod),
+    ]);
+
+    if (allPeriodQueriesUnavailable(currentRows, previousRows)) {
+      throw new ApiError(503, "History comparison sources are temporarily unavailable.", {
+        code: "HISTORY_SOURCES_UNAVAILABLE",
+      });
+    }
+
+    const unavailableSources = unavailableSourcesAcrossPeriods(currentRows, previousRows);
+    const current = periodMetrics(currentRows, periods.currentPeriod, periods.timezone);
+    const previous = periodMetrics(previousRows, periods.previousPeriod, periods.timezone);
+    const completeness = {
+      current: current.completeness,
+      previous: previous.completeness,
+    };
+
+    const comparison: HistoryComparisonResponse = {
+      periodType: "CUSTOM",
+      timezone: periods.timezone,
+      comparisonMode: periods.comparisonMode,
+      currentPeriod: periods.currentPeriod,
+      previousPeriod: periods.previousPeriod,
+      metrics: compareMetricSets(current.values, previous.values, completeness),
+      completeness,
+      meta: {
+        partialResponse: unavailableSources.length > 0,
+        unavailableSources,
+        generatedAt: now.toISOString(),
+      },
+    };
+
+    return {
+      comparison,
+      sourceFingerprint: {
+        mode: "CUSTOM",
+        currentPeriod: periods.currentPeriod,
+        previousPeriod: periods.previousPeriod,
         current: periodRowsFingerprint(currentRows),
         previous: periodRowsFingerprint(previousRows),
       },

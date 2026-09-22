@@ -22,9 +22,11 @@ export function historyShareDomModel(payload: HistorySharePayload): HistoryShare
 
   const heading =
     payload.kind === "comparison"
-      ? payload.scope === "WEEK"
-        ? "Haftalık Karşılaştırma"
-        : "Aylık Karşılaştırma"
+      ? payload.scope === "CUSTOM"
+        ? "Özel Karşılaştırma"
+        : payload.scope === "WEEK"
+          ? "Haftalık Karşılaştırma"
+          : "Aylık Karşılaştırma"
       : payload.scope === "DAY"
         ? "Günün Özeti"
         : payload.scope === "WEEK"

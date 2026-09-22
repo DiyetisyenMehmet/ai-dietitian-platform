@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   HISTORY_INSIGHT_CONTEXT_VERSION,
   canonicalHistoryContext,
+  comparisonPeriodKey,
   createHistoryContextHash,
   historyWaterGoalForInsight,
   sanitizeHistoryInsightText,
@@ -15,7 +16,7 @@ import {
   normalizeHistoryInsightText,
   repairUtf8MojibakeOnce,
 } from "./history-ai-text";
-import type { DailyHistoryResponse } from "./history.types";
+import type { DailyHistoryResponse, HistoryComparisonResponse } from "./history.types";
 
 test("context hash is stable across object key insertion order", () => {
   const first = {
@@ -148,5 +149,45 @@ test("HTML character-reference normalization preserves case-sensitive Turkish en
       "&Ccedil; &ccedil; &Ouml; &ouml; &Uuml; &uuml; &AMP; &QUOT;",
     ),
     'Ç ç Ö ö Ü ü & "',
+  );
+});
+
+
+test("custom insight cache identity includes both complete selected ranges", () => {
+  const comparison = {
+    currentPeriod: {
+      localStartDate: "2026-08-01",
+      localEndDateInclusive: "2026-08-07",
+    },
+    previousPeriod: {
+      localStartDate: "2026-09-01",
+      localEndDateInclusive: "2026-09-07",
+    },
+  } as HistoryComparisonResponse;
+
+  const key = comparisonPeriodKey("CUSTOM", comparison);
+  assert.equal(key, "CUSTOM:2026-08-01:2026-08-07:2026-09-01:2026-09-07");
+
+  const changed = {
+    ...comparison,
+    previousPeriod: {
+      ...comparison.previousPeriod,
+      localStartDate: "2026-09-02",
+      localEndDateInclusive: "2026-09-08",
+    },
+  } as HistoryComparisonResponse;
+
+  assert.notEqual(comparisonPeriodKey("CUSTOM", changed), key);
+  assert.notEqual(
+    createHistoryContextHash({
+      contextVersion: HISTORY_INSIGHT_CONTEXT_VERSION,
+      periodKey: key,
+      sourceFingerprint: { water: [{ id: "w1", amountMl: 500 }] },
+    }),
+    createHistoryContextHash({
+      contextVersion: HISTORY_INSIGHT_CONTEXT_VERSION,
+      periodKey: comparisonPeriodKey("CUSTOM", changed),
+      sourceFingerprint: { water: [{ id: "w1", amountMl: 500 }] },
+    }),
   );
 });
