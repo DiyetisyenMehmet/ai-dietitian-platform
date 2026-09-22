@@ -8,6 +8,7 @@ export interface HistoryShareDomModel {
   cards: HistoryShareVisualCard[];
   mealNames: string[];
   aiInsight: string | null;
+  motivation: string;
 }
 
 /** Pure privacy boundary: the DOM view can only consume fields already present in the payload. */
@@ -35,5 +36,6 @@ export function historyShareDomModel(payload: HistorySharePayload): HistoryShare
     cards: payload.visualCards,
     mealNames: Object.freeze(mealNames) as unknown as string[],
     aiInsight: payload.aiInsight,
+    motivation: payload.motivation,
   });
 }

@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import {
   DEFAULT_HISTORY_SHARE_OPTIONS,
+  HISTORY_VISUAL_SHARE_CAPTION,
   type HistoryShareOptions,
   type HistorySharePayload,
 } from "@/application/history/history-share";
@@ -53,6 +54,7 @@ export function HistoryShareDialog({ open, onClose, buildPayload }: HistoryShare
   const [options, setOptions] = React.useState<HistoryShareOptions>(DEFAULT_HISTORY_SHARE_OPTIONS);
   const [mode, setMode] = React.useState<ShareMode>("visual");
   const [sharing, setSharing] = React.useState(false);
+  const [visualCaptionEnabled, setVisualCaptionEnabled] = React.useState(false);
   const [visualPreviewOpen, setVisualPreviewOpen] = React.useState(false);
   const captureRef = React.useRef<HTMLDivElement>(null);
 
@@ -60,6 +62,7 @@ export function HistoryShareDialog({ open, onClose, buildPayload }: HistoryShare
     if (open) {
       setOptions(DEFAULT_HISTORY_SHARE_OPTIONS);
       setMode("visual");
+      setVisualCaptionEnabled(false);
       setVisualPreviewOpen(false);
     }
   }, [open]);
@@ -90,7 +93,11 @@ export function HistoryShareDialog({ open, onClose, buildPayload }: HistoryShare
     if (sharing || empty || !captureRef.current) return;
     setSharing(true);
     try {
-      const result = await shareHistoryDomVisual(captureRef.current, payload);
+      const result = await shareHistoryDomVisual(
+        captureRef.current,
+        payload,
+        visualCaptionEnabled ? HISTORY_VISUAL_SHARE_CAPTION : null,
+      );
       if (result === "downloaded") toast.success("Paylaşım görseli indirildi.");
       if (result === "shared") onClose();
     } catch {
@@ -188,6 +195,24 @@ export function HistoryShareDialog({ open, onClose, buildPayload }: HistoryShare
             Yazı olarak paylaş
           </button>
         </div>
+
+        {mode === "visual" && (
+          <label className="mt-4 flex cursor-pointer items-center justify-between gap-4 rounded-2xl border border-border p-3">
+            <span>
+              <span className="block text-sm font-medium">Paylaşım mesajı ekle</span>
+              <span className="block text-xs text-muted-foreground">
+                Görselin yanında yalnız kısa bir Diewish mesajı paylaşılır. Varsayılan olarak
+                kapalıdır.
+              </span>
+            </span>
+            <input
+              type="checkbox"
+              checked={visualCaptionEnabled}
+              onChange={(event) => setVisualCaptionEnabled(event.target.checked)}
+              className="size-5 accent-primary"
+            />
+          </label>
+        )}
 
         <div className="mt-5 space-y-2">
           {OPTION_ROWS.map((row) => (

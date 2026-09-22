@@ -38,12 +38,13 @@ export async function captureHistoryShareDom(node: HTMLElement): Promise<Blob> {
 export async function shareHistoryDomVisual(
   node: HTMLElement,
   payload: HistorySharePayload,
+  caption?: string | null,
 ): Promise<HistoryShareResult> {
   let blob: Blob;
   try {
     blob = await captureHistoryShareDom(node);
   } catch {
-    return shareHistoryVisual(payload);
+    return shareHistoryVisual(payload, caption);
   }
-  return shareHistoryPngBlob(payload, blob);
+  return shareHistoryPngBlob(payload, blob, caption);
 }

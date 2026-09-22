@@ -1,6 +1,7 @@
-import type {
-  HistorySharePayload,
-  HistoryShareVisualCard,
+import {
+  HISTORY_MOTIVATION_MAX_CHARACTERS,
+  type HistorySharePayload,
+  type HistoryShareVisualCard,
 } from "@/application/history/history-share";
 
 export type HistoryShareSceneDensity = "sparse" | "balanced" | "dense";
@@ -20,6 +21,7 @@ export interface HistoryShareScene {
   cards: readonly HistoryShareVisualCard[];
   details: readonly HistoryShareSceneDetail[];
   aiInsight: string | null;
+  motivation: string;
   footer: string;
   density: HistoryShareSceneDensity;
   normalColumns: 1 | 2;
@@ -110,6 +112,7 @@ export function buildHistoryShareScene(payload: HistorySharePayload): HistorySha
     cards,
     details: Object.freeze(details),
     aiInsight: payload.aiInsight ? visualText(payload.aiInsight, aiLimit) : null,
+    motivation: visualText(payload.motivation, HISTORY_MOTIVATION_MAX_CHARACTERS),
     footer: payload.footer,
     density,
     normalColumns,

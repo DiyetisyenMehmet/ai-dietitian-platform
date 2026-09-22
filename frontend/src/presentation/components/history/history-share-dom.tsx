@@ -7,6 +7,7 @@ import {
   Moon,
   Scale,
   ShieldCheck,
+  Sparkles,
   UtensilsCrossed,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -185,9 +186,20 @@ export function HistoryShareDom({ payload, captureRef, className }: HistoryShare
         )}
       </main>
 
-      <footer className="mx-4 mb-4 flex items-center gap-2 rounded-[18px] border border-emerald-100 bg-white/85 px-4 py-3 text-[10px] font-medium leading-snug text-slate-500 shadow-sm">
-        <ShieldCheck className="size-4 shrink-0 text-emerald-600" aria-hidden="true" />
-        <span>{payload.footer}</span>
+      <footer className="mx-4 mb-4 rounded-[18px] border border-emerald-100 bg-white/90 px-4 py-3 shadow-sm">
+        <div className="flex items-start gap-2.5">
+          <Sparkles className="mt-0.5 size-4 shrink-0 text-emerald-600" aria-hidden="true" />
+          <p
+            className="break-words text-[11px] font-semibold leading-[1.55] text-slate-700"
+            data-testid="history-share-motivation"
+          >
+            {model.motivation}
+          </p>
+        </div>
+        <div className="mt-2 flex items-center gap-2 border-t border-emerald-100/80 pt-2 text-[9px] font-medium leading-snug text-slate-500">
+          <ShieldCheck className="size-3.5 shrink-0 text-emerald-600" aria-hidden="true" />
+          <span>{payload.footer}</span>
+        </div>
       </footer>
     </div>
   );
