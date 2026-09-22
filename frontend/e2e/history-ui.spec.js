@@ -650,8 +650,8 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await expect(weeklyActivity.getByText("1 sa 20 dk", { exact: true })).toBeVisible();
   await expect(weeklyActivity.getByText("1 sa", { exact: true })).toBeVisible();
   await expect(weeklyActivity.getByText("+20 dk", { exact: true })).toBeVisible();
-  await expect(weeklyComparison.getByText("NaN", { exact: false })).toHaveCount(0);
-  await expect(weeklyComparison.getByText("Infinity", { exact: false })).toHaveCount(0);
+  await expect(weeklyComparison.getByText("NaN", { exact: true })).toHaveCount(0);
+  await expect(weeklyComparison.getByText("Infinity", { exact: true })).toHaveCount(0);
   await expect(weeklyComparison.locator("svg.lucide-chevron-right")).toHaveCount(0);
   await page.evaluate(() => {
     window.__nativeHistoryVisual = null;
