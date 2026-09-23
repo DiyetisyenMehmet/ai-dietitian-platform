@@ -6,7 +6,7 @@ import {
   Flame,
   Moon,
   Scale,
-remove sparkles  UtensilsCrossed,
+  UtensilsCrossed,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
