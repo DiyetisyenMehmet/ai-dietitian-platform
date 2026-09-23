@@ -7,8 +7,14 @@ fun buildConfigString(value: String): String = "\"" + value
     .replace("\"", "\\\"") + "\""
 
 val stagingWebBaseUrl = providers.gradleProperty("DIEWISH_WEB_BASE_URL")
-    .orElse("https://staging.invalid")
+    .orElse("https://staging.diewish.com")
     .get()
+// All debug builds are staging builds. Fail closed even if a caller supplies
+// a different URL, so no CI or local staging APK can silently target an
+// invalid host (or another environment).
+require(stagingWebBaseUrl == "https://staging.diewish.com") {
+    "Refusing to build a staging APK: DIEWISH_WEB_BASE_URL must equal https://staging.diewish.com (received: $stagingWebBaseUrl)"
+}
 val productionWebBaseUrl = providers.gradleProperty("DIEWISH_PRODUCTION_WEB_BASE_URL")
     .orElse("https://diewish-frontend-730419163638.europe-west1.run.app")
     .get()

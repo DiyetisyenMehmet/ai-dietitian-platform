@@ -135,10 +135,37 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.6.0"
+      - name: Verify invalid staging URL is rejected
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gradle --no-daemon -p android :app:help -PDIEWISH_WEB_BASE_URL=https://staging.invalid > /tmp/diewish-staging-url-guard.log 2>&1; then
+            echo "Unsafe Android staging URL unexpectedly passed Gradle validation." >&2
+            exit 1
+          fi
+          grep -Fq 'Refusing to build a staging APK' /tmp/diewish-staging-url-guard.log
       - name: Test Android notification and alarm guards
-        run: gradle --no-daemon -p android :app:testDebugUnitTest
+        run: gradle --no-daemon -p android :app:testDebugUnitTest -PDIEWISH_WEB_BASE_URL=https://staging.diewish.com
       - name: Build current-SHA debug APK
-        run: gradle --no-daemon -p android :app:assembleDebug
+        run: gradle --no-daemon -p android :app:assembleDebug -PDIEWISH_WEB_BASE_URL=https://staging.diewish.com
+      - name: Verify compiled staging APK URL
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=android/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$apk"
+          build_config="$(find android/app/build/generated -type f -path '*/debug/*/BuildConfig.java' -print -quit)"
+          test -n "$build_config"
+          grep -Fq 'WEB_BASE_URL = "https://staging.diewish.com"' "$build_config"
+          dex="$(mktemp)"
+          trap 'rm -f "$dex"' EXIT
+          unzip -p "$apk" 'classes*.dex' > "$dex"
+          grep -aFq 'https://staging.diewish.com' "$dex"
+          if grep -aFq 'staging.invalid' "$dex"; then
+            echo "Unsafe staging.invalid URL found in the compiled APK." >&2
+            exit 1
+          fi
+          echo "VERIFIED_APK_WEB_BASE_URL=https://staging.diewish.com"
       - name: Stamp current-SHA APK
         shell: bash
         run: |
@@ -146,6 +173,7 @@ jobs:
           mkdir -p android/app/build/traceable-apk
           cp android/app/build/outputs/apk/debug/app-debug.apk "android/app/build/traceable-apk/Diewish-hardening-${short_sha}.apk"
           sha256sum "android/app/build/traceable-apk/Diewish-hardening-${short_sha}.apk" > "android/app/build/traceable-apk/Diewish-hardening-${short_sha}.sha256"
+          cat "android/app/build/traceable-apk/Diewish-hardening-${short_sha}.sha256"
       - name: Upload current-SHA debug APK
         uses: actions/upload-artifact@v4
         with:
