@@ -420,6 +420,27 @@ function estimateAiHeight(ctx: CanvasRenderingContext2D, scene: HistoryShareScen
   return Math.min(dense ? 220 : 300, 78 + Math.max(2, lines.length) * (dense ? 24 : 27));
 }
 
+/** Same Diewish dashboard mascot leaf silhouette in the Canvas fallback. */
+function drawDiewishHistoryMark(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+): void {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(size / 32, size / 28);
+  ctx.strokeStyle = "#168D69";
+  ctx.lineWidth = 2;
+  ctx.lineCap = "round";
+  ctx.stroke(new Path2D("M16 26C16.2 20.7 15.8 15.5 16.3 10.2"));
+  ctx.fillStyle = "#149A73";
+  ctx.fill(new Path2D("M15.8 11.6C11.2 12.1 6.6 9.4 5.1 4.1C10.2 2.8 14.9 5.9 15.8 11.6Z"));
+  ctx.fillStyle = "#0D8F69";
+  ctx.fill(new Path2D("M16.4 9.9C17.7 5.2 21.9 2.1 27.1 2.9C26.3 8 22.1 11.2 16.4 9.9Z"));
+  ctx.restore();
+}
+
 function drawAi(
   ctx: CanvasRenderingContext2D,
   scene: HistoryShareScene,
@@ -438,9 +459,10 @@ function drawAi(
   roundedRect(ctx, x, y, width, height, 30);
   ctx.stroke();
 
+  drawDiewishHistoryMark(ctx, x + 30, y + 17, 26);
   ctx.fillStyle = "#087a55";
   ctx.font = `800 ${dense ? 20 : 23}px ${FONT}`;
-  ctx.fillText("Diewish değerlendirmesi", x + 30, y + 40);
+  ctx.fillText("Diewish değerlendirmesi", x + 62, y + 40);
 
   ctx.fillStyle = "#334155";
   ctx.font = `500 ${dense ? 17 : 19}px ${FONT}`;
@@ -458,10 +480,11 @@ function drawFooter(ctx: CanvasRenderingContext2D, scene: HistoryShareScene): vo
   roundedRect(ctx, x, y, width, FOOTER_HEIGHT, 28);
   ctx.fill();
 
+  drawDiewishHistoryMark(ctx, x + 20, y + 18, 26);
   ctx.fillStyle = "#334155";
   ctx.font = `700 17px ${FONT}`;
-  const motivationLines = fitLines(ctx, scene.motivation, width - 44, 3);
-  motivationLines.forEach((line, index) => ctx.fillText(line, x + 22, y + 30 + index * 22));
+  const motivationLines = fitLines(ctx, scene.motivation, width - 82, 3);
+  motivationLines.forEach((line, index) => ctx.fillText(line, x + 52, y + 30 + index * 22));
 
 }
 

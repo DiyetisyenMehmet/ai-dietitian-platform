@@ -6,8 +6,7 @@ import {
   Flame,
   Moon,
   Scale,
-  Sparkles,
-  UtensilsCrossed,
+remove sparkles  UtensilsCrossed,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -16,6 +15,7 @@ import type {
   HistoryShareVisualCard,
   HistoryShareVisualTone,
 } from "@/application/history/history-share";
+import { DiewishHistoryMark } from "@/presentation/components/history/diewish-history-mark";
 import { HistoryEvaluationCard } from "@/presentation/components/history/history-evaluation-card";
 import {
   HistoryComparisonMetricCard,
@@ -188,7 +188,7 @@ export function HistoryShareDom({ payload, captureRef, className }: HistoryShare
 
       <footer className="mx-4 mb-4 rounded-[18px] border border-emerald-100 bg-white/90 px-4 py-3 shadow-sm">
         <div className="flex items-start gap-2.5">
-          <Sparkles className="mt-0.5 size-4 shrink-0 text-emerald-600" aria-hidden="true" />
+          <DiewishHistoryMark className="mt-0.5 size-5" />
           <p
             className="break-words text-[11px] font-semibold leading-[1.55] text-slate-700"
             data-testid="history-share-motivation"

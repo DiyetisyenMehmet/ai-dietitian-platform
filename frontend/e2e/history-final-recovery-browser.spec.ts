@@ -123,6 +123,14 @@ test("privacy defaults do not leak weight, sleep, meal names or AI into visual s
 }) => {
   await openHistory(page, 390, 844, "light");
 
+  const dailyEvaluation = page.getByRole("heading", {
+    name: "Diewish Günlük Değerlendirmesi",
+  });
+  await expect(dailyEvaluation).toBeVisible();
+  const evaluationCard = dailyEvaluation.locator("xpath=ancestor::section[1]");
+  await expect(evaluationCard.locator('[data-diewish-history-mark="leaf"]')).toHaveCount(1);
+  await expect(evaluationCard.getByText("AI", { exact: true })).toHaveCount(0);
+
   const shareButton = page.getByRole("button", { name: "Günü paylaş" });
   await expect(shareButton).toBeEnabled();
   await shareButton.click();
@@ -144,6 +152,7 @@ test("privacy defaults do not leak weight, sleep, meal names or AI into visual s
   expect(rendered).not.toContain("Uyku");
   expect(rendered).not.toContain("Kilo");
   expect(rendered).not.toContain("Yalnız seçtiğin kayıtlar paylaşılır.");
+  await expect(capture.locator('[data-diewish-history-mark="leaf"]')).toHaveCount(1);
 
   const motivation = await preview.getByTestId("history-share-motivation").innerText();
   expect(motivation).not.toMatch(/PRIVATE_|91[,.]7|uyku|kilo/i);

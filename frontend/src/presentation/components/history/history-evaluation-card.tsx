@@ -1,5 +1,7 @@
 import * as React from "react";
-import { Leaf, Sparkles } from "lucide-react";
+import { Leaf } from "lucide-react";
+
+import { DiewishHistoryMark } from "./diewish-history-mark";
 
 import { cn } from "@/shared/lib/utils";
 
@@ -7,7 +9,6 @@ interface HistoryEvaluationCardProps {
   title: string;
   children: React.ReactNode;
   className?: string;
-  showAiBadge?: boolean;
   variant?: "normal" | "share";
 }
 
@@ -16,7 +17,6 @@ export function HistoryEvaluationCard({
   title,
   children,
   className,
-  showAiBadge = true,
   variant = "normal",
 }: HistoryEvaluationCardProps) {
   const share = variant === "share";
@@ -44,22 +44,10 @@ export function HistoryEvaluationCard({
             share && "dark:bg-emerald-100 dark:text-emerald-600",
           )}
         >
-          <Sparkles className="size-5" aria-hidden="true" />
+          <DiewishHistoryMark className="size-6" />
         </span>
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <h2 className="text-[13px] font-bold">{title}</h2>
-            {showAiBadge && (
-              <span
-                className={cn(
-                  "rounded-full bg-emerald-200/70 px-2 py-0.5 text-[9px] font-bold text-emerald-700 dark:bg-emerald-800/60 dark:text-emerald-200",
-                  share && "dark:bg-emerald-200/70 dark:text-emerald-700",
-                )}
-              >
-                AI
-              </span>
-            )}
-          </div>
+          <h2 className="text-[13px] font-bold">{title}</h2>
         </div>
       </div>
       <div className="relative">{children}</div>
