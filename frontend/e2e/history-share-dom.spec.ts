@@ -14,7 +14,6 @@ function payload(overrides: Partial<HistorySharePayload> = {}): HistorySharePayl
     sections: [{ title: "Su", lines: ["Kaydedilen su: 2,1 L"] }],
     aiInsight: null,
     motivation: "Bugün attığın küçük adımlar ilerlemeni görünür kılıyor.",
-    footer: "Yalnız seçtiğin kayıtlar paylaşılır.",
     ...overrides,
   };
 }

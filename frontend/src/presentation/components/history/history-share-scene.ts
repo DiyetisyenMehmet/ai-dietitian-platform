@@ -22,7 +22,6 @@ export interface HistoryShareScene {
   details: readonly HistoryShareSceneDetail[];
   aiInsight: string | null;
   motivation: string;
-  footer: string;
   density: HistoryShareSceneDensity;
   normalColumns: 1 | 2;
   cardRows: number;
@@ -113,7 +112,6 @@ export function buildHistoryShareScene(payload: HistorySharePayload): HistorySha
     details: Object.freeze(details),
     aiInsight: payload.aiInsight ? visualText(payload.aiInsight, aiLimit) : null,
     motivation: visualText(payload.motivation, HISTORY_MOTIVATION_MAX_CHARACTERS),
-    footer: payload.footer,
     density,
     normalColumns,
     cardRows,

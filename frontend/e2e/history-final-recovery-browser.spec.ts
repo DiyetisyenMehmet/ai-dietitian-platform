@@ -143,7 +143,7 @@ test("privacy defaults do not leak weight, sleep, meal names or AI into visual s
   expect(rendered).not.toContain("8 sa");
   expect(rendered).not.toContain("Uyku");
   expect(rendered).not.toContain("Kilo");
-  expect(rendered).toContain("Yalnız seçtiğin kayıtlar paylaşılır.");
+  expect(rendered).not.toContain("Yalnız seçtiğin kayıtlar paylaşılır.");
 
   const motivation = await preview.getByTestId("history-share-motivation").innerText();
   expect(motivation).not.toMatch(/PRIVATE_|91[,.]7|uyku|kilo/i);

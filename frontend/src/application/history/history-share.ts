@@ -65,7 +65,6 @@ export interface HistorySharePayload {
   sections: HistoryShareSection[];
   aiInsight: string | null;
   motivation: string;
-  footer: string;
 }
 
 export const DEFAULT_HISTORY_SHARE_OPTIONS: HistoryShareOptions = {
@@ -363,7 +362,6 @@ export function buildDailyHistorySharePayload(
     sections,
     aiInsight: options.includeAiInsight ? matchingInsight(insight, "DAY") : null,
     motivation: buildDailyHistoryMotivation(),
-    footer: "Yalnız seçtiğin kayıtlar paylaşılır.",
   });
 }
 
@@ -523,7 +521,6 @@ export function buildPeriodHistorySharePayload(
     sections,
     aiInsight: options.includeAiInsight ? matchingInsight(insight, comparison.periodType) : null,
     motivation: buildPeriodHistoryMotivation(comparison, options),
-    footer: "Yalnız seçtiğin kayıtlar paylaşılır.",
   });
 }
 
@@ -709,6 +706,5 @@ export function buildComparisonHistorySharePayload(
     sections,
     aiInsight: options.includeAiInsight ? matchingInsight(insight, comparison.periodType) : null,
     motivation: buildPeriodHistoryMotivation(comparison, options),
-    footer: "Yalnız seçtiğin kayıtlar paylaşılır.",
   });
 }

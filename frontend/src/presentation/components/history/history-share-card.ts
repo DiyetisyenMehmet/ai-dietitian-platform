@@ -24,7 +24,7 @@ const WIDTH = HISTORY_SHARE_EXPORT_SIZE.width;
 const HEIGHT = HISTORY_SHARE_EXPORT_SIZE.height;
 const OUTER = 48;
 const SHEET = 54;
-const FOOTER_HEIGHT = 124;
+const FOOTER_HEIGHT = 106;
 const VISUAL_CAPTION_MAX_CHARACTERS = 140;
 const FONT = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 
@@ -463,10 +463,6 @@ function drawFooter(ctx: CanvasRenderingContext2D, scene: HistoryShareScene): vo
   const motivationLines = fitLines(ctx, scene.motivation, width - 44, 3);
   motivationLines.forEach((line, index) => ctx.fillText(line, x + 22, y + 30 + index * 22));
 
-  ctx.fillStyle = "#64748b";
-  ctx.font = `500 13px ${FONT}`;
-  const privacyLine = fitLines(ctx, scene.footer, width - 44, 1)[0] ?? "Diewish";
-  ctx.fillText(privacyLine, x + 22, y + FOOTER_HEIGHT - 18);
 }
 
 function normalCardGridHeight(scene: HistoryShareScene, available: number): number {

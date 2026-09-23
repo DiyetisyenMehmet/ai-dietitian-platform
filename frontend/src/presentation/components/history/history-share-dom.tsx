@@ -6,7 +6,6 @@ import {
   Flame,
   Moon,
   Scale,
-  ShieldCheck,
   Sparkles,
   UtensilsCrossed,
 } from "lucide-react";
@@ -196,10 +195,6 @@ export function HistoryShareDom({ payload, captureRef, className }: HistoryShare
           >
             {model.motivation}
           </p>
-        </div>
-        <div className="mt-2 flex items-center gap-2 border-t border-emerald-100/80 pt-2 text-[9px] font-medium leading-snug text-slate-500">
-          <ShieldCheck className="size-3.5 shrink-0 text-emerald-600" aria-hidden="true" />
-          <span>{payload.footer}</span>
         </div>
       </footer>
     </div>
