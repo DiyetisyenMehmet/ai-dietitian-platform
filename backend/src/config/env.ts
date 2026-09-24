@@ -12,6 +12,10 @@ const booleanFromEnv = z.preprocess((value) => {
 
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+  // Explicit Management Center runtime identity. Staging sets this at deploy
+  // time; local/test/production safely derive from NODE_ENV when it is absent.
+  DIEWISH_ENVIRONMENT: z.enum(["development", "test", "staging", "production"]).optional(),
+  DIEWISH_APPLICATION_SHA: z.string().regex(/^[0-9a-f]{40}$/i).optional(),
   PORT: z.coerce.number().int().positive().default(4000),
   API_PREFIX: z.string().startsWith("/").default("/api"),
   CORS_ORIGIN: z.string().default("http://localhost:3000"),
@@ -22,6 +26,8 @@ const envSchema = z.object({
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(15 * 60 * 1000),
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(100),
+  ADMIN_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(15 * 60 * 1000),
+  ADMIN_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(60),
   AUTH_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(15 * 60 * 1000),
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
   DATABASE_URL: z.string().url({ message: "DATABASE_URL must be a valid connection string" }),

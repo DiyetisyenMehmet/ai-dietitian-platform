@@ -20,6 +20,7 @@ import { historyModule } from "../modules/history/history.module";
 import { expertProductModule } from "../modules/expert-products/expert-product.module";
 import { onboardingRouter } from "../modules/onboarding/onboarding.routes";
 import { foodScanRouter } from "../modules/food-scan/food-scan.routes";
+import { adminModule } from "../modules/admin/admin.module";
 import { healthRouter } from "./health.route";
 
 /**
@@ -91,5 +92,10 @@ for (const { path, router } of historyModule.routes) {
 }
 
 for (const { path, router } of expertProductModule.routes) {
+  apiRouter.use(path, router);
+}
+
+
+for (const { path, router } of adminModule.routes) {
   apiRouter.use(path, router);
 }
