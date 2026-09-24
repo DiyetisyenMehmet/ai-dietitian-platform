@@ -1,4 +1,5 @@
 import * as React from "react";
+import Image from "next/image";
 import {
   Activity,
   CalendarDays,
@@ -15,7 +16,6 @@ import type {
   HistoryShareVisualCard,
   HistoryShareVisualTone,
 } from "@/application/history/history-share";
-import { DiewishHistoryMark } from "@/presentation/components/history/diewish-history-mark";
 import { HistoryEvaluationCard } from "@/presentation/components/history/history-evaluation-card";
 import {
   HistoryComparisonMetricCard,
@@ -188,7 +188,17 @@ export function HistoryShareDom({ payload, captureRef, className }: HistoryShare
 
       <footer className="mx-4 mb-4 rounded-[18px] border border-emerald-100 bg-white/90 px-4 py-3 shadow-sm">
         <div className="flex items-start gap-2.5">
-          <DiewishHistoryMark className="mt-0.5 size-5" />
+          <Image
+            src="/images/diewish/semantic/diewish-evaluation.png"
+            alt=""
+            width={24}
+            height={24}
+            unoptimized
+            draggable={false}
+            aria-hidden="true"
+            data-diewish-semantic-icon="evaluation"
+            className="mt-0.5 size-5 shrink-0 rounded-full object-contain"
+          />
           <p
             className="break-words text-[11px] font-semibold leading-[1.55] text-slate-700"
             data-testid="history-share-motivation"

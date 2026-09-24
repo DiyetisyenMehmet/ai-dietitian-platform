@@ -1,11 +1,11 @@
 "use client";
 
 import * as React from "react";
+import Image from "next/image";
 import { ArrowUp } from "lucide-react";
 
 import { cn } from "@/shared/lib/utils";
 import { QuickPromptsSheet } from "./quick-prompts-sheet";
-import { DiewishHistoryMark } from "@/presentation/components/history/diewish-history-mark";
 
 interface ChatInputProps {
   onSend: (text: string) => void;
@@ -63,7 +63,7 @@ export function ChatInput({ onSend, disabled = false, showSuggestions = false }:
               type="button"
               onClick={() => setSuggestionsOpen(true)}
               disabled={disabled}
-              aria-label="Hızlı önerileri aç"
+              aria-label="Hızlı öneriler"
               className={cn(
                 "flex size-10 shrink-0 items-center justify-center rounded-full border border-input bg-card transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-95",
                 disabled
@@ -71,7 +71,17 @@ export function ChatInput({ onSend, disabled = false, showSuggestions = false }:
                   : "text-primary hover:border-primary/30 hover:bg-primary/5",
               )}
             >
-              <DiewishHistoryMark className="size-4.5" />
+              <Image
+                src="/images/diewish/semantic/diewish-quick-suggestions.png"
+                alt=""
+                width={32}
+                height={32}
+                unoptimized
+                draggable={false}
+                aria-hidden="true"
+                data-diewish-semantic-icon="quick-suggestions"
+                className="size-8 rounded-full object-contain"
+              />
             </button>
           )}
 

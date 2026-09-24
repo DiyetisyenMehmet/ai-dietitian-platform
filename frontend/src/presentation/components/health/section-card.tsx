@@ -7,6 +7,8 @@ import type { HealthIconKey } from "@/domain/health/types";
 interface SectionCardProps {
   icon: HealthIconKey;
   title: string;
+  /** Optional custom leading visual for semantic product icons. */
+  iconContent?: React.ReactNode;
   /** Optional trailing element (e.g. an edit/link action). */
   action?: React.ReactNode;
   children: React.ReactNode;
@@ -14,7 +16,14 @@ interface SectionCardProps {
 }
 
 /** A titled card section with a leading icon — the building block of the profile. */
-export function SectionCard({ icon, title, action, children, className }: SectionCardProps) {
+export function SectionCard({
+  icon,
+  iconContent,
+  title,
+  action,
+  children,
+  className,
+}: SectionCardProps) {
   const Icon = healthIcon(icon);
   return (
     <section
@@ -26,7 +35,7 @@ export function SectionCard({ icon, title, action, children, className }: Sectio
       <div className="mb-4 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
           <span className="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
-            <Icon className="size-[18px]" aria-hidden="true" />
+            {iconContent ?? <Icon className="size-[18px]" aria-hidden="true" />}
           </span>
           <h3 className="text-sm font-semibold">{title}</h3>
         </div>

@@ -1,7 +1,6 @@
 import * as React from "react";
+import Image from "next/image";
 import { Leaf } from "lucide-react";
-
-import { DiewishHistoryMark } from "./diewish-history-mark";
 
 import { cn } from "@/shared/lib/utils";
 
@@ -44,7 +43,17 @@ export function HistoryEvaluationCard({
             share && "dark:bg-emerald-100 dark:text-emerald-600",
           )}
         >
-          <DiewishHistoryMark className="size-6" />
+          <Image
+            src="/images/diewish/semantic/diewish-evaluation.png"
+            alt=""
+            width={32}
+            height={32}
+            unoptimized
+            draggable={false}
+            aria-hidden="true"
+            data-diewish-semantic-icon="evaluation"
+            className="size-8 rounded-full object-contain"
+          />
         </span>
         <div className="min-w-0 flex-1">
           <h2 className="text-[13px] font-bold">{title}</h2>

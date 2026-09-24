@@ -1,12 +1,12 @@
 "use client";
 
 import * as React from "react";
+import Image from "next/image";
 import { CalendarClock, TrendingDown, TrendingUp, Minus } from "lucide-react";
 
 import { cn } from "@/shared/lib/utils";
 import { ProgressBar } from "@/presentation/components/ui/progress-bar";
 import { SectionCard } from "@/presentation/components/health/section-card";
-import { healthIcon } from "@/presentation/components/health/health-icon";
 import { useProgressStats } from "@/application/health/progress-analytics";
 import { useWeightEntries } from "@/application/health/weight-store";
 import { useHealthProfile } from "@/application/health/health-profile-store";
@@ -50,7 +50,23 @@ export function ProgressStatsSection() {
   if (entries.length < 2) return null;
 
   return (
-    <SectionCard icon="activity" title="İlerleme Analizi">
+    <SectionCard
+      icon="activity"
+      title="İlerleme Analizi"
+      iconContent={
+        <Image
+          src="/images/diewish/semantic/diewish-weight-analysis.png"
+          alt=""
+          width={36}
+          height={36}
+          unoptimized
+          draggable={false}
+          aria-hidden="true"
+          data-diewish-semantic-icon="weight-analysis"
+          className="size-9 rounded-xl object-contain"
+        />
+      }
+    >
       <div className="space-y-4">
         <div className="grid grid-cols-3 gap-2">
           <DeltaStat label="Bu hafta" value={stats.weeklyChangeKg} />
@@ -82,8 +98,18 @@ export function ProgressStatsSection() {
         )}
 
         <div className="flex items-start gap-2.5 rounded-2xl bg-muted/50 p-3">
-          <span className="mt-0.5 shrink-0 text-primary">
-            {React.createElement(healthIcon("sparkles"), { className: "size-4", "aria-hidden": true })}
+          <span className="mt-0.5 shrink-0">
+            <Image
+              src="/images/diewish/semantic/diewish-evaluation.png"
+              alt=""
+              width={20}
+              height={20}
+              unoptimized
+              draggable={false}
+              aria-hidden="true"
+              data-diewish-semantic-icon="evaluation"
+              className="size-5 rounded-full object-contain"
+            />
           </span>
           <p className="text-sm leading-relaxed text-muted-foreground">{stats.interpretation}</p>
         </div>

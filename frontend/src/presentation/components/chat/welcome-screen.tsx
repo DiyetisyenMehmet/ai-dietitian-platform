@@ -15,7 +15,7 @@ interface WelcomeScreenProps {
 export function WelcomeScreen({ userName, onSelect }: WelcomeScreenProps) {
   return (
     <div className="flex animate-fade-in flex-col items-center px-2 py-8 text-center">
-      <AiAvatar className="size-14 [&_svg]:size-7" />
+      <AiAvatar className="size-14" />
       <h2 className="mt-4 text-2xl font-bold tracking-tight">
         Merhaba {userName} <span aria-hidden="true">👋</span>
       </h2>

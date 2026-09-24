@@ -1,11 +1,11 @@
 "use client";
 
 import * as React from "react";
+import Image from "next/image";
 import { X } from "lucide-react";
 
 import { SUGGESTIONS } from "@/application/chat/placeholder-responses";
 import { cn } from "@/shared/lib/utils";
-import { DiewishHistoryMark } from "@/presentation/components/history/diewish-history-mark";
 
 interface QuickPromptsSheetProps {
   open: boolean;
@@ -50,8 +50,18 @@ export function QuickPromptsSheet({ open, onClose, onSelect }: QuickPromptsSheet
 
         <div className="flex items-center justify-between border-b border-border/70 px-5 py-4">
           <div className="flex items-center gap-3">
-            <span className="flex size-9 items-center justify-center rounded-full bg-primary/10 text-primary">
-              <DiewishHistoryMark className="size-4" />
+            <span className="flex size-9 items-center justify-center rounded-full">
+              <Image
+                src="/images/diewish/semantic/diewish-quick-suggestions.png"
+                alt=""
+                width={36}
+                height={36}
+                unoptimized
+                draggable={false}
+                aria-hidden="true"
+                data-diewish-semantic-icon="quick-suggestions"
+                className="size-9 rounded-full object-contain"
+              />
             </span>
             <div>
               <h2 id="quick-prompts-title" className="text-sm font-semibold">

@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
@@ -225,10 +226,17 @@ export function ProgressView() {
         <section className={cn("rounded-2xl border p-5 shadow-card", tone.wrap)}>
           <div className="mb-3 flex items-center gap-2.5">
             <span className="flex size-9 items-center justify-center rounded-xl bg-background/70 text-primary">
-              {React.createElement(healthIcon("sparkles"), {
-                className: "size-[18px]",
-                "aria-hidden": true,
-              })}
+              <Image
+                src="/images/diewish/semantic/diewish-evaluation.png"
+                alt=""
+                width={32}
+                height={32}
+                unoptimized
+                draggable={false}
+                aria-hidden="true"
+                data-diewish-semantic-icon="evaluation"
+                className="size-8 rounded-full object-contain"
+              />
             </span>
             <div className="flex flex-col">
               <h3 className="text-sm font-semibold">İlerleme Analizi</h3>
