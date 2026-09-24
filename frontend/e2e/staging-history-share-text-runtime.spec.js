@@ -225,7 +225,7 @@ test("professional History share text is canonical across image, text, copy and 
   for (const name of [/Kalori ve makrolar/, /^Su/, /Aktivite/]) {
     await expect(dialog.getByRole("checkbox", { name })).toBeChecked();
   }
-  for (const name of [/Öğün isimleri/, /^Uyku/, /^Kilo/, /^Değerlendirme$/]) {
+  for (const name of [/Öğün isimleri/, /^Uyku/, /^Kilo/, /Değerlendirme/]) {
     await expect(dialog.getByRole("checkbox", { name })).not.toBeChecked();
   }
 
