@@ -1,11 +1,10 @@
 import {
   Activity,
-  Bot,
   ClipboardList,
   HeartPulse,
+  Leaf,
   MessageSquareHeart,
   ShieldCheck,
-  Sparkles,
   TestTube2,
   Utensils,
   type LucideIcon,
@@ -101,8 +100,8 @@ export interface FeatureItem {
 /** Product capabilities that have real backend/application support. */
 export const CORE_FEATURES: readonly FeatureItem[] = [
   {
-    icon: Sparkles,
-    title: "Yapay Zekâ Destekli Beslenme",
+    icon: Leaf,
+    title: "Kişisel Beslenme Rehberliği",
     description:
       "Hedeflerini, tercihlerini ve kaydettiğin verileri dikkate alan kişiselleştirilmiş beslenme rehberliği.",
   },
@@ -110,7 +109,7 @@ export const CORE_FEATURES: readonly FeatureItem[] = [
     icon: ClipboardList,
     title: "Kişiselleştirilmiş Beslenme Planları",
     description:
-      "30 veya 60 günlük plan dönemleri; kalori ve makro hesapları deterministik, öğün içeriği yapay zekâ desteklidir.",
+      "30 veya 60 günlük plan dönemleri; kalori ve makro hesapları deterministik, öğün içeriği profil ve tercihlere göre hazırlanır.",
   },
   {
     icon: TestTube2,
@@ -120,9 +119,9 @@ export const CORE_FEATURES: readonly FeatureItem[] = [
   },
   {
     icon: MessageSquareHeart,
-    title: "Yapay Zekâ Beslenme Asistanı",
+    title: "Diewish Koç",
     description:
-      "Beslenme sorularını sor; profilini ve ilgili kayıtlarını dikkate alan yapay zekâ yanıtları al.",
+      "Beslenme sorularını sor; profilini ve ilgili kayıtlarını dikkate alan kişisel yanıtlar al.",
   },
 ] as const;
 
@@ -172,23 +171,23 @@ export const HOW_IT_WORKS: readonly HowItWorksStep[] = [
     title: "Profiline göre kişiselleştir",
     description:
       "Diewish, kayıtlı profilini kullanarak beslenme planı ve desteklenen analiz özelliklerini kişiselleştirir.",
-    icon: Bot,
+    icon: Leaf,
   },
   {
     step: 3,
     title: "Kayıtlarını takip et",
     description:
-      "Öğün, su, kilo ve aktivite kayıtlarını güncel tut; ilerlemeni ve yapay zekâ destekli içgörüleri incele.",
+      "Öğün, su, kilo ve aktivite kayıtlarını güncel tut; ilerlemeni ve kişisel değerlendirmelerini incele.",
     icon: HeartPulse,
   },
 ] as const;
 
 export const KEY_BENEFITS: readonly string[] = [
   "Profil ve hedeflerine göre kişiselleştirilen beslenme rehberliği",
-  "Yapay zekâ beslenme asistanı",
+  "Diewish Koç desteği",
   "Kan tahlillerinden bilgilendirme amaçlı sade özetler",
   "Kilo, su, öğün ve aktivite takibi",
-  "Ücretsiz planda sınırlı AI deneme hakları",
+  "Ücretsiz planda sınırlı Koç ve analiz deneme hakları",
   "Hesap bazlı veri erişimi ve kullanıcı veri kontrolü",
 ] as const;
 
@@ -201,7 +200,7 @@ export const FAQ_ITEMS: readonly FaqItem[] = [
   {
     question: "Diewish nedir?",
     answer:
-      "Diewish; yapay zekâ destekli beslenme planları, kan tahlili özeti, öğün ve ilerleme takibi ile yapay zekâ beslenme asistanı sunan bir yazılım platformudur.",
+      "Diewish; kişiselleştirilmiş beslenme planları, kan tahlili özeti, öğün ve ilerleme takibi ile Diewish Koç desteği sunan bir yazılım platformudur.",
   },
   {
     question: "Diewish tıbbi tavsiye veriyor mu?",
@@ -211,7 +210,7 @@ export const FAQ_ITEMS: readonly FaqItem[] = [
   {
     question: "Ücretsiz plan neler içeriyor?",
     answer:
-      "Ücretsiz hesapta temel takip özelliklerinin yanında toplam 5 yapay zekâ sohbet yanıtı, 1 kan tahlili analizi ve 1 beslenme planı oluşturma denemesi bulunur. Bu AI deneme hakları yenilenmez.",
+      "Ücretsiz hesapta temel takip özelliklerinin yanında toplam 5 Diewish Koç yanıtı, 1 kan tahlili analizi ve 1 beslenme planı oluşturma denemesi bulunur. Bu deneme hakları yenilenmez.",
   },
   {
     question: "Ücretli erişim nasıl çalışır?",
@@ -303,7 +302,7 @@ export const PUBLIC_PLANS: readonly PublicPlan[] = [
   {
     tier: "FREE",
     name: "Free",
-    tagline: "Temel takibi kullan, AI özelliklerini sınırlı olarak dene",
+    tagline: "Temel takibi kullan, Diewish özelliklerini sınırlı olarak dene",
     monthlyPrice: 0,
     yearlyMonthlyPrice: 0,
     yearlyPrice: 0,
@@ -311,7 +310,7 @@ export const PUBLIC_PLANS: readonly PublicPlan[] = [
     cta: "Ücretsiz Başla",
     features: [
       "Temel öğün, su, kilo ve ilerleme takibi",
-      "Toplam 5 ücretsiz yapay zekâ sohbet yanıtı",
+      "Toplam 5 ücretsiz Diewish Koç yanıtı",
       "1 ücretsiz kan tahlili analizi",
       "1 ücretsiz beslenme planı oluşturma",
     ],
@@ -319,14 +318,14 @@ export const PUBLIC_PLANS: readonly PublicPlan[] = [
   {
     tier: "PREMIUM",
     name: "Premium",
-    tagline: "Daha yüksek AI kullanım kotalarıyla 30 günlük erişim",
+    tagline: "Daha yüksek kullanım kotalarıyla 30 günlük erişim",
     monthlyPrice: 149.99,
     yearlyMonthlyPrice: 0,
     yearlyPrice: 0,
     featured: true,
     cta: "30 Günlük Premium Al",
     features: [
-      "Genişletilmiş yapay zekâ sohbet kotası",
+      "Genişletilmiş Diewish Koç kullanım kotası",
       "30 ve 60 günlük beslenme planı oluşturma",
       "Genişletilmiş kan tahlili analiz kotası",
       "Kilo, öğün, su ve aktivite takibi",
@@ -335,14 +334,14 @@ export const PUBLIC_PLANS: readonly PublicPlan[] = [
   {
     tier: "PREMIUM_PLUS",
     name: "Premium Plus",
-    tagline: "En yüksek mevcut AI kotalarıyla 30 günlük erişim",
+    tagline: "En yüksek mevcut kullanım kotalarıyla 30 günlük erişim",
     monthlyPrice: 299.99,
     yearlyMonthlyPrice: 0,
     yearlyPrice: 0,
     featured: false,
     cta: "30 Günlük Premium Plus Al",
     features: [
-      "Premium'dan daha yüksek yapay zekâ sohbet kotası",
+      "Premium'dan daha yüksek Diewish Koç kullanım kotası",
       "30 ve 60 günlük beslenme planlarında daha yüksek oluşturma kotası",
       "Kan tahlili analizinde daha yüksek kullanım kotası",
       "Kilo, öğün, su ve aktivite takibi",

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Brain, CalendarDays, Moon, Sparkles, Trash2 } from "lucide-react";
+import { CalendarDays, Moon, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -151,7 +151,7 @@ export function SleepView() {
     try {
       setAiComment(await sleepClient.aiComment(today));
     } catch {
-      toast.error("AI uyku yorumu şu anda oluşturulamadı.");
+      toast.error("Uyku değerlendirmesi şu anda oluşturulamadı.");
     } finally {
       setAiLoading(false);
     }
@@ -288,13 +288,13 @@ export function SleepView() {
               onClick={() => void requestAiComment()}
               isLoading={aiLoading}
             >
-              <Sparkles aria-hidden="true" /> AI yorumunu oluştur
+              <Moon aria-hidden="true" /> Uyku değerlendirmesi oluştur
             </Button>
             {aiComment && (
               <div className="rounded-xl bg-secondary/60 p-3">
                 <div className="flex items-center gap-2 text-sm font-semibold">
-                  <Brain className="size-4" aria-hidden="true" />
-                  {aiComment.generatedBy === "AI" ? "AI uyku yorumu" : "Uyku değerlendirmesi"}
+                  <Moon className="size-4" aria-hidden="true" />
+                  Uyku değerlendirmesi
                 </div>
                 <p className="mt-2 text-sm text-muted-foreground">{aiComment.comment}</p>
                 <p className="mt-2 text-xs text-muted-foreground">

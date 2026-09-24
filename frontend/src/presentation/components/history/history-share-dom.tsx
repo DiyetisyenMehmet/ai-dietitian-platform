@@ -41,10 +41,10 @@ function tone(card: HistoryShareVisualCard): HistoryMetricTone {
 }
 
 function evaluationTitle(payload: HistorySharePayload) {
-  if (payload.scope === "DAY") return "Diewish Günlük Değerlendirmesi";
-  if (payload.scope === "WEEK") return "Diewish Haftalık Değerlendirmesi";
-  if (payload.scope === "MONTH") return "Diewish Aylık Değerlendirmesi";
-  return "Diewish Özel Karşılaştırma Değerlendirmesi";
+  if (payload.scope === "DAY") return "Günlük Değerlendirme";
+  if (payload.scope === "WEEK") return "Haftalık Değerlendirme";
+  if (payload.scope === "MONTH") return "Aylık Değerlendirme";
+  return "Özel Karşılaştırma Değerlendirmesi";
 }
 
 function SummaryCards({ cards }: { cards: HistoryShareVisualCard[] }) {

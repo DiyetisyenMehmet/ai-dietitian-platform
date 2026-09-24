@@ -23,8 +23,8 @@ export function SiteFooter() {
               <span className="text-lg">{APP_CONFIG.name}</span>
             </Link>
             <p className="max-w-xs text-sm text-muted-foreground">
-              Yapay zekâ destekli kişisel beslenme planları, kan tahlili analizi ve diyetisyen
-              asistanı ile sağlıklı yaşam yolculuğunda yanında.
+              Kişisel beslenme planları, kan tahlili analizi ve Diewish Koç ile sağlıklı yaşam
+              yolculuğunda yanında.
             </p>
             <div className="space-y-2 text-sm text-muted-foreground">
               <a

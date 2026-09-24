@@ -526,7 +526,7 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await expect(dialog.getByRole("checkbox", { name: /Öğün isimleri/ })).not.toBeChecked();
   await expect(dialog.getByRole("checkbox", { name: /^Uyku/ })).not.toBeChecked();
   await expect(dialog.getByRole("checkbox", { name: /^Kilo/ })).not.toBeChecked();
-  await expect(dialog.getByRole("checkbox", { name: /Diewish değerlendirmesi/ })).not.toBeChecked();
+  await expect(dialog.getByRole("checkbox", { name: /^Değerlendirme$/ })).not.toBeChecked();
   await expect(dialog.getByText("Geçmiş test öğünü")).toHaveCount(0);
 
   await dialog.getByRole("button", { name: "Önizlemeyi Aç" }).click();

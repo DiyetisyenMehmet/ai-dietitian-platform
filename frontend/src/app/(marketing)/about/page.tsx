@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { HeartPulse, ShieldCheck, Sparkles, Target } from "lucide-react";
+import { HeartPulse, Leaf, ShieldCheck, Target } from "lucide-react";
 
 import { APP_CONFIG } from "@/shared/constants/app";
 import { Section, SectionHeading } from "@/presentation/components/marketing/section";
@@ -8,7 +8,7 @@ import { CtaSection } from "@/presentation/components/marketing/cta-section";
 export const metadata: Metadata = {
   title: "Hakkımızda",
   description:
-    "Diewish, kullanıcıların kendi hesapları üzerinden kullandığı yapay zekâ destekli beslenme ve takip yazılım platformudur.",
+    "Diewish, kullanıcıların kendi hesapları üzerinden kullandığı kişisel beslenme ve takip yazılım platformudur.",
   alternates: { canonical: "/about" },
 };
 
@@ -29,9 +29,9 @@ const VALUES = [
     description: "İçerikler bilgilendirme amaçlıdır; teşhis veya tedavi yerine geçmez ve uzmana başvurmayı teşvik eder.",
   },
   {
-    icon: Sparkles,
-    title: "Sorumlu Yapay Zekâ",
-    description: "Yapay zekâyı beslenme takibini ve bilgiyi anlamayı kolaylaştıran bir yazılım aracı olarak kullanırız.",
+    icon: Leaf,
+    title: "Sorumlu Teknoloji",
+    description: "Teknolojiyi beslenme takibini ve bilgiyi anlamayı kolaylaştıran güvenli bir araç olarak kullanırız.",
   },
 ];
 
@@ -45,13 +45,13 @@ export default function AboutPage() {
             Hakkımızda
           </span>
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
-            Yapay zekâ destekli beslenme ve takip yazılımı
+            Kişisel beslenme ve takip yazılımı
           </h1>
           <p className="text-base leading-relaxed text-muted-foreground sm:text-lg">
             {APP_CONFIG.name}, kullanıcıların kendi hesapları üzerinden kullandığı dijital bir yazılım
             platformudur. Profil, hedef ve kullanıcı tarafından kaydedilen verileri kullanarak beslenme
             planı oluşturma, öğün ve ilerleme takibi, kan tahlili sonuçlarını bilgilendirme amaçlı
-            sadeleştirme ve yapay zekâ beslenme asistanı özellikleri sunar. Diewish üzerinden bire bir
+            sadeleştirme ve Diewish Koç özellikleri sunar. Diewish üzerinden bire bir
             hekim veya diyetisyen danışmanlığı satılmaz.
           </p>
         </div>

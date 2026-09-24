@@ -4,8 +4,8 @@ import {
   ArrowRight,
   Check,
   ClipboardList,
+  Leaf,
   MessageSquareHeart,
-  Sparkles,
   TestTube2,
 } from "lucide-react";
 
@@ -22,9 +22,9 @@ import { CtaSection } from "@/presentation/components/marketing/cta-section";
 import { FaqAccordion } from "@/presentation/components/marketing/faq-accordion";
 
 export const metadata: Metadata = {
-  title: "Yapay Zekâ Destekli Kişisel Beslenme Platformu",
+  title: "Kişisel Beslenme ve Sağlıklı Yaşam Platformu",
   description:
-    "Diewish; kişiselleştirilmiş beslenme planları, kan tahlili özeti, öğün ve ilerleme takibi ile yapay zekâ beslenme asistanını tek platformda buluşturur.",
+    "Diewish; kişiselleştirilmiş beslenme planları, kan tahlili özeti, öğün ve ilerleme takibi ile Diewish Koç desteğini tek platformda buluşturur.",
   alternates: { canonical: "/" },
 };
 
@@ -39,8 +39,8 @@ export default function LandingPage() {
         />
         <div className="container flex flex-col items-center py-20 text-center sm:py-28">
           <span className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-1.5 text-xs font-medium text-muted-foreground shadow-soft">
-            <Sparkles className="size-3.5 text-primary" aria-hidden="true" />
-            Yapay zekâ destekli beslenme asistanı
+            <Leaf className="size-3.5 text-primary" aria-hidden="true" />
+            Kişisel beslenme ve sağlıklı yaşam desteği
           </span>
           <h1 className="mt-6 max-w-3xl text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
             Sağlıklı yaşam için{" "}
@@ -48,8 +48,8 @@ export default function LandingPage() {
           </h1>
           <p className="mt-6 max-w-2xl text-base text-muted-foreground sm:text-lg">
             {APP_CONFIG.name}; profil ve hedeflerine göre beslenme planları oluşturur, desteklenen
-            kan tahlili dosyalarından bilgilendirme amaçlı özetler üretir ve yapay zekâ beslenme
-            asistanıyla kayıtlarını tek yerde kullanmana yardımcı olur.
+            kan tahlili dosyalarından bilgilendirme amaçlı özetler üretir ve Diewish Koç ile
+            kayıtlarını tek yerde kullanmana yardımcı olur.
           </p>
           <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row">
             <Button asChild size="lg">
@@ -72,7 +72,7 @@ export default function LandingPage() {
         <SectionHeading
           eyebrow="Neler sunuyoruz"
           title="Beslenme takibini tek yerde birleştiren dört özellik"
-          description="Diewish, kayıtlarını ve yapay zekâ destekli özellikleri aynı deneyimde buluşturur."
+          description="Diewish, kayıtlarını ve kişiselleştirilmiş özelliklerini aynı deneyimde buluşturur."
         />
         <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {CORE_FEATURES.map((feature) => (
@@ -102,8 +102,8 @@ export default function LandingPage() {
             </h2>
             <p className="text-muted-foreground">
               Kalori, makro ve su hedefleri profil verilerinden deterministik olarak hesaplanır;
-              öğün içeriği tercihler, alerjiler ve ilgili sağlık bağlamı dikkate alınarak yapay zekâ
-              desteğiyle oluşturulur.
+              öğün içeriği tercihler, alerjiler ve ilgili sağlık bağlamı dikkate alınarak Diewish
+              tarafından kişiselleştirilir.
             </p>
             <ul className="space-y-3">
               {[
@@ -132,12 +132,12 @@ export default function LandingPage() {
               <div className="flex items-center gap-3 rounded-2xl bg-card p-4 shadow-soft">
                 <MessageSquareHeart className="size-8 text-primary" aria-hidden="true" />
                 <div>
-                  <p className="text-sm font-semibold">Yapay Zekâ Beslenme Asistanı</p>
+                  <p className="text-sm font-semibold">Diewish Koç</p>
                   <p className="text-xs text-muted-foreground">Profil ve ilgili kayıt bağlamıyla yanıtlar</p>
                 </div>
               </div>
               <div className="flex items-center gap-3 rounded-2xl bg-card p-4 shadow-soft">
-                <Sparkles className="size-8 text-primary" aria-hidden="true" />
+                <Leaf className="size-8 text-primary" aria-hidden="true" />
                 <div>
                   <p className="text-sm font-semibold">Kişisel İçgörüler</p>
                   <p className="text-xs text-muted-foreground">Mevcut kayıtlarından türetilen takip desteği</p>

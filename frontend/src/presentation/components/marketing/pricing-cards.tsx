@@ -10,10 +10,10 @@ import { cn } from "@/shared/lib/utils";
 
 const PAID_COPY = {
   PREMIUM: {
-    tagline: "Daha yüksek yapay zekâ kullanım kotaları ve reklamsız deneyim",
+    tagline: "Daha yüksek Diewish Koç kullanım kotası ve reklamsız deneyim",
   },
   PREMIUM_PLUS: {
-    tagline: "En yüksek mevcut yapay zekâ kotaları ve reklamsız deneyim",
+    tagline: "En yüksek Diewish Koç kullanım kotası ve reklamsız deneyim",
   },
 } as const;
 

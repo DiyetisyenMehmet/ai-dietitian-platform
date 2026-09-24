@@ -135,23 +135,23 @@ function isToday(timestamp: number): boolean {
 function friendlyError(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.code === "SUBSCRIPTION_REQUIRED") {
-      return "Ücretsiz AI Koç kullanım hakkın doldu. Devam etmek için plan seçeneklerini inceleyebilirsin.";
+      return "Ücretsiz Diewish Koç kullanım hakkın doldu. Devam etmek için plan seçeneklerini inceleyebilirsin.";
     }
     if (error.code === "CONSENT_REQUIRED") {
-      return "AI Koç'u kullanmak için güncel yasal onaylarını tamamlaman gerekiyor.";
+      return "Diewish Koç'u kullanmak için güncel yasal onaylarını tamamlaman gerekiyor.";
     }
     if (error.status === 401) {
       return "Oturum yenilenemedi. Lütfen yeniden giriş yap.";
     }
     if (error.status === 429) {
-      return "AI Koç kullanım limitine ulaştın. Bir süre sonra tekrar deneyebilir veya planını inceleyebilirsin.";
+      return "Diewish Koç kullanım limitine ulaştın. Bir süre sonra tekrar deneyebilir veya planını inceleyebilirsin.";
     }
     if (error.status === 0 || error.status >= 500) {
-      return "AI Koç şu anda kullanılamıyor. Lütfen daha sonra tekrar dene.";
+      return "Diewish Koç şu anda kullanılamıyor. Lütfen daha sonra tekrar dene.";
     }
-    return "AI Koç isteği tamamlanamadı. Lütfen tekrar dene.";
+    return "Diewish Koç isteği tamamlanamadı. Lütfen tekrar dene.";
   }
-  return "AI Koç şu anda yanıt veremiyor. Lütfen biraz sonra tekrar dene.";
+  return "Diewish Koç şu anda yanıt veremiyor. Lütfen biraz sonra tekrar dene.";
 }
 
 let state: ChatState = createInitialState();

@@ -1,10 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { ArrowUp, Sparkles } from "lucide-react";
+import { ArrowUp } from "lucide-react";
 
 import { cn } from "@/shared/lib/utils";
 import { QuickPromptsSheet } from "./quick-prompts-sheet";
+import { DiewishHistoryMark } from "@/presentation/components/history/diewish-history-mark";
 
 interface ChatInputProps {
   onSend: (text: string) => void;
@@ -70,7 +71,7 @@ export function ChatInput({ onSend, disabled = false, showSuggestions = false }:
                   : "text-primary hover:border-primary/30 hover:bg-primary/5",
               )}
             >
-              <Sparkles className="size-4.5" aria-hidden="true" />
+              <DiewishHistoryMark className="size-4.5" />
             </button>
           )}
 

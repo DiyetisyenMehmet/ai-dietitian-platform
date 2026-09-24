@@ -124,7 +124,7 @@ test("privacy defaults do not leak weight, sleep, meal names or AI into visual s
   await openHistory(page, 390, 844, "light");
 
   const dailyEvaluation = page.getByRole("heading", {
-    name: "Diewish Günlük Değerlendirmesi",
+    name: "Günlük Değerlendirme",
   });
   await expect(dailyEvaluation).toBeVisible();
   const evaluationCard = dailyEvaluation.locator("xpath=ancestor::section[1]");
@@ -139,7 +139,7 @@ test("privacy defaults do not leak weight, sleep, meal names or AI into visual s
   await expect(dialog.getByRole("checkbox", { name: /Öğün isimleri/ })).not.toBeChecked();
   await expect(dialog.getByRole("checkbox", { name: /Uyku/ })).not.toBeChecked();
   await expect(dialog.getByRole("checkbox", { name: /Kilo/ })).not.toBeChecked();
-  await expect(dialog.getByRole("checkbox", { name: /Diewish değerlendirmesi/ })).not.toBeChecked();
+  await expect(dialog.getByRole("checkbox", { name: /^Değerlendirme$/ })).not.toBeChecked();
 
   const preview = await openVisualPreview(page);
   const capture = preview.locator('[data-history-share-capture-root="true"]');
@@ -555,7 +555,7 @@ test("CUSTOM share privacy defaults do not leak sleep, weight or AI evaluation",
   const dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
   await expect(dialog.getByRole("checkbox", { name: /Uyku/ })).not.toBeChecked();
   await expect(dialog.getByRole("checkbox", { name: /Kilo/ })).not.toBeChecked();
-  await expect(dialog.getByRole("checkbox", { name: /Diewish değerlendirmesi/ })).not.toBeChecked();
+  await expect(dialog.getByRole("checkbox", { name: /^Değerlendirme$/ })).not.toBeChecked();
 
   const preview = await openVisualPreview(page);
   const rendered = await preview

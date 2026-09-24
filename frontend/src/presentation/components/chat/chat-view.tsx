@@ -74,7 +74,7 @@ export function ChatView({ initialPrompt }: { initialPrompt?: string | null }) {
         <div className="flex flex-1 items-center gap-2">
           <AiAvatar />
           <div className="leading-tight">
-            <p className="text-sm font-semibold">Beslenme Koçun</p>
+            <p className="text-sm font-semibold">Diewish Koç</p>
             <p className="text-[11px] text-muted-foreground">
               {isResponding ? "Yanıt hazırlanıyor..." : isLoading ? "Sohbetler yükleniyor..." : "Hazır"}
             </p>

@@ -727,7 +727,7 @@ export function HistoryView() {
             <div className="space-y-4">
               <PeriodComparisonSection comparison={state.comparison} />
               {comparisonKind === "CUSTOM" && (
-                <HistoryEvaluationCard title="Diewish Özel Karşılaştırma Değerlendirmesi">
+                <HistoryEvaluationCard title="Özel Karşılaştırma Değerlendirmesi">
                   {state.insightStatus === "loading" || state.insightStatus === "idle" ? (
                     <div className="space-y-2">
                       <Skeleton className="h-4 w-full" />
@@ -738,7 +738,7 @@ export function HistoryView() {
                     <div>
                       <p className="text-sm text-muted-foreground">
                         {state.insightError ??
-                          "Diewish değerlendirmesi şu anda alınamadı. Karşılaştırma verilerin görüntülenmeye devam ediyor."}
+                          "Değerlendirme şu anda alınamadı. Karşılaştırma verilerin görüntülenmeye devam ediyor."}
                       </p>
                       <Button
                         type="button"
@@ -793,10 +793,10 @@ export function HistoryView() {
               <HistoryEvaluationCard
                 title={
                   normalMode === "DAY"
-                    ? "Diewish Günlük Değerlendirmesi"
+                    ? "Günlük Değerlendirme"
                     : normalMode === "WEEK"
-                      ? "Diewish Haftalık Değerlendirmesi"
-                      : "Diewish Aylık Değerlendirmesi"
+                      ? "Haftalık Değerlendirme"
+                      : "Aylık Değerlendirme"
                 }
               >
                 {state.insightStatus === "loading" || state.insightStatus === "idle" ? (

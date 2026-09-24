@@ -8,7 +8,6 @@ import {
   Clock3,
   Droplets,
   RefreshCw,
-  Sparkles,
   Target,
   Trash2,
   Utensils,
@@ -421,7 +420,7 @@ function DurationOptions({
                   : "Daha kısa süre seçildiğinde bugünden başlayan yeni bir plan hazırlanır."}
               </p>
               <Button className="mt-4 w-full" disabled={generating} onClick={() => void create(duration)}>
-                <Sparkles className={selected ? "animate-pulse" : ""} aria-hidden="true" />
+                <CalendarDays className={selected ? "animate-pulse" : ""} aria-hidden="true" />
                 {selected ? "Hazırlanıyor…" : extending ? `${targetDays} güne uzat` : "Yeni plan oluştur"}
               </Button>
             </CardContent>
@@ -438,7 +437,7 @@ function EmptyPlan({ generating, generatingDuration }: { generating: boolean; ge
       <Card className="overflow-hidden border-primary/20 bg-gradient-to-br from-primary/10 via-background to-background">
         <CardContent className="p-5">
           <span className="flex size-11 items-center justify-center rounded-2xl bg-primary/15 text-primary">
-            <Sparkles className="size-5" aria-hidden="true" />
+            <Utensils className="size-5" aria-hidden="true" />
           </span>
           <h2 className="mt-4 text-xl font-bold">Kişisel öğün planını oluştur</h2>
           <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
@@ -629,7 +628,7 @@ export function NutritionPlanView() {
               <p className="text-[11px] text-muted-foreground">su hedefi</p>
             </div>
             <div className="rounded-xl bg-background/80 p-3">
-              <Sparkles className="size-4 text-primary" aria-hidden="true" />
+              <CalendarDays className="size-4 text-primary" aria-hidden="true" />
               <p className="mt-2 text-lg font-bold">{content.durationDays}</p>
               <p className="text-[11px] text-muted-foreground">planlanan gün</p>
             </div>

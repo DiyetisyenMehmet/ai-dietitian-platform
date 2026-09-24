@@ -265,7 +265,7 @@ test("Stage4B-2 real AI cache isolation share and web acceptance", async ({ page
   const dateInput = page.locator('input[type="date"]');
   await dateInput.fill("2026-09-15");
   await expect(page.getByText(privateData.privateMeal, { exact: true })).toBeVisible();
-  await expect(page.getByText("Diewish değerlendirmesi", { exact: true })).toBeVisible();
+  await expect(page.getByText("Değerlendirme", { exact: true })).toBeVisible();
 
   expect(await page.evaluate(
     () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
@@ -302,7 +302,7 @@ test("Stage4B-2 real AI cache isolation share and web acceptance", async ({ page
   for (const name of [/Kalori ve makrolar/, /^Su/, /Aktivite/]) {
     await expect(dialog.getByRole("checkbox", { name })).toBeChecked();
   }
-  for (const name of [/Öğün isimleri/, /^Uyku/, /^Kilo/, /Diewish değerlendirmesi/]) {
+  for (const name of [/Öğün isimleri/, /^Uyku/, /^Kilo/, /^Değerlendirme$/]) {
     await expect(dialog.getByRole("checkbox", { name })).not.toBeChecked();
   }
   await expect(dialog.getByText(privateData.privateMeal)).toHaveCount(0);
@@ -328,14 +328,14 @@ test("Stage4B-2 real AI cache isolation share and web acceptance", async ({ page
     privateData.privateMeal,
     "69,4 kg",
     "460 dk",
-    "Diewish değerlendirmesi",
+    "Değerlendirme",
   ]) {
     expect(defaultExport.canvas).not.toContain(forbidden);
   }
 
   await page.getByRole("button", { name: "Günü paylaş" }).click();
   dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
-  for (const name of [/Öğün isimleri/, /^Uyku/, /^Kilo/, /Diewish değerlendirmesi/]) {
+  for (const name of [/Öğün isimleri/, /^Uyku/, /^Kilo/, /^Değerlendirme$/]) {
     await dialog.getByRole("checkbox", { name }).check();
   }
   await expect(dialog.getByText(/Öğünler:/)).toContainText(privateData.privateMeal);
@@ -356,7 +356,7 @@ test("Stage4B-2 real AI cache isolation share and web acceptance", async ({ page
   expect(selectedExport.compactCanvas).toContain(privateData.longMeal);
   expect(selectedCanvas).toContain("69,4 kg");
   expect(selectedCanvas).toContain("460 dk");
-  expect(selectedCanvas).toContain("Diewish değerlendirmesi");
+  expect(selectedCanvas).toContain("Değerlendirme");
   expect(selectedCanvas.replace(/\s+/g, " ")).toContain(
     day2.content.text.replace(/\s+/g, " ").slice(0, 48),
   );

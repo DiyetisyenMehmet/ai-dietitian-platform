@@ -16,7 +16,7 @@ const PRICING_FAQ = [
   {
     question: "Ücretsiz plan neler içeriyor?",
     answer:
-      "Ücretsiz hesap temel takip özelliklerini ve sınırlı yapay zekâ deneme haklarını içerir. Kullanım sınırları uygulama içinde plan durumunda gösterilir.",
+      "Ücretsiz hesap temel takip özelliklerini ve sınırlı Diewish Koç ile analiz deneme haklarını içerir. Kullanım sınırları uygulama içinde plan durumunda gösterilir.",
   },
   {
     question: "Premium nasıl satın alınacak?",
@@ -59,7 +59,7 @@ export default function PricingPage() {
 
       <CtaSection
         title="Diewish'i ücretsiz kullanmaya başla"
-        description="Hesabını oluştur, temel takip özelliklerini kullan ve desteklenen yapay zekâ özelliklerini dene."
+        description="Hesabını oluştur, temel takip özelliklerini kullan ve desteklenen Diewish özelliklerini dene."
       />
     </>
   );

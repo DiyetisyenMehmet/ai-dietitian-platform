@@ -13,7 +13,6 @@ import {
   Plus,
   RefreshCcw,
   ScanLine,
-  Sparkles,
   Utensils,
   X,
 } from "lucide-react";
@@ -279,7 +278,7 @@ export function FoodScannerView() {
                 </button>
               </div>
               <Button className="w-full" onClick={() => void onAnalyze()} isLoading={analyzing} disabled={analyzing}>
-                {!analyzing && <Sparkles aria-hidden="true" />} {analyzing ? "Yemek tanınıyor" : "Görseli analiz et"}
+                {!analyzing && <ScanLine aria-hidden="true" />} {analyzing ? "Yemek tanınıyor" : "Görseli analiz et"}
               </Button>
               <div className="grid grid-cols-2 gap-2">
                 <Button
@@ -545,7 +544,7 @@ export function FoodScannerView() {
                   <Button onClick={() => void onLogMeal()} isLoading={loggingMeal}><Utensils /> Öğüne ekle</Button>
                 </div>
                 <Button asChild variant="outline">
-                  <Link href={coachHref(analysis)}><MessageCircle /> AI Koç&apos;a sor</Link>
+                  <Link href={coachHref(analysis)}><MessageCircle /> Diewish Koç&apos;a sor</Link>
                 </Button>
               </div>
             </section>

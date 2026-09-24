@@ -627,7 +627,7 @@ test("real staging History acceptance", async ({ page, request }) => {
   await expect(shareDialog.getByRole("checkbox", { name: /Öğün isimleri/ })).not.toBeChecked();
   await expect(shareDialog.getByRole("checkbox", { name: /^Uyku/ })).not.toBeChecked();
   await expect(shareDialog.getByRole("checkbox", { name: /^Kilo/ })).not.toBeChecked();
-  await expect(shareDialog.getByRole("checkbox", { name: /Diewish değerlendirmesi/ })).not.toBeChecked();
+  await expect(shareDialog.getByRole("checkbox", { name: /^Değerlendirme$/ })).not.toBeChecked();
   await expect(shareDialog.getByText(privateMeal)).toHaveCount(0);
 
   expect(await page.evaluate(
@@ -654,7 +654,7 @@ test("real staging History acceptance", async ({ page, request }) => {
   await secondDialog.getByRole("checkbox", { name: /Öğün isimleri/ }).check();
   await secondDialog.getByRole("checkbox", { name: /^Uyku/ }).check();
   await secondDialog.getByRole("checkbox", { name: /^Kilo/ }).check();
-  await secondDialog.getByRole("checkbox", { name: /Diewish değerlendirmesi/ }).check();
+  await secondDialog.getByRole("checkbox", { name: /^Değerlendirme$/ }).check();
   await expect(secondDialog.getByText(privateMeal)).toBeVisible();
   await page.evaluate(() => { window.__historyCanvasText = []; });
   await secondDialog.getByRole("button", { name: "Paylaş", exact: true }).click();

@@ -28,7 +28,7 @@ export const PLAN_CATALOG: Record<SubscriptionTier, PlanDefinition> = {
     priceMinor: 0,
     currency: "TRY",
     periodDays: BILLING_PERIOD_DAYS,
-    description: "Temel özellikler ve sınırlı AI kullanımı.",
+    description: "Temel özellikler ve sınırlı Diewish Koç kullanımı.",
   },
   PREMIUM: {
     tier: "PREMIUM",
@@ -37,7 +37,7 @@ export const PLAN_CATALOG: Record<SubscriptionTier, PlanDefinition> = {
     priceMinor: 14999,
     currency: "TRY",
     periodDays: BILLING_PERIOD_DAYS,
-    description: "Genişletilmiş AI kotaları, kan tahlili analizi ve beslenme planları.",
+    description: "Genişletilmiş Diewish Koç kotası, kan tahlili analizi ve beslenme planları.",
   },
   PREMIUM_PLUS: {
     tier: "PREMIUM_PLUS",
@@ -46,7 +46,7 @@ export const PLAN_CATALOG: Record<SubscriptionTier, PlanDefinition> = {
     priceMinor: 29999,
     currency: "TRY",
     periodDays: BILLING_PERIOD_DAYS,
-    description: "En yüksek mevcut AI kotaları ve genişletilmiş kullanım limitleri.",
+    description: "En yüksek mevcut Diewish Koç kotası ve genişletilmiş kullanım limitleri.",
   },
 };
 

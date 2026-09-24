@@ -7,7 +7,7 @@ import { CtaSection } from "@/presentation/components/marketing/cta-section";
 export const metadata: Metadata = {
   title: "Özellikler",
   description:
-    "Diewish'in tüm özellikleri: yapay zekâ destekli beslenme, kişiselleştirilmiş planlar, kan tahlili analizi, diyetisyen asistanı, öğün ve hedef takibi, KVKK uyumlu gizlilik.",
+    "Diewish'in tüm özellikleri: kişiselleştirilmiş beslenme planları, kan tahlili analizi, Diewish Koç, öğün ve hedef takibi, KVKK uyumlu gizlilik.",
   alternates: { canonical: "/features" },
 };
 
@@ -19,7 +19,7 @@ export default function FeaturesPage() {
         <SectionHeading
           eyebrow="Özellikler"
           title="Sağlıklı yaşam için ihtiyacın olan her şey"
-          description="Diewish, yapay zekânın gücünü kişisel beslenme yolculuğunla birleştiren kapsamlı bir platformdur."
+          description="Diewish, kişisel beslenme yolculuğunu takip ve değerlendirme özellikleriyle birleştiren kapsamlı bir platformdur."
         />
         <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {EXTENDED_FEATURES.map((feature) => (

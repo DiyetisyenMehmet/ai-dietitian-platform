@@ -1,4 +1,4 @@
-import { Home, UtensilsCrossed, Sparkles, TrendingUp, User, type LucideIcon } from "lucide-react";
+import { Home, UtensilsCrossed, Leaf, TrendingUp, User, type LucideIcon } from "lucide-react";
 
 export interface NavigationItem {
   /** Stable identifier for the navigation entry. */
@@ -18,7 +18,7 @@ export interface NavigationItem {
 export const PRIMARY_NAVIGATION: readonly NavigationItem[] = [
   { id: "home", label: "Ana Sayfa", href: "/dashboard", icon: Home },
   { id: "meals", label: "Beslenme", href: "/meals", icon: UtensilsCrossed },
-  { id: "ai", label: "Koç", href: "/ai", icon: Sparkles },
+  { id: "ai", label: "Koç", href: "/ai", icon: Leaf },
   { id: "progress", label: "İlerleme", href: "/progress", icon: TrendingUp },
   { id: "profile", label: "Profil", href: "/profile", icon: User },
 ] as const;

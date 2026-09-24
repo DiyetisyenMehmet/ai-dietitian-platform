@@ -159,7 +159,7 @@ export const aiUsageService = {
 
     if (status.exceeded) {
       const which = status.day.remaining === 0 ? status.day : status.month;
-      throw new ApiError(429, "AI usage limit reached for your plan. Please try again later.", {
+      throw new ApiError(429, "Planındaki kullanım sınırına ulaştın. Lütfen daha sonra tekrar dene.", {
         code: QUOTA_EXCEEDED_CODE,
         details: {
           feature,

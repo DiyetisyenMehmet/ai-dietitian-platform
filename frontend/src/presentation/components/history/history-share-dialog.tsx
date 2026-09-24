@@ -45,7 +45,7 @@ const OPTION_ROWS: Array<{
   { key: "includeWeight", label: "Kilo", description: "Varsayılan olarak kapalıdır." },
   {
     key: "includeAiInsight",
-    label: "Diewish değerlendirmesi",
+    label: "Değerlendirme",
     description: "Varsayılan olarak kapalıdır.",
   },
 ];

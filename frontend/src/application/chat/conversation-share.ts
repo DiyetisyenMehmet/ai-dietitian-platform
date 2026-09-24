@@ -61,10 +61,10 @@ export async function loadConversationForShare(id: string): Promise<Conversation
 export function formatConversationForShare(conversation: Conversation): string {
   const transcript = conversation.messages
     .map((message) => {
-      const speaker = message.role === "user" ? "Sen" : "Diewish AI Koç";
+      const speaker = message.role === "user" ? "Sen" : "Diewish Koç";
       return `${speaker}:\n${message.content.trim()}`;
     })
     .join("\n\n");
 
-  return `Diewish AI Koç — ${conversation.title}\n\n${transcript}`.trim();
+  return `Diewish Koç — ${conversation.title}\n\n${transcript}`.trim();
 }

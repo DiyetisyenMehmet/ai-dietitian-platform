@@ -1,8 +1,7 @@
-import { Sparkles } from "lucide-react";
-
 import { cn } from "@/shared/lib/utils";
+import { DiewishHistoryMark } from "@/presentation/components/history/diewish-history-mark";
 
-/** Gradient AI assistant avatar. Pulses gently while active. */
+/** Gradient Diewish Coach avatar. Pulses gently while active. */
 export function AiAvatar({ active = false, className }: { active?: boolean; className?: string }) {
   return (
     <span
@@ -17,7 +16,7 @@ export function AiAvatar({ active = false, className }: { active?: boolean; clas
           aria-hidden="true"
         />
       )}
-      <Sparkles className="relative size-4" aria-hidden="true" />
+      <DiewishHistoryMark className="relative size-4 brightness-0 invert" />
     </span>
   );
 }

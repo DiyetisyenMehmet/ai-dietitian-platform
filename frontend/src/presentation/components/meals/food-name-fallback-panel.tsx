@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Search, Sparkles } from "lucide-react";
+import { Search } from "lucide-react";
 import { toast } from "sonner";
 
 import { ApiError } from "@/infrastructure/api/http-client";
@@ -85,7 +85,7 @@ export function FoodNameFallbackPanel() {
         <div className="mt-4 space-y-3 rounded-xl border p-3">
           <div>
             <div className="flex items-center gap-2">
-              <Sparkles className="size-4 text-primary" />
+              <Search className="size-4 text-primary" aria-hidden="true" />
               <p className="font-semibold">{result.dishName}</p>
             </div>
             <p className="mt-1 text-xs text-muted-foreground">{resolutionLabel(result)}</p>

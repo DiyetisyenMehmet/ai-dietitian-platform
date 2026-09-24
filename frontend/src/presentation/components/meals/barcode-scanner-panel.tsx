@@ -556,7 +556,7 @@ export function BarcodeScannerPanel() {
                   <Heart /> Favorilere ekle
                 </Button>
                 <Button asChild variant="outline">
-                  <Link href={coachHref(food, grams)}><MessageCircle /> AI Koç&apos;a sor</Link>
+                  <Link href={coachHref(food, grams)}><MessageCircle /> Diewish Koç&apos;a sor</Link>
                 </Button>
               </div>
             </section>

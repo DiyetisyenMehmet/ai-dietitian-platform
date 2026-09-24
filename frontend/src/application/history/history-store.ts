@@ -228,7 +228,7 @@ export const historyStore = {
       setState({
         insightStatus: "error",
         insightError:
-          error instanceof Error ? error.message : "Diewish değerlendirmesi şu anda alınamadı.",
+          error instanceof Error ? error.message : "Değerlendirme şu anda alınamadı.",
       });
     }
   },

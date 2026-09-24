@@ -224,10 +224,10 @@ function fallbackText(scope: HistoryInsightScopeName, partial: boolean, noData: 
   }
   if (partial) {
     return scope === "DAY"
-      ? "Bugünkü kayıtlarının bir bölümü şu anda kullanılamıyor. Mevcut kayıtların görüntülenmeye devam ediyor; AI değerlendirmesi geçici olarak oluşturulamadı."
-      : "Bu dönemin bazı kayıtları şu anda kullanılamıyor. Karşılaştırmayı mevcut verilerle inceleyebilirsin; AI değerlendirmesi geçici olarak oluşturulamadı.";
+      ? "Bugünkü kayıtlarının bir bölümü şu anda kullanılamıyor. Mevcut kayıtların görüntülenmeye devam ediyor; değerlendirme geçici olarak oluşturulamadı."
+      : "Bu dönemin bazı kayıtları şu anda kullanılamıyor. Karşılaştırmayı mevcut verilerle inceleyebilirsin; değerlendirme geçici olarak oluşturulamadı.";
   }
-  return "Verilerin görüntülenebiliyor ancak Diewish değerlendirmesi şu anda oluşturulamadı. Biraz sonra yeniden deneyebilirsin.";
+  return "Verilerin görüntülenebiliyor ancak değerlendirme şu anda oluşturulamadı. Biraz sonra yeniden deneyebilirsin.";
 }
 
 function promptFor(scope: HistoryInsightScopeName, context: InsightContext): string {

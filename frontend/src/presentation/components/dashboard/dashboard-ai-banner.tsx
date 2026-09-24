@@ -42,10 +42,10 @@ function DiewishMascot({ gradientId }: { gradientId: string }) {
   );
 }
 
-/** AI entry point with identical copy and geometry in light/dark themes. */
+/** Coach entry point with identical copy and geometry in light/dark themes. */
 export function DashboardAiBanner() {
   return (
-    <section aria-label="Diewish AI Koçu">
+    <section aria-label="Diewish Koç">
       <div
         className="relative w-full overflow-hidden rounded-[clamp(1.1rem,4vw,2rem)] border border-sky-300/25 bg-[linear-gradient(100deg,#f7fbff_0%,#f2fbff_45%,#ebfff8_100%)] shadow-sm dark:border-sky-500/15 dark:bg-[linear-gradient(100deg,rgba(14,63,78,0.52)_0%,rgba(10,45,48,0.72)_52%,rgba(8,72,56,0.48)_100%)]"
         style={{ aspectRatio: "670 / 126" }}
@@ -60,11 +60,11 @@ export function DashboardAiBanner() {
           <DiewishMascot gradientId="dashboard-ai" />
         </span>
 
-        <div className="absolute left-[18.5%] right-[31%] top-1/2 min-w-0 -translate-y-1/2">
-          <h2 className="whitespace-nowrap text-[clamp(0.68rem,3vw,1rem)] font-extrabold leading-none tracking-[-0.025em] text-slate-950 dark:text-slate-50">
-            Diewish AI Koçun Yanında
+        <div className="absolute left-[21.5%] right-[28%] top-1/2 min-w-0 -translate-y-1/2">
+          <h2 className="whitespace-nowrap text-[clamp(0.58rem,2.6vw,1rem)] font-extrabold leading-none tracking-[-0.025em] text-slate-950 dark:text-slate-50">
+            Diewish Her Zaman Yanında
           </h2>
-          <p className="mt-[clamp(0.16rem,0.7vw,0.32rem)] whitespace-nowrap text-[clamp(0.52rem,2.15vw,0.74rem)] font-medium leading-none text-slate-600 dark:text-slate-300">
+          <p className="mt-[clamp(0.16rem,0.7vw,0.32rem)] whitespace-nowrap text-[clamp(0.45rem,2vw,0.74rem)] font-medium leading-none tracking-[-0.025em] text-slate-600 dark:text-slate-300">
             Daha sağlıklı bir sen için buradayım.
           </p>
         </div>

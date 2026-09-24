@@ -15,7 +15,7 @@ const inter = Inter({
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: `${APP_CONFIG.name} — Yapay Zekâ Destekli Kişisel Beslenme Platformu`,
+    default: `${APP_CONFIG.name} — Kişisel Beslenme ve Sağlıklı Yaşam Platformu`,
     template: `%s · ${APP_CONFIG.name}`,
   },
   description: APP_CONFIG.description,
@@ -38,12 +38,12 @@ export const metadata: Metadata = {
     locale: "tr_TR",
     url: SITE_URL,
     siteName: APP_CONFIG.name,
-    title: `${APP_CONFIG.name} — Yapay Zekâ Destekli Kişisel Beslenme Platformu`,
+    title: `${APP_CONFIG.name} — Kişisel Beslenme ve Sağlıklı Yaşam Platformu`,
     description: APP_CONFIG.description,
   },
   twitter: {
     card: "summary_large_image",
-    title: `${APP_CONFIG.name} — Yapay Zekâ Destekli Kişisel Beslenme Platformu`,
+    title: `${APP_CONFIG.name} — Kişisel Beslenme ve Sağlıklı Yaşam Platformu`,
     description: APP_CONFIG.description,
   },
   robots: {

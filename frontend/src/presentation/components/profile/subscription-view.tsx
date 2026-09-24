@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { toast } from "sonner";
-import { Check, CreditCard, Crown, RotateCcw, Smartphone, Sparkles } from "lucide-react";
+import { Check, CreditCard, Crown, Leaf, RotateCcw, Smartphone } from "lucide-react";
 
 import { cn } from "@/shared/lib/utils";
 import { formatLongDate } from "@/shared/lib/format";
@@ -149,7 +149,7 @@ export function SubscriptionView() {
               {subscription.tier === "PREMIUM_PLUS" ? (
                 <Crown className="size-6" aria-hidden="true" />
               ) : (
-                <Sparkles className="size-6" aria-hidden="true" />
+                <Leaf className="size-6" aria-hidden="true" />
               )}
             </span>
             <div>
@@ -270,8 +270,8 @@ export function SubscriptionView() {
                       {isFree
                         ? plan.tagline
                         : plan.tier === "PREMIUM"
-                          ? "Daha yüksek yapay zekâ kullanım kotaları ve reklamsız deneyim"
-                          : "En yüksek mevcut yapay zekâ kotaları ve reklamsız deneyim"}
+                          ? "Daha yüksek Diewish Koç kullanım kotası ve reklamsız deneyim"
+                          : "En yüksek Diewish Koç kullanım kotası ve reklamsız deneyim"}
                     </p>
                   </div>
                   <div className="text-right">

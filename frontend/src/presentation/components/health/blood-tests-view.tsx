@@ -322,7 +322,7 @@ function PremiumValueEducation({
 
         {explanation && isFlagged && (
           <div className="rounded-lg bg-amber-500/5 p-2.5">
-            <p className="font-semibold text-foreground">Kişisel AI değerlendirmesi</p>
+            <p className="font-semibold text-foreground">Kişisel değerlendirme</p>
             <p className="mt-1 text-muted-foreground">{explanation}</p>
           </div>
         )}

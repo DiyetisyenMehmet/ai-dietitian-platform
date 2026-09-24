@@ -114,7 +114,7 @@ export function useDailyJourney(): JourneyStep[] {
       },
       {
         kind: "coach",
-        label: "AI Koç",
+        label: "Diewish Koç",
         hint: "Koçunla günü değerlendir",
         icon: "message",
         href: "/ai",

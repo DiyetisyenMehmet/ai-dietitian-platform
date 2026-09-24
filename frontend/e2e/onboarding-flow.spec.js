@@ -204,7 +204,7 @@ test("register -> consent -> onboarding -> scanner -> same-day weigh-in preserve
   await expect(page.getByText("25 g porsiyon")).toBeVisible();
   await expect(page.getByText("100 g için şeker miktarı yüksek.")).toBeVisible();
   await expect(page.getByText("Open Food Facts", { exact: false }).first()).toBeVisible();
-  const coachLink = page.getByRole("link", { name: /AI Koç/ });
+  const coachLink = page.getByRole("link", { name: /Diewish Koç/ });
   await expect(coachLink).toHaveAttribute("href", /prompt=/);
 
   await page.route("**/api/food-scan/analyze", async (route) => {

@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { Bot, ChevronRight } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 
 import { Button } from "@/presentation/components/ui/button";
 import { healthIcon } from "@/presentation/components/health/health-icon";
+import { DiewishHistoryMark } from "@/presentation/components/history/diewish-history-mark";
 import { useNextAction } from "@/application/health/coach";
 
 /**
@@ -18,11 +19,11 @@ export function CoachHeroSection() {
   const ctaHref = action?.actionHref ?? "/ai";
 
   return (
-    <section aria-label="AI Koç önerisi" className="animate-scale-in">
+    <section aria-label="Diewish Koç önerisi" className="animate-scale-in">
       <div className="rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/10 via-card to-card p-5 shadow-card">
         <div className="flex items-center gap-3">
           <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/15 text-primary">
-            <Bot className="size-6" aria-hidden="true" />
+            <DiewishHistoryMark className="size-6" />
           </span>
           <div className="min-w-0">
             <p className="text-sm font-bold">Koçundan bugünün önerisi</p>

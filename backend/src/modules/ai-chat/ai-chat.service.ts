@@ -107,7 +107,7 @@ export const aiChatService = {
     } catch (error) {
       logger.error({ err: error, userId, conversationId: conversation?.id ?? conversationId ?? null }, "AI chat turn failed");
       if (error instanceof ApiError) throw error;
-      throw ApiError.internal("The AI dietitian chat is temporarily unavailable.");
+      throw ApiError.internal("Diewish Koç şu anda kullanılamıyor.");
     }
   },
 

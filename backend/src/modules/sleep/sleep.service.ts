@@ -250,7 +250,7 @@ export const sleepService = {
     const analysis = await weeklyAnalysisForUser(userId, endDate, timezoneOffsetMinutes);
     if (analysis.nightsLogged === 0) {
       return {
-        comment: "AI yorumu için önce en az bir uyku kaydı eklemelisin.",
+        comment: "Uyku değerlendirmesi için önce en az bir uyku kaydı eklemelisin.",
         generatedBy: "FALLBACK",
         provider: null,
         model: null,

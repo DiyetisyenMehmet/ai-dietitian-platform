@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Bell, Bot, Droplets, Minus, Plus, Save } from "lucide-react";
+import { Bell, Droplets, Minus, Plus, Save } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -15,6 +15,7 @@ import {
   type WaterRecommendation,
 } from "@/infrastructure/tracking/tracking-client";
 import { Button } from "@/presentation/components/ui/button";
+import { DiewishHistoryMark } from "@/presentation/components/history/diewish-history-mark";
 import { Card, CardContent } from "@/presentation/components/ui/card";
 import { ProgressBar } from "@/presentation/components/ui/progress-bar";
 import { formatNumber, toPercent } from "@/shared/lib/format";
@@ -324,7 +325,7 @@ export function WaterSection() {
         <div className="space-y-2 rounded-xl bg-sky-500/5 p-3">
           <div className="flex items-center justify-between gap-2">
             <p className="inline-flex items-center gap-1.5 text-xs font-semibold">
-              <Bot className="size-4 text-sky-600" aria-hidden="true" /> Hidrasyon önerisi
+              <DiewishHistoryMark className="size-4" /> Hidrasyon önerisi
             </p>
             <Button type="button" variant="ghost" size="sm" disabled={busy !== null} isLoading={busy === "recommendation"} onClick={() => void loadRecommendation()}>
               Öneri al
@@ -334,7 +335,7 @@ export function WaterSection() {
             <div className="space-y-1">
               <p className="text-sm leading-relaxed text-muted-foreground">{recommendation.text}</p>
               <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                {recommendation.source === "AI" ? "AI destekli" : "Güvenli kural tabanlı yedek"} · 7 gün ort. {recommendation.sevenDayAverageMl} ml
+                {recommendation.source === "AI" ? "Otomatik değerlendirme" : "Güvenli kural tabanlı yedek"} · 7 gün ort. {recommendation.sevenDayAverageMl} ml
               </p>
             </div>
           ) : (

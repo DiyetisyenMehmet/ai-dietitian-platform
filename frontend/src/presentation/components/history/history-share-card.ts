@@ -462,7 +462,7 @@ function drawAi(
   drawDiewishHistoryMark(ctx, x + 30, y + 17, 26);
   ctx.fillStyle = "#087a55";
   ctx.font = `800 ${dense ? 20 : 23}px ${FONT}`;
-  ctx.fillText("Diewish değerlendirmesi", x + 62, y + 40);
+  ctx.fillText("Değerlendirme", x + 62, y + 40);
 
   ctx.fillStyle = "#334155";
   ctx.font = `500 ${dense ? 17 : 19}px ${FONT}`;
@@ -642,7 +642,7 @@ export function historyPayloadText(payload: HistorySharePayload): string {
     for (const line of section.lines) lines.push(line);
     lines.push("");
   }
-  if (payload.aiInsight) lines.push("Diewish değerlendirmesi", payload.aiInsight, "");
+  if (payload.aiInsight) lines.push("Değerlendirme", payload.aiInsight, "");
   lines.push("Diewish ile ilerlememi takip ediyorum.");
   return lines.join("\n").trim();
 }

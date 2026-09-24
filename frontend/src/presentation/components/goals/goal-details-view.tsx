@@ -3,10 +3,11 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Sparkles, Pencil, Trash2, CalendarClock, Target, TrendingUp } from "lucide-react";
+import { Pencil, Trash2, CalendarClock, Target, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 
 import { cn } from "@/shared/lib/utils";
+import { DiewishHistoryMark } from "@/presentation/components/history/diewish-history-mark";
 import { formatNumber } from "@/shared/lib/format";
 import { getGoalTypeMeta } from "@/domain/goals/types";
 import { useGoal, goalsStore } from "@/application/goals/goals-store";
@@ -176,7 +177,7 @@ export function GoalDetailsView({ goalId }: GoalDetailsViewProps) {
         <div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 via-accent to-background p-5 shadow-soft">
           <div className="flex items-start gap-3.5">
             <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/15 backdrop-blur">
-              <Sparkles className="size-5 text-primary" aria-hidden="true" />
+              <DiewishHistoryMark className="size-5" />
             </span>
             <div className="space-y-1">
               <p className="flex items-center gap-2 text-sm font-semibold">
