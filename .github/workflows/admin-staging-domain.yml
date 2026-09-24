@@ -1,0 +1,41 @@
+name: Admin Staging Domain
+
+on:
+  push:
+    branches:
+      - feature/staging-preview
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PROJECT_ID: project-a2e260c1-839d-4f1d-b90
+  WIF_PROVIDER: projects/730419163638/locations/global/workloadIdentityPools/github-actions/providers/diewish-staging
+  DEPLOY_SERVICE_ACCOUNT: diewish-staging-deployer@project-a2e260c1-839d-4f1d-b90.iam.gserviceaccount.com
+
+jobs:
+  bootstrap-domain:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[admin-domain-bootstrap]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: staging
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to isolated staging Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Bootstrap admin staging custom domain
+        shell: bash
+        run: bash scripts/bootstrap-admin-staging-domain.sh
