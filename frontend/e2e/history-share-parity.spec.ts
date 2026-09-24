@@ -153,9 +153,9 @@ test("weekly and monthly normal shares contain only the current period summary",
     expect(payload.kind).toBe("normal");
     expect(payload.comparisonLabel).toBeNull();
     expect(payload.visualCards.every((card) => card.layout === "summary")).toBe(true);
-    expect(text).toContain(periodType === "WEEK" ? "Diewish hafta özetim" : "Diewish ay özetim");
-    expect(text).toContain("Ortalama Kalori: 1.840 kcal");
-    expect(text).toContain("Toplam Aktivite Süresi: 16 sa 30 dk");
+    expect(text).toContain(periodType === "WEEK" ? "Diewish Hafta Özetim 🌿" : "Diewish Ay Özetim 🌿");
+    expect(text).toContain("Günlük ortalama enerji: 1.840 kcal");
+    expect(text).toContain("Toplam hareket: 16 sa 30 dk");
     expect(text).not.toContain("Geçen hafta");
     expect(text).not.toContain("Geçen ay");
     expect(text).not.toContain("Fark:");
