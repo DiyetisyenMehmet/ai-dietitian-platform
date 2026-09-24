@@ -27,14 +27,16 @@ export interface AuditedMutationResult<T> {
   after?: AdminAuditSnapshot;
 }
 
-function normalizeAuditValue(value: unknown): Prisma.InputJsonValue | undefined {
+function normalizeAuditValue(value: unknown): Prisma.InputJsonValue | null | undefined {
   if (value === null || typeof value === "boolean" || typeof value === "number") return value;
   if (typeof value === "string") return value.slice(0, 512);
   if (Array.isArray(value)) {
     return value
       .slice(0, 20)
       .map((item) => normalizeAuditValue(item))
-      .filter((item): item is Prisma.InputJsonValue => item !== undefined);
+      .filter(
+        (item): item is Prisma.InputJsonValue | null => item !== undefined,
+      );
   }
   return undefined;
 }
