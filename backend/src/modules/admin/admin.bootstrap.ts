@@ -3,58 +3,14 @@ import { UserRole } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { buildAuditSnapshot, runAuditedAdminMutation } from "./admin-audit.service";
 import { resolveRuntimeEnvironment } from "./admin.environment";
-import {
-  ADMIN_PERMISSION_DEFINITIONS,
-  ADMIN_ROLE_DEFINITIONS,
-  ADMIN_SYSTEM_ROLES,
-} from "./admin.permissions";
+import { ensureAdminFoundation } from "./admin.foundation";
+import { ADMIN_SYSTEM_ROLES } from "./admin.permissions";
 
 const BOOTSTRAP_CONFIRMATION = "DIEWISH_STAGING_ADMIN_BOOTSTRAP";
 
 export async function bootstrapAdminFoundation(): Promise<void> {
-  await prisma.$transaction(async (tx) => {
-    for (const definition of ADMIN_PERMISSION_DEFINITIONS) {
-      await tx.adminPermission.upsert({
-        where: { key: definition.key },
-        update: { description: definition.description },
-        create: definition,
-      });
-    }
+  await prisma.$transaction((tx) => ensureAdminFoundation(tx));
 
-    for (const roleDefinition of ADMIN_ROLE_DEFINITIONS) {
-      const role = await tx.adminRole.upsert({
-        where: { key: roleDefinition.key },
-        update: {
-          name: roleDefinition.name,
-          description: roleDefinition.description,
-          isSystem: true,
-        },
-        create: {
-          key: roleDefinition.key,
-          name: roleDefinition.name,
-          description: roleDefinition.description,
-          isSystem: true,
-        },
-      });
-
-      for (const permissionKey of roleDefinition.permissions) {
-        const permission = await tx.adminPermission.findUniqueOrThrow({
-          where: { key: permissionKey },
-        });
-        await tx.adminRolePermission.upsert({
-          where: {
-            roleId_permissionId: {
-              roleId: role.id,
-              permissionId: permission.id,
-            },
-          },
-          update: {},
-          create: { roleId: role.id, permissionId: permission.id },
-        });
-      }
-    }
-  });
-}
 
 /**
  * Explicit non-production first-admin bootstrap. It is a CLI operation, not an

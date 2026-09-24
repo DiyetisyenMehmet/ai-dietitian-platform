@@ -24,10 +24,10 @@ steps:
         npm ci
         npx prisma generate
         DATABASE_URL="$$DIRECT_DATABASE_URL" npx prisma migrate deploy
-        # Seed only the deterministic RBAC registry/system-role mapping. No user
-        # is promoted unless an explicit ADMIN_BOOTSTRAP_USER_ID is supplied,
-        # which this staging build deliberately does not set.
-        DIEWISH_ENVIRONMENT=staging DATABASE_URL="$$DIRECT_DATABASE_URL" npm run admin:bootstrap
+        # Seed only the deterministic RBAC registry/system-role mapping using
+        # DB-only credentials. First-admin promotion remains a separate,
+        # explicitly confirmed non-production CLI operation.
+        DATABASE_URL="$DIRECT_DATABASE_URL" npm run admin:seed-foundation
 
   - name: gcr.io/cloud-builders/docker
     args:
