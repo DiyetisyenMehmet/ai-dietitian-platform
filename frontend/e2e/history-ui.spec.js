@@ -553,7 +553,11 @@ test("History daily/period UI keeps data visible when AI fails and share default
     window.__historyCopied = null;
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
-      value: { writeText: async (value) => { window.__historyCopied = value; } },
+      value: {
+        writeText: async (value) => {
+          window.__historyCopied = value;
+        },
+      },
     });
   });
   const previewText = await dialog.locator("pre").innerText();
