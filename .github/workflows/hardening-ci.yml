@@ -110,6 +110,16 @@ jobs:
         run: node --test tests/notification-lifecycle.test.cjs tests/web-push-service-worker.test.cjs
       - name: Validate staging History runtime spec syntax
         run: node --check e2e/staging-history-runtime.spec.js
+      - name: Lint frontend
+        run: npm run lint
+      - name: Test History share formatter contracts
+        run: >-
+          npx playwright test
+          e2e/history-share-text.spec.ts
+          e2e/history-share-parity.spec.ts
+          e2e/history-custom-comparison.spec.ts
+          e2e/history-final-recovery.spec.ts
+          --workers=1 --reporter=line
       - run: npm run type-check
       - run: npm run build
         env:
