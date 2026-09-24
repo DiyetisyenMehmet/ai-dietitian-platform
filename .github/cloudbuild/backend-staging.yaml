@@ -27,7 +27,7 @@ steps:
         # Seed only the deterministic RBAC registry/system-role mapping using
         # DB-only credentials. First-admin promotion remains a separate,
         # explicitly confirmed non-production CLI operation.
-        DATABASE_URL="$DIRECT_DATABASE_URL" npm run admin:seed-foundation
+        DATABASE_URL="$$DIRECT_DATABASE_URL" npm run admin:seed-foundation
 
   - name: gcr.io/cloud-builders/docker
     args:

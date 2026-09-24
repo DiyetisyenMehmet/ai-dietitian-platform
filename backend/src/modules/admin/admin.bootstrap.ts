@@ -10,7 +10,7 @@ const BOOTSTRAP_CONFIRMATION = "DIEWISH_STAGING_ADMIN_BOOTSTRAP";
 
 export async function bootstrapAdminFoundation(): Promise<void> {
   await prisma.$transaction((tx) => ensureAdminFoundation(tx));
-
+}
 
 /**
  * Explicit non-production first-admin bootstrap. It is a CLI operation, not an
