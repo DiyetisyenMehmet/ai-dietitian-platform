@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  APPLICATION_SHA: 45782e6fd23d79635372835422622db83a3051e6
+  APPLICATION_SHA: 53547bc1d2c68287e602789fa418519043555b99
   PROJECT_ID: project-a2e260c1-839d-4f1d-b90
   REGION: europe-west1
   WIF_PROVIDER: projects/730419163638/locations/global/workloadIdentityPools/github-actions/providers/diewish-staging

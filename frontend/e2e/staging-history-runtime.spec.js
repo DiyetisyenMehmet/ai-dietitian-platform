@@ -196,6 +196,41 @@ function sensitiveAiLanguage(text) {
   return /\b\d+\s*(mg|ml)\s*(ilaç|doz)|\b(reçete|tedavi dozu)\b/i.test(text);
 }
 
+function localDateKey(date = new Date(), timezone = ZONE) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    calendar: "gregory",
+    numberingSystem: "latn",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const value = (type) => parts.find((part) => part.type === type)?.value;
+  return [value("year"), value("month"), value("day")].join("-");
+}
+
+function shiftCalendarDate(dateKey, days) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const value = new Date(Date.UTC(year, month - 1, day));
+  value.setUTCDate(value.getUTCDate() + days);
+  return value.toISOString().slice(0, 10);
+}
+
+function startOfWeek(dateKey) {
+  const day = new Date(dateKey + "T00:00:00.000Z").getUTCDay();
+  return shiftCalendarDate(dateKey, day === 0 ? -6 : 1 - day);
+}
+
+function inclusiveCalendarDayCount(startDate, endDate) {
+  const start = Date.parse(startDate + "T00:00:00.000Z");
+  const end = Date.parse(endDate + "T00:00:00.000Z");
+  return Math.floor((end - start) / 86_400_000) + 1;
+}
+
+function fixtureTimestamp(dateKey, time = "09:00:00") {
+  return dateKey + "T" + time + ".000Z";
+}
+
 test("real staging History acceptance", async ({ page, request }) => {
   test.setTimeout(240000);
   const pageErrors = [];
@@ -203,6 +238,15 @@ test("real staging History acceptance", async ({ page, request }) => {
 
   const userA = await createOnboardedUser(request, "stage4-history-a", true);
   const userB = await createOnboardedUser(request, "stage4-history-b");
+
+  // A weekly comparison is partial only while its selected reference date is
+  // inside the user's current local week. Derive this fixture from the staging
+  // clock instead of freezing a date that later becomes a historical full week.
+  const weeklyReferenceDate = localDateKey(new Date(), ZONE);
+  const weeklyCurrentStart = startOfWeek(weeklyReferenceDate);
+  const weeklyPreviousStart = shiftCalendarDate(weeklyCurrentStart, -7);
+  const weeklyElapsedDays = inclusiveCalendarDayCount(weeklyCurrentStart, weeklyReferenceDate);
+  const weeklyPreviousEnd = shiftCalendarDate(weeklyPreviousStart, weeklyElapsedDays - 1);
 
   const empty = await historyDay(request, userA.token, "2026-09-01");
   expect(empty.response.status()).toBe(200);
@@ -353,7 +397,7 @@ test("real staging History acceptance", async ({ page, request }) => {
       proteinG: 0,
       carbsG: 0,
       fatG: 0,
-      loggedAt: "2026-09-07T09:00:00.000Z",
+      loggedAt: fixtureTimestamp(weeklyPreviousStart),
     },
   });
   expect(previousZeroMeal.response.status()).toBe(201);
@@ -367,28 +411,30 @@ test("real staging History acceptance", async ({ page, request }) => {
       proteinG: 40,
       carbsG: 60,
       fatG: 20,
-      loggedAt: "2026-09-14T09:00:00.000Z",
+      loggedAt: fixtureTimestamp(weeklyCurrentStart),
     },
   });
   expect(currentWeekMeal.response.status()).toBe(201);
 
   await apiJson(request, "post", "/tracking/water", {
     token: userA.token,
-    data: { amountMl: 500, loggedAt: "2026-09-08T09:00:00.000Z" },
+    data: { amountMl: 500, loggedAt: fixtureTimestamp(weeklyPreviousStart, "10:00:00") },
   });
   await apiJson(request, "post", "/tracking/water", {
     token: userA.token,
-    data: { amountMl: 700, loggedAt: "2026-09-15T09:00:00.000Z" },
+    data: { amountMl: 700, loggedAt: fixtureTimestamp(weeklyCurrentStart, "10:00:00") },
   });
 
-  const weekly = await historyComparison(request, userA.token, "week", "2026-09-16");
+  const weekly = await historyComparison(request, userA.token, "week", weeklyReferenceDate);
   expect(weekly.response.status()).toBe(200);
   const weeklyComparison = weekly.body.data.comparison;
-  expect(weeklyComparison.currentPeriod.days).toBe(3);
-  expect(weeklyComparison.previousPeriod.days).toBe(3);
+  expect(weeklyComparison.currentPeriod.days).toBe(weeklyElapsedDays);
+  expect(weeklyComparison.previousPeriod.days).toBe(weeklyElapsedDays);
   expect(weeklyComparison.comparisonMode).toBe("EQUAL_ELAPSED_DAYS");
-  expect(weeklyComparison.currentPeriod.localStartDate).toBe("2026-09-14");
-  expect(weeklyComparison.previousPeriod.localStartDate).toBe("2026-09-07");
+  expect(weeklyComparison.currentPeriod.localStartDate).toBe(weeklyCurrentStart);
+  expect(weeklyComparison.previousPeriod.localStartDate).toBe(weeklyPreviousStart);
+  expect(weeklyComparison.currentPeriod.localEndDateInclusive).toBe(weeklyReferenceDate);
+  expect(weeklyComparison.previousPeriod.localEndDateInclusive).toBe(weeklyPreviousEnd);
   expect(
     weeklyComparison.metrics.nutrition.averageCaloriesPerQuantifiedDay.previous.value,
   ).toBe(0);
@@ -397,7 +443,7 @@ test("real staging History acceptance", async ({ page, request }) => {
   ).toBeNull();
   expect(weeklyComparison.completeness.current.nutrition.status).toBe("PARTIAL");
   expect(weeklyComparison.completeness.current.nutrition.recordedDays).toBe(1);
-  expect(weeklyComparison.completeness.current.nutrition.expectedDays).toBe(3);
+  expect(weeklyComparison.completeness.current.nutrition.expectedDays).toBe(weeklyElapsedDays);
   expectNoNonFinite(weeklyComparison);
 
   const monthly = await historyComparison(request, userA.token, "month", "2026-09-19");
@@ -429,7 +475,7 @@ test("real staging History acceptance", async ({ page, request }) => {
   expect(dailyAi2.body.data.insight.generatedAt).toBe(dailyAi1.body.data.insight.generatedAt);
   expect(dailyAi2.body.data.insight.content.text).toBe(dailyAi1.body.data.insight.content.text);
 
-  const weekAi1 = await insight(request, userA.token, "WEEK", "2026-09-16");
+  const weekAi1 = await insight(request, userA.token, "WEEK", weeklyReferenceDate);
   expect(weekAi1.response.status()).toBe(200);
   expect(weekAi1.body.data.insight.generatedBy).toBe("AI");
   expect(weekAi1.body.data.insight.cacheStatus).toBe("MISS");
@@ -456,14 +502,14 @@ test("real staging History acceptance", async ({ page, request }) => {
 
   const periodMutation = await apiJson(request, "post", "/activity", {
     token: userA.token,
-    data: { type: "WALKING", durationMinutes: 20, loggedAt: "2026-09-15T10:00:00.000Z" },
+    data: { type: "WALKING", durationMinutes: 20, loggedAt: fixtureTimestamp(weeklyCurrentStart, "11:00:00") },
   });
   expect(periodMutation.response.status()).toBe(201);
   await expectFreshAiAfterMutation(
     request,
     userA.token,
     "WEEK",
-    "2026-09-16",
+    weeklyReferenceDate,
     weekAi1.body.data.insight.generatedAt,
   );
   await expectFreshAiAfterMutation(
@@ -496,7 +542,7 @@ test("real staging History acceptance", async ({ page, request }) => {
   });
   expect(crossWeight.response.status()).toBe(404);
 
-  const bComparison = await historyComparison(request, userB.token, "week", "2026-09-16");
+  const bComparison = await historyComparison(request, userB.token, "week", weeklyReferenceDate);
   expect(bComparison.response.status()).toBe(200);
   expect(bComparison.body.data.comparison.metrics.water.totalMl.current.state).toBe("NO_RECORD");
 
@@ -582,7 +628,7 @@ test("real staging History acceptance", async ({ page, request }) => {
   await page.unroute("**/api/history/insight");
 
   await page.getByRole("button", { name: "Haftalık" }).click();
-  await dateInput.fill("2026-09-16");
+  await dateInput.fill(weeklyReferenceDate);
   await expect(page.getByText("Dönem karşılaştırması", { exact: true })).toBeVisible();
   await expect(page.getByText(/karşılaştırma sınırlı olabilir/)).toBeVisible();
 
@@ -627,7 +673,7 @@ test("real staging History acceptance", async ({ page, request }) => {
   await expect(shareDialog.getByRole("checkbox", { name: /Öğün isimleri/ })).not.toBeChecked();
   await expect(shareDialog.getByRole("checkbox", { name: /^Uyku/ })).not.toBeChecked();
   await expect(shareDialog.getByRole("checkbox", { name: /^Kilo/ })).not.toBeChecked();
-  await expect(shareDialog.getByRole("checkbox", { name: /^Değerlendirme$/ })).not.toBeChecked();
+  await expect(shareDialog.getByRole("checkbox", { name: /^Değerlendirme/ })).not.toBeChecked();
   await expect(shareDialog.getByText(privateMeal)).toHaveCount(0);
 
   expect(await page.evaluate(
@@ -654,7 +700,7 @@ test("real staging History acceptance", async ({ page, request }) => {
   await secondDialog.getByRole("checkbox", { name: /Öğün isimleri/ }).check();
   await secondDialog.getByRole("checkbox", { name: /^Uyku/ }).check();
   await secondDialog.getByRole("checkbox", { name: /^Kilo/ }).check();
-  await secondDialog.getByRole("checkbox", { name: /^Değerlendirme$/ }).check();
+  await secondDialog.getByRole("checkbox", { name: /^Değerlendirme/ }).check();
   await expect(secondDialog.getByText(privateMeal)).toBeVisible();
   await page.evaluate(() => { window.__historyCanvasText = []; });
   await secondDialog.getByRole("button", { name: "Paylaş", exact: true }).click();
