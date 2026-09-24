@@ -3,6 +3,7 @@ import type {
   HistoryShareVisualCard,
   HistoryShareVisualTone,
 } from "@/application/history/history-share";
+import { formatHistoryShareText } from "@/application/history/history-share-text";
 import {
   buildHistoryShareScene,
   distributeVerticalSpace,
@@ -25,7 +26,6 @@ const HEIGHT = HISTORY_SHARE_EXPORT_SIZE.height;
 const OUTER = 48;
 const SHEET = 54;
 const FOOTER_HEIGHT = 106;
-const VISUAL_CAPTION_MAX_CHARACTERS = 140;
 const FONT = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 
 const TONE: Record<HistoryShareVisualTone, { fill: string; accent: string; soft: string }> = {
@@ -619,33 +619,7 @@ export function createHistoryShareCanvas(payload: HistorySharePayload): HTMLCanv
   return canvas;
 }
 
-export function historyPayloadText(payload: HistorySharePayload): string {
-  const heading =
-    payload.kind === "comparison"
-      ? `${payload.periodLabel} Diewish ${
-          payload.scope === "CUSTOM"
-            ? "özel"
-            : payload.scope === "WEEK"
-              ? "haftalık"
-              : "aylık"
-        } karşılaştırmam 🌿`
-      : payload.scope === "DAY"
-        ? `${payload.periodLabel} Diewish gün özetim 🌿`
-        : payload.scope === "WEEK"
-          ? `${payload.periodLabel} Diewish hafta özetim 🌿`
-          : `${payload.periodLabel} Diewish ay özetim 🌿`;
-
-  const lines = [heading, ""];
-  if (payload.comparisonLabel) lines.push(payload.comparisonLabel, "");
-  for (const section of payload.sections) {
-    lines.push(section.title);
-    for (const line of section.lines) lines.push(line);
-    lines.push("");
-  }
-  if (payload.aiInsight) lines.push("Değerlendirme", payload.aiInsight, "");
-  lines.push("Diewish ile ilerlememi takip ediyorum.");
-  return lines.join("\n").trim();
-}
+export const historyPayloadText = formatHistoryShareText;
 
 function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
   return new Promise((resolve, reject) => {
@@ -676,30 +650,24 @@ function blobData(blob: Blob): Promise<string> {
   });
 }
 
-export function normalizeHistoryVisualCaption(caption?: string | null): string {
-  const normalized = (caption ?? "").replace(/\s+/g, " ").trim();
-  return Array.from(normalized).slice(0, VISUAL_CAPTION_MAX_CHARACTERS).join("").trim();
-}
-
 export function buildHistoryWebShareData(
   payload: HistorySharePayload,
   file: File,
-  caption?: string | null,
 ): ShareData {
-  const text = normalizeHistoryVisualCaption(caption);
-  return text
-    ? { title: payload.title, text, files: [file] }
-    : { title: payload.title, files: [file] };
+  return {
+    title: payload.title,
+    text: formatHistoryShareText(payload),
+    files: [file],
+  };
 }
 
-/** Shares an already-rendered PNG. Visual text is opt-in and short by contract. */
+/** Shares an already-rendered PNG with the canonical professional History text. */
 export async function shareHistoryPngBlob(
   payload: HistorySharePayload,
   blob: Blob,
-  caption?: string | null,
 ): Promise<HistoryShareResult> {
   const filename = `Diewish-gecmisim-${payload.scope.toLowerCase()}.png`;
-  const text = normalizeHistoryVisualCaption(caption);
+  const text = formatHistoryShareText(payload);
   const nativeShare = nativeBridge();
 
   if (nativeShare?.isAvailable()) {
@@ -711,7 +679,7 @@ export async function shareHistoryPngBlob(
 
   try {
     if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
-      await navigator.share(buildHistoryWebShareData(payload, file, text));
+      await navigator.share(buildHistoryWebShareData(payload, file));
       return "shared";
     }
   } catch (error) {
@@ -730,15 +698,14 @@ export async function shareHistoryPngBlob(
 
 export async function shareHistoryVisual(
   payload: HistorySharePayload,
-  caption?: string | null,
 ): Promise<HistoryShareResult> {
   const canvas = createHistoryShareCanvas(payload);
   const blob = await canvasToBlob(canvas);
-  return shareHistoryPngBlob(payload, blob, caption);
+  return shareHistoryPngBlob(payload, blob);
 }
 
 export async function shareHistoryText(payload: HistorySharePayload): Promise<HistoryShareResult> {
-  const text = historyPayloadText(payload);
+  const text = formatHistoryShareText(payload);
   const nativeShare = nativeBridge();
 
   if (nativeShare?.isAvailable()) {
@@ -760,10 +727,14 @@ export async function shareHistoryText(payload: HistorySharePayload): Promise<Hi
   return "copied";
 }
 
+export async function copyHistoryText(payload: HistorySharePayload): Promise<HistoryShareResult> {
+  await navigator.clipboard.writeText(formatHistoryShareText(payload));
+  return "copied";
+}
+
 /** Backward-compatible visual share entry point. */
 export async function shareHistoryPayload(
   payload: HistorySharePayload,
-  caption?: string | null,
 ): Promise<HistoryShareResult> {
-  return shareHistoryVisual(payload, caption);
+  return shareHistoryVisual(payload);
 }

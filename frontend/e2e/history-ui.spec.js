@@ -546,9 +546,20 @@ test("History daily/period UI keeps data visible when AI fails and share default
     "true",
   );
   await expect(dialog.getByText("Yazı önizleme", { exact: true })).toBeVisible();
-  await expect(dialog.locator("pre")).toContainText("650 kcal");
+  await expect(dialog.locator("pre")).toContainText("Toplam enerji: 650 kcal");
   await expect(dialog.locator("pre")).not.toContainText("Geçmiş test öğünü");
   await expect(dialog.locator("pre")).not.toContainText("69,8 kg");
+  await page.evaluate(() => {
+    window.__historyCopied = null;
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: async (value) => { window.__historyCopied = value; } },
+    });
+  });
+  const previewText = await dialog.locator("pre").innerText();
+  await dialog.getByRole("button", { name: "Kopyala" }).click();
+  await expect(page.getByText("Paylaşım metni panoya kopyalandı.")).toBeVisible();
+  expect(await page.evaluate(() => window.__historyCopied)).toBe(previewText);
   await dialog.getByRole("button", { name: "Yazıyı Paylaş" }).click();
   await expect(dialog).toHaveCount(0);
   shares = await waitForHistoryShareCount(page, 2);
@@ -600,7 +611,9 @@ test("History daily/period UI keeps data visible when AI fails and share default
   const nativeVisual = await waitForNativeHistoryVisual(page);
   expect(nativeVisual.base64Length).toBeGreaterThan(100);
   expect(nativeVisual.filename).toMatch(/\.png$/);
-  expect(nativeVisual.text).toBe("");
+  expect(nativeVisual.text).toContain("Diewish Gün Özetim 🌿");
+  expect(nativeVisual.text).toContain("Toplam enerji: 650 kcal");
+  expect(nativeVisual.text).not.toContain("Geçmiş test öğünü");
   expect(nativeVisual.text).not.toContain("History Browser User");
 
   await page.getByRole("button", { name: "Günü paylaş" }).click();
@@ -670,7 +683,7 @@ test("History daily/period UI keeps data visible when AI fails and share default
   const weeklyComparisonVisual = await waitForNativeHistoryVisual(page);
   expect(weeklyComparisonVisual.base64Length).toBeGreaterThan(100);
   expect(weeklyComparisonVisual.filename).toMatch(/\.png$/);
-  expect(weeklyComparisonVisual.text).toBe("");
+  expect(weeklyComparisonVisual.text).toContain("Diewish Haftalık Karşılaştırmam 🌿");
   await page.evaluate(() => {
     delete window.DiewishShare;
   });
@@ -711,8 +724,8 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await page.getByRole("button", { name: "Haftayı paylaş" }).click();
   dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
   await dialog.getByRole("button", { name: "Yazı olarak paylaş" }).click();
-  await expect(dialog.locator("pre")).toContainText("Diewish hafta özetim");
-  await expect(dialog.locator("pre")).toContainText("Ortalama Kalori: 1.800 kcal");
+  await expect(dialog.locator("pre")).toContainText("Diewish Hafta Özetim");
+  await expect(dialog.locator("pre")).toContainText("Günlük ortalama enerji: 1.800 kcal");
   await expect(dialog.locator("pre")).not.toContainText("Geçen hafta");
   await expect(dialog.locator("pre")).not.toContainText("Fark:");
   await dialog.getByRole("button", { name: "Kapat" }).click();
@@ -756,8 +769,8 @@ test("History daily/period UI keeps data visible when AI fails and share default
   await page.getByRole("button", { name: "Ayı paylaş" }).click();
   dialog = page.getByRole("dialog", { name: "Geçmiş paylaşım önizlemesi" });
   await dialog.getByRole("button", { name: "Yazı olarak paylaş" }).click();
-  await expect(dialog.locator("pre")).toContainText("Diewish ay özetim");
-  await expect(dialog.locator("pre")).toContainText("Ortalama Kalori: 1.800 kcal");
+  await expect(dialog.locator("pre")).toContainText("Diewish Ay Özetim");
+  await expect(dialog.locator("pre")).toContainText("Günlük ortalama enerji: 1.800 kcal");
   await expect(dialog.locator("pre")).not.toContainText("Geçen ay");
   await expect(dialog.locator("pre")).not.toContainText("Fark:");
   await dialog.getByRole("button", { name: "Kapat" }).click();

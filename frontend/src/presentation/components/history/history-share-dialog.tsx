@@ -1,18 +1,18 @@
 "use client";
 
 import * as React from "react";
-import { ArrowLeft, FileText, Image as ImageIcon, Share2, X } from "lucide-react";
+import { ArrowLeft, Copy, FileText, Image as ImageIcon, Share2, X } from "lucide-react";
 import { toast } from "sonner";
 
 import {
   DEFAULT_HISTORY_SHARE_OPTIONS,
-  HISTORY_VISUAL_SHARE_CAPTION,
   type HistoryShareOptions,
   type HistorySharePayload,
 } from "@/application/history/history-share";
+import { formatHistoryShareText } from "@/application/history/history-share-text";
 import { Button } from "@/presentation/components/ui/button";
 import { cn } from "@/shared/lib/utils";
-import { historyPayloadText, shareHistoryText } from "./history-share-card";
+import { copyHistoryText, shareHistoryText } from "./history-share-card";
 import { HistoryShareDom } from "./history-share-dom";
 import { shareHistoryDomVisual } from "./history-share-dom-export";
 
@@ -54,7 +54,6 @@ export function HistoryShareDialog({ open, onClose, buildPayload }: HistoryShare
   const [options, setOptions] = React.useState<HistoryShareOptions>(DEFAULT_HISTORY_SHARE_OPTIONS);
   const [mode, setMode] = React.useState<ShareMode>("visual");
   const [sharing, setSharing] = React.useState(false);
-  const [visualCaptionEnabled, setVisualCaptionEnabled] = React.useState(false);
   const [visualPreviewOpen, setVisualPreviewOpen] = React.useState(false);
   const captureRef = React.useRef<HTMLDivElement>(null);
 
@@ -62,13 +61,12 @@ export function HistoryShareDialog({ open, onClose, buildPayload }: HistoryShare
     if (open) {
       setOptions(DEFAULT_HISTORY_SHARE_OPTIONS);
       setMode("visual");
-      setVisualCaptionEnabled(false);
       setVisualPreviewOpen(false);
     }
   }, [open]);
 
   const payload = React.useMemo(() => buildPayload(options), [buildPayload, options]);
-  const textPreview = React.useMemo(() => historyPayloadText(payload), [payload]);
+  const textPreview = React.useMemo(() => formatHistoryShareText(payload), [payload]);
 
   if (!open) return null;
 
@@ -89,15 +87,24 @@ export function HistoryShareDialog({ open, onClose, buildPayload }: HistoryShare
     }
   };
 
+  const copyText = async () => {
+    if (sharing || empty) return;
+    setSharing(true);
+    try {
+      await copyHistoryText(payload);
+      toast.success("Paylaşım metni panoya kopyalandı.");
+    } catch {
+      toast.error("Paylaşım metni kopyalanamadı. Lütfen tekrar dene.");
+    } finally {
+      setSharing(false);
+    }
+  };
+
   const shareVisual = async () => {
     if (sharing || empty || !captureRef.current) return;
     setSharing(true);
     try {
-      const result = await shareHistoryDomVisual(
-        captureRef.current,
-        payload,
-        visualCaptionEnabled ? HISTORY_VISUAL_SHARE_CAPTION : null,
-      );
+      const result = await shareHistoryDomVisual(captureRef.current, payload);
       if (result === "downloaded") toast.success("Paylaşım görseli indirildi.");
       if (result === "shared") onClose();
     } catch {
@@ -196,24 +203,6 @@ export function HistoryShareDialog({ open, onClose, buildPayload }: HistoryShare
           </button>
         </div>
 
-        {mode === "visual" && (
-          <label className="mt-4 flex cursor-pointer items-center justify-between gap-4 rounded-2xl border border-border p-3">
-            <span>
-              <span className="block text-sm font-medium">Paylaşım mesajı ekle</span>
-              <span className="block text-xs text-muted-foreground">
-                Görselin yanında yalnız kısa bir Diewish mesajı paylaşılır. Varsayılan olarak
-                kapalıdır.
-              </span>
-            </span>
-            <input
-              type="checkbox"
-              checked={visualCaptionEnabled}
-              onChange={(event) => setVisualCaptionEnabled(event.target.checked)}
-              className="size-5 accent-primary"
-            />
-          </label>
-        )}
-
         <div className="mt-5 space-y-2">
           {OPTION_ROWS.map((row) => (
             <label
@@ -262,13 +251,25 @@ export function HistoryShareDialog({ open, onClose, buildPayload }: HistoryShare
           )}
         </div>
 
-        <div className="mt-5 flex gap-3">
-          <Button type="button" variant="outline" className="flex-1" onClick={onClose}>
+        <div className="mt-5 grid grid-cols-2 gap-3">
+          <Button type="button" variant="outline" onClick={onClose}>
             Vazgeç
           </Button>
+          {mode === "text" && (
+            <Button
+              type="button"
+              variant="outline"
+              isLoading={sharing}
+              disabled={empty}
+              onClick={() => void copyText()}
+            >
+              {!sharing && <Copy aria-hidden="true" />}
+              Kopyala
+            </Button>
+          )}
           <Button
             type="button"
-            className="flex-1"
+            className={mode === "text" ? "col-span-2" : undefined}
             isLoading={sharing}
             disabled={empty}
             onClick={() => {

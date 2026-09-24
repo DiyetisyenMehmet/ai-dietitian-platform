@@ -77,9 +77,6 @@ export const DEFAULT_HISTORY_SHARE_OPTIONS: HistoryShareOptions = {
   includeAiInsight: false,
 };
 
-export const HISTORY_VISUAL_SHARE_CAPTION =
-  "Diewish ile ilerlememi takip ediyorum. Küçük adımlar, sürdürülebilir değişimlerin başlangıcıdır. 🌿";
-
 export const HISTORY_MOTIVATION_MAX_CHARACTERS = 190;
 
 const MOTIVATION_COPY = {
@@ -177,6 +174,14 @@ function usable(observed: ObservedNumber): observed is ObservedNumber & { value:
     (observed.state === "KNOWN_ZERO" ||
       observed.state === "KNOWN_VALUE" ||
       observed.state === "PARTIAL_VALUE")
+  );
+}
+
+function exactUsable(observed: ObservedNumber): observed is ObservedNumber & { value: number } {
+  return (
+    observed.value !== null &&
+    Number.isFinite(observed.value) &&
+    (observed.state === "KNOWN_ZERO" || observed.state === "KNOWN_VALUE")
   );
 }
 
@@ -314,14 +319,30 @@ export function buildDailyHistorySharePayload(
   if (options.includeWater && history.water.sourceStatus === "OK") {
     const water = waterValue(history.water.totalMl);
     if (water) {
+      const lines = [`Kaydedilen su: ${water}`];
+      if (
+        history.water.historicalGoalComparisonAvailable &&
+        exactUsable(history.water.currentGoalMl) &&
+        history.water.currentGoalMl.value > 0
+      ) {
+        const goal = `${numberText(history.water.currentGoalMl.value)} ml`;
+        lines.push(`Günlük hedef: ${goal}`);
+        if (exactUsable(history.water.totalMl)) {
+          const completion = Math.round(
+            (history.water.totalMl.value / history.water.currentGoalMl.value) * 100,
+          );
+          lines.push(`Hedef tamamlanma: %${numberText(completion)}`);
+        }
+      }
       visualCards.push({ title: "Su", tone: "water", layout: "summary", value: water });
-      sections.push({ title: "Su", lines: [`Kaydedilen su: ${water}`] });
+      sections.push({ title: "Su", lines });
     }
   }
 
   if (options.includeActivity && history.activity.sourceStatus === "OK") {
     const duration = durationValue(history.activity.totalActiveMinutes);
     const distance = value(history.activity.totalDistanceKm, " km", 1);
+    const activeEnergy = value(history.activity.totalCaloriesBurned, " kcal");
     const lines: string[] = [];
     if (duration) {
       visualCards.push({
@@ -333,6 +354,7 @@ export function buildDailyHistorySharePayload(
       lines.push(`Hareket: ${duration}`);
     }
     if (distance) lines.push(`Mesafe: ${distance}`);
+    if (activeEnergy) lines.push(`Aktif enerji: ${activeEnergy}`);
     if (history.activity.entries.length > 0)
       lines.push(`Aktivite kaydı: ${history.activity.entries.length}`);
     if (lines.length > 0) sections.push({ title: "Hareket", lines });
@@ -398,6 +420,33 @@ function summaryLine(card: HistoryShareVisualCard) {
   return `${card.title}: ${card.value ?? "—"}${note}`;
 }
 
+function appendSectionLine(
+  sections: HistoryShareSection[],
+  sectionTitle: string,
+  line: string | null,
+  prepend = false,
+): void {
+  if (!line) return;
+  const existing = sections.find((section) => section.title === sectionTitle);
+  if (existing) {
+    if (prepend) existing.lines.unshift(line);
+    else existing.lines.push(line);
+  } else {
+    sections.push({ title: sectionTitle, lines: [line] });
+  }
+}
+
+function periodMetricLine(
+  label: string,
+  observed: ObservedNumber,
+  format: ComparisonValueFormat,
+  unit = "",
+  digits = 0,
+): string | null {
+  const formatted = comparisonValueText(observed, format, unit, digits);
+  return formatted === "—" ? null : `${label}: ${formatted}`;
+}
+
 export function buildPeriodHistorySharePayload(
   comparison: HistoryComparisonResponse,
   options: HistoryShareOptions,
@@ -441,6 +490,28 @@ export function buildPeriodHistorySharePayload(
         1,
       ),
     );
+    appendSectionLine(
+      sections,
+      "Beslenme",
+      periodMetricLine(
+        "Ortalama Karbonhidrat",
+        comparison.metrics.nutrition.averageCarbsGPerQuantifiedDay.current,
+        "number",
+        " g",
+        1,
+      ),
+    );
+    appendSectionLine(
+      sections,
+      "Beslenme",
+      periodMetricLine(
+        "Ortalama Yağ",
+        comparison.metrics.nutrition.averageFatGPerQuantifiedDay.current,
+        "number",
+        " g",
+        1,
+      ),
+    );
   }
 
   if (options.includeWater) {
@@ -455,6 +526,12 @@ export function buildPeriodHistorySharePayload(
         coverageText(current.water),
       ),
     );
+    appendSectionLine(
+      sections,
+      "Su",
+      periodMetricLine("Toplam Su", comparison.metrics.water.totalMl.current, "water"),
+      true,
+    );
   }
 
   if (options.includeActivity) {
@@ -467,6 +544,27 @@ export function buildPeriodHistorySharePayload(
         comparison.metrics.activity.totalActiveMinutes.current,
         "duration",
         coverageText(current.activity),
+      ),
+    );
+    appendSectionLine(
+      sections,
+      "Hareket",
+      periodMetricLine(
+        "Toplam Mesafe",
+        comparison.metrics.activity.totalDistanceKm.current,
+        "number",
+        " km",
+        1,
+      ),
+    );
+    appendSectionLine(
+      sections,
+      "Hareket",
+      periodMetricLine(
+        "Aktif Enerji",
+        comparison.metrics.activity.totalCaloriesBurned.current,
+        "number",
+        " kcal",
       ),
     );
   }
