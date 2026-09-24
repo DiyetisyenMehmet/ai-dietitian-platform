@@ -48,6 +48,7 @@ jobs:
           --health-retries 10
     env:
       NODE_ENV: test
+      DIEWISH_ENVIRONMENT: test
       DATABASE_URL: postgresql://diewish:diewish@localhost:5432/diewish_test?schema=public
       JWT_ACCESS_SECRET: integration-access-secret-012345678901234567890123456789
       JWT_REFRESH_SECRET: integration-refresh-secret-01234567890123456789012345678
@@ -201,6 +202,7 @@ jobs:
           --health-retries 10
     env:
       NODE_ENV: test
+      DIEWISH_ENVIRONMENT: test
       PORT: 4000
       DATABASE_URL: postgresql://diewish:diewish@127.0.0.1:5432/diewish_e2e?schema=public
       JWT_ACCESS_SECRET: browser-e2e-access-secret-012345678901234567890123456789
@@ -276,7 +278,7 @@ jobs:
           exit 1
       - name: Run browser smoke
         working-directory: frontend
-        run: npx playwright test e2e/onboarding-flow.spec.js e2e/auth-entry-points.spec.js e2e/history-data.spec.ts e2e/history-ui.spec.js --workers=1 --reporter=line
+        run: npx playwright test e2e/onboarding-flow.spec.js e2e/auth-entry-points.spec.js e2e/history-data.spec.ts e2e/history-ui.spec.js e2e/admin-foundation.spec.js --workers=1 --reporter=line
       - name: Print service logs on failure
         if: failure()
         run: |

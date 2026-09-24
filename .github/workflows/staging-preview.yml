@@ -37,7 +37,7 @@ jobs:
     # [stage4-release] may start this workflow immediately, but no staging
     # resource is touched until the exact-SHA Hardening + Staging Config gates
     # below are both completed successfully.
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (contains(github.event.head_commit.message, '[deploy-staging]') || contains(github.event.head_commit.message, '[stage4-release]') || contains(github.event.head_commit.message, '[stage4-ai-share-release]'))) }}
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (contains(github.event.head_commit.message, '[deploy-staging]') || contains(github.event.head_commit.message, '[stage4-release]') || contains(github.event.head_commit.message, '[stage4-ai-share-release]') || contains(github.event.head_commit.message, '[admin-phase1-release]'))) }}
     name: Deploy isolated staging
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -47,7 +47,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Wait for exact-SHA pre-deploy CI gates
-        if: ${{ github.event_name == 'push' && (contains(github.event.head_commit.message, '[stage4-release]') || contains(github.event.head_commit.message, '[stage4-ai-share-release]')) }}
+        if: ${{ github.event_name == 'push' && (contains(github.event.head_commit.message, '[stage4-release]') || contains(github.event.head_commit.message, '[stage4-ai-share-release]') || contains(github.event.head_commit.message, '[admin-phase1-release]')) }}
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -173,7 +173,7 @@ jobs:
             --timeout 120 \
             --min 0 \
             --max 2 \
-            --update-env-vars "API_PREFIX=/api,TRUST_PROXY_HOPS=1,RATE_LIMIT_WINDOW_MS=60000,RATE_LIMIT_MAX=600,ENABLE_API_DOCS=false,LOG_LEVEL=info,JWT_ISSUER=diewish-staging,REFRESH_COOKIE_NAME=diewish_staging_refresh,REFRESH_COOKIE_SAME_SITE=lax,STORAGE_PROVIDER=local,AI_PROVIDER=vertex,GOOGLE_CLOUD_PROJECT=${PROJECT_ID},FIREBASE_MESSAGING_SENDER_ID=${PROJECT_NUMBER},VERTEX_AI_LOCATION=global,VERTEX_AI_MODEL=gemini-3.5-flash,USDA_FDC_API_KEY=DEMO_KEY,OPEN_FOOD_FACTS_USER_AGENT=Diewish-Staging/0.1" \
+            --update-env-vars "API_PREFIX=/api,DIEWISH_ENVIRONMENT=staging,DIEWISH_APPLICATION_SHA=${GITHUB_SHA},TRUST_PROXY_HOPS=1,RATE_LIMIT_WINDOW_MS=60000,RATE_LIMIT_MAX=600,ENABLE_API_DOCS=false,LOG_LEVEL=info,JWT_ISSUER=diewish-staging,REFRESH_COOKIE_NAME=diewish_staging_refresh,REFRESH_COOKIE_SAME_SITE=lax,STORAGE_PROVIDER=local,AI_PROVIDER=vertex,GOOGLE_CLOUD_PROJECT=${PROJECT_ID},FIREBASE_MESSAGING_SENDER_ID=${PROJECT_NUMBER},VERTEX_AI_LOCATION=global,VERTEX_AI_MODEL=gemini-3.5-flash,USDA_FDC_API_KEY=DEMO_KEY,OPEN_FOOD_FACTS_USER_AGENT=Diewish-Staging/0.1" \
             --set-secrets "DATABASE_URL=${DATABASE_SECRET_NAME}:latest,JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET_NAME}:latest,JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET_NAME}:latest" \
             --quiet
 
