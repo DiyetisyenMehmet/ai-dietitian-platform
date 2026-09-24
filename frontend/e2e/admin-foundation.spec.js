@@ -91,3 +91,43 @@ test("auth loading never flashes admin content", async ({ page }) => {
   release();
   await expect(page).toHaveURL(/\/login$/, { timeout: 10_000 });
 });
+
+
+test("admin staging hostname is isolated from normal app routes", async ({ request }) => {
+  const headers = { "x-forwarded-host": "admin-staging.diewish.com" };
+
+  const root = await request.get(`${WEB_BASE_URL}/`, {
+    headers,
+    maxRedirects: 0,
+  });
+  expect([307, 308]).toContain(root.status());
+  expect(new URL(root.headers().location).pathname).toBe("/admin");
+
+  const login = await request.get(`${WEB_BASE_URL}/login`, {
+    headers,
+    maxRedirects: 0,
+  });
+  expect([307, 308]).toContain(login.status());
+  expect(new URL(login.headers().location).pathname).toBe("/admin/login");
+
+  const dashboard = await request.get(`${WEB_BASE_URL}/dashboard`, {
+    headers,
+    maxRedirects: 0,
+  });
+  expect([307, 308]).toContain(dashboard.status());
+  expect(new URL(dashboard.headers().location).pathname).toBe("/admin");
+
+  const adminLogin = await request.get(`${WEB_BASE_URL}/admin/login`, {
+    headers,
+    maxRedirects: 0,
+  });
+  expect(adminLogin.status()).toBe(200);
+});
+
+test("production admin hostname fails closed", async ({ request }) => {
+  const response = await request.get(`${WEB_BASE_URL}/admin`, {
+    headers: { "x-forwarded-host": "admin.diewish.com" },
+    maxRedirects: 0,
+  });
+  expect(response.status()).toBe(404);
+});

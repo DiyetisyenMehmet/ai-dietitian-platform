@@ -31,6 +31,7 @@ env:
   JWT_REFRESH_SECRET_NAME: diewish-staging-jwt-refresh
   DIEWISH_STAGING_SMS_REGIONS: TR
   CUSTOM_FRONTEND_URL: https://staging.diewish.com
+  ADMIN_STAGING_URL: https://admin-staging.diewish.com
 
 jobs:
   deploy-staging:
@@ -239,7 +240,7 @@ jobs:
           gcloud run services update "$BACKEND_SERVICE" \
             --project "$PROJECT_ID" \
             --region "$REGION" \
-            --update-env-vars "^|^CORS_ORIGIN=${FRONTEND_URL},${CANONICAL_FRONTEND_URL},${CUSTOM_FRONTEND_URL}|APP_WEB_URL=${CUSTOM_FRONTEND_URL}|FIREBASE_WEB_API_KEY=${FIREBASE_WEB_API_KEY}|FIREBASE_AUTH_DOMAIN=${FIREBASE_AUTH_DOMAIN}|FIREBASE_WEB_APP_ID=${FIREBASE_WEB_APP_ID}|FIREBASE_MESSAGING_SENDER_ID=${PROJECT_NUMBER}" \
+            --update-env-vars "^|^CORS_ORIGIN=${FRONTEND_URL},${CANONICAL_FRONTEND_URL},${CUSTOM_FRONTEND_URL},${ADMIN_STAGING_URL}|APP_WEB_URL=${CUSTOM_FRONTEND_URL}|FIREBASE_WEB_API_KEY=${FIREBASE_WEB_API_KEY}|FIREBASE_AUTH_DOMAIN=${FIREBASE_AUTH_DOMAIN}|FIREBASE_WEB_APP_ID=${FIREBASE_WEB_APP_ID}|FIREBASE_MESSAGING_SENDER_ID=${PROJECT_NUMBER}" \
             --quiet
 
       - name: Verify staging health and Authentication runtime
@@ -464,6 +465,7 @@ jobs:
             echo "- Frontend status URL: ${FRONTEND_URL}"
             echo "- Frontend canonical URL: ${CANONICAL_FRONTEND_URL}"
             echo "- Frontend custom URL: ${CUSTOM_FRONTEND_URL}"
+            echo "- Admin staging URL: ${ADMIN_STAGING_URL} (custom-domain mapping/DNS required)"
             echo "- Backend: ${BACKEND_URL}"
             echo "- Browser API: same-origin ${FRONTEND_URL}/api"
             echo "- Authentication: Google + phone enabled; anonymous disabled; Cloud Run and custom staging origins authorized"
