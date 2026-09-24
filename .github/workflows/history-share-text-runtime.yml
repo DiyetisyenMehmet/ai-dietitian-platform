@@ -1,0 +1,97 @@
+name: History Share Text Runtime
+
+on:
+  push:
+    branches:
+      - feature/staging-preview
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: diewish-history-share-text-runtime
+  cancel-in-progress: false
+
+env:
+  APPLICATION_SHA: 7bf1fea07538551a9491f53d0c5f3543a2e08c1c
+  PROJECT_ID: project-a2e260c1-839d-4f1d-b90
+  REGION: europe-west1
+  WIF_PROVIDER: projects/730419163638/locations/global/workloadIdentityPools/github-actions/providers/diewish-staging
+  DEPLOY_SERVICE_ACCOUNT: diewish-staging-deployer@project-a2e260c1-839d-4f1d-b90.iam.gserviceaccount.com
+  BACKEND_SERVICE: diewish-backend-staging
+  FRONTEND_SERVICE: diewish-frontend-staging
+  STAGING_WEB_URL: https://staging.diewish.com
+
+jobs:
+  runtime:
+    if: ${{ contains(github.event.head_commit.message, '[history-share-text-runtime]') }}
+    name: Validate professional History share text on staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate staging-only contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$BACKEND_SERVICE" == *-staging ]]
+          [[ "$FRONTEND_SERVICE" == *-staging ]]
+          [[ "$DEPLOY_SERVICE_ACCOUNT" == diewish-staging-deployer@* ]]
+          [[ "$WIF_PROVIDER" == *diewish-staging* ]]
+          [[ "$STAGING_WEB_URL" == "https://staging.diewish.com" ]]
+
+      - name: Authenticate to isolated staging Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Verify deployed application SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected_suffix=":${APPLICATION_SHA}"
+          for attempt in {1..120}; do
+            backend_image="$(gcloud run services describe "$BACKEND_SERVICE" --project "$PROJECT_ID" --region "$REGION" --format='value(spec.template.spec.containers[0].image)' 2>/dev/null || true)"
+            frontend_image="$(gcloud run services describe "$FRONTEND_SERVICE" --project "$PROJECT_ID" --region "$REGION" --format='value(spec.template.spec.containers[0].image)' 2>/dev/null || true)"
+            if [[ "$backend_image" == *"$expected_suffix" && "$frontend_image" == *"$expected_suffix" ]]; then
+              echo "APPLICATION_SHA_MATCH=${APPLICATION_SHA}"
+              curl --fail --silent --show-error "${STAGING_WEB_URL}/api/health" >/dev/null
+              curl --fail --silent --show-error "${STAGING_WEB_URL}/history" >/dev/null
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Exact application SHA was not observed on both staging services." >&2
+          exit 1
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run professional History share-text staging acceptance
+        working-directory: frontend
+        env:
+          APPLICATION_SHA: ${{ env.APPLICATION_SHA }}
+          E2E_WEB_BASE_URL: ${{ env.STAGING_WEB_URL }}
+          E2E_API_BASE_URL: ${{ env.STAGING_WEB_URL }}/api
+        run: npx playwright test e2e/staging-history-share-text-runtime.spec.js --workers=1 --reporter=line
