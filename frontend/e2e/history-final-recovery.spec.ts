@@ -4,7 +4,6 @@ import { formatComparisonPeriodDateRange } from "../src/application/history/hist
 import {
   DEFAULT_HISTORY_SHARE_OPTIONS,
   HISTORY_MOTIVATION_MAX_CHARACTERS,
-  HISTORY_VISUAL_SHARE_CAPTION,
   buildComparisonHistorySharePayload,
   buildPeriodHistoryMotivation,
 } from "../src/application/history/history-share";
@@ -14,10 +13,10 @@ import type {
   ObservedNumber,
   PeriodCategoryCompleteness,
 } from "../src/domain/history/types";
+import { formatHistoryShareText } from "../src/application/history/history-share-text";
 import {
   buildHistoryWebShareData,
   historyPayloadText,
-  normalizeHistoryVisualCaption,
 } from "../src/presentation/components/history/history-share-card";
 import { historyShareDomModel } from "../src/presentation/components/history/history-share-dom-model";
 import { buildHistoryShareScene } from "../src/presentation/components/history/history-share-scene";
@@ -143,21 +142,19 @@ function setCurrentCoverage(
   source.completeness.current.sleep = coverage(sleep, expected);
 }
 
-test("visual caption is short, generic and absent from Web Share when disabled", () => {
+test("visual share always carries the canonical privacy-filtered professional text", () => {
   const payload = buildComparisonHistorySharePayload(
     comparison(),
     DEFAULT_HISTORY_SHARE_OPTIONS,
     null,
   );
   const file = {} as File;
-  const off = buildHistoryWebShareData(payload, file, null);
-  const on = buildHistoryWebShareData(payload, file, HISTORY_VISUAL_SHARE_CAPTION);
+  const shareData = buildHistoryWebShareData(payload, file);
 
-  expect(Object.prototype.hasOwnProperty.call(off, "text")).toBe(false);
-  expect(on.text).toBe(HISTORY_VISUAL_SHARE_CAPTION);
-  expect(Array.from(HISTORY_VISUAL_SHARE_CAPTION).length).toBeLessThanOrEqual(140);
-  expect(normalizeHistoryVisualCaption("x".repeat(200))).toHaveLength(140);
-  expect(HISTORY_VISUAL_SHARE_CAPTION).not.toMatch(/kg|kcal|uyku|öğün/i);
+  expect(shareData.text).toBe(formatHistoryShareText(payload));
+  expect(shareData.text).toContain("Diewish Haftalık Karşılaştırmam 🌿");
+  expect(shareData.text).toContain("Diewish ile ilerlememi takip ediyorum. 🌿");
+  expect(shareData.text).not.toMatch(/uyku|kilo/i);
 });
 
 test("motivation covers insufficient, weak, mixed, positive and steady recording rhythms", () => {
@@ -223,10 +220,10 @@ test("text share keeps its privacy-filtered contract and excludes visual-only mo
   );
   const text = historyPayloadText(payload);
 
-  expect(text).toContain("Diewish haftalık karşılaştırmam");
+  expect(text).toBe(formatHistoryShareText(payload));
+  expect(text).toContain("Diewish Haftalık Karşılaştırmam 🌿");
   expect(text).toContain("Ortalama Kalori");
   expect(text).not.toContain(payload.motivation);
-  expect(text).not.toContain(HISTORY_VISUAL_SHARE_CAPTION);
 });
 
 test("weekly and monthly comparison period labels are complete and locale formatted", () => {

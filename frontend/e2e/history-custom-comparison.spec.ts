@@ -7,19 +7,16 @@ import {
 } from "../src/application/history/history-custom-comparison";
 import {
   DEFAULT_HISTORY_SHARE_OPTIONS,
-  HISTORY_VISUAL_SHARE_CAPTION,
   buildComparisonHistorySharePayload,
 } from "../src/application/history/history-share";
+import { formatHistoryShareText } from "../src/application/history/history-share-text";
 import type {
   HistoryComparisonResponse,
   MetricComparison,
   ObservedNumber,
   PeriodCategoryCompleteness,
 } from "../src/domain/history/types";
-import {
-  buildHistoryWebShareData,
-  normalizeHistoryVisualCaption,
-} from "../src/presentation/components/history/history-share-card";
+import { buildHistoryWebShareData } from "../src/presentation/components/history/history-share-card";
 import { historyShareDomModel } from "../src/presentation/components/history/history-share-dom-model";
 import { buildHistoryShareScene } from "../src/presentation/components/history/history-share-scene";
 
@@ -282,20 +279,20 @@ test("single-day custom share keeps complete one-day labels", () => {
   expect(payload.comparisonLabel).toBe("2. dönem: 19 Eylül 2026");
 });
 
-test("custom visual caption remains opt-in, generic and metric-free", () => {
+test("custom image share uses the canonical privacy-filtered professional text", () => {
   const payload = buildComparisonHistorySharePayload(
     customComparison(),
     DEFAULT_HISTORY_SHARE_OPTIONS,
     null,
   );
   const file = {} as File;
-  const off = buildHistoryWebShareData(payload, file, null);
-  const on = buildHistoryWebShareData(payload, file, HISTORY_VISUAL_SHARE_CAPTION);
+  const shareData = buildHistoryWebShareData(payload, file);
 
-  expect(Object.prototype.hasOwnProperty.call(off, "text")).toBe(false);
-  expect(on.text).toBe(HISTORY_VISUAL_SHARE_CAPTION);
-  expect(Array.from(normalizeHistoryVisualCaption(on.text)).length).toBeLessThanOrEqual(140);
-  expect(on.text).not.toMatch(/kcal|kg|uyku|öğün|1\. dönem|2\. dönem/i);
+  expect(shareData.text).toBe(formatHistoryShareText(payload));
+  expect(shareData.text).toContain("Diewish Özel Karşılaştırmam 🌿");
+  expect(shareData.text).toContain("1. dönem");
+  expect(shareData.text).toContain("2. dönem");
+  expect(shareData.text).not.toMatch(/uyku|kilo/i);
 });
 
 test("standard weekly labels remain unchanged after custom support", () => {
