@@ -7,7 +7,7 @@ import type { DiewishRuntimeEnvironment } from "./admin.environment";
 const FORBIDDEN_AUDIT_KEY =
   /(password|passwordhash|token|secret|credential|authorization|cookie|firebase|blood|health|meal|sleep|weight)/i;
 
-export type AdminAuditSnapshot = Record<string, Prisma.InputJsonValue>;
+export type AdminAuditSnapshot = Record<string, Prisma.InputJsonValue | null>;
 
 export interface AdminAuditContext {
   actorAdminId: string;
