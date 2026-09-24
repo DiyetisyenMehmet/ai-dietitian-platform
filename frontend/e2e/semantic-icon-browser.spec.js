@@ -88,45 +88,36 @@ test("semantic Diewish icons keep coach, History and progress meanings distinct"
   test.setTimeout(180_000);
   await onboard(page);
 
-  await page.route("**/api/ai-chat/conversations**", async (route) => {
-    const url = new URL(route.request().url());
-    const base = {
-      id: "semantic-conv",
-      title: "Semantik ikon testi",
-      pinnedAt: null,
-      createdAt: "2026-09-24T09:00:00.000Z",
-      updatedAt: "2026-09-24T09:01:00.000Z",
-    };
-    if (url.pathname.endsWith("/semantic-conv")) {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          success: true,
-          data: {
-            conversation: {
-              ...base,
-              messages: [{
-                id: "assistant-semantic",
-                role: "ASSISTANT",
-                content: "Koç avatarı semantik test yanıtı.",
-                createdAt: "2026-09-24T09:01:00.000Z",
-              }],
-            },
-          },
-        }),
-      });
-      return;
-    }
+  await page.route("**/api/ai-chat/conversations", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ success: true, data: { conversations: [base] } }),
+      body: JSON.stringify({ success: true, data: { conversations: [] } }),
+    });
+  });
+  await page.route("**/api/ai-chat/messages", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        data: {
+          conversationId: "semantic-conv",
+          message: {
+            id: "assistant-semantic",
+            role: "ASSISTANT",
+            content: "Koç avatarı semantik test yanıtı.",
+            createdAt: "2026-09-24T09:01:00.000Z",
+          },
+        },
+      }),
     });
   });
 
   await page.goto(`${WEB_BASE_URL}/ai`);
   await expect(page.getByText("Diewish Koç", { exact: true })).toBeVisible();
+  await page.getByLabel("Mesaj").fill("Semantik ikon testi");
+  await page.getByRole("button", { name: "Gönder" }).click();
   await expect(page.getByText("Koç avatarı semantik test yanıtı.", { exact: true })).toBeVisible();
   await expect(page.locator('img[data-diewish-semantic-icon="coach-avatar"]')).toHaveCount(2);
 
