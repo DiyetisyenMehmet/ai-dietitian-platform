@@ -208,6 +208,8 @@ test("professional History share text is canonical across image, text, copy and 
   await dialog.getByRole("button", { name: "Önizlemeyi Aç" }).click();
   const nativeVisual = page.getByRole("dialog", { name: "Görsel paylaşım önizlemesi" });
   await nativeVisual.getByRole("button", { name: "Paylaş", exact: true }).click();
+  await page.waitForFunction(() => window.__nativeHistoryShare !== null);
+  await expect(nativeVisual).toHaveCount(0);
   const nativeShare = await page.evaluate(() => window.__nativeHistoryShare);
   expect(nativeShare.base64Length).toBeGreaterThan(100);
   expect(nativeShare.filename).toMatch(/\.png$/);
