@@ -57,6 +57,7 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { status, user } = useAuth();
   const consentState = useConsentState();
+  const onAdmin = pathname === "/admin" || pathname.startsWith("/admin/");
 
   React.useEffect(() => {
     authStore.hydrate();
@@ -66,13 +67,14 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
   const onboardingDone = authed && user.onboardingCompleted;
 
   React.useEffect(() => {
-    if (status === "authenticated" && user?.id) {
+    if (!onAdmin && status === "authenticated" && user?.id) {
       void consentStore.hydrate(user.id);
     }
-  }, [status, user?.id]);
+  }, [onAdmin, status, user?.id]);
 
   const consentOwnedByUser = authed && consentState.ownerId === user.id;
   const consentLoading =
+    !onAdmin &&
     authed &&
     (!consentOwnedByUser || consentState.status === "idle" || consentState.status === "loading");
   const consentGranted =
@@ -86,6 +88,7 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
   // not block navigation to account/privacy/data-management screens.
   React.useEffect(() => {
     if (
+      !onAdmin &&
       status === "authenticated" &&
       user?.onboardingCompleted &&
       user.id &&
@@ -94,7 +97,7 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
     ) {
       void hydrateProfileFromBackend(user.id, user.fullName);
     }
-  }, [status, user?.id, user?.onboardingCompleted, user?.fullName, consentGranted]);
+  }, [onAdmin, status, user?.id, user?.onboardingCompleted, user?.fullName, consentGranted]);
 
   React.useEffect(() => {
     if (status === "unauthenticated") {
@@ -112,14 +115,14 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
   if (!onMarketing && status !== "loading" && !consentLoading) {
     if (!authed && !onAuthRoute) {
       redirectTo = "/login";
-    } else if (authed && !onboardingDone) {
+    } else if (!onAdmin && authed && !onboardingDone) {
       // First run: consent must precede any health-data onboarding.
       if (!consentGranted && !onConsent) {
         redirectTo = CONSENT_ROUTE;
       } else if (consentGranted && !onOnboarding) {
         redirectTo = ONBOARDING_ROUTE;
       }
-    } else if (authed && onboardingDone && (onAuthRoute || onOnboarding)) {
+    } else if (!onAdmin && authed && onboardingDone && (onAuthRoute || onOnboarding)) {
       // Established users may visit /consent deliberately to review/re-grant
       // consent, including after a withdrawal or legal-version change.
       redirectTo = APP_HOME;
