@@ -22,7 +22,9 @@ function normalizedEmailHash(email: string): string {
 
 function bootstrapExitCode(error: unknown): number {
   const message = error instanceof Error ? error.message : String(error);
-  if (message.includes("Expected exactly one active staging user")) return 41;
+  if (message.includes("Approved staging user does not exist")) return 51;
+  if (message.includes("Approved staging user is inactive")) return 52;
+  if (message.includes("Approved staging user fingerprint is not unique")) return 53;
   if (message.includes("different staging Super Admin")) return 42;
   if (message.includes("already been consumed")) return 43;
   if (message.includes("missing its required audit event")) return 44;
@@ -45,20 +47,23 @@ async function main(): Promise<void> {
   }
 
   const candidates = await prisma.user.findMany({
-    where: { isActive: true },
     select: { id: true, email: true, role: true, isActive: true },
   });
   const matches = candidates.filter(
     (user) => user.email && normalizedEmailHash(user.email) === expectedHash,
   );
 
-  if (matches.length !== 1) {
-    throw new Error(
-      `Expected exactly one active staging user matching the approved email fingerprint; found ${matches.length}.`,
-    );
+  if (matches.length === 0) {
+    throw new Error("Approved staging user does not exist.");
+  }
+  if (matches.length > 1) {
+    throw new Error("Approved staging user fingerprint is not unique.");
   }
 
   const target = matches[0];
+  if (!target.isActive) {
+    throw new Error("Approved staging user is inactive.");
+  }
 
   const result = await prisma.$transaction(async (tx) => {
     await ensureAdminFoundation(tx);
