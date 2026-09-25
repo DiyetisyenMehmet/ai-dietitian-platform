@@ -8,11 +8,13 @@ import { UserRole } from "@prisma/client";
 import { createApp } from "../app";
 import { prisma } from "../lib/prisma";
 import { signAccessToken } from "../utils/jwt";
+import { hashPassword } from "../utils/password";
 import { buildAuditSnapshot, runAuditedAdminMutation } from "../modules/admin/admin-audit.service";
 import { resolveRuntimeEnvironment } from "../modules/admin/admin.environment";
 import { ADMIN_PERMISSIONS, isAdminPermissionKey } from "../modules/admin/admin.permissions";
 import { resolveAdminAccess } from "../modules/admin/admin-rbac.repository";
 import { bootstrapAdminFoundation } from "../modules/admin/admin.bootstrap";
+import { firebaseAuthProvider } from "../modules/identity/firebase-auth.provider";
 
 async function startServer(): Promise<{ server: Server; baseUrl: string }> {
   const app = createApp();
@@ -253,4 +255,103 @@ test("Phase 1 admin authorization, RBAC and transactional audit", async (t) => {
     );
     assert.equal(await prisma.adminRole.count({ where: { id: rollbackRoleId } }), 0);
   });
+
+  await t.test("Management Center authentication accepts only existing RBAC admins", async () => {
+    const password = "AdminLoginPass123";
+    const passwordHash = await hashPassword(password);
+    const superRole = await prisma.adminRole.findUniqueOrThrow({
+      where: { key: "SUPER_ADMIN" },
+    });
+
+    const admin = await prisma.user.create({
+      data: {
+        email: `admin.login.${crypto.randomUUID()}@example.com`,
+        passwordHash,
+        role: UserRole.ADMIN,
+        isActive: true,
+      },
+    });
+    createdUserIds.push(admin.id);
+    await prisma.adminUserRole.create({
+      data: { userId: admin.id, roleId: superRole.id },
+    });
+
+    const emailLogin = await fetch(`${baseUrl}/api/admin/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: admin.email, password }),
+    });
+    assert.equal(emailLogin.status, 200);
+    assert.match(emailLogin.headers.get("set-cookie") ?? "", /HttpOnly/i);
+
+    const normal = await prisma.user.create({
+      data: {
+        email: `admin.normal.${crypto.randomUUID()}@example.com`,
+        passwordHash,
+        role: UserRole.USER,
+        isActive: true,
+      },
+    });
+    createdUserIds.push(normal.id);
+
+    const normalLogin = await fetch(`${baseUrl}/api/admin/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: normal.email, password }),
+    });
+    assert.equal(normalLogin.status, 401);
+
+    const phoneNumber = "+905551112233";
+    const phoneAdmin = await prisma.user.create({
+      data: {
+        email: "phone.905551112233@phone.diewish.invalid",
+        passwordHash: "external-login-secret",
+        role: UserRole.ADMIN,
+        isActive: true,
+      },
+    });
+    createdUserIds.push(phoneAdmin.id);
+    await prisma.adminUserRole.create({
+      data: { userId: phoneAdmin.id, roleId: superRole.id },
+    });
+
+    const originalVerify = firebaseAuthProvider.verifyIdToken;
+    try {
+      firebaseAuthProvider.verifyIdToken = async () => ({
+        uid: "admin-phone-fixture",
+        email: null,
+        emailVerified: false,
+        phoneNumber,
+        displayName: null,
+        providers: ["phone"],
+      });
+
+      const phoneLogin = await fetch(`${baseUrl}/api/admin/auth/phone`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ idToken: "x".repeat(32) }),
+      });
+      assert.equal(phoneLogin.status, 200);
+
+      const beforeUnknown = await prisma.user.count();
+      firebaseAuthProvider.verifyIdToken = async () => ({
+        uid: "unknown-phone-fixture",
+        email: null,
+        emailVerified: false,
+        phoneNumber: "+905559998877",
+        displayName: null,
+        providers: ["phone"],
+      });
+      const unknownPhone = await fetch(`${baseUrl}/api/admin/auth/phone`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ idToken: "y".repeat(32) }),
+      });
+      assert.equal(unknownPhone.status, 401);
+      assert.equal(await prisma.user.count(), beforeUnknown);
+    } finally {
+      firebaseAuthProvider.verifyIdToken = originalVerify;
+    }
+  });
+
 });

@@ -131,3 +131,18 @@ test("production admin hostname fails closed", async ({ request }) => {
   });
   expect(response.status()).toBe(404);
 });
+
+
+test("admin login uses one blank identifier field for email or phone", async ({ page }) => {
+  await page.goto(`${WEB_BASE_URL}/admin/login`);
+
+  const identifier = page.getByLabel("E-posta veya telefon");
+  await expect(identifier).toBeVisible();
+  await expect(identifier).toHaveValue("");
+  expect(await identifier.getAttribute("placeholder")).toBeNull();
+
+  await identifier.fill("admin@example.com");
+  await page.getByRole("button", { name: "Devam Et" }).click();
+  await expect(page.getByLabel("Şifre")).toBeVisible();
+  await expect(page.getByLabel("E-posta veya telefon")).toHaveCount(0);
+});

@@ -1,3 +1,4 @@
+import type { AuthSession } from "@/domain/auth/types";
 import { apiRequest } from "@/infrastructure/api/http-client";
 
 export type AdminPermission = "admin.access" | "admin.security.read";
@@ -21,6 +22,22 @@ export interface AdminSession {
 }
 
 export const adminClient = {
+  loginWithEmail(email: string, password: string): Promise<AuthSession> {
+    return apiRequest<AuthSession>({
+      path: "/admin/auth/login",
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    });
+  },
+
+  loginWithPhone(idToken: string): Promise<AuthSession> {
+    return apiRequest<AuthSession>({
+      path: "/admin/auth/phone",
+      method: "POST",
+      body: JSON.stringify({ idToken }),
+    });
+  },
+
   getSession(): Promise<AdminSession> {
     return apiRequest<AdminSession>({
       path: "/admin/session",

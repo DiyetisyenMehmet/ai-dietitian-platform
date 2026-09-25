@@ -7,6 +7,7 @@ REGION="europe-west1"
 DEPLOY_SA="diewish-staging-deployer@${PROJECT_ID}.iam.gserviceaccount.com"
 FRONTEND_SERVICE="diewish-frontend-staging"
 CUSTOM_FRONTEND_HOST="${DIEWISH_STAGING_CUSTOM_HOST:-staging.diewish.com}"
+ADMIN_CUSTOM_FRONTEND_HOST="${DIEWISH_ADMIN_STAGING_CUSTOM_HOST:-admin-staging.diewish.com}"
 WEB_APP_DISPLAY_NAME="Diewish Staging Web"
 ANDROID_APP_DISPLAY_NAME="Diewish Staging Android"
 ANDROID_PACKAGE_NAME="com.diewish.app"
@@ -261,7 +262,8 @@ authorized_domains="$(jq -cn \
   --arg firebase "${PROJECT_ID}.firebaseapp.com" \
   --arg frontend "$frontend_host" \
   --arg custom "$CUSTOM_FRONTEND_HOST" \
-  '$current + [$firebase,$custom] + (if $frontend == "" then [] else [$frontend] end) | unique')"
+  --arg admin_custom "$ADMIN_CUSTOM_FRONTEND_HOST" \
+  '$current + [$firebase,$custom,$admin_custom] + (if $frontend == "" then [] else [$frontend] end) | unique')"
 
 patch_body="$(jq -cn \
   --argjson domains "$authorized_domains" \
@@ -301,13 +303,14 @@ google_code="$(curl -sS -o "$google_file" -w '%{http_code}' \
 phone_enabled="$(jq -r '.signIn.phoneNumber.enabled // false' <<<"$config_response")"
 anonymous_enabled="$(jq -r '.signIn.anonymous.enabled // false' <<<"$config_response")"
 custom_authorized="$(jq -r --arg host "$CUSTOM_FRONTEND_HOST" '(.authorizedDomains // []) | index($host) != null' <<<"$config_response")"
+admin_custom_authorized="$(jq -r --arg host "$ADMIN_CUSTOM_FRONTEND_HOST" '(.authorizedDomains // []) | index($host) != null' <<<"$config_response")"
 google_enabled="false"
 if [[ "$google_code" == "200" ]]; then
   google_enabled="$(jq -r '.enabled // false' "$google_file")"
 fi
 rm -f "$google_file"
 
-if [[ "$phone_enabled" != "true" || "$anonymous_enabled" != "false" || "$google_enabled" != "true" || "$custom_authorized" != "true" ]]; then
+if [[ "$phone_enabled" != "true" || "$anonymous_enabled" != "false" || "$google_enabled" != "true" || "$custom_authorized" != "true" || "$admin_custom_authorized" != "true" ]]; then
   echo "Authentication bootstrap assertions failed (phone/google/anonymous state)." >&2
   exit 1
 fi
@@ -321,6 +324,7 @@ Staging Authentication bootstrap complete.
 - Phone Sign-In: enabled
 - Anonymous Sign-In: disabled
 - Custom staging domain: ${CUSTOM_FRONTEND_HOST} authorized
+- Admin staging domain: ${ADMIN_CUSTOM_FRONTEND_HOST} authorized
 - SMS region allowlist: ${SMS_REGIONS}
 - Protected staging deployer: least-privilege auth/config read-write access granted
 

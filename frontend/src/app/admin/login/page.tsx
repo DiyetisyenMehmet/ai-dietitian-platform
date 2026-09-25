@@ -2,35 +2,46 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { zodResolver } from "@hookform/resolvers/zod";
 import { ShieldCheck } from "lucide-react";
-import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 
-import { authService } from "@/application/auth/auth-service";
 import { authStore, useAuth } from "@/application/auth/auth-store";
-import { loginSchema, type LoginInput } from "@/domain/auth/validation";
+import { adminClient } from "@/infrastructure/admin/admin-client";
+import { authErrorMessage } from "@/infrastructure/identity/auth-feedback";
+import { startPhoneVerification } from "@/infrastructure/identity/firebase-browser";
+import { normalizePhoneNumber } from "@/infrastructure/identity/phone-number";
 import { Button } from "@/presentation/components/ui/button";
-import { Checkbox } from "@/presentation/components/ui/checkbox";
 import { FormField } from "@/presentation/components/ui/form-field";
 import { Input } from "@/presentation/components/ui/input";
 import { PasswordInput } from "@/presentation/components/ui/password-input";
 
+type LoginStep = "identifier" | "email-password" | "phone-code";
+
+interface PhoneConfirmation {
+  confirm(code: string): Promise<string>;
+  clear(): void;
+}
+
+function normalizeEmail(value: string): string | null {
+  const email = value.trim().toLowerCase();
+  if (!email || email.length > 254) return null;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null;
+  return email;
+}
+
 export default function AdminLoginPage() {
   const router = useRouter();
   const { status } = useAuth();
-  const {
-    register,
-    handleSubmit,
-    setValue,
-    watch,
-    formState: { errors, isSubmitting },
-  } = useForm<LoginInput>({
-    resolver: zodResolver(loginSchema),
-    defaultValues: { email: "", password: "", rememberMe: false },
-  });
-
-  const rememberMe = watch("rememberMe");
+  const [step, setStep] = React.useState<LoginStep>("identifier");
+  const [identifier, setIdentifier] = React.useState("");
+  const [resolvedEmail, setResolvedEmail] = React.useState("");
+  const [password, setPassword] = React.useState("");
+  const [code, setCode] = React.useState("");
+  const [confirmation, setConfirmation] =
+    React.useState<PhoneConfirmation | null>(null);
+  const [busy, setBusy] = React.useState(false);
+  const [feedback, setFeedback] = React.useState("");
+  const inFlight = React.useRef(false);
 
   React.useEffect(() => {
     if (status === "authenticated") {
@@ -38,18 +49,126 @@ export default function AdminLoginPage() {
     }
   }, [router, status]);
 
-  const onSubmit = React.useCallback(
-    async (values: LoginInput) => {
-      const result = await authService.login(values);
-      if (!result.ok) {
-        toast.error(result.error);
+  React.useEffect(
+    () => () => {
+      confirmation?.clear();
+    },
+    [confirmation],
+  );
+
+  const resetToIdentifier = React.useCallback(() => {
+    confirmation?.clear();
+    setConfirmation(null);
+    setStep("identifier");
+    setPassword("");
+    setCode("");
+    setFeedback("");
+  }, [confirmation]);
+
+  const continueWithIdentifier = React.useCallback(
+    async (event: React.FormEvent) => {
+      event.preventDefault();
+      if (busy || inFlight.current) return;
+
+      const email = normalizeEmail(identifier);
+      if (email) {
+        setResolvedEmail(email);
+        setStep("email-password");
+        setFeedback("");
         return;
       }
 
-      authStore.setSession(result.data);
-      router.replace("/admin");
+      const phoneNumber = normalizePhoneNumber(identifier, "TR");
+      if (!phoneNumber) {
+        setFeedback("Geçerli bir e-posta adresi veya SMS alabilen telefon numarası girin.");
+        return;
+      }
+
+      inFlight.current = true;
+      setBusy(true);
+      setFeedback("Güvenlik doğrulaması yapılıyor...");
+      try {
+        const next = await startPhoneVerification(
+          phoneNumber,
+          "diewish-admin-identifier-continue",
+        );
+        setIdentifier(phoneNumber);
+        setConfirmation(next);
+        setStep("phone-code");
+        setFeedback("Doğrulama kodu gönderildi.");
+      } catch (error) {
+        setFeedback(authErrorMessage(error));
+      } finally {
+        inFlight.current = false;
+        setBusy(false);
+      }
     },
-    [router],
+    [busy, identifier],
+  );
+
+  const submitEmail = React.useCallback(
+    async (event: React.FormEvent) => {
+      event.preventDefault();
+      if (busy || inFlight.current) return;
+      if (!password) {
+        setFeedback("Şifrenizi girin.");
+        return;
+      }
+
+      inFlight.current = true;
+      setBusy(true);
+      setFeedback("");
+      try {
+        const session = await adminClient.loginWithEmail(
+          resolvedEmail,
+          password,
+        );
+        authStore.setSession(session);
+        router.replace("/admin");
+      } catch {
+        setFeedback("Giriş bilgileri doğrulanamadı.");
+        toast.error("Giriş bilgileri doğrulanamadı.");
+      } finally {
+        inFlight.current = false;
+        setBusy(false);
+      }
+    },
+    [busy, password, resolvedEmail, router],
+  );
+
+  const submitPhoneCode = React.useCallback(
+    async (event: React.FormEvent) => {
+      event.preventDefault();
+      if (busy || inFlight.current || !confirmation) return;
+      if (!/^\d{6}$/.test(code.trim())) {
+        setFeedback("SMS ile gelen altı haneli kodu girin.");
+        return;
+      }
+
+      inFlight.current = true;
+      setBusy(true);
+      setFeedback("Kod doğrulanıyor...");
+      try {
+        const firebaseToken = await confirmation.confirm(code.trim());
+        const session = await adminClient.loginWithPhone(firebaseToken);
+        authStore.setSession(session);
+        confirmation.clear();
+        setConfirmation(null);
+        router.replace("/admin");
+      } catch (error) {
+        const firebaseMessage = authErrorMessage(error);
+        const message =
+          firebaseMessage === "Kimlik doğrulama sırasında bir hata oluştu. Lütfen tekrar deneyin."
+            ? "Management Center erişimi doğrulanamadı."
+            : firebaseMessage;
+        setFeedback(message);
+        toast.error(message);
+      } finally {
+        inFlight.current = false;
+        setBusy(false);
+      }
+    },
+    [busy, code, confirmation, router],
   );
 
   return (
@@ -73,44 +192,104 @@ export default function AdminLoginPage() {
           </p>
         </div>
 
-        <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
-          <FormField id="email" label="E-posta" error={errors.email?.message}>
-            <Input
-              type="email"
-              autoComplete="email"
-              inputMode="email"
-              placeholder="yonetici@diewish.com"
-              {...register("email")}
-            />
-          </FormField>
+        {feedback ? (
+          <p role="status" aria-live="polite" className="mb-4 text-sm text-muted-foreground">
+            {feedback}
+          </p>
+        ) : null}
 
-          <FormField id="password" label="Şifre" error={errors.password?.message}>
-            <PasswordInput
-              autoComplete="current-password"
-              placeholder="••••••••"
-              {...register("password")}
-            />
-          </FormField>
+        {step === "identifier" ? (
+          <form onSubmit={continueWithIdentifier} noValidate className="space-y-4">
+            <FormField id="adminIdentifier" label="E-posta veya telefon">
+              <Input
+                id="adminIdentifier"
+                type="text"
+                inputMode="text"
+                autoComplete="off"
+                autoCapitalize="none"
+                spellCheck={false}
+                value={identifier}
+                onChange={(event) => {
+                  setIdentifier(event.target.value);
+                  setFeedback("");
+                }}
+                disabled={busy}
+              />
+            </FormField>
 
-          <label className="flex cursor-pointer items-center gap-2.5 text-sm">
-            <Checkbox
-              checked={rememberMe}
-              onCheckedChange={(checked) =>
-                setValue("rememberMe", checked === true)
-              }
-            />
-            Beni hatırla
-          </label>
+            <Button
+              id="diewish-admin-identifier-continue"
+              type="submit"
+              size="lg"
+              className="w-full"
+              isLoading={busy}
+            >
+              {busy ? "Doğrulanıyor..." : "Devam Et"}
+            </Button>
+          </form>
+        ) : null}
 
-          <Button
-            type="submit"
-            size="lg"
-            className="w-full"
-            isLoading={isSubmitting}
-          >
-            {isSubmitting ? "Giriş yapılıyor..." : "Giriş Yap"}
-          </Button>
-        </form>
+        {step === "email-password" ? (
+          <form onSubmit={submitEmail} noValidate className="space-y-4">
+            <FormField id="adminPassword" label="Şifre">
+              <PasswordInput
+                id="adminPassword"
+                autoComplete="current-password"
+                value={password}
+                onChange={(event) => {
+                  setPassword(event.target.value);
+                  setFeedback("");
+                }}
+                disabled={busy}
+              />
+            </FormField>
+
+            <Button type="submit" size="lg" className="w-full" isLoading={busy}>
+              {busy ? "Giriş yapılıyor..." : "Giriş Yap"}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              className="w-full"
+              disabled={busy}
+              onClick={resetToIdentifier}
+            >
+              Geri dön
+            </Button>
+          </form>
+        ) : null}
+
+        {step === "phone-code" ? (
+          <form onSubmit={submitPhoneCode} noValidate className="space-y-4">
+            <FormField id="adminPhoneCode" label="SMS doğrulama kodu">
+              <Input
+                id="adminPhoneCode"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                value={code}
+                onChange={(event) => {
+                  setCode(event.target.value.replace(/\D/g, ""));
+                  setFeedback("");
+                }}
+                disabled={busy}
+              />
+            </FormField>
+
+            <Button type="submit" size="lg" className="w-full" isLoading={busy}>
+              {busy ? "Doğrulanıyor..." : "Doğrula ve Giriş Yap"}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              className="w-full"
+              disabled={busy}
+              onClick={resetToIdentifier}
+            >
+              Geri dön
+            </Button>
+          </form>
+        ) : null}
 
         <p className="mt-6 text-center text-xs leading-5 text-muted-foreground">
           Yetki kontrolü backend üzerinde güncel ADMIN rolü ve RBAC izinleriyle
