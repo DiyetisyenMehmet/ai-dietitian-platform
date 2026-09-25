@@ -208,7 +208,7 @@ test("unknown admin email does not reveal account existence", async ({ page }) =
 test("Admin reset page accepts Firebase oobCode and rejects unrelated modes", async ({ page }) => {
   await page.goto(`${WEB_BASE_URL}/admin/reset-password?mode=resetPassword&oobCode=test-reset-code`);
   await expect(page.getByRole("heading", { name: "Yeni şifre belirle" })).toBeVisible();
-  await page.getByLabel("Yeni şifre").fill("NewAdminPass123!");
+  await page.getByLabel("Yeni şifre", { exact: true }).fill("NewAdminPass123!");
   await page.getByLabel("Yeni şifre tekrar").fill("NewAdminPass123!");
 
   let resetPayload = null;
@@ -224,7 +224,7 @@ test("Admin reset page accepts Firebase oobCode and rejects unrelated modes", as
   expect(resetPayload).toEqual({ token: "test-reset-code", newPassword: "NewAdminPass123!" });
 
   await page.goto(`${WEB_BASE_URL}/admin/reset-password?mode=verifyEmail&oobCode=not-a-reset`);
-  await page.getByLabel("Yeni şifre").fill("NewAdminPass123!");
+  await page.getByLabel("Yeni şifre", { exact: true }).fill("NewAdminPass123!");
   await page.getByLabel("Yeni şifre tekrar").fill("NewAdminPass123!");
   await page.getByRole("button", { name: "Şifreyi güncelle" }).click();
   await expect(page.getByText("Sıfırlama bağlantısı geçersiz veya süresi dolmuş.")).toBeVisible();
