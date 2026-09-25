@@ -1,11 +1,16 @@
 import { createHash } from "node:crypto";
 
-import { prisma } from "../../lib/prisma";
-import { resolveRuntimeEnvironment } from "./admin.environment";
-import { bootstrapStagingSuperAdmin } from "./admin.bootstrap";
+import {
+  AdminAuditRiskLevel,
+  PrismaClient,
+  UserRole,
+} from "@prisma/client";
+
+import { ensureAdminFoundation } from "./admin.foundation";
 import { ADMIN_SYSTEM_ROLES } from "./admin.permissions";
 
 const CONFIRMATION = "DIEWISH_STAGING_ADMIN_BOOTSTRAP";
+const prisma = new PrismaClient();
 
 function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
@@ -15,9 +20,18 @@ function normalizedEmailHash(email: string): string {
   return sha256(email.trim().toLowerCase());
 }
 
+function bootstrapExitCode(error: unknown): number {
+  const message = error instanceof Error ? error.message : String(error);
+  if (message.includes("Expected exactly one active staging user")) return 41;
+  if (message.includes("different staging Super Admin")) return 42;
+  if (message.includes("already been consumed")) return 43;
+  if (message.includes("missing its required audit event")) return 44;
+  if (message.includes("Post-bootstrap verification failed")) return 45;
+  return 49;
+}
+
 async function main(): Promise<void> {
-  const environment = resolveRuntimeEnvironment();
-  if (environment !== "staging") {
+  if (process.env.DIEWISH_ENVIRONMENT !== "staging") {
     throw new Error("First Super Admin bootstrap is staging-only.");
   }
 
@@ -45,13 +59,16 @@ async function main(): Promise<void> {
   }
 
   const target = matches[0];
-  const superRole = await prisma.adminRole.findUnique({
-    where: { key: ADMIN_SYSTEM_ROLES.SUPER_ADMIN },
-    select: { id: true },
-  });
 
-  if (superRole) {
-    const alreadyAssigned = await prisma.adminUserRole.findUnique({
+  const result = await prisma.$transaction(async (tx) => {
+    await ensureAdminFoundation(tx);
+
+    const superRole = await tx.adminRole.findUniqueOrThrow({
+      where: { key: ADMIN_SYSTEM_ROLES.SUPER_ADMIN },
+      select: { id: true },
+    });
+
+    const existingMembership = await tx.adminUserRole.findUnique({
       where: {
         userId_roleId: {
           userId: target.id,
@@ -60,32 +77,23 @@ async function main(): Promise<void> {
       },
       select: { userId: true },
     });
+    const existingAudit = await tx.adminAuditEvent.findFirst({
+      where: {
+        actorAdminId: target.id,
+        action: "admin.bootstrap.super_admin",
+        environment: "staging",
+      },
+      select: { id: true },
+    });
 
-    if (alreadyAssigned && target.role === "ADMIN") {
-      const auditExists = await prisma.adminAuditEvent.findFirst({
-        where: {
-          actorAdminId: target.id,
-          action: "admin.bootstrap.super_admin",
-          environment: "staging",
-        },
-        select: { id: true },
-      });
-      if (!auditExists) {
+    if (existingMembership && target.role === UserRole.ADMIN) {
+      if (!existingAudit) {
         throw new Error("Existing Super Admin assignment is missing its required audit event.");
       }
-      console.log(
-        JSON.stringify({
-          userId: target.id,
-          role: "ADMIN",
-          superAdmin: true,
-          auditEvent: true,
-          status: "already-configured",
-        }),
-      );
-      return;
+      return "already-configured" as const;
     }
 
-    const anotherSuperAdmin = await prisma.adminUserRole.findFirst({
+    const anotherSuperAdmin = await tx.adminUserRole.findFirst({
       where: {
         roleId: superRole.id,
         userId: { not: target.id },
@@ -95,34 +103,74 @@ async function main(): Promise<void> {
     if (anotherSuperAdmin) {
       throw new Error("A different staging Super Admin already exists; first-admin bootstrap is closed.");
     }
-  }
 
-  const consumed = await prisma.adminAuditEvent.findFirst({
-    where: {
-      action: "admin.bootstrap.super_admin",
-      environment: "staging",
-    },
+    const consumed = await tx.adminAuditEvent.findFirst({
+      where: {
+        action: "admin.bootstrap.super_admin",
+        environment: "staging",
+      },
+      select: { id: true },
+    });
+    if (consumed) {
+      throw new Error("The one-time staging Super Admin bootstrap has already been consumed.");
+    }
+
+    await tx.user.update({
+      where: { id: target.id },
+      data: { role: UserRole.ADMIN },
+    });
+    await tx.adminUserRole.upsert({
+      where: {
+        userId_roleId: {
+          userId: target.id,
+          roleId: superRole.id,
+        },
+      },
+      update: { assignedByAdminId: target.id },
+      create: {
+        userId: target.id,
+        roleId: superRole.id,
+        assignedByAdminId: target.id,
+      },
+    });
+    await tx.adminAuditEvent.create({
+      data: {
+        actorAdminId: target.id,
+        action: "admin.bootstrap.super_admin",
+        targetType: "user",
+        targetId: target.id,
+        beforeState: {
+          role: target.role,
+          isActive: target.isActive,
+        },
+        afterState: {
+          role: UserRole.ADMIN,
+          assignedRole: ADMIN_SYSTEM_ROLES.SUPER_ADMIN,
+        },
+        reason: "Explicit non-production Management Center bootstrap",
+        environment: "staging",
+        correlationId: "bootstrap",
+        requestId: "bootstrap",
+        riskLevel: AdminAuditRiskLevel.HIGH,
+      },
+    });
+
+    return "bootstrapped" as const;
+  });
+
+  const superRole = await prisma.adminRole.findUniqueOrThrow({
+    where: { key: ADMIN_SYSTEM_ROLES.SUPER_ADMIN },
     select: { id: true },
   });
-  if (consumed) {
-    throw new Error("The one-time staging Super Admin bootstrap has already been consumed.");
-  }
-
-  await bootstrapStagingSuperAdmin(target.id);
-
   const verifiedUser = await prisma.user.findUniqueOrThrow({
     where: { id: target.id },
     select: { role: true, isActive: true },
-  });
-  const verifiedRole = await prisma.adminRole.findUniqueOrThrow({
-    where: { key: ADMIN_SYSTEM_ROLES.SUPER_ADMIN },
-    select: { id: true },
   });
   const verifiedMembership = await prisma.adminUserRole.findUnique({
     where: {
       userId_roleId: {
         userId: target.id,
-        roleId: verifiedRole.id,
+        roleId: superRole.id,
       },
     },
     select: { userId: true },
@@ -133,12 +181,11 @@ async function main(): Promise<void> {
       action: "admin.bootstrap.super_admin",
       environment: "staging",
     },
-    orderBy: { createdAt: "desc" },
     select: { id: true },
   });
 
   if (
-    verifiedUser.role !== "ADMIN" ||
+    verifiedUser.role !== UserRole.ADMIN ||
     !verifiedUser.isActive ||
     !verifiedMembership ||
     !verifiedAudit
@@ -152,19 +199,9 @@ async function main(): Promise<void> {
       role: verifiedUser.role,
       superAdmin: true,
       auditEvent: true,
-      status: "bootstrapped",
+      status: result,
     }),
   );
-}
-
-function bootstrapExitCode(error: unknown): number {
-  const message = error instanceof Error ? error.message : String(error);
-  if (message.includes("Expected exactly one active staging user")) return 41;
-  if (message.includes("different staging Super Admin")) return 42;
-  if (message.includes("already been consumed")) return 43;
-  if (message.includes("missing its required audit event")) return 44;
-  if (message.includes("Post-bootstrap verification failed")) return 45;
-  return 49;
 }
 
 void main()
