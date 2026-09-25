@@ -160,14 +160,14 @@ test("semantic Diewish icons keep coach, History and progress meanings distinct"
   await page.getByRole("button", { name: "Kaydet", exact: true }).click();
   await expect(weightInput).toHaveValue("", { timeout: 15_000 });
 
-  const progressEvaluation = page.locator("section").filter({ hasText: "Hedef kiloya ilerleme" }).first();
+  const progressEvaluation = page
+    .getByText("Hedef kiloya ilerleme", { exact: true })
+    .locator("xpath=ancestor::section[1]");
   await expect(progressEvaluation.locator('img[data-diewish-semantic-icon="evaluation"]')).toBeVisible();
 
   const weightAnalysis = page
-    .locator("section")
-    .filter({ hasText: "Bu hafta" })
-    .filter({ hasText: "Hedef tamamlanma" })
-    .first();
+    .getByText("Hedef tamamlanma", { exact: true })
+    .locator("xpath=ancestor::section[1]");
   await expect(weightAnalysis.locator('img[data-diewish-semantic-icon="weight-analysis"]')).toBeVisible();
   await expect(weightAnalysis.locator('img[data-diewish-semantic-icon="evaluation"]')).toBeVisible();
   await checkViewports(page);
