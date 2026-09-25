@@ -22,6 +22,14 @@ export interface AdminSession {
 }
 
 export const adminClient = {
+  resolveIdentifier(input: { kind: "email" | "phone"; value: string }): Promise<{ accepted: boolean }> {
+    return apiRequest<{ accepted: boolean }>({
+      path: "/admin/auth/identifier",
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  },
+
   loginWithEmail(email: string, password: string): Promise<AuthSession> {
     return apiRequest<AuthSession>({
       path: "/admin/auth/login",
@@ -35,6 +43,24 @@ export const adminClient = {
       path: "/admin/auth/phone",
       method: "POST",
       body: JSON.stringify({ idToken }),
+    });
+  },
+
+  changeEmail(payload: { currentPassword: string; newEmail: string }): Promise<AuthSession> {
+    return apiRequest<AuthSession>({
+      path: "/admin/account/email",
+      method: "PATCH",
+      auth: true,
+      body: JSON.stringify(payload),
+    });
+  },
+
+  changePassword(payload: { currentPassword: string; newPassword: string }): Promise<AuthSession> {
+    return apiRequest<AuthSession>({
+      path: "/admin/account/password",
+      method: "PATCH",
+      auth: true,
+      body: JSON.stringify(payload),
     });
   },
 

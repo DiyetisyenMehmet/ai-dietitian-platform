@@ -91,18 +91,24 @@ export default function AdminLoginPage() {
         return;
       }
 
-      if (resolved.kind === "email") {
-        setIdentifier(resolved.value);
-        setResolvedEmail(resolved.value);
-        setStep("email-password");
-        setFeedback("");
-        return;
-      }
-
       inFlight.current = true;
       setBusy(true);
       setFeedback("Güvenlik doğrulaması yapılıyor...");
       try {
+        const resolvedAccess = await adminClient.resolveIdentifier(resolved);
+        if (!resolvedAccess.accepted) {
+          setFeedback("Bu yönetici hesabı doğrulanamadı.");
+          return;
+        }
+
+        if (resolved.kind === "email") {
+          setIdentifier(resolved.value);
+          setResolvedEmail(resolved.value);
+          setStep("email-password");
+          setFeedback("");
+          return;
+        }
+
         const next = await startPhoneVerification(
           resolved.value,
           "diewish-admin-identifier-continue",

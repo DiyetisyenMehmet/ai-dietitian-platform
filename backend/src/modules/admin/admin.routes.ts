@@ -4,7 +4,13 @@ import { Router } from "express";
 import { authenticate, authorize } from "../../middleware/authenticate";
 import { validate } from "../../middleware/validate";
 import { adminAuthController } from "./admin-auth.controller";
-import { adminEmailLoginSchema, adminPhoneLoginSchema } from "./admin-auth.schemas";
+import {
+  adminEmailChangeSchema,
+  adminEmailLoginSchema,
+  adminIdentifierCheckSchema,
+  adminPasswordChangeSchema,
+  adminPhoneLoginSchema,
+} from "./admin-auth.schemas";
 import { adminController } from "./admin.controller";
 import { requireAdminFoundationEnvironment } from "./admin.environment";
 import { requireAdminPermission } from "./admin.middleware";
@@ -16,6 +22,11 @@ export const adminRouter = Router();
 adminRouter.use(adminRateLimiter);
 adminRouter.use(requireAdminFoundationEnvironment);
 
+adminRouter.post(
+  "/auth/identifier",
+  validate({ body: adminIdentifierCheckSchema }),
+  adminAuthController.identifierCheck,
+);
 adminRouter.post(
   "/auth/login",
   validate({ body: adminEmailLoginSchema }),
@@ -29,6 +40,19 @@ adminRouter.post(
 
 adminRouter.use(authenticate);
 adminRouter.use(authorize(UserRole.ADMIN));
+
+adminRouter.patch(
+  "/account/email",
+  requireAdminPermission(ADMIN_PERMISSIONS.ACCESS),
+  validate({ body: adminEmailChangeSchema }),
+  adminAuthController.changeEmail,
+);
+adminRouter.patch(
+  "/account/password",
+  requireAdminPermission(ADMIN_PERMISSIONS.ACCESS),
+  validate({ body: adminPasswordChangeSchema }),
+  adminAuthController.changePassword,
+);
 
 adminRouter.get(
   "/session",

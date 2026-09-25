@@ -4,6 +4,7 @@ import { LockKeyhole, ShieldCheck } from "lucide-react";
 
 import type { AdminSession } from "@/infrastructure/admin/admin-client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/presentation/components/ui/card";
+import { AdminAccountSecurity } from "./admin-account-security";
 import { PermissionGate } from "./permission-gate";
 
 export function AdminShell({ session }: { session: AdminSession }) {
@@ -98,6 +99,10 @@ export function AdminShell({ session }: { session: AdminSession }) {
                 </CardContent>
               </Card>
             </div>
+
+            <PermissionGate permissions={session.permissions} require="admin.security.read">
+              <AdminAccountSecurity initialEmail={session.admin.email} />
+            </PermissionGate>
           </div>
         </main>
       </div>

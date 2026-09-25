@@ -284,6 +284,34 @@ test("Phase 1 admin authorization, RBAC and transactional audit", async (t) => {
     assert.equal(emailLogin.status, 200);
     assert.match(emailLogin.headers.get("set-cookie") ?? "", /HttpOnly/i);
 
+    const emailLoginBody = (await emailLogin.json()) as {
+      success: boolean;
+      data: { user: { id: string; email: string }; tokens: { accessToken: string } };
+    };
+    assert.equal(emailLoginBody.success, true);
+
+    const acceptedIdentifier = await fetch(`${baseUrl}/api/admin/auth/identifier`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ kind: "email", value: admin.email }),
+    });
+    assert.equal(acceptedIdentifier.status, 200);
+    assert.deepEqual(
+      ((await acceptedIdentifier.json()) as { data: { accepted: boolean } }).data,
+      { accepted: true },
+    );
+
+    const rejectedIdentifier = await fetch(`${baseUrl}/api/admin/auth/identifier`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ kind: "email", value: "another.valid.admin@example.com" }),
+    });
+    assert.equal(rejectedIdentifier.status, 200);
+    assert.deepEqual(
+      ((await rejectedIdentifier.json()) as { data: { accepted: boolean } }).data,
+      { accepted: false },
+    );
+
     const normal = await prisma.user.create({
       data: {
         email: `admin.normal.${crypto.randomUUID()}@example.com`,
@@ -304,6 +332,63 @@ test("Phase 1 admin authorization, RBAC and transactional audit", async (t) => {
       error: { code: string };
     };
     assert.equal(normalLoginBody.error.code, "ADMIN_AUTH_FORBIDDEN");
+
+    const changedEmail = `admin.changed.${crypto.randomUUID()}@example.com`;
+    const changeEmail = await fetch(`${baseUrl}/api/admin/account/email`, {
+      method: "PATCH",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${emailLoginBody.data.tokens.accessToken}`,
+      },
+      body: JSON.stringify({ currentPassword: password, newEmail: changedEmail }),
+    });
+    assert.equal(changeEmail.status, 200);
+    const changeEmailBody = (await changeEmail.json()) as {
+      success: boolean;
+      data: { user: { email: string }; tokens: { accessToken: string } };
+    };
+    assert.equal(changeEmailBody.data.user.email, changedEmail);
+
+    const oldEmailLogin = await fetch(`${baseUrl}/api/admin/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: admin.email, password }),
+    });
+    assert.equal(oldEmailLogin.status, 401);
+
+    const rotatedPassword = "rotated-admin-123!";
+    const changePassword = await fetch(`${baseUrl}/api/admin/account/password`, {
+      method: "PATCH",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${changeEmailBody.data.tokens.accessToken}`,
+      },
+      body: JSON.stringify({ currentPassword: password, newPassword: rotatedPassword }),
+    });
+    assert.equal(changePassword.status, 200);
+
+    const oldPasswordLogin = await fetch(`${baseUrl}/api/admin/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: changedEmail, password }),
+    });
+    assert.equal(oldPasswordLogin.status, 401);
+
+    const rotatedLogin = await fetch(`${baseUrl}/api/admin/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: changedEmail, password: rotatedPassword }),
+    });
+    assert.equal(rotatedLogin.status, 200);
+
+    const emailAudit = await prisma.adminAuditEvent.findFirst({
+      where: { actorAdminId: admin.id, action: "admin.security.email_change" },
+    });
+    const passwordAudit = await prisma.adminAuditEvent.findFirst({
+      where: { actorAdminId: admin.id, action: "admin.security.password_change" },
+    });
+    assert.ok(emailAudit);
+    assert.ok(passwordAudit);
 
     const phoneNumber = "+905551112233";
     const phoneAdmin = await prisma.user.create({

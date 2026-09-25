@@ -82,6 +82,9 @@ test("authorized admin sees shell and backend environment identity", async ({ pa
   await expect(page.getByTestId("admin-environment-banner")).toHaveText("TEST");
   await expect(page.getByText("Access / Security", { exact: true })).toBeVisible();
   await expect(page.getByText(/Kullanıcı veya abonelik operasyonları henüz açık değildir/)).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Hesap ve güvenlik" })).toBeVisible();
+  await expect(page.getByText("E-posta değiştir", { exact: true })).toBeVisible();
+  await expect(page.getByText("Şifre değiştir", { exact: true })).toBeVisible();
 });
 
 test("auth loading never flashes admin content", async ({ page }) => {
@@ -159,6 +162,13 @@ test("admin login uses one blank identifier field for email or phone", async ({ 
   await expect(identifier).toHaveValue("");
   await expect(identifier).toHaveAttribute("placeholder", "Yönetici hesabınız");
 
+  await page.route("**/api/admin/auth/identifier", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ success: true, data: { accepted: true } }),
+    });
+  });
   await identifier.fill("admin@example.com");
   await page.getByRole("button", { name: "Devam Et" }).click();
   await expect(page.getByRole("textbox", { name: "Şifre", exact: true })).toBeVisible();
@@ -204,12 +214,12 @@ test("Admin login rejects malformed identifiers before any auth step", async ({ 
   }
 });
 
-test("Admin login keeps syntactically valid email verification non-enumerating", async ({ page }) => {
+test("Admin login does not advance an unapproved valid email to the password step", async ({ page }) => {
   await page.goto(`${WEB_BASE_URL}/admin/login`);
   await page.getByLabel("E-posta veya telefon").fill("not-a-known-admin-account@gmail.com");
   await page.getByRole("button", { name: "Devam Et" }).click();
-  await expect(page.getByRole("textbox", { name: "Şifre", exact: true })).toBeVisible();
-  await expect(page.getByText("Bu hesap Yönetim Merkezi için yetkili değil.")).toHaveCount(0);
+  await expect(page.getByText("Bu yönetici hesabı doğrulanamadı.")).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Şifre", exact: true })).toHaveCount(0);
 });
 
 
@@ -260,6 +270,14 @@ test("Admin login routes a valid Turkish mobile number to SMS verification", asy
   });
   await page.route("https://www.gstatic.com/firebasejs/**/firebase-auth-compat.js", async (route) => {
     await route.fulfill({ status: 200, contentType: "application/javascript", body: "" });
+  });
+
+  await page.route("**/api/admin/auth/identifier", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ success: true, data: { accepted: true } }),
+    });
   });
 
   await page.goto(`${WEB_BASE_URL}/admin/login`);
