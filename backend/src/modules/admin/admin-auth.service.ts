@@ -261,7 +261,7 @@ export const adminAuthService = {
     return issueAuthSession(user, context);
   },
 
-  async requestPasswordReset(email: string, context: SessionContext): Promise<void> {
+  async requestPasswordReset(email: string, _context: SessionContext): Promise<void> {
     const user = await authRepository.findUserByEmail(email);
     if (!user || !(await hasAdminAccess(user))) return;
     await adminPasswordIdentityProvider.sendPasswordReset(email);

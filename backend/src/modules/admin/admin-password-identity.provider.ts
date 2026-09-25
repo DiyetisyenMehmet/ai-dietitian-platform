@@ -1,10 +1,6 @@
 import { env } from "../../config/env";
 import { ApiError } from "../../utils/api-error";
 
-interface IdentityErrorPayload {
-  error?: { message?: string };
-}
-
 interface IdentityAuthResponse {
   idToken: string;
   email?: string;
