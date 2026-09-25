@@ -150,6 +150,7 @@ jobs:
             --project "$PROJECT_ID" \
             --config .github/cloudbuild/backend-staging.yaml \
             --substitutions "_IMAGE=${BACKEND_IMAGE},_GIT_SHA=${GITHUB_SHA}" \
+            --suppress-logs \
             --quiet
 
       - name: Deploy backend staging service
@@ -196,6 +197,7 @@ jobs:
             --project "$PROJECT_ID" \
             --config .github/cloudbuild/frontend-staging.yaml \
             --substitutions "_IMAGE=${FRONTEND_IMAGE},_GIT_SHA=${GITHUB_SHA},_API_BASE_URL=/api,_API_PROXY_TARGET=${BACKEND_URL},_SITE_URL=${CUSTOM_FRONTEND_URL}" \
+            --suppress-logs \
             --quiet
 
       - name: Deploy frontend staging service
