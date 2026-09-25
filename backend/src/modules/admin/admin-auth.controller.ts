@@ -21,7 +21,8 @@ function context(req: Request): SessionContext {
 }
 
 function requestIdentity(req: Request) {
-  return { correlationId: req.id, requestId: req.id };
+  const requestId = String(req.id);
+  return { correlationId: requestId, requestId };
 }
 
 function refreshCookieOptions(expires?: Date): CookieOptions {
