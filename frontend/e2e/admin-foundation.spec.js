@@ -197,7 +197,7 @@ test("unknown admin email does not reveal account existence", async ({ page }) =
   await page.getByLabel("Yönetici hesabınız").fill("not-a-known-admin-account@gmail.com");
   await page.getByLabel("Şifreniz").fill("NotARealAdminPassword123!");
   await page.getByRole("button", { name: "Giriş Yap" }).click();
-  await expect(page.getByText("Giriş bilgileri doğrulanamadı.")).toBeVisible();
+  await expect(page.getByRole("status")).toHaveText("Giriş bilgileri doğrulanamadı.");
   await expect(page.getByText(/kayıtlı|bulunamadı|mevcut değil/i)).toHaveCount(0);
 });
 
