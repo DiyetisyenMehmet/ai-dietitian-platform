@@ -23,7 +23,11 @@ export default function AdminResetPasswordPage() {
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (busy || !token) return;
+    if (busy) return;
+    if (!token) {
+      setMessage("Sıfırlama bağlantısı geçersiz veya süresi dolmuş.");
+      return;
+    }
     if (password !== confirm) {
       setMessage("Şifreler eşleşmiyor.");
       return;
