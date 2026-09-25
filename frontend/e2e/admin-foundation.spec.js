@@ -143,6 +143,6 @@ test("admin login uses one blank identifier field for email or phone", async ({ 
 
   await identifier.fill("admin@example.com");
   await page.getByRole("button", { name: "Devam Et" }).click();
-  await expect(page.getByLabel("Şifre")).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Şifre", exact: true })).toBeVisible();
   await expect(page.getByLabel("E-posta veya telefon")).toHaveCount(0);
 });
