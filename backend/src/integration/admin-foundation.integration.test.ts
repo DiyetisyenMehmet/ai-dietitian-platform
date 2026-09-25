@@ -336,12 +336,14 @@ test("Phase 1 admin authorization, RBAC and transactional audit", async (t) => {
     });
 
     let activeIdentityEmail = admin.email;
+    let activeIdentityPassword = password;
     let secondaryIdentityEmail: string | null = null;
     adminPasswordIdentityProvider.signIn = async (email, suppliedPassword) => {
-      if (
-        (email !== activeIdentityEmail && email !== secondaryIdentityEmail) ||
-        ![password, "rotated-admin-123!"].includes(suppliedPassword)
-      ) {
+      const passwordMatches =
+        email === activeIdentityEmail
+          ? suppliedPassword === activeIdentityPassword
+          : email === secondaryIdentityEmail && suppliedPassword === password;
+      if (!passwordMatches) {
         throw new (await import("../utils/api-error")).ApiError(401, "invalid", { code: "ADMIN_AUTH_INVALID" });
       }
       return { idToken: `identity:${email}`, email, localId: "admin-login-fixture" };
@@ -358,11 +360,14 @@ test("Phase 1 admin authorization, RBAC and transactional audit", async (t) => {
       activeIdentityEmail = email;
       return { idToken: `identity:${email}`, email, localId: "admin-login-fixture" };
     };
-    adminPasswordIdentityProvider.updatePassword = async (_idToken, _newPassword) => ({
-      idToken: `identity:${activeIdentityEmail}`,
-      email: activeIdentityEmail,
-      localId: "admin-login-fixture",
-    });
+    adminPasswordIdentityProvider.updatePassword = async (_idToken, newPassword) => {
+      activeIdentityPassword = newPassword;
+      return {
+        idToken: `identity:${activeIdentityEmail}`,
+        email: activeIdentityEmail,
+        localId: "admin-login-fixture",
+      };
+    };
 
     const emailLogin = await fetch(`${baseUrl}/api/admin/auth/login`, {
       method: "POST",
