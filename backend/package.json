@@ -24,7 +24,8 @@
     "prisma:studio": "prisma studio",
     "start:migrate": "prisma migrate deploy && node dist/index.js",
     "admin:bootstrap": "tsx src/modules/admin/admin.bootstrap.ts",
-    "admin:seed-foundation": "tsx src/modules/admin/admin.seed.ts"
+    "admin:seed-foundation": "tsx src/modules/admin/admin.seed.ts",
+    "admin:bootstrap-first-super-admin": "tsx src/modules/admin/admin.bootstrap-first-super-admin.ts"
   },
   "prisma": {
     "schema": "prisma/schema.prisma"

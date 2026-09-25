@@ -1,0 +1,50 @@
+name: Admin First Super Admin Staging
+
+on:
+  push:
+    branches:
+      - feature/staging-preview
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PROJECT_ID: project-a2e260c1-839d-4f1d-b90
+  WIF_PROVIDER: projects/730419163638/locations/global/workloadIdentityPools/github-actions/providers/diewish-staging
+  DEPLOY_SERVICE_ACCOUNT: diewish-staging-deployer@project-a2e260c1-839d-4f1d-b90.iam.gserviceaccount.com
+  ADMIN_EMAIL_SHA256: ed911dcbf3353a718ab0e6e3039e92287169025cb0a4609de03ade42a6463cb8
+
+jobs:
+  bootstrap-first-super-admin:
+    if: ${{ contains(github.event.head_commit.message, '[admin-super-bootstrap]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: staging
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to isolated staging Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Bootstrap approved first staging Super Admin
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REF_NAME}" = "feature/staging-preview"
+          test "${#ADMIN_EMAIL_SHA256}" = "64"
+          gcloud builds submit \
+            --no-source \
+            --project "${PROJECT_ID}" \
+            --config .github/cloudbuild/admin-first-super-admin-staging.yaml \
+            --substitutions "_GIT_SHA=${GITHUB_SHA},_ADMIN_EMAIL_SHA256=${ADMIN_EMAIL_SHA256}" \
+            --quiet
