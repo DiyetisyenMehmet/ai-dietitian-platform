@@ -145,13 +145,38 @@ jobs:
           set -euo pipefail
           BACKEND_IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPOSITORY}/backend:${GITHUB_SHA}"
           echo "BACKEND_IMAGE=${BACKEND_IMAGE}" >> "$GITHUB_ENV"
-          gcloud builds submit \
+          BACKEND_BUILD_ID="$(gcloud builds submit \
             --no-source \
             --project "$PROJECT_ID" \
             --config .github/cloudbuild/backend-staging.yaml \
             --substitutions "_IMAGE=${BACKEND_IMAGE},_GIT_SHA=${GITHUB_SHA}" \
-            --suppress-logs \
-            --quiet
+            --async \
+            --format='value(id)' \
+            --quiet)"
+          test -n "$BACKEND_BUILD_ID"
+          echo "Backend Cloud Build: $BACKEND_BUILD_ID"
+
+          for attempt in {1..180}; do
+            build_status="$(gcloud builds describe "$BACKEND_BUILD_ID" \
+              --project "$PROJECT_ID" \
+              --region=global \
+              --format='value(status)')"
+            case "$build_status" in
+              SUCCESS)
+                echo "Backend Cloud Build succeeded."
+                break
+                ;;
+              FAILURE|INTERNAL_ERROR|TIMEOUT|CANCELLED|EXPIRED)
+                echo "Backend Cloud Build failed with status: $build_status" >&2
+                exit 1
+                ;;
+            esac
+            if [[ "$attempt" == "180" ]]; then
+              echo "Timed out waiting for backend Cloud Build." >&2
+              exit 1
+            fi
+            sleep 5
+          done
 
       - name: Deploy backend staging service
         shell: bash
@@ -192,13 +217,38 @@ jobs:
           set -euo pipefail
           FRONTEND_IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPOSITORY}/frontend:${GITHUB_SHA}"
           echo "FRONTEND_IMAGE=${FRONTEND_IMAGE}" >> "$GITHUB_ENV"
-          gcloud builds submit \
+          FRONTEND_BUILD_ID="$(gcloud builds submit \
             --no-source \
             --project "$PROJECT_ID" \
             --config .github/cloudbuild/frontend-staging.yaml \
             --substitutions "_IMAGE=${FRONTEND_IMAGE},_GIT_SHA=${GITHUB_SHA},_API_BASE_URL=/api,_API_PROXY_TARGET=${BACKEND_URL},_SITE_URL=${CUSTOM_FRONTEND_URL}" \
-            --suppress-logs \
-            --quiet
+            --async \
+            --format='value(id)' \
+            --quiet)"
+          test -n "$FRONTEND_BUILD_ID"
+          echo "Frontend Cloud Build: $FRONTEND_BUILD_ID"
+
+          for attempt in {1..180}; do
+            build_status="$(gcloud builds describe "$FRONTEND_BUILD_ID" \
+              --project "$PROJECT_ID" \
+              --region=global \
+              --format='value(status)')"
+            case "$build_status" in
+              SUCCESS)
+                echo "Frontend Cloud Build succeeded."
+                break
+                ;;
+              FAILURE|INTERNAL_ERROR|TIMEOUT|CANCELLED|EXPIRED)
+                echo "Frontend Cloud Build failed with status: $build_status" >&2
+                exit 1
+                ;;
+            esac
+            if [[ "$attempt" == "180" ]]; then
+              echo "Timed out waiting for frontend Cloud Build." >&2
+              exit 1
+            fi
+            sleep 5
+          done
 
       - name: Deploy frontend staging service
         shell: bash
