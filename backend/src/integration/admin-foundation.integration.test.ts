@@ -336,8 +336,12 @@ test("Phase 1 admin authorization, RBAC and transactional audit", async (t) => {
     });
 
     let activeIdentityEmail = admin.email;
+    let secondaryIdentityEmail: string | null = null;
     adminPasswordIdentityProvider.signIn = async (email, suppliedPassword) => {
-      if (email !== activeIdentityEmail || ![password, "rotated-admin-123!"].includes(suppliedPassword)) {
+      if (
+        (email !== activeIdentityEmail && email !== secondaryIdentityEmail) ||
+        ![password, "rotated-admin-123!"].includes(suppliedPassword)
+      ) {
         throw new (await import("../utils/api-error")).ApiError(401, "invalid", { code: "ADMIN_AUTH_INVALID" });
       }
       return { idToken: `identity:${email}`, email, localId: "admin-login-fixture" };
@@ -374,6 +378,13 @@ test("Phase 1 admin authorization, RBAC and transactional audit", async (t) => {
     };
     assert.equal(emailLoginBody.success, true);
 
+    const normalAppAdminLogin = await fetch(`${baseUrl}/api/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: admin.email, password }),
+    });
+    assert.equal(normalAppAdminLogin.status, 401);
+
     const normal = await prisma.user.create({
       data: {
         email: `admin.normal.${crypto.randomUUID()}@example.com`,
@@ -383,6 +394,7 @@ test("Phase 1 admin authorization, RBAC and transactional audit", async (t) => {
       },
     });
     createdUserIds.push(normal.id);
+    secondaryIdentityEmail = normal.email;
 
     const normalLogin = await fetch(`${baseUrl}/api/admin/auth/login`, {
       method: "POST",

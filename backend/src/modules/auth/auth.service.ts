@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 
-import { Prisma, type RefreshToken, type User } from "@prisma/client";
+import { Prisma, UserRole, type RefreshToken, type User } from "@prisma/client";
 
 import { env } from "../../config/env";
 import { logger } from "../../lib/logger";
@@ -175,6 +175,10 @@ export const authService = {
 
     const passwordOk = await verifyPassword(input.password, user.passwordHash);
     if (!passwordOk) throw invalid;
+    // Management Center principals authenticate only through /api/admin/auth.
+    // This prevents stale local password hashes from becoming a second login
+    // path after an Identity Platform password change or recovery.
+    if (user.role === UserRole.ADMIN) throw invalid;
     if (!user.isActive) throw ApiError.forbidden("This account has been deactivated.");
 
     await authRepository.updateLastLogin(user.id);
