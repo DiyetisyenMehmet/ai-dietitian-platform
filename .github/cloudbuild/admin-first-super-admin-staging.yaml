@@ -17,13 +17,17 @@ steps:
     entrypoint: sh
     secretEnv:
       - DIRECT_DATABASE_URL
+      - JWT_ACCESS_SECRET
+      - JWT_REFRESH_SECRET
     args:
       - -c
       - |
         set -eu
         npm ci
         npx prisma generate
-        DATABASE_URL="$$DIRECT_DATABASE_URL" \
+        DATABASE_URL="$DIRECT_DATABASE_URL" \
+        JWT_ACCESS_SECRET="$JWT_ACCESS_SECRET" \
+        JWT_REFRESH_SECRET="$JWT_REFRESH_SECRET" \
         DIEWISH_ENVIRONMENT=staging \
         ADMIN_BOOTSTRAP_CONFIRM=DIEWISH_STAGING_ADMIN_BOOTSTRAP \
         ADMIN_BOOTSTRAP_EMAIL_SHA256="${_ADMIN_EMAIL_SHA256}" \
@@ -33,6 +37,10 @@ availableSecrets:
   secretManager:
     - versionName: projects/project-a2e260c1-839d-4f1d-b90/secrets/diewish-staging-direct-database-url/versions/latest
       env: DIRECT_DATABASE_URL
+    - versionName: projects/project-a2e260c1-839d-4f1d-b90/secrets/diewish-staging-jwt-access/versions/latest
+      env: JWT_ACCESS_SECRET
+    - versionName: projects/project-a2e260c1-839d-4f1d-b90/secrets/diewish-staging-jwt-refresh/versions/latest
+      env: JWT_REFRESH_SECRET
 
 options:
   logging: LEGACY
