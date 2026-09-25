@@ -42,12 +42,37 @@ function bootstrapAdmin(userId) {
   });
 }
 
-test("normal user cannot render Management Center content", async ({ page }) => {
+test("normal user is returned to Admin login with an inline access warning", async ({ page }) => {
   await registerInBrowser(page, "normal");
   await page.goto(`${WEB_BASE_URL}/admin`);
 
-  await expect(page.getByRole("heading", { name: "Erişim reddedildi" })).toBeVisible();
+  await expect(page).toHaveURL(/\/admin\/login\?notice=access-denied$/, { timeout: 10_000 });
+  await expect(page.getByRole("heading", { name: "Management Center" })).toBeVisible();
+  await expect(
+    page.getByText(
+      "Bu hesap Yönetim Merkezi için yetkili değil. Farklı bir e-posta veya telefonla tekrar deneyin.",
+    ),
+  ).toBeVisible();
+  await expect(page.getByLabel("E-posta veya telefon")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Erişim reddedildi" })).toHaveCount(0);
   await expect(page.getByText("Yönetim merkezi hazır")).toHaveCount(0);
+});
+
+test("Admin login recovers from an existing normal Diewish session", async ({ page }) => {
+  await registerInBrowser(page, "stale-normal-session");
+  await page.goto(`${WEB_BASE_URL}/admin/login`);
+
+  await expect(page).toHaveURL(/\/admin\/login$/, { timeout: 10_000 });
+  await expect(page.getByLabel("E-posta veya telefon")).toBeVisible();
+  await expect(
+    page.getByText(
+      "Bu hesap Yönetim Merkezi için yetkili değil. Farklı bir e-posta veya telefonla tekrar deneyin.",
+    ),
+  ).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByLabel("E-posta veya telefon")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Erişim reddedildi" })).toHaveCount(0);
 });
 
 test("authorized admin sees shell and backend environment identity", async ({ page, request }) => {

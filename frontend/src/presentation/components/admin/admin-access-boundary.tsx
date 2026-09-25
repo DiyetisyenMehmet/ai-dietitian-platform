@@ -1,9 +1,11 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { Loader2, ShieldX } from "lucide-react";
 
-import { useAuth } from "@/application/auth/auth-store";
+import { authStore, useAuth } from "@/application/auth/auth-store";
+import { authClient } from "@/infrastructure/auth/auth-client";
 import {
   adminClient,
   type AdminSession,
@@ -34,8 +36,23 @@ function AccessDenied() {
 }
 
 export function AdminAccessBoundary() {
+  const router = useRouter();
   const { status, user } = useAuth();
   const [state, setState] = React.useState<State>({ status: "checking" });
+  const rejectingSession = React.useRef(false);
+
+  const returnToAdminLogin = React.useCallback(async () => {
+    if (rejectingSession.current) return;
+    rejectingSession.current = true;
+    try {
+      await authClient.logout();
+    } catch {
+      // The in-memory session must still be cleared so the login form can recover.
+    } finally {
+      authStore.clear();
+      router.replace("/admin/login?notice=access-denied");
+    }
+  }, [router]);
 
   React.useEffect(() => {
     if (status !== "authenticated" || !user) {
@@ -44,7 +61,7 @@ export function AdminAccessBoundary() {
     }
 
     if (user.role !== "ADMIN") {
-      setState({ status: "denied" });
+      void returnToAdminLogin();
       return;
     }
 
@@ -66,13 +83,17 @@ export function AdminAccessBoundary() {
           typeof error === "object" && error !== null && "status" in error
             ? Number((error as { status: unknown }).status)
             : 0;
-        setState(statusCode === 401 || statusCode === 403 ? { status: "denied" } : { status: "error" });
+        if (statusCode === 401 || statusCode === 403) {
+          void returnToAdminLogin();
+          return;
+        }
+        setState({ status: "error" });
       });
 
     return () => {
       cancelled = true;
     };
-  }, [status, user]);
+  }, [returnToAdminLogin, status, user]);
 
   if (state.status === "allowed") {
     return <AdminShell session={state.session} />;

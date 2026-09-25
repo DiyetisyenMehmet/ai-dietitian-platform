@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { authStore, useAuth } from "@/application/auth/auth-store";
 import { adminClient } from "@/infrastructure/admin/admin-client";
+import { authClient } from "@/infrastructure/auth/auth-client";
 import { authErrorMessage } from "@/infrastructure/identity/auth-feedback";
 import { startPhoneVerification } from "@/infrastructure/identity/firebase-browser";
 import { normalizePhoneNumber } from "@/infrastructure/identity/phone-number";
@@ -31,7 +32,7 @@ function normalizeEmail(value: string): string | null {
 
 export default function AdminLoginPage() {
   const router = useRouter();
-  const { status } = useAuth();
+  const { status, user } = useAuth();
   const [step, setStep] = React.useState<LoginStep>("identifier");
   const [identifier, setIdentifier] = React.useState("");
   const [resolvedEmail, setResolvedEmail] = React.useState("");
@@ -42,12 +43,43 @@ export default function AdminLoginPage() {
   const [busy, setBusy] = React.useState(false);
   const [feedback, setFeedback] = React.useState("");
   const inFlight = React.useRef(false);
+  const recoveringSession = React.useRef(false);
 
   React.useEffect(() => {
-    if (status === "authenticated") {
-      router.replace("/admin");
+    const notice = new URLSearchParams(window.location.search).get("notice");
+    if (notice === "access-denied") {
+      setFeedback(
+        "Bu hesap Yönetim Merkezi için yetkili değil. Farklı bir e-posta veya telefonla tekrar deneyin.",
+      );
     }
-  }, [router, status]);
+  }, []);
+
+  React.useEffect(() => {
+    if (status !== "authenticated" || !user) return;
+
+    if (user.role === "ADMIN") {
+      router.replace("/admin");
+      return;
+    }
+
+    if (recoveringSession.current) return;
+    recoveringSession.current = true;
+    void authClient
+      .logout()
+      .catch(() => undefined)
+      .finally(() => {
+        authStore.clear();
+        setStep("identifier");
+        setIdentifier("");
+        setResolvedEmail("");
+        setPassword("");
+        setCode("");
+        setFeedback(
+          "Bu hesap Yönetim Merkezi için yetkili değil. Farklı bir e-posta veya telefonla tekrar deneyin.",
+        );
+        recoveringSession.current = false;
+      });
+  }, [router, status, user]);
 
   React.useEffect(
     () => () => {
