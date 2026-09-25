@@ -15,6 +15,7 @@ import { ADMIN_PERMISSIONS, isAdminPermissionKey } from "../modules/admin/admin.
 import { resolveAdminAccess } from "../modules/admin/admin-rbac.repository";
 import { bootstrapAdminFoundation } from "../modules/admin/admin.bootstrap";
 import { firebaseAuthProvider } from "../modules/identity/firebase-auth.provider";
+import { adminPasswordIdentityProvider } from "../modules/admin/admin-password-identity.provider";
 
 async function startServer(): Promise<{ server: Server; baseUrl: string }> {
   const app = createApp();
@@ -258,9 +259,15 @@ test("Phase 1 admin authorization, RBAC and transactional audit", async (t) => {
 
   await t.test("first Super Admin bootstrap requires verified approved Google ownership", async () => {
     const originalVerify = firebaseAuthProvider.verifyIdToken;
+    const originalLinkPassword = adminPasswordIdentityProvider.linkPassword;
     const approvedEmail = "admindiewish@gmail.com";
     let createdId = "";
     try {
+      adminPasswordIdentityProvider.linkPassword = async () => ({
+        idToken: "linked-owner-token",
+        email: approvedEmail,
+        localId: "approved-owner",
+      });
       firebaseAuthProvider.verifyIdToken = async () => ({
         uid: "approved-owner",
         email: approvedEmail,
@@ -293,6 +300,7 @@ test("Phase 1 admin authorization, RBAC and transactional audit", async (t) => {
       assert.equal(second.status, 409);
     } finally {
       firebaseAuthProvider.verifyIdToken = originalVerify;
+      adminPasswordIdentityProvider.linkPassword = originalLinkPassword;
       if (createdId) {
         await prisma.adminAuditEvent.deleteMany({ where: { actorAdminId: createdId } });
         await prisma.adminUserRole.deleteMany({ where: { userId: createdId } });
@@ -306,6 +314,10 @@ test("Phase 1 admin authorization, RBAC and transactional audit", async (t) => {
   await t.test("Management Center authentication accepts only existing RBAC admins", async () => {
     const password = "AdminLoginPass123";
     const passwordHash = await hashPassword(password);
+    const originalSignIn = adminPasswordIdentityProvider.signIn;
+    const originalUpdateEmail = adminPasswordIdentityProvider.updateEmail;
+    const originalUpdatePassword = adminPasswordIdentityProvider.updatePassword;
+    const originalVerifyIdentity = firebaseAuthProvider.verifyIdToken;
     const superRole = await prisma.adminRole.findUniqueOrThrow({
       where: { key: "SUPER_ADMIN" },
     });
@@ -321,6 +333,31 @@ test("Phase 1 admin authorization, RBAC and transactional audit", async (t) => {
     createdUserIds.push(admin.id);
     await prisma.adminUserRole.create({
       data: { userId: admin.id, roleId: superRole.id },
+    });
+
+    let activeIdentityEmail = admin.email;
+    adminPasswordIdentityProvider.signIn = async (email, suppliedPassword) => {
+      if (email !== activeIdentityEmail || ![password, "rotated-admin-123!"].includes(suppliedPassword)) {
+        throw new (await import("../utils/api-error")).ApiError(401, "invalid", { code: "ADMIN_AUTH_INVALID" });
+      }
+      return { idToken: `identity:${email}`, email, localId: "admin-login-fixture" };
+    };
+    firebaseAuthProvider.verifyIdToken = async (idToken) => ({
+      uid: "admin-login-fixture",
+      email: idToken.replace("identity:", ""),
+      emailVerified: true,
+      phoneNumber: null,
+      displayName: null,
+      providers: ["password"],
+    });
+    adminPasswordIdentityProvider.updateEmail = async (_idToken, email) => {
+      activeIdentityEmail = email;
+      return { idToken: `identity:${email}`, email, localId: "admin-login-fixture" };
+    };
+    adminPasswordIdentityProvider.updatePassword = async (_idToken, _newPassword) => ({
+      idToken: `identity:${activeIdentityEmail}`,
+      email: activeIdentityEmail,
+      localId: "admin-login-fixture",
     });
 
     const emailLogin = await fetch(`${baseUrl}/api/admin/auth/login`, {
@@ -415,6 +452,10 @@ test("Phase 1 admin authorization, RBAC and transactional audit", async (t) => {
     assert.ok(emailAudit);
     assert.ok(passwordAudit);
 
+    adminPasswordIdentityProvider.signIn = originalSignIn;
+    adminPasswordIdentityProvider.updateEmail = originalUpdateEmail;
+    adminPasswordIdentityProvider.updatePassword = originalUpdatePassword;
+    firebaseAuthProvider.verifyIdToken = originalVerifyIdentity;
   });
 
 });

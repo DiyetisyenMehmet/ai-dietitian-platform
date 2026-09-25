@@ -11,6 +11,7 @@ import {
 } from "./admin-audit.service";
 import { resolveRuntimeEnvironment } from "./admin.environment";
 import { ADMIN_SYSTEM_ROLES } from "./admin.permissions";
+import { adminPasswordIdentityProvider } from "./admin-password-identity.provider";
 import type {
   AdminAccessLevel,
   AdminCreateAccessUserInput,
@@ -76,6 +77,21 @@ export const adminAccessService = {
     const id = crypto.randomUUID();
     const passwordHash = await hashPassword(input.temporaryPassword);
     const selectedRoleKey = roleKey(input.accessLevel);
+
+    const existingUser = await prisma.user.findUnique({
+      where: { email: input.email },
+      select: { id: true },
+    });
+    if (existingUser) {
+      throw new ApiError(409, "This email address is already in use.", {
+        code: "ADMIN_EMAIL_IN_USE",
+      });
+    }
+
+    const externalIdentity = await adminPasswordIdentityProvider.createUser(
+      input.email,
+      input.temporaryPassword,
+    );
 
     try {
       return await runAuditedAdminMutation(
@@ -152,6 +168,14 @@ export const adminAccessService = {
         },
       );
     } catch (error) {
+      try {
+        if (externalIdentity.idToken) {
+          await adminPasswordIdentityProvider.deleteUser(externalIdentity.idToken);
+        }
+      } catch {
+        // The Diewish DB/audit failure remains authoritative; an orphaned
+        // external identity has no Management Center RBAC access.
+      }
       if (isUniqueConstraintError(error)) {
         throw new ApiError(409, "This email address is already in use.", {
           code: "ADMIN_EMAIL_IN_USE",

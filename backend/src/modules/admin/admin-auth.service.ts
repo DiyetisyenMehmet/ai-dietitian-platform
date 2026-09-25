@@ -9,8 +9,7 @@ import {
 
 import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/api-error";
-import { hashPassword, verifyPassword } from "../../utils/password";
-import { accountService } from "../account/account.service";
+import { hashPassword } from "../../utils/password";
 import { authRepository } from "../auth/auth.repository";
 import {
   issueAuthSession,
@@ -26,8 +25,8 @@ import { resolveRuntimeEnvironment } from "./admin.environment";
 import { ensureAdminFoundation } from "./admin.foundation";
 import { ADMIN_PERMISSIONS, ADMIN_SYSTEM_ROLES } from "./admin.permissions";
 import { resolveAdminAccess } from "./admin-rbac.repository";
+import { adminPasswordIdentityProvider } from "./admin-password-identity.provider";
 
-const DUMMY_PASSWORD_HASH = "$2a$12$" + "x".repeat(53);
 const APPROVED_FIRST_SUPER_ADMIN_EMAIL_SHA256 =
   "ed911dcbf3353a718ab0e6e3039e92287169025cb0a4609de03ade42a6463cb8";
 
@@ -96,9 +95,22 @@ async function requirePrimaryAdmin(userId: string): Promise<User> {
   return user;
 }
 
-async function reauthenticate(user: User, currentPassword: string): Promise<void> {
-  if (!(await verifyPassword(currentPassword, user.passwordHash))) {
-    throw invalidCurrentPassword();
+async function reauthenticate(
+  user: User,
+  currentPassword: string,
+): Promise<{ idToken: string }> {
+  try {
+    const identity = await adminPasswordIdentityProvider.signIn(
+      user.email,
+      currentPassword,
+    );
+    if (!identity.idToken) throw invalidCurrentPassword();
+    return { idToken: identity.idToken };
+  } catch (error) {
+    if (error instanceof ApiError && error.statusCode === 401) {
+      throw invalidCurrentPassword();
+    }
+    throw error;
   }
 }
 
@@ -108,14 +120,23 @@ export const adminAuthService = {
     password: string,
     context: SessionContext,
   ): Promise<AuthResult> {
+    let external;
+    try {
+      external = await adminPasswordIdentityProvider.signIn(email, password);
+    } catch (error) {
+      if (error instanceof ApiError && error.statusCode === 401) {
+        throw invalidAdminLogin();
+      }
+      throw error;
+    }
+
+    const identity = await firebaseAuthProvider.verifyIdToken(external.idToken);
+    if (!identity.email || identity.email.trim().toLowerCase() !== email) {
+      throw invalidAdminLogin();
+    }
+
     const user = await authRepository.findUserByEmail(email);
-    if (!user) {
-      await verifyPassword(password, DUMMY_PASSWORD_HASH);
-      throw invalidAdminLogin();
-    }
-    if (!(await verifyPassword(password, user.passwordHash))) {
-      throw invalidAdminLogin();
-    }
+    if (!user) throw invalidAdminLogin();
     await assertAdminAccess(user);
     await authRepository.updateLastLogin(user.id);
     return issueAuthSession(user, context);
@@ -144,6 +165,17 @@ export const adminAuthService = {
       throw forbiddenAdminLogin();
     }
 
+    const setupAlreadyClosed = await prisma.adminAuditEvent.findFirst({
+      where: { action: "admin.bootstrap.super_admin", environment },
+      select: { id: true },
+    });
+    if (setupAlreadyClosed) {
+      throw new ApiError(409, "Initial Management Center setup is already complete.", {
+        code: "ADMIN_BOOTSTRAP_CLOSED",
+      });
+    }
+
+    await adminPasswordIdentityProvider.linkPassword(idToken, email, password);
     const passwordHash = await hashPassword(password);
     const user = await prisma.$transaction(async (tx) => {
       await ensureAdminFoundation(tx);
@@ -232,15 +264,30 @@ export const adminAuthService = {
   async requestPasswordReset(email: string, context: SessionContext): Promise<void> {
     const user = await authRepository.findUserByEmail(email);
     if (!user || !(await hasAdminAccess(user))) return;
-    await accountService.forgotPassword(email, context, "/admin/reset-password");
+    await adminPasswordIdentityProvider.sendPasswordReset(email);
   },
 
   async resetPassword(
     token: string,
     newPassword: string,
-    context: SessionContext,
+    _context: SessionContext,
   ): Promise<void> {
-    await accountService.resetPassword(token, newPassword, context);
+    const identity = await adminPasswordIdentityProvider.confirmPasswordReset(
+      token,
+      newPassword,
+    );
+    const email = identity.email?.trim().toLowerCase();
+    if (!email) throw invalidAdminLogin();
+
+    const user = await authRepository.findUserByEmail(email);
+    if (!user || !(await hasAdminAccess(user))) throw invalidAdminLogin();
+
+    const passwordHash = await hashPassword(newPassword);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash },
+    });
+    await authRepository.revokeAllForUser(user.id);
   },
 
   async changePrimaryEmail(
@@ -251,8 +298,20 @@ export const adminAuthService = {
     requestContext: AdminMutationRequestContext,
   ): Promise<AuthResult> {
     const user = await requirePrimaryAdmin(userId);
-    await reauthenticate(user, currentPassword);
+    const reauth = await reauthenticate(user, currentPassword);
     if (newEmail === user.email) return issueAuthSession(user, sessionContext);
+
+    const conflictingUser = await authRepository.findUserByEmail(newEmail);
+    if (conflictingUser && conflictingUser.id !== user.id) {
+      throw new ApiError(409, "This email address is already in use.", {
+        code: "ADMIN_EMAIL_IN_USE",
+      });
+    }
+
+    const externalUpdate = await adminPasswordIdentityProvider.updateEmail(
+      reauth.idToken,
+      newEmail,
+    );
 
     let updated: User;
     try {
@@ -290,6 +349,17 @@ export const adminAuthService = {
         },
       );
     } catch (error) {
+      try {
+        if (externalUpdate.idToken) {
+          await adminPasswordIdentityProvider.updateEmail(
+            externalUpdate.idToken,
+            user.email,
+          );
+        }
+      } catch {
+        // The primary error is preserved; compensation failure is handled by
+        // the next authenticated support operation and never exposes secrets.
+      }
       if (isUniqueConstraintError(error)) {
         throw new ApiError(409, "This email address is already in use.", {
           code: "ADMIN_EMAIL_IN_USE",
@@ -310,15 +380,22 @@ export const adminAuthService = {
     requestContext: AdminMutationRequestContext,
   ): Promise<AuthResult> {
     const user = await requireAdmin(userId);
-    await reauthenticate(user, currentPassword);
-    if (await verifyPassword(newPassword, user.passwordHash)) {
+    const reauth = await reauthenticate(user, currentPassword);
+    if (newPassword === currentPassword) {
       throw new ApiError(400, "New password must be different from the current password.", {
         code: "ADMIN_PASSWORD_REUSE",
       });
     }
 
+    const externalUpdate = await adminPasswordIdentityProvider.updatePassword(
+      reauth.idToken,
+      newPassword,
+    );
     const passwordHash = await hashPassword(newPassword);
-    const updated = await runAuditedAdminMutation(
+
+    let updated: User;
+    try {
+      updated = await runAuditedAdminMutation(
       {
         actorAdminId: user.id,
         action: "admin.security.password_change",
@@ -337,7 +414,20 @@ export const adminAuthService = {
         });
         return { result: next };
       },
-    );
+      );
+    } catch (error) {
+      try {
+        if (externalUpdate.idToken) {
+          await adminPasswordIdentityProvider.updatePassword(
+            externalUpdate.idToken,
+            currentPassword,
+          );
+        }
+      } catch {
+        // Preserve the audited Diewish mutation failure as the primary error.
+      }
+      throw error;
+    }
 
     await authRepository.revokeAllForUser(user.id);
     return issueAuthSession(updated, sessionContext);
