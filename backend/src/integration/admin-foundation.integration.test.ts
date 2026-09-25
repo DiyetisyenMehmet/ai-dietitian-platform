@@ -257,50 +257,88 @@ test("Phase 1 admin authorization, RBAC and transactional audit", async (t) => {
     assert.equal(await prisma.adminRole.count({ where: { id: rollbackRoleId } }), 0);
   });
 
-  await t.test("first Super Admin bootstrap requires verified approved Google ownership", async () => {
+  await t.test("first Super Admin bootstrap requires approved email and one-time code", async () => {
+    const originalCreateUser = adminPasswordIdentityProvider.createUser;
+    const originalDeleteUser = adminPasswordIdentityProvider.deleteUser;
     const originalVerify = firebaseAuthProvider.verifyIdToken;
-    const originalLinkPassword = adminPasswordIdentityProvider.linkPassword;
+    const originalBootstrapHash = process.env.ADMIN_BOOTSTRAP_CODE_SHA256;
     const approvedEmail = "admindiewish@gmail.com";
+    const testBootstrapCode = "test-only-owner-bootstrap-code-2026";
+    process.env.ADMIN_BOOTSTRAP_CODE_SHA256 = crypto
+      .createHash("sha256")
+      .update(testBootstrapCode)
+      .digest("hex");
+
     let createdId = "";
     try {
-      adminPasswordIdentityProvider.linkPassword = async () => ({
-        idToken: "linked-owner-token",
-        email: approvedEmail,
+      adminPasswordIdentityProvider.createUser = async (email) => ({
+        idToken: `password-owner:${email}`,
+        email,
         localId: "approved-owner",
       });
-      firebaseAuthProvider.verifyIdToken = async () => ({
+      adminPasswordIdentityProvider.deleteUser = async () => undefined;
+      firebaseAuthProvider.verifyIdToken = async (idToken) => ({
         uid: "approved-owner",
-        email: approvedEmail,
-        emailVerified: true,
+        email: idToken.replace("password-owner:", ""),
+        emailVerified: false,
         phoneNumber: null,
-        displayName: "Diewish Admin",
-        providers: ["google.com"],
+        displayName: null,
+        providers: ["password"],
       });
+
+      const invalidCode = await fetch(`${baseUrl}/api/admin/auth/bootstrap`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          email: approvedEmail,
+          password: "bootstrap-admin-123!",
+          bootstrapCode: "wrong-test-bootstrap-code-12345",
+        }),
+      });
+      assert.equal(invalidCode.status, 403);
+
       const response = await fetch(`${baseUrl}/api/admin/auth/bootstrap`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ idToken: "g".repeat(32), password: "bootstrap-admin-123!" }),
+        body: JSON.stringify({
+          email: approvedEmail,
+          password: "bootstrap-admin-123!",
+          bootstrapCode: testBootstrapCode,
+        }),
       });
       assert.equal(response.status, 200);
       const body = (await response.json()) as { data: { user: { id: string; role: string } } };
       createdId = body.data.user.id;
       createdUserIds.push(createdId);
       assert.equal(body.data.user.role, "ADMIN");
+
       const access = await resolveAdminAccess(createdId);
       assert.ok(access?.roles.includes("SUPER_ADMIN"));
-      assert.ok(await prisma.adminAuditEvent.findFirst({
+      const audit = await prisma.adminAuditEvent.findFirst({
         where: { actorAdminId: createdId, action: "admin.bootstrap.super_admin" },
-      }));
+      });
+      assert.ok(audit);
+      assert.equal(audit.riskLevel, "CRITICAL");
 
       const second = await fetch(`${baseUrl}/api/admin/auth/bootstrap`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ idToken: "g".repeat(32), password: "bootstrap-admin-123!" }),
+        body: JSON.stringify({
+          email: approvedEmail,
+          password: "bootstrap-admin-123!",
+          bootstrapCode: testBootstrapCode,
+        }),
       });
       assert.equal(second.status, 409);
     } finally {
+      adminPasswordIdentityProvider.createUser = originalCreateUser;
+      adminPasswordIdentityProvider.deleteUser = originalDeleteUser;
       firebaseAuthProvider.verifyIdToken = originalVerify;
-      adminPasswordIdentityProvider.linkPassword = originalLinkPassword;
+      if (originalBootstrapHash === undefined) {
+        delete process.env.ADMIN_BOOTSTRAP_CODE_SHA256;
+      } else {
+        process.env.ADMIN_BOOTSTRAP_CODE_SHA256 = originalBootstrapHash;
+      }
       if (createdId) {
         await prisma.adminAuditEvent.deleteMany({ where: { actorAdminId: createdId } });
         await prisma.adminUserRole.deleteMany({ where: { userId: createdId } });

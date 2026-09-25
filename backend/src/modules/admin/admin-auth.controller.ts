@@ -56,8 +56,9 @@ export const adminAuthController = {
   bootstrap: asyncHandler(async (req: Request, res: Response) => {
     const input = req.body as AdminBootstrapInput;
     const result = await adminAuthService.bootstrapFirstSuperAdmin(
-      input.idToken,
+      input.email,
       input.password,
+      input.bootstrapCode,
       context(req),
       requestIdentity(req),
     );

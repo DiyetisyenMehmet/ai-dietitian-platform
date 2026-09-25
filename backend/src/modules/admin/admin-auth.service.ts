@@ -29,6 +29,8 @@ import { adminPasswordIdentityProvider } from "./admin-password-identity.provide
 
 const APPROVED_FIRST_SUPER_ADMIN_EMAIL_SHA256 =
   "ed911dcbf3353a718ab0e6e3039e92287169025cb0a4609de03ade42a6463cb8";
+const STAGING_OWNER_BOOTSTRAP_CODE_SHA256 =
+  "817e3b42836c784e2452d809f3c7c54cc065d8a1126bc22df6da4024136ae1dd";
 
 interface AdminMutationRequestContext {
   correlationId: string;
@@ -55,6 +57,22 @@ function invalidCurrentPassword(): ApiError {
 
 function sha256(value: string): string {
   return crypto.createHash("sha256").update(value).digest("hex");
+}
+
+function expectedBootstrapCodeHash(): string {
+  const testOverride =
+    process.env.NODE_ENV === "test"
+      ? process.env.ADMIN_BOOTSTRAP_CODE_SHA256?.trim().toLowerCase()
+      : undefined;
+  return testOverride && /^[a-f0-9]{64}$/.test(testOverride)
+    ? testOverride
+    : STAGING_OWNER_BOOTSTRAP_CODE_SHA256;
+}
+
+function bootstrapCodeMatches(value: string): boolean {
+  const actual = Buffer.from(sha256(value.trim()), "hex");
+  const expected = Buffer.from(expectedBootstrapCodeHash(), "hex");
+  return actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
 }
 
 async function hasAdminAccess(user: User | null): Promise<boolean> {
@@ -143,8 +161,9 @@ export const adminAuthService = {
   },
 
   async bootstrapFirstSuperAdmin(
-    idToken: string,
+    email: string,
     password: string,
+    bootstrapCode: string,
     context: SessionContext,
     requestContext: AdminMutationRequestContext,
   ): Promise<AuthResult> {
@@ -153,14 +172,10 @@ export const adminAuthService = {
       throw new ApiError(404, "Not found.", { code: "ADMIN_BOOTSTRAP_UNAVAILABLE" });
     }
 
-    const identity = await firebaseAuthProvider.verifyIdToken(idToken);
-    const email = identity.email?.trim().toLowerCase() ?? "";
-    const isGoogle = identity.providers.includes("google.com");
+    const normalizedEmail = email.trim().toLowerCase();
     if (
-      !email ||
-      !identity.emailVerified ||
-      !isGoogle ||
-      sha256(email) !== APPROVED_FIRST_SUPER_ADMIN_EMAIL_SHA256
+      sha256(normalizedEmail) !== APPROVED_FIRST_SUPER_ADMIN_EMAIL_SHA256 ||
+      !bootstrapCodeMatches(bootstrapCode)
     ) {
       throw forbiddenAdminLogin();
     }
@@ -175,87 +190,133 @@ export const adminAuthService = {
       });
     }
 
-    await adminPasswordIdentityProvider.linkPassword(idToken, email, password);
+    let externalIdentity: { idToken: string; email?: string; localId?: string };
+    let externalIdentityCreated = false;
+    try {
+      externalIdentity = await adminPasswordIdentityProvider.createUser(
+        normalizedEmail,
+        password,
+      );
+      externalIdentityCreated = true;
+    } catch (error) {
+      if (
+        error instanceof ApiError &&
+        error.code === "ADMIN_EMAIL_IN_USE"
+      ) {
+        try {
+          externalIdentity = await adminPasswordIdentityProvider.signIn(
+            normalizedEmail,
+            password,
+          );
+        } catch {
+          throw new ApiError(
+            409,
+            "Approved owner identity already exists with different credentials.",
+            { code: "ADMIN_BOOTSTRAP_IDENTITY_CONFLICT" },
+          );
+        }
+      } else {
+        throw error;
+      }
+    }
+
+    const identity = await firebaseAuthProvider.verifyIdToken(externalIdentity.idToken);
+    if (identity.email?.trim().toLowerCase() !== normalizedEmail) {
+      if (externalIdentityCreated) {
+        await adminPasswordIdentityProvider.deleteUser(externalIdentity.idToken).catch(() => undefined);
+      }
+      throw forbiddenAdminLogin();
+    }
+
     const passwordHash = await hashPassword(password);
-    const user = await prisma.$transaction(async (tx) => {
-      await ensureAdminFoundation(tx);
+    let user: User;
+    try {
+      user = await prisma.$transaction(async (tx) => {
+        await ensureAdminFoundation(tx);
 
-      const consumed = await tx.adminAuditEvent.findFirst({
-        where: { action: "admin.bootstrap.super_admin", environment },
-        select: { id: true },
-      });
-      if (consumed) {
-        throw new ApiError(409, "Initial Management Center setup is already complete.", {
-          code: "ADMIN_BOOTSTRAP_CLOSED",
+        const consumed = await tx.adminAuditEvent.findFirst({
+          where: { action: "admin.bootstrap.super_admin", environment },
+          select: { id: true },
         });
-      }
-
-      const superRole = await tx.adminRole.findUniqueOrThrow({
-        where: { key: ADMIN_SYSTEM_ROLES.SUPER_ADMIN },
-        select: { id: true },
-      });
-      const existingSuperAdmin = await tx.adminUserRole.findFirst({
-        where: { roleId: superRole.id },
-        select: { userId: true },
-      });
-      if (existingSuperAdmin) {
-        throw new ApiError(409, "Initial Management Center setup is already complete.", {
-          code: "ADMIN_BOOTSTRAP_CLOSED",
-        });
-      }
-
-      const existing = await tx.user.findUnique({ where: { email } });
-      const next = existing
-        ? await tx.user.update({
-            where: { id: existing.id },
-            data: {
-              passwordHash,
-              role: UserRole.ADMIN,
-              isActive: true,
-              emailVerifiedAt: new Date(),
-              deletionRequestedAt: null,
-              fullName: existing.fullName ?? identity.displayName ?? undefined,
-            },
-          })
-        : await tx.user.create({
-            data: {
-              email,
-              passwordHash,
-              fullName: identity.displayName ?? undefined,
-              role: UserRole.ADMIN,
-              isActive: true,
-              emailVerifiedAt: new Date(),
-            },
+        if (consumed) {
+          throw new ApiError(409, "Initial Management Center setup is already complete.", {
+            code: "ADMIN_BOOTSTRAP_CLOSED",
           });
+        }
 
-      await tx.adminUserRole.upsert({
-        where: { userId_roleId: { userId: next.id, roleId: superRole.id } },
-        update: { assignedByAdminId: next.id },
-        create: {
-          userId: next.id,
-          roleId: superRole.id,
-          assignedByAdminId: next.id,
-        },
+        const superRole = await tx.adminRole.findUniqueOrThrow({
+          where: { key: ADMIN_SYSTEM_ROLES.SUPER_ADMIN },
+          select: { id: true },
+        });
+        const existingSuperAdmin = await tx.adminUserRole.findFirst({
+          where: { roleId: superRole.id },
+          select: { userId: true },
+        });
+        if (existingSuperAdmin) {
+          throw new ApiError(409, "Initial Management Center setup is already complete.", {
+            code: "ADMIN_BOOTSTRAP_CLOSED",
+          });
+        }
+
+        const existing = await tx.user.findUnique({ where: { email: normalizedEmail } });
+        const next = existing
+          ? await tx.user.update({
+              where: { id: existing.id },
+              data: {
+                passwordHash,
+                role: UserRole.ADMIN,
+                isActive: true,
+                deletionRequestedAt: null,
+              },
+            })
+          : await tx.user.create({
+              data: {
+                email: normalizedEmail,
+                passwordHash,
+                role: UserRole.ADMIN,
+                isActive: true,
+              },
+            });
+
+        await tx.adminUserRole.upsert({
+          where: { userId_roleId: { userId: next.id, roleId: superRole.id } },
+          update: { assignedByAdminId: next.id },
+          create: {
+            userId: next.id,
+            roleId: superRole.id,
+            assignedByAdminId: next.id,
+          },
+        });
+
+        await tx.adminAuditEvent.create({
+          data: {
+            actorAdminId: next.id,
+            action: "admin.bootstrap.super_admin",
+            targetType: "user",
+            targetId: next.id,
+            beforeState: existing
+              ? { role: existing.role, isActive: existing.isActive }
+              : undefined,
+            afterState: {
+              role: UserRole.ADMIN,
+              assignedRole: ADMIN_SYSTEM_ROLES.SUPER_ADMIN,
+            },
+            reason: "One-time approved staging owner bootstrap",
+            environment,
+            correlationId: requestContext.correlationId,
+            requestId: requestContext.requestId,
+            riskLevel: AdminAuditRiskLevel.CRITICAL,
+          },
+        });
+
+        return next;
       });
-
-      await tx.adminAuditEvent.create({
-        data: {
-          actorAdminId: next.id,
-          action: "admin.bootstrap.super_admin",
-          targetType: "user",
-          targetId: next.id,
-          beforeState: existing ? { role: existing.role, isActive: existing.isActive } : undefined,
-          afterState: { role: UserRole.ADMIN, assignedRole: ADMIN_SYSTEM_ROLES.SUPER_ADMIN },
-          reason: "Verified Google ownership bootstrap for first staging Super Admin",
-          environment,
-          correlationId: requestContext.correlationId,
-          requestId: requestContext.requestId,
-          riskLevel: AdminAuditRiskLevel.CRITICAL,
-        },
-      });
-
-      return next;
-    });
+    } catch (error) {
+      if (externalIdentityCreated) {
+        await adminPasswordIdentityProvider.deleteUser(externalIdentity.idToken).catch(() => undefined);
+      }
+      throw error;
+    }
 
     await authRepository.updateLastLogin(user.id);
     return issueAuthSession(user, context);

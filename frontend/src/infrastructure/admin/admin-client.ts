@@ -62,11 +62,15 @@ export const adminClient = {
     });
   },
 
-  bootstrapFirstSuperAdmin(idToken: string, password: string): Promise<AuthSession> {
+  bootstrapFirstSuperAdmin(
+    email: string,
+    password: string,
+    bootstrapCode: string,
+  ): Promise<AuthSession> {
     return apiRequest<AuthSession>({
       path: "/admin/auth/bootstrap",
       method: "POST",
-      body: JSON.stringify({ idToken, password }),
+      body: JSON.stringify({ email, password, bootstrapCode }),
     });
   },
 

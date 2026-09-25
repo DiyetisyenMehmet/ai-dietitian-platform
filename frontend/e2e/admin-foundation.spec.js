@@ -156,6 +156,19 @@ test("production admin hostname fails closed", async ({ request }) => {
 });
 
 
+test("Admin bootstrap uses email password and one-time code without Google", async ({ page }) => {
+  await page.goto(`${WEB_BASE_URL}/admin/bootstrap`);
+
+  await expect(page.getByRole("heading", { name: "İlk Yönetici Kurulumu" })).toBeVisible();
+  await expect(page.getByLabel("Yönetici e-postası")).toHaveValue("");
+  await expect(page.getByLabel("Yeni yönetici şifresi")).toHaveValue("");
+  await expect(page.getByLabel("Şifre tekrar")).toHaveValue("");
+  await expect(page.getByLabel("Tek kullanımlık kurulum kodu")).toHaveValue("");
+  await expect(page.getByRole("button", { name: "Kurulumu tamamla" })).toBeVisible();
+  await expect(page.getByText(/Google ile doğrula/i)).toHaveCount(0);
+});
+
+
 test("admin login keeps email and password on one screen", async ({ page }) => {
   await page.goto(`${WEB_BASE_URL}/admin/login`);
   const email = page.getByLabel("Yönetici hesabınız");
