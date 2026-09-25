@@ -31,7 +31,7 @@ steps:
         DIEWISH_ENVIRONMENT=staging \
         ADMIN_BOOTSTRAP_CONFIRM=DIEWISH_STAGING_ADMIN_BOOTSTRAP \
         ADMIN_BOOTSTRAP_EMAIL_SHA256="${_ADMIN_EMAIL_SHA256}" \
-        npm run admin:bootstrap-first-super-admin
+        node --import tsx src/modules/admin/admin.bootstrap-first-super-admin.ts
 
 availableSecrets:
   secretManager:
