@@ -50,7 +50,7 @@ test("normal user is returned to Admin login with an inline access warning", asy
   await expect(page.getByRole("heading", { name: "Management Center" })).toBeVisible();
   await expect(
     page.getByText(
-      "Bu hesap Yönetim Merkezi için yetkili değil. Farklı bir e-posta veya telefonla tekrar deneyin.",
+      "Bu hesap Yönetim Merkezi için yetkili değil.",
     ),
   ).toBeVisible();
   await expect(page.getByLabel("E-posta veya telefon")).toBeVisible();
@@ -66,7 +66,7 @@ test("Admin login recovers from an existing normal Diewish session", async ({ pa
   await expect(page.getByLabel("E-posta veya telefon")).toBeVisible();
   await expect(
     page.getByText(
-      "Bu hesap Yönetim Merkezi için yetkili değil. Farklı bir e-posta veya telefonla tekrar deneyin.",
+      "Bu hesap Yönetim Merkezi için yetkili değil.",
     ),
   ).toBeVisible();
 

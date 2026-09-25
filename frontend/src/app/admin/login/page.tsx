@@ -49,7 +49,7 @@ export default function AdminLoginPage() {
     const notice = new URLSearchParams(window.location.search).get("notice");
     if (notice === "access-denied") {
       setFeedback(
-        "Bu hesap Yönetim Merkezi için yetkili değil. Farklı bir e-posta veya telefonla tekrar deneyin.",
+        "Bu hesap Yönetim Merkezi için yetkili değil.",
       );
     }
   }, []);
@@ -75,7 +75,7 @@ export default function AdminLoginPage() {
         setPassword("");
         setCode("");
         setFeedback(
-          "Bu hesap Yönetim Merkezi için yetkili değil. Farklı bir e-posta veya telefonla tekrar deneyin.",
+          "Bu hesap Yönetim Merkezi için yetkili değil.",
         );
         recoveringSession.current = false;
       });
