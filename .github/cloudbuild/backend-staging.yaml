@@ -13,6 +13,7 @@ steps:
         test "$(git rev-parse HEAD)" = "${_GIT_SHA}"
 
   - name: node:20-alpine
+    id: migrate-staging-database
     dir: /workspace/repo/backend
     entrypoint: sh
     secretEnv:
@@ -23,11 +24,21 @@ steps:
         set -eu
         npm ci
         npx prisma generate
-        DATABASE_URL="$$DIRECT_DATABASE_URL" npx prisma migrate deploy
+        DATABASE_URL="$DIRECT_DATABASE_URL" npx prisma migrate deploy
+
+  - name: node:20-alpine
+    id: seed-admin-foundation
+    dir: /workspace/repo/backend
+    entrypoint: sh
+    secretEnv:
+      - DIRECT_DATABASE_URL
+    args:
+      - -c
+      - |
+        set -eu
         # Seed only the deterministic RBAC registry/system-role mapping using
-        # DB-only credentials. First-admin promotion remains a separate,
-        # explicitly confirmed non-production CLI operation.
-        DATABASE_URL="$$DIRECT_DATABASE_URL" npm run admin:seed-foundation
+        # DB-only credentials. First-admin promotion remains separate.
+        DATABASE_URL="$DIRECT_DATABASE_URL" npm run admin:seed-foundation
 
   - name: gcr.io/cloud-builders/docker
     args:
@@ -45,4 +56,4 @@ availableSecrets:
       env: DIRECT_DATABASE_URL
 
 options:
-  logging: CLOUD_LOGGING_ONLY
+  logging: LEGACY
