@@ -1,6 +1,4 @@
-"use strict";
-
-const { PrismaClient } = require("@prisma/client");
+import { PrismaClient } from "@prisma/client";
 
 const CONFIRMATION = "DIEWISH_TEST_BACKDATE_WEIGHT_BASELINE";
 
@@ -46,7 +44,7 @@ async function main() {
   }
 }
 
-main().catch((error) => {
+void main().catch((error) => {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
 });

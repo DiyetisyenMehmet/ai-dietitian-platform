@@ -47,7 +47,7 @@ async function onboard(page) {
 }
 
 function backdateOnboardingBaseline(email, dateKey) {
-  execFileSync("node", ["scripts/test-backdate-weight-baseline.cjs"], {
+  execFileSync("node", ["scripts/test-backdate-weight-baseline.mjs"], {
     cwd: path.resolve(process.cwd(), "../backend"),
     env: {
       ...process.env,
