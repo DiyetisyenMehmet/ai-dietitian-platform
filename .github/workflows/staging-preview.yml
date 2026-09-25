@@ -168,6 +168,10 @@ jobs:
                 ;;
               FAILURE|INTERNAL_ERROR|TIMEOUT|CANCELLED|EXPIRED)
                 echo "Backend Cloud Build failed with status: $build_status" >&2
+                gcloud builds describe "$BACKEND_BUILD_ID" \
+                  --project "$PROJECT_ID" \
+                  --region=global \
+                  --format='yaml(status,statusDetail,failureInfo,steps.id,steps.status)' || true
                 exit 1
                 ;;
             esac
@@ -240,6 +244,10 @@ jobs:
                 ;;
               FAILURE|INTERNAL_ERROR|TIMEOUT|CANCELLED|EXPIRED)
                 echo "Frontend Cloud Build failed with status: $build_status" >&2
+                gcloud builds describe "$FRONTEND_BUILD_ID" \
+                  --project "$PROJECT_ID" \
+                  --region=global \
+                  --format='yaml(status,statusDetail,failureInfo,steps.id,steps.status)' || true
                 exit 1
                 ;;
             esac
