@@ -1,7 +1,37 @@
 import type { AuthSession } from "@/domain/auth/types";
 import { apiRequest } from "@/infrastructure/api/http-client";
 
-export type AdminPermission = "admin.access" | "admin.security.read";
+export type AdminPermission =
+  | "admin.access"
+  | "admin.security.read"
+  | "admin.access.manage"
+  | "admin.audit.read";
+
+export interface AdminManagedUser {
+  id: string;
+  email: string;
+  fullName: string | null;
+  isActive: boolean;
+  createdAt: string;
+  lastLoginAt: string | null;
+  roles: string[];
+  accessLevel: "LIMITED" | "FULL";
+}
+
+export interface AdminAuditRecord {
+  id: string;
+  actorAdminId: string;
+  actorEmail: string | null;
+  actorName: string | null;
+  action: string;
+  targetType: string;
+  targetId: string;
+  targetEmail: string | null;
+  reason: string | null;
+  environment: string;
+  riskLevel: string;
+  createdAt: string;
+}
 
 export interface AdminEnvironmentIdentity {
   environment: "development" | "test" | "staging" | "production";
@@ -69,6 +99,45 @@ export const adminClient = {
       method: "PATCH",
       auth: true,
       body: JSON.stringify(payload),
+    });
+  },
+
+  listAccessUsers(): Promise<{ users: AdminManagedUser[] }> {
+    return apiRequest<{ users: AdminManagedUser[] }>({
+      path: "/admin/access/users",
+      method: "GET",
+      auth: true,
+    });
+  },
+
+  createAccessUser(payload: {
+    email: string;
+    fullName?: string;
+    temporaryPassword: string;
+    accessLevel: "LIMITED" | "FULL";
+  }): Promise<{ user: AdminManagedUser }> {
+    return apiRequest<{ user: AdminManagedUser }>({
+      path: "/admin/access/users",
+      method: "POST",
+      auth: true,
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updateAccessUser(id: string, accessLevel: "LIMITED" | "FULL"): Promise<{ user: { id: string; email: string; accessLevel: "LIMITED" | "FULL"; roles: string[] } }> {
+    return apiRequest({
+      path: `/admin/access/users/${encodeURIComponent(id)}`,
+      method: "PATCH",
+      auth: true,
+      body: JSON.stringify({ accessLevel }),
+    });
+  },
+
+  getAudit(): Promise<{ events: AdminAuditRecord[] }> {
+    return apiRequest<{ events: AdminAuditRecord[] }>({
+      path: "/admin/audit",
+      method: "GET",
+      auth: true,
     });
   },
 

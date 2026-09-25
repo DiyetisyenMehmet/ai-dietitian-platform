@@ -83,6 +83,8 @@ test("authorized admin sees shell and backend environment identity", async ({ pa
   await expect(page.getByText("Access / Security", { exact: true })).toBeVisible();
   await expect(page.getByText(/Kullanıcı veya abonelik operasyonları henüz açık değildir/)).toBeVisible();
   await expect(page.getByRole("heading", { name: "Hesap ve güvenlik" })).toBeVisible();
+  await expect(page.getByText("Yetkili erişimi", { exact: true })).toBeVisible();
+  await expect(page.getByText("İşlem geçmişi", { exact: true })).toBeVisible();
   await expect(page.getByText("E-posta değiştir", { exact: true })).toBeVisible();
   await expect(page.getByText("Şifre değiştir", { exact: true })).toBeVisible();
 });

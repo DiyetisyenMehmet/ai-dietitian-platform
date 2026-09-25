@@ -3,6 +3,12 @@ import { Router } from "express";
 
 import { authenticate, authorize } from "../../middleware/authenticate";
 import { validate } from "../../middleware/validate";
+import { adminAccessController } from "./admin-access.controller";
+import {
+  adminAccessUserParamsSchema,
+  adminCreateAccessUserSchema,
+  adminUpdateAccessUserSchema,
+} from "./admin-access.schemas";
 import { adminAuthController } from "./admin-auth.controller";
 import {
   adminBootstrapSchema,
@@ -50,6 +56,29 @@ adminRouter.patch(
   requireAdminPermission(ADMIN_PERMISSIONS.ACCESS),
   validate({ body: adminPasswordChangeSchema }),
   adminAuthController.changePassword,
+);
+
+adminRouter.get(
+  "/access/users",
+  requireAdminPermission(ADMIN_PERMISSIONS.ACCESS_MANAGE),
+  adminAccessController.listUsers,
+);
+adminRouter.post(
+  "/access/users",
+  requireAdminPermission(ADMIN_PERMISSIONS.ACCESS_MANAGE),
+  validate({ body: adminCreateAccessUserSchema }),
+  adminAccessController.createUser,
+);
+adminRouter.patch(
+  "/access/users/:id",
+  requireAdminPermission(ADMIN_PERMISSIONS.ACCESS_MANAGE),
+  validate({ params: adminAccessUserParamsSchema, body: adminUpdateAccessUserSchema }),
+  adminAccessController.updateUserAccess,
+);
+adminRouter.get(
+  "/audit",
+  requireAdminPermission(ADMIN_PERMISSIONS.AUDIT_READ),
+  adminAccessController.audit,
 );
 
 adminRouter.get("/session", requireAdminPermission(ADMIN_PERMISSIONS.ACCESS), adminController.session);

@@ -28,7 +28,13 @@ function messageFor(error: unknown): string {
   return "İşlem tamamlanamadı. Bilgileri kontrol edip tekrar deneyin.";
 }
 
-export function AdminAccountSecurity({ initialEmail }: { initialEmail: string }) {
+export function AdminAccountSecurity({
+  initialEmail,
+  canChangeEmail,
+}: {
+  initialEmail: string;
+  canChangeEmail: boolean;
+}) {
   const [email, setEmail] = React.useState(initialEmail);
   const [newEmail, setNewEmail] = React.useState("");
   const [emailPassword, setEmailPassword] = React.useState("");
@@ -96,6 +102,7 @@ export function AdminAccountSecurity({ initialEmail }: { initialEmail: string })
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
+        {canChangeEmail ? (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
@@ -136,6 +143,7 @@ export function AdminAccountSecurity({ initialEmail }: { initialEmail: string })
             </form>
           </CardContent>
         </Card>
+        ) : null}
 
         <Card>
           <CardHeader>

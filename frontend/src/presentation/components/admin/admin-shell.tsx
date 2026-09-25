@@ -4,6 +4,7 @@ import { LockKeyhole, ShieldCheck } from "lucide-react";
 
 import type { AdminSession } from "@/infrastructure/admin/admin-client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/presentation/components/ui/card";
+import { AdminAccessManagement } from "./admin-access-management";
 import { AdminAccountSecurity } from "./admin-account-security";
 import { PermissionGate } from "./permission-gate";
 
@@ -46,7 +47,7 @@ export function AdminShell({ session }: { session: AdminSession }) {
               <ShieldCheck className="size-4" aria-hidden="true" />
               Overview
             </div>
-            <PermissionGate permissions={session.permissions} require="admin.security.read">
+            <PermissionGate permissions={session.permissions} require="admin.access.manage">
               <div className="mt-2 flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-muted-foreground">
                 <LockKeyhole className="size-4" aria-hidden="true" />
                 Access / Security
@@ -100,8 +101,16 @@ export function AdminShell({ session }: { session: AdminSession }) {
               </Card>
             </div>
 
-            <PermissionGate permissions={session.permissions} require="admin.security.read">
-              <AdminAccountSecurity initialEmail={session.admin.email} />
+            <AdminAccountSecurity
+              initialEmail={session.admin.email}
+              canChangeEmail={session.roles.includes("SUPER_ADMIN")}
+            />
+
+            <PermissionGate permissions={session.permissions} require="admin.access.manage">
+              <AdminAccessManagement
+                currentAdminId={session.admin.id}
+                canReadAudit={session.permissions.includes("admin.audit.read")}
+              />
             </PermissionGate>
           </div>
         </main>
