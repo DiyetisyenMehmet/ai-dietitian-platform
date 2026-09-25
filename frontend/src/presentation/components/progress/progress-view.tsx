@@ -223,7 +223,7 @@ export function ProgressView() {
       </SectionCard>
 
       {analysis.status !== "no-data" && (
-        <section data-testid="progress-evaluation-card" className={cn("rounded-2xl border p-5 shadow-card", tone.wrap)}>
+        <section className={cn("rounded-2xl border p-5 shadow-card", tone.wrap)}>
           <div className="mb-3 flex items-center gap-2.5">
             <span className="flex size-9 items-center justify-center rounded-xl bg-background/70 text-primary">
               <Image

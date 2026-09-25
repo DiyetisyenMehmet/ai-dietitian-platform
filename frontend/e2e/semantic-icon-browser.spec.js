@@ -1,3 +1,5 @@
+const path = require("node:path");
+const { execFileSync } = require("node:child_process");
 const { test, expect } = require("@playwright/test");
 
 const WEB_BASE_URL = process.env.E2E_WEB_BASE_URL || "http://127.0.0.1:3000";
@@ -41,6 +43,22 @@ async function onboard(page) {
   await page.getByLabel("Genellikle kaçta uyursunuz?").fill("09:00");
   await page.getByRole("button", { name: "Tamamla" }).click();
   await expect(page).toHaveURL(/\/dashboard$/, { timeout: 15_000 });
+  return { email };
+}
+
+function backdateOnboardingBaseline(email, dateKey) {
+  execFileSync("node", ["scripts/test-backdate-weight-baseline.cjs"], {
+    cwd: path.resolve(process.cwd(), "../backend"),
+    env: {
+      ...process.env,
+      NODE_ENV: "test",
+      DIEWISH_ENVIRONMENT: "test",
+      DIEWISH_TEST_FIXTURE_CONFIRM: "DIEWISH_TEST_BACKDATE_WEIGHT_BASELINE",
+      DIEWISH_TEST_FIXTURE_EMAIL: email,
+      DIEWISH_TEST_FIXTURE_DATE: dateKey,
+    },
+    stdio: "pipe",
+  });
 }
 
 async function expectNoOverflow(page) {
@@ -86,7 +104,13 @@ async function checkViewports(page) {
 
 test("semantic Diewish icons keep coach, History and progress meanings distinct", async ({ page }) => {
   test.setTimeout(180_000);
-  await onboard(page);
+  const { email } = await onboard(page);
+  const baselineDate = await page.evaluate(() => {
+    const value = new Date();
+    value.setDate(value.getDate() - 2);
+    return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+  });
+  backdateOnboardingBaseline(email, baselineDate);
 
   await page.route("**/api/ai-chat/conversations", async (route) => {
     await route.fulfill({
@@ -160,15 +184,16 @@ test("semantic Diewish icons keep coach, History and progress meanings distinct"
   await page.getByRole("button", { name: "Kaydet", exact: true }).click();
   await expect(weightInput).toHaveValue("", { timeout: 15_000 });
 
-  const progressEvaluation = page.getByTestId("progress-evaluation-card");
-  await expect(progressEvaluation).toContainText("Hedef kiloya ilerleme");
-  await expect(progressEvaluation.locator('img[src*="diewish-evaluation.png"]')).toBeVisible();
+  const progressEvaluation = page
+    .getByText("Hedef kiloya ilerleme", { exact: true })
+    .locator("xpath=ancestor::section[1]");
+  await expect(progressEvaluation.locator('img[data-diewish-semantic-icon="evaluation"]')).toBeVisible();
 
   const weightAnalysis = page
     .getByText("Hedef tamamlanma", { exact: true })
     .locator("xpath=ancestor::section[1]");
-  await expect(weightAnalysis.locator('img[src*="diewish-weight-analysis.png"]')).toBeVisible();
-  await expect(weightAnalysis.locator('img[src*="diewish-evaluation.png"]')).toBeVisible();
+  await expect(weightAnalysis.locator('img[data-diewish-semantic-icon="weight-analysis"]')).toBeVisible();
+  await expect(weightAnalysis.locator('img[data-diewish-semantic-icon="evaluation"]')).toBeVisible();
   await checkViewports(page);
 
   await page.goto(`${WEB_BASE_URL}/ai`);
