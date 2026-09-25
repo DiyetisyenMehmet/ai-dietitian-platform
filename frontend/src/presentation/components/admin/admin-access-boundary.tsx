@@ -1,10 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
 import { Loader2, ShieldX } from "lucide-react";
 
-import { authStore, useAuth } from "@/application/auth/auth-store";
+import { useAuth } from "@/application/auth/auth-store";
 import { authClient } from "@/infrastructure/auth/auth-client";
 import {
   adminClient,
@@ -36,7 +35,6 @@ function AccessDenied() {
 }
 
 export function AdminAccessBoundary() {
-  const router = useRouter();
   const { status, user } = useAuth();
   const [state, setState] = React.useState<State>({ status: "checking" });
   const rejectingSession = React.useRef(false);
@@ -49,10 +47,9 @@ export function AdminAccessBoundary() {
     } catch {
       // The in-memory session must still be cleared so the login form can recover.
     } finally {
-      authStore.clear();
-      router.replace("/admin/login?notice=access-denied");
+      window.location.replace("/admin/login?notice=access-denied");
     }
-  }, [router]);
+  }, []);
 
   React.useEffect(() => {
     if (status !== "authenticated" || !user) {
