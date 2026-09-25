@@ -22,14 +22,20 @@ function invalidAdminLogin(): ApiError {
   });
 }
 
+function forbiddenAdminLogin(): ApiError {
+  return new ApiError(403, "Management Center access is not authorized.", {
+    code: "ADMIN_AUTH_FORBIDDEN",
+  });
+}
+
 async function assertAdminAccess(user: User): Promise<void> {
   if (!user.isActive || user.role !== UserRole.ADMIN) {
-    throw invalidAdminLogin();
+    throw forbiddenAdminLogin();
   }
 
   const access = await resolveAdminAccess(user.id);
   if (!access || !access.permissions.includes(ADMIN_PERMISSIONS.ACCESS)) {
-    throw invalidAdminLogin();
+    throw forbiddenAdminLogin();
   }
 }
 

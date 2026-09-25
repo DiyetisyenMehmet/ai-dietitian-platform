@@ -299,7 +299,9 @@ test("Phase 1 admin authorization, RBAC and transactional audit", async (t) => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ email: normal.email, password }),
     });
-    assert.equal(normalLogin.status, 401);
+    assert.equal(normalLogin.status, 403);
+    const normalLoginBody = await normalLogin.json();
+    assert.equal(normalLoginBody.error.code, "ADMIN_AUTH_FORBIDDEN");
 
     const phoneNumber = "+905551112233";
     const phoneAdmin = await prisma.user.create({

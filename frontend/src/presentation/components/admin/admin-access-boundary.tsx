@@ -47,7 +47,7 @@ export function AdminAccessBoundary() {
     } catch {
       // The in-memory session must still be cleared so the login form can recover.
     } finally {
-      window.location.replace("/admin/login?notice=access-denied");
+      window.location.replace("/admin/login");
     }
   }, []);
 

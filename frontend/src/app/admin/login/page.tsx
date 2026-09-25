@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { authStore, useAuth } from "@/application/auth/auth-store";
 import { adminClient } from "@/infrastructure/admin/admin-client";
 import { authClient } from "@/infrastructure/auth/auth-client";
+import { ApiError } from "@/infrastructure/api/http-client";
 import { authErrorMessage } from "@/infrastructure/identity/auth-feedback";
 import { startPhoneVerification } from "@/infrastructure/identity/firebase-browser";
 import { normalizePhoneNumber } from "@/infrastructure/identity/phone-number";
@@ -46,15 +47,6 @@ export default function AdminLoginPage() {
   const recoveringSession = React.useRef(false);
 
   React.useEffect(() => {
-    const notice = new URLSearchParams(window.location.search).get("notice");
-    if (notice === "access-denied") {
-      setFeedback(
-        "Bu hesap Yönetim Merkezi için yetkili değil.",
-      );
-    }
-  }, []);
-
-  React.useEffect(() => {
     if (status !== "authenticated" || !user) return;
 
     if (user.role === "ADMIN") {
@@ -74,9 +66,7 @@ export default function AdminLoginPage() {
         setResolvedEmail("");
         setPassword("");
         setCode("");
-        setFeedback(
-          "Bu hesap Yönetim Merkezi için yetkili değil.",
-        );
+        setFeedback("");
         recoveringSession.current = false;
       });
   }, [router, status, user]);
@@ -157,9 +147,14 @@ export default function AdminLoginPage() {
         );
         authStore.setSession(session);
         router.replace("/admin");
-      } catch {
-        setFeedback("Giriş bilgileri doğrulanamadı.");
-        toast.error("Giriş bilgileri doğrulanamadı.");
+      } catch (error) {
+        const message =
+          error instanceof ApiError &&
+          (error.status === 403 || error.code === "ADMIN_AUTH_FORBIDDEN")
+            ? "Bu hesap Yönetim Merkezi için yetkili değil."
+            : "Giriş bilgileri doğrulanamadı.";
+        setFeedback(message);
+        toast.error(message);
       } finally {
         inFlight.current = false;
         setBusy(false);
@@ -188,11 +183,17 @@ export default function AdminLoginPage() {
         setConfirmation(null);
         router.replace("/admin");
       } catch (error) {
-        const firebaseMessage = authErrorMessage(error);
         const message =
-          firebaseMessage === "Kimlik doğrulama sırasında bir hata oluştu. Lütfen tekrar deneyin."
-            ? "Management Center erişimi doğrulanamadı."
-            : firebaseMessage;
+          error instanceof ApiError &&
+          (error.status === 403 || error.code === "ADMIN_AUTH_FORBIDDEN")
+            ? "Bu hesap Yönetim Merkezi için yetkili değil."
+            : (() => {
+                const firebaseMessage = authErrorMessage(error);
+                return firebaseMessage ===
+                  "Kimlik doğrulama sırasında bir hata oluştu. Lütfen tekrar deneyin."
+                  ? "Management Center erişimi doğrulanamadı."
+                  : firebaseMessage;
+              })();
         setFeedback(message);
         toast.error(message);
       } finally {

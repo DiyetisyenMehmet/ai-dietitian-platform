@@ -42,17 +42,13 @@ function bootstrapAdmin(userId) {
   });
 }
 
-test("normal user is returned to Admin login with an inline access warning", async ({ page }) => {
+test("normal user is returned to a clean Admin login screen", async ({ page }) => {
   await registerInBrowser(page, "normal");
   await page.goto(`${WEB_BASE_URL}/admin`);
 
-  await expect(page).toHaveURL(/\/admin\/login\?notice=access-denied$/, { timeout: 10_000 });
+  await expect(page).toHaveURL(/\/admin\/login$/, { timeout: 10_000 });
   await expect(page.getByRole("heading", { name: "Management Center" })).toBeVisible();
-  await expect(
-    page.getByText(
-      "Bu hesap Yönetim Merkezi için yetkili değil.",
-    ),
-  ).toBeVisible();
+  await expect(page.getByText("Bu hesap Yönetim Merkezi için yetkili değil.")).toHaveCount(0);
   await expect(page.getByLabel("E-posta veya telefon")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Erişim reddedildi" })).toHaveCount(0);
   await expect(page.getByText("Yönetim merkezi hazır")).toHaveCount(0);
@@ -64,14 +60,11 @@ test("Admin login recovers from an existing normal Diewish session", async ({ pa
 
   await expect(page).toHaveURL(/\/admin\/login$/, { timeout: 10_000 });
   await expect(page.getByLabel("E-posta veya telefon")).toBeVisible();
-  await expect(
-    page.getByText(
-      "Bu hesap Yönetim Merkezi için yetkili değil.",
-    ),
-  ).toBeVisible();
+  await expect(page.getByText("Bu hesap Yönetim Merkezi için yetkili değil.")).toHaveCount(0);
 
   await page.reload();
   await expect(page.getByLabel("E-posta veya telefon")).toBeVisible();
+  await expect(page.getByText("Bu hesap Yönetim Merkezi için yetkili değil.")).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Erişim reddedildi" })).toHaveCount(0);
 });
 
@@ -188,4 +181,11 @@ test("Admin login uses a discreet professional identifier prompt", async ({ page
   await expect(identifier).toHaveAttribute("placeholder", "Yönetici hesabınız");
   await expect(page.getByText("Yönetici hesabınız", { exact: true })).toHaveCount(0);
   await expect(page.getByText(/örnek@|example@/i)).toHaveCount(0);
+});
+
+
+test("blank Admin login never shows a stale authorization warning", async ({ page }) => {
+  await page.goto(`${WEB_BASE_URL}/admin/login?notice=access-denied`);
+  await expect(page.getByLabel("E-posta veya telefon")).toHaveValue("");
+  await expect(page.getByText("Bu hesap Yönetim Merkezi için yetkili değil.")).toHaveCount(0);
 });
