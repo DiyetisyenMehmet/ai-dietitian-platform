@@ -15,7 +15,10 @@ export default function AdminResetPasswordPage() {
   const [message, setMessage] = React.useState("");
 
   React.useEffect(() => {
-    setToken(new URLSearchParams(window.location.search).get("token") ?? "");
+    const params = new URLSearchParams(window.location.search);
+    const mode = params.get("mode");
+    const actionCode = params.get("oobCode") ?? params.get("token") ?? "";
+    setToken(mode && mode !== "resetPassword" ? "" : actionCode);
   }, []);
 
   const submit = async (event: React.FormEvent) => {

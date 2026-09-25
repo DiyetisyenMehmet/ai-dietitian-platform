@@ -7,6 +7,7 @@ REGION="${REGION:-europe-west1}"
 FRONTEND_SERVICE="${FRONTEND_SERVICE:-diewish-frontend-staging}"
 FRONTEND_URL="${FRONTEND_URL:-}"
 CUSTOM_FRONTEND_URL="${CUSTOM_FRONTEND_URL:-https://staging.diewish.com}"
+ADMIN_STAGING_URL="${ADMIN_STAGING_URL:-https://admin-staging.diewish.com}"
 WEB_APP_DISPLAY_NAME="Diewish Staging Web"
 SMS_REGIONS="${DIEWISH_STAGING_SMS_REGIONS:-TR}"
 
@@ -50,6 +51,14 @@ custom_frontend_host="${custom_frontend_host%%/*}"
 custom_frontend_host="${custom_frontend_host%%:*}"
 if [[ -z "$custom_frontend_host" ]]; then
   echo "Could not resolve custom staging frontend host." >&2
+  exit 1
+fi
+
+admin_staging_host="${ADMIN_STAGING_URL#https://}"
+admin_staging_host="${admin_staging_host%%/*}"
+admin_staging_host="${admin_staging_host%%:*}"
+if [[ -z "$admin_staging_host" ]]; then
+  echo "Could not resolve admin staging host." >&2
   exit 1
 fi
 
@@ -151,7 +160,8 @@ authorized_domains="$(jq -cn \
   --arg frontend "$frontend_host" \
   --arg canonical "$canonical_frontend_host" \
   --arg custom "$custom_frontend_host" \
-  '$current + [$firebase,$frontend,$canonical,$custom] | map(select(length>0)) | unique')"
+  --arg admin "$admin_staging_host" \
+  '$current + [$firebase,$frontend,$canonical,$custom,$admin] | map(select(length>0)) | unique')"
 
 IFS=',' read -r -a region_array <<<"$SMS_REGIONS"
 region_json="$(printf '%s\n' "${region_array[@]}" | sed 's/^ *//;s/ *$//' | jq -R 'select(length>0)' | jq -s '.')"
@@ -160,10 +170,12 @@ if [[ "$(jq 'length' <<<"$region_json")" -eq 0 ]]; then
   exit 1
 fi
 
+admin_reset_callback="${ADMIN_STAGING_URL%/}/admin/reset-password"
 patch_body="$(jq -cn \
   --argjson domains "$authorized_domains" \
   --argjson regions "$region_json" \
-  '{signIn:{phoneNumber:{enabled:true},anonymous:{enabled:false}},authorizedDomains:$domains,smsRegionConfig:{allowlistOnly:{allowedRegions:$regions}}}')"
+  --arg callback "$admin_reset_callback" \
+  '{signIn:{email:{enabled:true,passwordRequired:true},phoneNumber:{enabled:true},anonymous:{enabled:false}},authorizedDomains:$domains,smsRegionConfig:{allowlistOnly:{allowedRegions:$regions}},notification:{sendEmail:{callbackUri:$callback}}}')"
 
 patch_file="$(mktemp)"
 patch_code="$(curl -sS -o "$patch_file" -w '%{http_code}' \
@@ -171,7 +183,7 @@ patch_code="$(curl -sS -o "$patch_file" -w '%{http_code}' \
   -H "$(auth_header)" \
   -H 'Content-Type: application/json' \
   -d "$patch_body" \
-  "https://identitytoolkit.googleapis.com/admin/v2/projects/${PROJECT_ID}/config?updateMask=signIn.phoneNumber.enabled,signIn.anonymous.enabled,authorizedDomains,smsRegionConfig")"
+  "https://identitytoolkit.googleapis.com/admin/v2/projects/${PROJECT_ID}/config?updateMask=signIn.email.enabled,signIn.email.passwordRequired,signIn.phoneNumber.enabled,signIn.anonymous.enabled,authorizedDomains,smsRegionConfig,notification.sendEmail.callbackUri")"
 if [[ "$patch_code" != "200" ]]; then
   fail_from_json "$patch_file" "Could not enforce staging phone/anonymous/domain configuration."
 fi
@@ -202,16 +214,20 @@ if [[ "$verify_code" != "200" ]]; then
   fail_from_json "$verify_file" "Could not verify staging Identity Platform config."
 fi
 
+email_enabled="$(jq -r '.signIn.email.enabled // false' "$verify_file")"
+email_password_required="$(jq -r '.signIn.email.passwordRequired // false' "$verify_file")"
 phone_enabled="$(jq -r '.signIn.phoneNumber.enabled // false' "$verify_file")"
 anonymous_enabled="$(jq -r '.signIn.anonymous.enabled // false' "$verify_file")"
+admin_callback="$(jq -r '.notification.sendEmail.callbackUri // ""' "$verify_file")"
 frontend_authorized="$(jq -r --arg host "$frontend_host" '(.authorizedDomains // []) | index($host) != null' "$verify_file")"
 canonical_authorized="$(jq -r --arg host "$canonical_frontend_host" '(.authorizedDomains // []) | index($host) != null' "$verify_file")"
 custom_authorized="$(jq -r --arg host "$custom_frontend_host" '(.authorizedDomains // []) | index($host) != null' "$verify_file")"
+admin_authorized="$(jq -r --arg host "$admin_staging_host" '(.authorizedDomains // []) | index($host) != null' "$verify_file")"
 sms_allowed_regions="$(jq -c '(.smsRegionConfig.allowlistOnly.allowedRegions // []) | sort | unique' "$verify_file")"
 expected_sms_regions="$(jq -c 'sort | unique' <<<"$region_json")"
 rm -f "$verify_file"
 
-if [[ "$phone_enabled" != "true" || "$anonymous_enabled" != "false" || "$frontend_authorized" != "true" || "$canonical_authorized" != "true" || "$custom_authorized" != "true" || "$sms_allowed_regions" != "$expected_sms_regions" ]]; then
+if [[ "$email_enabled" != "true" || "$email_password_required" != "true" || "$phone_enabled" != "true" || "$anonymous_enabled" != "false" || "$frontend_authorized" != "true" || "$canonical_authorized" != "true" || "$custom_authorized" != "true" || "$admin_authorized" != "true" || "$admin_callback" != "$admin_reset_callback" || "$sms_allowed_regions" != "$expected_sms_regions" ]]; then
   echo "Staging auth contract verification failed after update." >&2
   exit 1
 fi
@@ -230,5 +246,5 @@ fi
   echo "CUSTOM_FRONTEND_URL=https://${custom_frontend_host}"
 } >> "$GITHUB_ENV"
 
-echo "Staging Authentication contract verified: Google enabled, phone enabled, anonymous disabled, Cloud Run and custom staging frontend domains authorized, SMS allowlist enforced."
+echo "Staging Authentication contract verified: email/password + Google + phone enabled, anonymous disabled, admin reset callback and authorized domains enforced, SMS allowlist enforced."
 echo "Staging phone reCAPTCHA diagnostic: enforcement=${recaptcha_phone_enforcement}, smsTollFraudProtection=${recaptcha_sms_toll_fraud}, tollFraudManagedRules=${recaptcha_toll_fraud_rules}, smsBotScore=${recaptcha_sms_bot_score}."

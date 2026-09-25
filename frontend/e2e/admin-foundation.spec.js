@@ -203,3 +203,29 @@ test("unknown admin email does not reveal account existence", async ({ page }) =
   await expect(page.getByText(/kayıtlı|bulunamadı|mevcut değil/i)).toHaveCount(0);
 });
 
+
+
+test("Admin reset page accepts Firebase oobCode and rejects unrelated modes", async ({ page }) => {
+  await page.goto(`${WEB_BASE_URL}/admin/reset-password?mode=resetPassword&oobCode=test-reset-code`);
+  await expect(page.getByRole("heading", { name: "Yeni şifre belirle" })).toBeVisible();
+  await page.getByLabel("Yeni şifre").fill("NewAdminPass123!");
+  await page.getByLabel("Yeni şifre tekrar").fill("NewAdminPass123!");
+
+  let resetPayload = null;
+  await page.route("**/api/admin/auth/password/reset", async (route) => {
+    resetPayload = JSON.parse(route.request().postData() || "{}");
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ success: true, data: { message: "Şifreniz güncellendi." } }),
+    });
+  });
+  await page.getByRole("button", { name: "Şifreyi güncelle" }).click();
+  expect(resetPayload).toEqual({ token: "test-reset-code", newPassword: "NewAdminPass123!" });
+
+  await page.goto(`${WEB_BASE_URL}/admin/reset-password?mode=verifyEmail&oobCode=not-a-reset`);
+  await page.getByLabel("Yeni şifre").fill("NewAdminPass123!");
+  await page.getByLabel("Yeni şifre tekrar").fill("NewAdminPass123!");
+  await page.getByRole("button", { name: "Şifreyi güncelle" }).click();
+  await expect(page.getByText("Sıfırlama bağlantısı geçersiz veya süresi dolmuş.")).toBeVisible();
+});
