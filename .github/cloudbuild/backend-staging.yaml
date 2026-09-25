@@ -24,7 +24,7 @@ steps:
         set -eu
         npm ci
         npx prisma generate
-        DATABASE_URL="$DIRECT_DATABASE_URL" npx prisma migrate deploy
+        DATABASE_URL="$$DIRECT_DATABASE_URL" npx prisma migrate deploy
 
   - name: node:20-alpine
     id: seed-admin-foundation
@@ -38,7 +38,7 @@ steps:
         set -eu
         # Seed only the deterministic RBAC registry/system-role mapping using
         # DB-only credentials. First-admin promotion remains separate.
-        DATABASE_URL="$DIRECT_DATABASE_URL" npm run admin:seed-foundation
+        DATABASE_URL="$$DIRECT_DATABASE_URL" npm run admin:seed-foundation
 
   - name: gcr.io/cloud-builders/docker
     args:
