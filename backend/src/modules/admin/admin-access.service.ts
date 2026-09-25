@@ -5,6 +5,7 @@ import { AdminAuditRiskLevel, Prisma, UserRole } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/api-error";
 import { hashPassword } from "../../utils/password";
+import { authRepository } from "../auth/auth.repository";
 import {
   buildAuditSnapshot,
   runAuditedAdminMutation,
@@ -15,6 +16,7 @@ import { adminPasswordIdentityProvider } from "./admin-password-identity.provide
 import type {
   AdminAccessLevel,
   AdminCreateAccessUserInput,
+  AdminUpdateAccessUserInput,
 } from "./admin-access.schemas";
 
 interface AdminMutationRequestContext {
@@ -185,19 +187,19 @@ export const adminAccessService = {
     }
   },
 
-  async updateAccessLevel(
+  async updateAccess(
     actorAdminId: string,
     targetUserId: string,
-    accessLevel: AdminAccessLevel,
+    input: AdminUpdateAccessUserInput,
     requestContext: AdminMutationRequestContext,
   ) {
     if (actorAdminId === targetUserId) {
-      throw new ApiError(400, "You cannot change your own access level.", {
+      throw new ApiError(400, "You cannot change your own access configuration.", {
         code: "ADMIN_SELF_ACCESS_CHANGE_BLOCKED",
       });
     }
 
-    return runAuditedAdminMutation(
+    const result = await runAuditedAdminMutation(
       {
         actorAdminId,
         action: "admin.access.level_change",
@@ -229,10 +231,11 @@ export const adminAccessService = {
         }
 
         const currentRoles = target.adminRoleMemberships.map((membership) => membership.role.key);
-        const nextRoleKey = roleKey(accessLevel);
+        const nextRoleKey = roleKey(input.accessLevel);
+        const nextIsActive = input.isActive ?? target.isActive;
         if (
           currentRoles.includes(ADMIN_SYSTEM_ROLES.SUPER_ADMIN) &&
-          nextRoleKey !== ADMIN_SYSTEM_ROLES.SUPER_ADMIN
+          (nextRoleKey !== ADMIN_SYSTEM_ROLES.SUPER_ADMIN || !nextIsActive)
         ) {
           const superRole = await tx.adminRole.findUniqueOrThrow({
             where: { key: ADMIN_SYSTEM_ROLES.SUPER_ADMIN },
@@ -249,6 +252,13 @@ export const adminAccessService = {
               code: "ADMIN_LAST_SUPER_ADMIN",
             });
           }
+        }
+
+        if (target.isActive !== nextIsActive) {
+          await tx.user.update({
+            where: { id: targetUserId },
+            data: { isActive: nextIsActive },
+          });
         }
 
         const managedRoles = await tx.adminRole.findMany({
@@ -279,20 +289,34 @@ export const adminAccessService = {
           result: {
             id: target.id,
             email: target.email,
-            accessLevel,
+            accessLevel: input.accessLevel,
+            isActive: nextIsActive,
             roles: [nextRoleKey],
           },
           before: buildAuditSnapshot(
-            { email: target.email, roles: currentRoles, accessLevel: accessLevelFromRoles(currentRoles) },
-            ["email", "roles", "accessLevel"],
+            {
+              email: target.email,
+              roles: currentRoles,
+              accessLevel: accessLevelFromRoles(currentRoles),
+              isActive: target.isActive,
+            },
+            ["email", "roles", "accessLevel", "isActive"],
           ),
           after: buildAuditSnapshot(
-            { email: target.email, roles: [nextRoleKey], accessLevel },
-            ["email", "roles", "accessLevel"],
+            {
+              email: target.email,
+              roles: [nextRoleKey],
+              accessLevel: input.accessLevel,
+              isActive: nextIsActive,
+            },
+            ["email", "roles", "accessLevel", "isActive"],
           ),
         };
       },
     );
+
+    await authRepository.revokeAllForUser(targetUserId);
+    return result;
   },
 
   async listAudit(limit = 100) {

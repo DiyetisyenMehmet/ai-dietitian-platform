@@ -66,14 +66,62 @@ export function AdminAccessManagement({
     }
   };
 
-  const changeAccess = async (id: string, next: "LIMITED" | "FULL") => {
+  const updateAccess = async (
+    user: AdminManagedUser,
+    next: { accessLevel?: "LIMITED" | "FULL"; isActive?: boolean },
+  ) => {
     try {
-      await adminClient.updateAccessUser(id, next);
+      await adminClient.updateAccessUser(user.id, {
+        accessLevel: next.accessLevel ?? user.accessLevel,
+        ...(typeof next.isActive === "boolean" ? { isActive: next.isActive } : {}),
+      });
       await load();
-      toast.success("Yetki seviyesi güncellendi.");
+      toast.success(
+        typeof next.isActive === "boolean"
+          ? next.isActive
+            ? "Yetkili hesap etkinleştirildi."
+            : "Yetkili hesap devre dışı bırakıldı."
+          : "Yetki seviyesi güncellendi.",
+      );
     } catch {
-      toast.error("Yetki seviyesi güncellenemedi.");
+      toast.error("Yetkili hesabı güncellenemedi.");
     }
+  };
+
+  const actionLabel = (action: string) => {
+    const labels: Record<string, string> = {
+      "admin.bootstrap.super_admin": "İlk Super Admin kurulumu",
+      "admin.access.user_create": "Yetkili hesabı oluşturuldu",
+      "admin.access.level_change": "Yetki / hesap durumu değiştirildi",
+      "admin.security.email_change": "Yönetici e-postası değiştirildi",
+      "admin.security.password_change": "Yönetici şifresi değiştirildi",
+    };
+    return labels[action] ?? action;
+  };
+
+  const snapshotText = (value: Record<string, unknown> | null) => {
+    if (!value || Object.keys(value).length === 0) return "—";
+    return Object.entries(value)
+      .map(([key, item]) => {
+        const labels: Record<string, string> = {
+          email: "E-posta",
+          fullName: "Ad",
+          accessLevel: "Yetki",
+          isActive: "Durum",
+          roles: "Roller",
+          role: "Rol",
+          assignedRole: "Atanan rol",
+        };
+        const rendered = Array.isArray(item)
+          ? item.join(", ")
+          : typeof item === "boolean"
+            ? item
+              ? "Etkin"
+              : "Devre dışı"
+            : String(item ?? "—");
+        return `${labels[key] ?? key}: ${rendered}`;
+      })
+      .join(" · ");
   };
 
   return (
@@ -109,19 +157,30 @@ export function AdminAccessManagement({
                   <p className="truncate font-medium">{user.fullName || user.email}</p>
                   <p className="truncate text-xs text-muted-foreground">{user.email}</p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {user.accessLevel === "FULL" ? "Tam yetki" : "Sınırlı yetki"}
+                    {user.accessLevel === "FULL" ? "Tam yetki" : "Sınırlı yetki"} · {user.isActive ? "Etkin" : "Devre dışı"}
                   </p>
                 </div>
-                <select
-                  aria-label={`${user.email} yetki seviyesi`}
-                  className="h-10 rounded-xl border border-input bg-background px-3 text-sm"
-                  value={user.accessLevel}
-                  disabled={user.id === currentAdminId}
-                  onChange={(e)=>void changeAccess(user.id, e.target.value as "LIMITED" | "FULL")}
-                >
-                  <option value="LIMITED">Sınırlı</option>
-                  <option value="FULL">Tam</option>
-                </select>
+                <div className="flex flex-wrap gap-2">
+                  <select
+                    aria-label={`${user.email} yetki seviyesi`}
+                    className="h-10 rounded-xl border border-input bg-background px-3 text-sm"
+                    value={user.accessLevel}
+                    disabled={user.id === currentAdminId}
+                    onChange={(e)=>void updateAccess(user, { accessLevel: e.target.value as "LIMITED" | "FULL" })}
+                  >
+                    <option value="LIMITED">Sınırlı</option>
+                    <option value="FULL">Tam</option>
+                  </select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={user.id === currentAdminId}
+                    onClick={() => void updateAccess(user, { isActive: !user.isActive })}
+                  >
+                    {user.isActive ? "Devre dışı bırak" : "Etkinleştir"}
+                  </Button>
+                </div>
               </div>
             ))}
           </div>
@@ -145,10 +204,18 @@ export function AdminAccessManagement({
                   <span className="font-medium">{event.actorName || event.actorEmail || event.actorAdminId}</span>
                   <time className="text-xs text-muted-foreground">{new Date(event.createdAt).toLocaleString("tr-TR")}</time>
                 </div>
-                <p className="mt-1 break-words">{event.action}</p>
+                <p className="mt-1 break-words font-medium">{actionLabel(event.action)}</p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Hedef: {event.targetEmail || event.targetId} · Risk: {event.riskLevel}
                 </p>
+                <div className="mt-2 grid gap-2 text-xs sm:grid-cols-2">
+                  <div className="rounded-lg bg-muted/50 px-3 py-2">
+                    <span className="font-medium">Önce:</span> {snapshotText(event.beforeState)}
+                  </div>
+                  <div className="rounded-lg bg-muted/50 px-3 py-2">
+                    <span className="font-medium">Sonra:</span> {snapshotText(event.afterState)}
+                  </div>
+                </div>
               </div>
             ))}
           </CardContent>

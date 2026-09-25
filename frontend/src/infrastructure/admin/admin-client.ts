@@ -27,6 +27,8 @@ export interface AdminAuditRecord {
   targetType: string;
   targetId: string;
   targetEmail: string | null;
+  beforeState: Record<string, unknown> | null;
+  afterState: Record<string, unknown> | null;
   reason: string | null;
   environment: string;
   riskLevel: string;
@@ -124,12 +126,15 @@ export const adminClient = {
     });
   },
 
-  updateAccessUser(id: string, accessLevel: "LIMITED" | "FULL"): Promise<{ user: { id: string; email: string; accessLevel: "LIMITED" | "FULL"; roles: string[] } }> {
+  updateAccessUser(
+    id: string,
+    payload: { accessLevel: "LIMITED" | "FULL"; isActive?: boolean },
+  ): Promise<{ user: { id: string; email: string; accessLevel: "LIMITED" | "FULL"; isActive: boolean; roles: string[] } }> {
     return apiRequest({
       path: `/admin/access/users/${encodeURIComponent(id)}`,
       method: "PATCH",
       auth: true,
-      body: JSON.stringify({ accessLevel }),
+      body: JSON.stringify(payload),
     });
   },
 

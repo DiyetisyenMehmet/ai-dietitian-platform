@@ -19,6 +19,7 @@ export const adminCreateAccessUserSchema = z.object({
 
 export const adminUpdateAccessUserSchema = z.object({
   accessLevel: adminAccessLevelSchema,
+  isActive: z.boolean().optional(),
 });
 
 export const adminAccessUserParamsSchema = z.object({

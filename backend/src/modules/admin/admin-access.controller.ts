@@ -35,10 +35,10 @@ export const adminAccessController = {
 
   updateUserAccess: asyncHandler(async (req: Request, res: Response) => {
     const input = req.body as AdminUpdateAccessUserInput;
-    const user = await adminAccessService.updateAccessLevel(
+    const user = await adminAccessService.updateAccess(
       requireUserId(req),
       req.params.id!,
-      input.accessLevel,
+      input,
       requestIdentity(req),
     );
     sendSuccess(res, { user });
