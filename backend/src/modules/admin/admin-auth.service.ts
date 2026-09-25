@@ -30,7 +30,7 @@ import { adminPasswordIdentityProvider } from "./admin-password-identity.provide
 const APPROVED_FIRST_SUPER_ADMIN_EMAIL_SHA256 =
   "ed911dcbf3353a718ab0e6e3039e92287169025cb0a4609de03ade42a6463cb8";
 const STAGING_OWNER_BOOTSTRAP_CODE_SHA256 =
-  "817e3b42836c784e2452d809f3c7c54cc065d8a1126bc22df6da4024136ae1dd";
+  "9cc44cdab1feb2ebccf46a9ab32df71c3c143833150ff9fac23e63c185bfe734";
 
 interface AdminMutationRequestContext {
   correlationId: string;
