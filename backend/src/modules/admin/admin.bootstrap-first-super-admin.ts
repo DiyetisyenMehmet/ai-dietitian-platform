@@ -157,10 +157,20 @@ async function main(): Promise<void> {
   );
 }
 
+function bootstrapExitCode(error: unknown): number {
+  const message = error instanceof Error ? error.message : String(error);
+  if (message.includes("Expected exactly one active staging user")) return 41;
+  if (message.includes("different staging Super Admin")) return 42;
+  if (message.includes("already been consumed")) return 43;
+  if (message.includes("missing its required audit event")) return 44;
+  if (message.includes("Post-bootstrap verification failed")) return 45;
+  return 49;
+}
+
 void main()
   .then(() => prisma.$disconnect())
   .catch(async (error) => {
     console.error(error instanceof Error ? error.message : String(error));
     await prisma.$disconnect();
-    process.exitCode = 1;
+    process.exitCode = bootstrapExitCode(error);
   });

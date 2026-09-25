@@ -42,9 +42,34 @@ jobs:
           set -euo pipefail
           test "${GITHUB_REF_NAME}" = "feature/staging-preview"
           test "${#ADMIN_EMAIL_SHA256}" = "64"
-          gcloud builds submit \
+          BUILD_ID="$(gcloud builds submit \
+            --async \
             --no-source \
             --project "${PROJECT_ID}" \
             --config .github/cloudbuild/admin-first-super-admin-staging.yaml \
             --substitutions "_GIT_SHA=${GITHUB_SHA},_ADMIN_EMAIL_SHA256=${ADMIN_EMAIL_SHA256}" \
-            --quiet
+            --format='value(id)' \
+            --quiet)"
+          test -n "${BUILD_ID}"
+          echo "Cloud Build started: ${BUILD_ID}"
+
+          for attempt in $(seq 1 120); do
+            STATUS="$(gcloud builds describe "${BUILD_ID}" --project "${PROJECT_ID}" --format='value(status)')"
+            case "${STATUS}" in
+              SUCCESS)
+                echo "Staging Super Admin bootstrap verification: SUCCESS"
+                exit 0
+                ;;
+              FAILURE|CANCELLED|TIMEOUT|EXPIRED)
+                echo "Staging Super Admin bootstrap verification: ${STATUS}"
+                gcloud builds describe "${BUILD_ID}" \
+                  --project "${PROJECT_ID}" \
+                  --format='yaml(status,statusDetail,failureInfo,steps.id,steps.status)' || true
+                exit 1
+                ;;
+            esac
+            sleep 5
+          done
+
+          echo "Timed out waiting for staging Super Admin bootstrap build."
+          exit 1
