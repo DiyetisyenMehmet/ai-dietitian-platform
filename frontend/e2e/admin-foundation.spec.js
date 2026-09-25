@@ -171,3 +171,12 @@ test("admin login uses one blank identifier field for email or phone", async ({ 
   await expect(page.getByRole("textbox", { name: "Şifre", exact: true })).toBeVisible();
   await expect(page.getByLabel("E-posta veya telefon")).toHaveCount(0);
 });
+
+
+test("Admin login hides explanatory access copy", async ({ page }) => {
+  await page.goto(`${WEB_BASE_URL}/admin/login`);
+  await expect(page.getByText("Yalnızca yetkili yönetici hesapları içindir.")).toHaveCount(0);
+  await expect(page.getByText(/Yetki kontrolü backend üzerinde/)).toHaveCount(0);
+  await expect(page.getByText("E-posta veya telefon", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("E-posta veya telefon")).toBeVisible();
+});

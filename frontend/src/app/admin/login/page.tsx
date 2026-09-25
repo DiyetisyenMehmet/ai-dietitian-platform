@@ -219,9 +219,6 @@ export default function AdminLoginPage() {
           <h1 className="mt-1 text-2xl font-bold tracking-tight">
             Management Center
           </h1>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            Yalnızca yetkili yönetici hesapları içindir.
-          </p>
         </div>
 
         {feedback ? (
@@ -232,22 +229,21 @@ export default function AdminLoginPage() {
 
         {step === "identifier" ? (
           <form onSubmit={continueWithIdentifier} noValidate className="space-y-4">
-            <FormField id="adminIdentifier" label="E-posta veya telefon">
-              <Input
-                id="adminIdentifier"
-                type="text"
-                inputMode="text"
-                autoComplete="off"
-                autoCapitalize="none"
-                spellCheck={false}
-                value={identifier}
-                onChange={(event) => {
-                  setIdentifier(event.target.value);
-                  setFeedback("");
-                }}
-                disabled={busy}
-              />
-            </FormField>
+            <Input
+              id="adminIdentifier"
+              type="text"
+              inputMode="text"
+              autoComplete="off"
+              autoCapitalize="none"
+              spellCheck={false}
+              aria-label="E-posta veya telefon"
+              value={identifier}
+              onChange={(event) => {
+                setIdentifier(event.target.value);
+                setFeedback("");
+              }}
+              disabled={busy}
+            />
 
             <Button
               id="diewish-admin-identifier-continue"
@@ -323,10 +319,6 @@ export default function AdminLoginPage() {
           </form>
         ) : null}
 
-        <p className="mt-6 text-center text-xs leading-5 text-muted-foreground">
-          Yetki kontrolü backend üzerinde güncel ADMIN rolü ve RBAC izinleriyle
-          doğrulanır.
-        </p>
       </section>
     </main>
   );
