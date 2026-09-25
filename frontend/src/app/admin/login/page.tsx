@@ -204,27 +204,39 @@ export default function AdminLoginPage() {
   );
 
   return (
-    <main className="flex min-h-dvh items-center justify-center bg-muted/30 p-4">
-      <section className="w-full max-w-md rounded-3xl border bg-card p-6 shadow-sm sm:p-8">
-        <div className="mb-7">
+    <main className="relative flex min-h-dvh items-center justify-center overflow-hidden bg-gradient-to-b from-background via-muted/20 to-background p-4">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-44 bg-primary/[0.04] blur-3xl" aria-hidden="true" />
+      <div className="pointer-events-none absolute -left-24 top-1/3 size-56 rounded-full bg-primary/[0.035] blur-3xl" aria-hidden="true" />
+      <div className="pointer-events-none absolute -right-24 bottom-1/4 size-64 rounded-full bg-primary/[0.03] blur-3xl" aria-hidden="true" />
+
+      <section className="relative w-full max-w-[430px] rounded-[2rem] border border-border/70 bg-card/95 p-6 shadow-2xl backdrop-blur-sm sm:p-8">
+        <div className="mb-8">
           <div className="flex items-center justify-between gap-4">
-            <div className="flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+            <div className="flex size-12 items-center justify-center rounded-2xl border border-primary/10 bg-primary/10 text-primary shadow-sm">
               <ShieldCheck className="size-5" aria-hidden="true" />
             </div>
-            <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-bold tracking-[0.16em] text-amber-700 dark:text-amber-300">
+            <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3.5 py-1.5 text-[11px] font-bold tracking-[0.2em] text-amber-700 dark:text-amber-300">
               STAGING
             </span>
           </div>
-          <p className="mt-5 text-sm font-semibold text-primary">DIEWISH</p>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight">
-            Management Center
-          </h1>
+
+          <div className="mt-6">
+            <p className="text-xs font-bold tracking-[0.22em] text-primary">DIEWISH</p>
+            <h1 className="mt-2 text-[2rem] font-bold leading-tight tracking-[-0.035em]">
+              Management Center
+            </h1>
+            <div className="mt-4 h-px w-12 bg-primary/30" aria-hidden="true" />
+          </div>
         </div>
 
         {feedback ? (
-          <p role="status" aria-live="polite" className="mb-4 text-sm text-muted-foreground">
+          <div
+            role="status"
+            aria-live="polite"
+            className="mb-5 rounded-2xl border border-destructive/15 bg-destructive/[0.04] px-4 py-3 text-sm font-medium text-foreground"
+          >
             {feedback}
-          </p>
+          </div>
         ) : null}
 
         {step === "identifier" ? (
@@ -237,6 +249,8 @@ export default function AdminLoginPage() {
               autoCapitalize="none"
               spellCheck={false}
               aria-label="E-posta veya telefon"
+              placeholder="Yönetici hesabınız"
+              className="h-14 rounded-2xl border-border/80 bg-background/80 px-4 text-base shadow-sm placeholder:text-muted-foreground/65 focus-visible:ring-2"
               value={identifier}
               onChange={(event) => {
                 setIdentifier(event.target.value);
@@ -249,7 +263,7 @@ export default function AdminLoginPage() {
               id="diewish-admin-identifier-continue"
               type="submit"
               size="lg"
-              className="w-full"
+              className="h-14 w-full rounded-2xl text-base font-semibold shadow-sm"
               isLoading={busy}
             >
               {busy ? "Doğrulanıyor..." : "Devam Et"}
@@ -263,6 +277,7 @@ export default function AdminLoginPage() {
               <PasswordInput
                 id="adminPassword"
                 autoComplete="current-password"
+                className="h-14 rounded-2xl"
                 value={password}
                 onChange={(event) => {
                   setPassword(event.target.value);
@@ -272,13 +287,13 @@ export default function AdminLoginPage() {
               />
             </FormField>
 
-            <Button type="submit" size="lg" className="w-full" isLoading={busy}>
+            <Button type="submit" size="lg" className="h-14 w-full rounded-2xl text-base font-semibold shadow-sm" isLoading={busy}>
               {busy ? "Giriş yapılıyor..." : "Giriş Yap"}
             </Button>
             <Button
               type="button"
               variant="ghost"
-              className="w-full"
+              className="w-full rounded-xl text-muted-foreground"
               disabled={busy}
               onClick={resetToIdentifier}
             >
@@ -293,6 +308,7 @@ export default function AdminLoginPage() {
               <Input
                 id="adminPhoneCode"
                 inputMode="numeric"
+                className="h-14 rounded-2xl text-center text-lg tracking-[0.3em]"
                 autoComplete="one-time-code"
                 maxLength={6}
                 value={code}
@@ -304,13 +320,13 @@ export default function AdminLoginPage() {
               />
             </FormField>
 
-            <Button type="submit" size="lg" className="w-full" isLoading={busy}>
+            <Button type="submit" size="lg" className="h-14 w-full rounded-2xl text-base font-semibold shadow-sm" isLoading={busy}>
               {busy ? "Doğrulanıyor..." : "Doğrula ve Giriş Yap"}
             </Button>
             <Button
               type="button"
               variant="ghost"
-              className="w-full"
+              className="w-full rounded-xl text-muted-foreground"
               disabled={busy}
               onClick={resetToIdentifier}
             >

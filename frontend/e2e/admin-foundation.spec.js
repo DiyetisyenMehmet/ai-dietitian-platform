@@ -164,7 +164,7 @@ test("admin login uses one blank identifier field for email or phone", async ({ 
   const identifier = page.getByLabel("E-posta veya telefon");
   await expect(identifier).toBeVisible();
   await expect(identifier).toHaveValue("");
-  expect(await identifier.getAttribute("placeholder")).toBeNull();
+  await expect(identifier).toHaveAttribute("placeholder", "Yönetici hesabınız");
 
   await identifier.fill("admin@example.com");
   await page.getByRole("button", { name: "Devam Et" }).click();
@@ -179,4 +179,13 @@ test("Admin login hides explanatory access copy", async ({ page }) => {
   await expect(page.getByText(/Yetki kontrolü backend üzerinde/)).toHaveCount(0);
   await expect(page.getByText("E-posta veya telefon", { exact: true })).toHaveCount(0);
   await expect(page.getByLabel("E-posta veya telefon")).toBeVisible();
+});
+
+
+test("Admin login uses a discreet professional identifier prompt", async ({ page }) => {
+  await page.goto(`${WEB_BASE_URL}/admin/login`);
+  const identifier = page.getByLabel("E-posta veya telefon");
+  await expect(identifier).toHaveAttribute("placeholder", "Yönetici hesabınız");
+  await expect(page.getByText("Yönetici hesabınız", { exact: true })).toHaveCount(0);
+  await expect(page.getByText(/örnek@|example@/i)).toHaveCount(0);
 });
