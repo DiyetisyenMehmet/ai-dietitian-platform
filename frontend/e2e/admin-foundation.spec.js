@@ -189,3 +189,84 @@ test("blank Admin login never shows a stale authorization warning", async ({ pag
   await expect(page.getByLabel("E-posta veya telefon")).toHaveValue("");
   await expect(page.getByText("Bu hesap Yönetim Merkezi için yetkili değil.")).toHaveCount(0);
 });
+
+
+test("Admin login rejects malformed identifiers before any auth step", async ({ page }) => {
+  await page.goto(`${WEB_BASE_URL}/admin/login`);
+  const identifier = page.getByLabel("E-posta veya telefon");
+
+  for (const value of ["admin", "admin@", "0532", "+90 abc"]) {
+    await identifier.fill(value);
+    await page.getByRole("button", { name: "Devam Et" }).click();
+    await expect(page.getByText("Geçerli bir yönetici hesabı girin.")).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "Şifre", exact: true })).toHaveCount(0);
+    await expect(page.getByLabel("SMS doğrulama kodu")).toHaveCount(0);
+  }
+});
+
+test("Admin login keeps syntactically valid email verification non-enumerating", async ({ page }) => {
+  await page.goto(`${WEB_BASE_URL}/admin/login`);
+  await page.getByLabel("E-posta veya telefon").fill("not-a-known-admin-account@gmail.com");
+  await page.getByRole("button", { name: "Devam Et" }).click();
+  await expect(page.getByRole("textbox", { name: "Şifre", exact: true })).toBeVisible();
+  await expect(page.getByText("Bu hesap Yönetim Merkezi için yetkili değil.")).toHaveCount(0);
+});
+
+
+test("Admin login routes a valid Turkish mobile number to SMS verification", async ({ page }) => {
+  await page.route("**/api/identity/firebase-config", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        data: {
+          configured: true,
+          config: {
+            apiKey: "test-api-key",
+            authDomain: "admin-staging.diewish.com",
+            projectId: "test-project",
+            appId: "test-app",
+          },
+        },
+      }),
+    });
+  });
+
+  const firebaseStub = `
+    (() => {
+      const authFactory = function () {
+        return {
+          languageCode: null,
+          signInWithPopup: async () => ({ user: { getIdToken: async () => "token" } }),
+          signInWithPhoneNumber: async () => ({
+            confirm: async () => ({ user: { getIdToken: async () => "phone-token" } }),
+          }),
+        };
+      };
+      authFactory.GoogleAuthProvider = class {};
+      authFactory.OAuthProvider = class { addScope() {} };
+      authFactory.RecaptchaVerifier = class { clear() {} };
+      window.firebase = {
+        apps: [],
+        initializeApp() { this.apps.push({}); },
+        auth: authFactory,
+      };
+    })();
+  `;
+
+  await page.route("https://www.gstatic.com/firebasejs/**/firebase-app-compat.js", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/javascript", body: firebaseStub });
+  });
+  await page.route("https://www.gstatic.com/firebasejs/**/firebase-auth-compat.js", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/javascript", body: "" });
+  });
+
+  await page.goto(`${WEB_BASE_URL}/admin/login`);
+  await page.getByLabel("E-posta veya telefon").fill("0532 123 45 67");
+  await page.getByRole("button", { name: "Devam Et" }).click();
+
+  await expect(page.getByLabel("SMS doğrulama kodu")).toBeVisible();
+  await expect(page.getByText("Doğrulama kodu gönderildi.")).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Şifre", exact: true })).toHaveCount(0);
+});

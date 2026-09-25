@@ -7,11 +7,11 @@ import { toast } from "sonner";
 
 import { authStore, useAuth } from "@/application/auth/auth-store";
 import { adminClient } from "@/infrastructure/admin/admin-client";
+import { classifyAdminIdentifier } from "@/infrastructure/admin/admin-identifier";
 import { authClient } from "@/infrastructure/auth/auth-client";
 import { ApiError } from "@/infrastructure/api/http-client";
 import { authErrorMessage } from "@/infrastructure/identity/auth-feedback";
 import { startPhoneVerification } from "@/infrastructure/identity/firebase-browser";
-import { normalizePhoneNumber } from "@/infrastructure/identity/phone-number";
 import { Button } from "@/presentation/components/ui/button";
 import { FormField } from "@/presentation/components/ui/form-field";
 import { Input } from "@/presentation/components/ui/input";
@@ -22,13 +22,6 @@ type LoginStep = "identifier" | "email-password" | "phone-code";
 interface PhoneConfirmation {
   confirm(code: string): Promise<string>;
   clear(): void;
-}
-
-function normalizeEmail(value: string): string | null {
-  const email = value.trim().toLowerCase();
-  if (!email || email.length > 254) return null;
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null;
-  return email;
 }
 
 export default function AdminLoginPage() {
@@ -92,17 +85,17 @@ export default function AdminLoginPage() {
       event.preventDefault();
       if (busy || inFlight.current) return;
 
-      const email = normalizeEmail(identifier);
-      if (email) {
-        setResolvedEmail(email);
-        setStep("email-password");
-        setFeedback("");
+      const resolved = classifyAdminIdentifier(identifier);
+      if (!resolved) {
+        setFeedback("Geçerli bir yönetici hesabı girin.");
         return;
       }
 
-      const phoneNumber = normalizePhoneNumber(identifier, "TR");
-      if (!phoneNumber) {
-        setFeedback("Geçerli bir e-posta adresi veya SMS alabilen telefon numarası girin.");
+      if (resolved.kind === "email") {
+        setIdentifier(resolved.value);
+        setResolvedEmail(resolved.value);
+        setStep("email-password");
+        setFeedback("");
         return;
       }
 
@@ -111,10 +104,10 @@ export default function AdminLoginPage() {
       setFeedback("Güvenlik doğrulaması yapılıyor...");
       try {
         const next = await startPhoneVerification(
-          phoneNumber,
+          resolved.value,
           "diewish-admin-identifier-continue",
         );
-        setIdentifier(phoneNumber);
+        setIdentifier(resolved.value);
         setConfirmation(next);
         setStep("phone-code");
         setFeedback("Doğrulama kodu gönderildi.");
