@@ -1,7 +1,6 @@
 import { z } from "zod";
 
 const adminEmailSchema = z.string().trim().toLowerCase().email("A valid email address is required").max(254);
-const adminPhoneSchema = z.string().trim().regex(/^\+[1-9]\d{7,14}$/, "A valid E.164 phone number is required");
 const currentPasswordSchema = z.string().min(1, "Current password is required").max(128);
 const newAdminPasswordSchema = z.string()
   .min(12, "Password must be at least 12 characters")
@@ -10,18 +9,23 @@ const newAdminPasswordSchema = z.string()
   .regex(/[0-9]/, "Password must contain a digit")
   .regex(/[^A-Za-z0-9]/, "Password must contain a symbol");
 
-export const adminIdentifierCheckSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("email"), value: adminEmailSchema }),
-  z.object({ kind: z.literal("phone"), value: adminPhoneSchema }),
-]);
-
 export const adminEmailLoginSchema = z.object({
   email: adminEmailSchema,
   password: z.string().min(1, "Password is required").max(128),
 });
 
-export const adminPhoneLoginSchema = z.object({
-  idToken: z.string().trim().min(20, "Identity token is required").max(10_000),
+export const adminBootstrapSchema = z.object({
+  idToken: z.string().trim().min(20, "Identity token is required").max(16_000),
+  password: newAdminPasswordSchema,
+});
+
+export const adminForgotPasswordSchema = z.object({
+  email: adminEmailSchema,
+});
+
+export const adminResetPasswordSchema = z.object({
+  token: z.string().min(1).max(512),
+  newPassword: newAdminPasswordSchema,
 });
 
 export const adminEmailChangeSchema = z.object({
@@ -37,8 +41,9 @@ export const adminPasswordChangeSchema = z.object({
   message: "New password must be different from the current password",
 });
 
-export type AdminIdentifierCheckInput = z.infer<typeof adminIdentifierCheckSchema>;
 export type AdminEmailLoginInput = z.infer<typeof adminEmailLoginSchema>;
-export type AdminPhoneLoginInput = z.infer<typeof adminPhoneLoginSchema>;
+export type AdminBootstrapInput = z.infer<typeof adminBootstrapSchema>;
+export type AdminForgotPasswordInput = z.infer<typeof adminForgotPasswordSchema>;
+export type AdminResetPasswordInput = z.infer<typeof adminResetPasswordSchema>;
 export type AdminEmailChangeInput = z.infer<typeof adminEmailChangeSchema>;
 export type AdminPasswordChangeInput = z.infer<typeof adminPasswordChangeSchema>;

@@ -100,7 +100,11 @@ export const accountService = {
    * whether the email exists, to avoid account-enumeration. A token is only
    * issued/sent for an existing, active account.
    */
-  async forgotPassword(email: string, context: AuditContext): Promise<void> {
+  async forgotPassword(
+    email: string,
+    context: AuditContext,
+    resetPath = "/reset-password",
+  ): Promise<void> {
     const user = await accountRepository.findUserByEmail(email);
     if (!user || !user.isActive) {
       logger.info({ email }, "Password reset requested for unknown/inactive account (no-op)");
@@ -112,7 +116,7 @@ export const accountService = {
       AccountTokenType.PASSWORD_RESET,
       env.PASSWORD_RESET_TTL_MINUTES * MS_PER_MINUTE,
     );
-    await mailer.sendPasswordReset(user.email, rawToken);
+    await mailer.sendPasswordReset(user.email, rawToken, resetPath);
     await recordAudit({ action: "PASSWORD_RESET_REQUESTED", userId: user.id, context });
   },
 

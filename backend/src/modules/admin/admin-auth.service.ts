@@ -1,3 +1,5 @@
+import crypto from "node:crypto";
+
 import {
   AdminAuditRiskLevel,
   Prisma,
@@ -5,6 +7,10 @@ import {
   type User,
 } from "@prisma/client";
 
+import { prisma } from "../../lib/prisma";
+import { ApiError } from "../../utils/api-error";
+import { hashPassword, verifyPassword } from "../../utils/password";
+import { accountService } from "../account/account.service";
 import { authRepository } from "../auth/auth.repository";
 import {
   issueAuthSession,
@@ -12,20 +18,18 @@ import {
   type SessionContext,
 } from "../auth/auth.service";
 import { firebaseAuthProvider } from "../identity/firebase-auth.provider";
-import { issueIdentitySession } from "../identity/session.service";
-import type { IdentitySessionResult } from "../identity/identity.types";
-import { ApiError } from "../../utils/api-error";
-import { hashPassword, verifyPassword } from "../../utils/password";
 import {
   buildAuditSnapshot,
   runAuditedAdminMutation,
 } from "./admin-audit.service";
 import { resolveRuntimeEnvironment } from "./admin.environment";
+import { ensureAdminFoundation } from "./admin.foundation";
 import { ADMIN_PERMISSIONS, ADMIN_SYSTEM_ROLES } from "./admin.permissions";
 import { resolveAdminAccess } from "./admin-rbac.repository";
-import type { AdminIdentifierCheckInput } from "./admin-auth.schemas";
 
 const DUMMY_PASSWORD_HASH = "$2a$12$" + "x".repeat(53);
+const APPROVED_FIRST_SUPER_ADMIN_EMAIL_SHA256 =
+  "ed911dcbf3353a718ab0e6e3039e92287169025cb0a4609de03ade42a6463cb8";
 
 interface AdminMutationRequestContext {
   correlationId: string;
@@ -50,6 +54,10 @@ function invalidCurrentPassword(): ApiError {
   });
 }
 
+function sha256(value: string): string {
+  return crypto.createHash("sha256").update(value).digest("hex");
+}
+
 async function hasAdminAccess(user: User | null): Promise<boolean> {
   if (!user?.isActive || user.role !== UserRole.ADMIN) return false;
   const access = await resolveAdminAccess(user.id);
@@ -70,12 +78,15 @@ async function assertPrimaryEmailAccess(user: User): Promise<void> {
   if (!(await hasPrimaryEmailAccess(user))) throw forbiddenAdminLogin();
 }
 
-function phoneIdentityEmail(phoneNumber: string): string {
-  return `phone.${phoneNumber.replace(/\D/g, "")}@phone.diewish.invalid`;
-}
-
 function isUniqueConstraintError(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
+}
+
+async function requireAdmin(userId: string): Promise<User> {
+  const user = await authRepository.findUserById(userId);
+  if (!user) throw forbiddenAdminLogin();
+  await assertAdminAccess(user);
+  return user;
 }
 
 async function requirePrimaryAdmin(userId: string): Promise<User> {
@@ -91,22 +102,7 @@ async function reauthenticate(user: User, currentPassword: string): Promise<void
   }
 }
 
-/**
- * Management Center authentication never creates a Diewish user. A principal
- * must already exist, be active, be ADMIN, and hold the required RBAC access.
- * Email sign-in is intentionally narrower: only the current SUPER_ADMIN
- * identity is accepted.
- */
 export const adminAuthService = {
-  async identifierAllowed(input: AdminIdentifierCheckInput): Promise<boolean> {
-    const user =
-      input.kind === "email"
-        ? await authRepository.findUserByEmail(input.value)
-        : await authRepository.findUserByEmail(phoneIdentityEmail(input.value));
-
-    return input.kind === "email" ? hasPrimaryEmailAccess(user) : hasAdminAccess(user);
-  },
-
   async loginWithEmail(
     email: string,
     password: string,
@@ -117,38 +113,134 @@ export const adminAuthService = {
       await verifyPassword(password, DUMMY_PASSWORD_HASH);
       throw invalidAdminLogin();
     }
-
     if (!(await verifyPassword(password, user.passwordHash))) {
       throw invalidAdminLogin();
     }
-
-    await assertPrimaryEmailAccess(user);
+    await assertAdminAccess(user);
     await authRepository.updateLastLogin(user.id);
     return issueAuthSession(user, context);
   },
 
-  async loginWithPhone(
+  async bootstrapFirstSuperAdmin(
     idToken: string,
+    password: string,
     context: SessionContext,
-  ): Promise<IdentitySessionResult> {
+    requestContext: AdminMutationRequestContext,
+  ): Promise<AuthResult> {
+    const environment = resolveRuntimeEnvironment();
+    if (environment !== "staging" && environment !== "test") {
+      throw new ApiError(404, "Not found.", { code: "ADMIN_BOOTSTRAP_UNAVAILABLE" });
+    }
+
     const identity = await firebaseAuthProvider.verifyIdToken(idToken);
-    if (!identity.phoneNumber) {
-      throw invalidAdminLogin();
+    const email = identity.email?.trim().toLowerCase() ?? "";
+    const isGoogle = identity.providers.includes("google.com");
+    if (
+      !email ||
+      !identity.emailVerified ||
+      !isGoogle ||
+      sha256(email) !== APPROVED_FIRST_SUPER_ADMIN_EMAIL_SHA256
+    ) {
+      throw forbiddenAdminLogin();
     }
 
-    const user = await authRepository.findUserByEmail(
-      phoneIdentityEmail(identity.phoneNumber),
-    );
-    if (!user) {
-      throw invalidAdminLogin();
-    }
+    const passwordHash = await hashPassword(password);
+    const user = await prisma.$transaction(async (tx) => {
+      await ensureAdminFoundation(tx);
 
-    await assertAdminAccess(user);
-    await authRepository.updateLastLogin(user.id);
-    return issueIdentitySession(user, context, {
-      phoneNumber: identity.phoneNumber,
-      emailVerified: false,
+      const consumed = await tx.adminAuditEvent.findFirst({
+        where: { action: "admin.bootstrap.super_admin", environment },
+        select: { id: true },
+      });
+      if (consumed) {
+        throw new ApiError(409, "Initial Management Center setup is already complete.", {
+          code: "ADMIN_BOOTSTRAP_CLOSED",
+        });
+      }
+
+      const superRole = await tx.adminRole.findUniqueOrThrow({
+        where: { key: ADMIN_SYSTEM_ROLES.SUPER_ADMIN },
+        select: { id: true },
+      });
+      const existingSuperAdmin = await tx.adminUserRole.findFirst({
+        where: { roleId: superRole.id },
+        select: { userId: true },
+      });
+      if (existingSuperAdmin) {
+        throw new ApiError(409, "Initial Management Center setup is already complete.", {
+          code: "ADMIN_BOOTSTRAP_CLOSED",
+        });
+      }
+
+      const existing = await tx.user.findUnique({ where: { email } });
+      const next = existing
+        ? await tx.user.update({
+            where: { id: existing.id },
+            data: {
+              passwordHash,
+              role: UserRole.ADMIN,
+              isActive: true,
+              emailVerifiedAt: new Date(),
+              deletionRequestedAt: null,
+              fullName: existing.fullName ?? identity.displayName ?? undefined,
+            },
+          })
+        : await tx.user.create({
+            data: {
+              email,
+              passwordHash,
+              fullName: identity.displayName ?? undefined,
+              role: UserRole.ADMIN,
+              isActive: true,
+              emailVerifiedAt: new Date(),
+            },
+          });
+
+      await tx.adminUserRole.upsert({
+        where: { userId_roleId: { userId: next.id, roleId: superRole.id } },
+        update: { assignedByAdminId: next.id },
+        create: {
+          userId: next.id,
+          roleId: superRole.id,
+          assignedByAdminId: next.id,
+        },
+      });
+
+      await tx.adminAuditEvent.create({
+        data: {
+          actorAdminId: next.id,
+          action: "admin.bootstrap.super_admin",
+          targetType: "user",
+          targetId: next.id,
+          beforeState: existing ? { role: existing.role, isActive: existing.isActive } : undefined,
+          afterState: { role: UserRole.ADMIN, assignedRole: ADMIN_SYSTEM_ROLES.SUPER_ADMIN },
+          reason: "Verified Google ownership bootstrap for first staging Super Admin",
+          environment,
+          correlationId: requestContext.correlationId,
+          requestId: requestContext.requestId,
+          riskLevel: AdminAuditRiskLevel.CRITICAL,
+        },
+      });
+
+      return next;
     });
+
+    await authRepository.updateLastLogin(user.id);
+    return issueAuthSession(user, context);
+  },
+
+  async requestPasswordReset(email: string, context: SessionContext): Promise<void> {
+    const user = await authRepository.findUserByEmail(email);
+    if (!user || !(await hasAdminAccess(user))) return;
+    await accountService.forgotPassword(email, context, "/admin/reset-password");
+  },
+
+  async resetPassword(
+    token: string,
+    newPassword: string,
+    context: SessionContext,
+  ): Promise<void> {
+    await accountService.resetPassword(token, newPassword, context);
   },
 
   async changePrimaryEmail(
@@ -160,10 +252,7 @@ export const adminAuthService = {
   ): Promise<AuthResult> {
     const user = await requirePrimaryAdmin(userId);
     await reauthenticate(user, currentPassword);
-
-    if (newEmail === user.email) {
-      return issueAuthSession(user, sessionContext);
-    }
+    if (newEmail === user.email) return issueAuthSession(user, sessionContext);
 
     let updated: User;
     try {
@@ -189,12 +278,10 @@ export const adminAuthService = {
               code: "ADMIN_EMAIL_IN_USE",
             });
           }
-
           const next = await tx.user.update({
             where: { id: user.id },
-            data: { email: newEmail },
+            data: { email: newEmail, emailVerifiedAt: null },
           });
-
           return {
             result: next,
             before: buildAuditSnapshot({ email: user.email }, ["email"]),
@@ -215,16 +302,15 @@ export const adminAuthService = {
     return issueAuthSession(updated, sessionContext);
   },
 
-  async changePrimaryPassword(
+  async changePassword(
     userId: string,
     currentPassword: string,
     newPassword: string,
     sessionContext: SessionContext,
     requestContext: AdminMutationRequestContext,
   ): Promise<AuthResult> {
-    const user = await requirePrimaryAdmin(userId);
+    const user = await requireAdmin(userId);
     await reauthenticate(user, currentPassword);
-
     if (await verifyPassword(newPassword, user.passwordHash)) {
       throw new ApiError(400, "New password must be different from the current password.", {
         code: "ADMIN_PASSWORD_REUSE",

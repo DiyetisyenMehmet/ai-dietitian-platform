@@ -22,14 +22,6 @@ export interface AdminSession {
 }
 
 export const adminClient = {
-  resolveIdentifier(input: { kind: "email" | "phone"; value: string }): Promise<{ accepted: boolean }> {
-    return apiRequest<{ accepted: boolean }>({
-      path: "/admin/auth/identifier",
-      method: "POST",
-      body: JSON.stringify(input),
-    });
-  },
-
   loginWithEmail(email: string, password: string): Promise<AuthSession> {
     return apiRequest<AuthSession>({
       path: "/admin/auth/login",
@@ -38,11 +30,27 @@ export const adminClient = {
     });
   },
 
-  loginWithPhone(idToken: string): Promise<AuthSession> {
+  bootstrapFirstSuperAdmin(idToken: string, password: string): Promise<AuthSession> {
     return apiRequest<AuthSession>({
-      path: "/admin/auth/phone",
+      path: "/admin/auth/bootstrap",
       method: "POST",
-      body: JSON.stringify({ idToken }),
+      body: JSON.stringify({ idToken, password }),
+    });
+  },
+
+  requestPasswordReset(email: string): Promise<{ message: string }> {
+    return apiRequest<{ message: string }>({
+      path: "/admin/auth/password/forgot",
+      method: "POST",
+      body: JSON.stringify({ email }),
+    });
+  },
+
+  resetPassword(token: string, newPassword: string): Promise<{ message: string }> {
+    return apiRequest<{ message: string }>({
+      path: "/admin/auth/password/reset",
+      method: "POST",
+      body: JSON.stringify({ token, newPassword }),
     });
   },
 

@@ -49,7 +49,7 @@ test("normal user is returned to a clean Admin login screen", async ({ page }) =
   await expect(page).toHaveURL(/\/admin\/login$/, { timeout: 10_000 });
   await expect(page.getByRole("heading", { name: "Management Center" })).toBeVisible();
   await expect(page.getByText("Bu hesap Yönetim Merkezi için yetkili değil.")).toHaveCount(0);
-  await expect(page.getByLabel("E-posta veya telefon")).toBeVisible();
+  await expect(page.getByLabel("Yönetici hesabınız")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Erişim reddedildi" })).toHaveCount(0);
   await expect(page.getByText("Yönetim merkezi hazır")).toHaveCount(0);
 });
@@ -59,11 +59,11 @@ test("Admin login recovers from an existing normal Diewish session", async ({ pa
   await page.goto(`${WEB_BASE_URL}/admin/login`);
 
   await expect(page).toHaveURL(/\/admin\/login$/, { timeout: 10_000 });
-  await expect(page.getByLabel("E-posta veya telefon")).toBeVisible();
+  await expect(page.getByLabel("Yönetici hesabınız")).toBeVisible();
   await expect(page.getByText("Bu hesap Yönetim Merkezi için yetkili değil.")).toHaveCount(0);
 
   await page.reload();
-  await expect(page.getByLabel("E-posta veya telefon")).toBeVisible();
+  await expect(page.getByLabel("Yönetici hesabınız")).toBeVisible();
   await expect(page.getByText("Bu hesap Yönetim Merkezi için yetkili değil.")).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Erişim reddedildi" })).toHaveCount(0);
 });
@@ -154,25 +154,16 @@ test("production admin hostname fails closed", async ({ request }) => {
 });
 
 
-test("admin login uses one blank identifier field for email or phone", async ({ page }) => {
+test("admin login keeps email and password on one screen", async ({ page }) => {
   await page.goto(`${WEB_BASE_URL}/admin/login`);
-
-  const identifier = page.getByLabel("E-posta veya telefon");
-  await expect(identifier).toBeVisible();
-  await expect(identifier).toHaveValue("");
-  await expect(identifier).toHaveAttribute("placeholder", "Yönetici hesabınız");
-
-  await page.route("**/api/admin/auth/identifier", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ success: true, data: { accepted: true } }),
-    });
-  });
-  await identifier.fill("admin@example.com");
-  await page.getByRole("button", { name: "Devam Et" }).click();
-  await expect(page.getByRole("textbox", { name: "Şifre", exact: true })).toBeVisible();
-  await expect(page.getByLabel("E-posta veya telefon")).toHaveCount(0);
+  const email = page.getByLabel("Yönetici hesabınız");
+  const password = page.getByLabel("Şifreniz");
+  await expect(email).toBeVisible();
+  await expect(password).toBeVisible();
+  await expect(email).toHaveValue("");
+  await expect(password).toHaveValue("");
+  await expect(page.getByRole("button", { name: "Devam Et" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Giriş Yap" })).toBeVisible();
 });
 
 
@@ -181,13 +172,13 @@ test("Admin login hides explanatory access copy", async ({ page }) => {
   await expect(page.getByText("Yalnızca yetkili yönetici hesapları içindir.")).toHaveCount(0);
   await expect(page.getByText(/Yetki kontrolü backend üzerinde/)).toHaveCount(0);
   await expect(page.getByText("E-posta veya telefon", { exact: true })).toHaveCount(0);
-  await expect(page.getByLabel("E-posta veya telefon")).toBeVisible();
+  await expect(page.getByLabel("Yönetici hesabınız")).toBeVisible();
 });
 
 
 test("Admin login uses a discreet professional identifier prompt", async ({ page }) => {
   await page.goto(`${WEB_BASE_URL}/admin/login`);
-  const identifier = page.getByLabel("E-posta veya telefon");
+  const identifier = page.getByLabel("Yönetici hesabınız");
   await expect(identifier).toHaveAttribute("placeholder", "Yönetici hesabınız");
   await expect(page.getByText("Yönetici hesabınız", { exact: true })).toHaveCount(0);
   await expect(page.getByText(/örnek@|example@/i)).toHaveCount(0);
@@ -196,95 +187,17 @@ test("Admin login uses a discreet professional identifier prompt", async ({ page
 
 test("blank Admin login never shows a stale authorization warning", async ({ page }) => {
   await page.goto(`${WEB_BASE_URL}/admin/login?notice=access-denied`);
-  await expect(page.getByLabel("E-posta veya telefon")).toHaveValue("");
+  await expect(page.getByLabel("Yönetici hesabınız")).toHaveValue("");
   await expect(page.getByText("Bu hesap Yönetim Merkezi için yetkili değil.")).toHaveCount(0);
 });
 
 
-test("Admin login rejects malformed identifiers before any auth step", async ({ page }) => {
+test("unknown admin email does not reveal account existence", async ({ page }) => {
   await page.goto(`${WEB_BASE_URL}/admin/login`);
-  const identifier = page.getByLabel("E-posta veya telefon");
-
-  for (const value of ["admin", "admin@", "0532", "+90 abc"]) {
-    await identifier.fill(value);
-    await page.getByRole("button", { name: "Devam Et" }).click();
-    await expect(page.getByText("Geçerli bir yönetici hesabı girin.")).toBeVisible();
-    await expect(page.getByRole("textbox", { name: "Şifre", exact: true })).toHaveCount(0);
-    await expect(page.getByLabel("SMS doğrulama kodu")).toHaveCount(0);
-  }
+  await page.getByLabel("Yönetici hesabınız").fill("not-a-known-admin-account@gmail.com");
+  await page.getByLabel("Şifreniz").fill("NotARealAdminPassword123!");
+  await page.getByRole("button", { name: "Giriş Yap" }).click();
+  await expect(page.getByText("Giriş bilgileri doğrulanamadı.")).toBeVisible();
+  await expect(page.getByText(/kayıtlı|bulunamadı|mevcut değil/i)).toHaveCount(0);
 });
 
-test("Admin login does not advance an unapproved valid email to the password step", async ({ page }) => {
-  await page.goto(`${WEB_BASE_URL}/admin/login`);
-  await page.getByLabel("E-posta veya telefon").fill("not-a-known-admin-account@gmail.com");
-  await page.getByRole("button", { name: "Devam Et" }).click();
-  await expect(page.getByText("Bu yönetici hesabı doğrulanamadı.")).toBeVisible();
-  await expect(page.getByRole("textbox", { name: "Şifre", exact: true })).toHaveCount(0);
-});
-
-
-test("Admin login routes a valid Turkish mobile number to SMS verification", async ({ page }) => {
-  await page.route("**/api/identity/firebase-config", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        success: true,
-        data: {
-          configured: true,
-          config: {
-            apiKey: "test-api-key",
-            authDomain: "admin-staging.diewish.com",
-            projectId: "test-project",
-            appId: "test-app",
-          },
-        },
-      }),
-    });
-  });
-
-  const firebaseStub = `
-    (() => {
-      const authFactory = function () {
-        return {
-          languageCode: null,
-          signInWithPopup: async () => ({ user: { getIdToken: async () => "token" } }),
-          signInWithPhoneNumber: async () => ({
-            confirm: async () => ({ user: { getIdToken: async () => "phone-token" } }),
-          }),
-        };
-      };
-      authFactory.GoogleAuthProvider = class {};
-      authFactory.OAuthProvider = class { addScope() {} };
-      authFactory.RecaptchaVerifier = class { clear() {} };
-      window.firebase = {
-        apps: [],
-        initializeApp() { this.apps.push({}); },
-        auth: authFactory,
-      };
-    })();
-  `;
-
-  await page.route("https://www.gstatic.com/firebasejs/**/firebase-app-compat.js", async (route) => {
-    await route.fulfill({ status: 200, contentType: "application/javascript", body: firebaseStub });
-  });
-  await page.route("https://www.gstatic.com/firebasejs/**/firebase-auth-compat.js", async (route) => {
-    await route.fulfill({ status: 200, contentType: "application/javascript", body: "" });
-  });
-
-  await page.route("**/api/admin/auth/identifier", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ success: true, data: { accepted: true } }),
-    });
-  });
-
-  await page.goto(`${WEB_BASE_URL}/admin/login`);
-  await page.getByLabel("E-posta veya telefon").fill("0532 123 45 67");
-  await page.getByRole("button", { name: "Devam Et" }).click();
-
-  await expect(page.getByLabel("SMS doğrulama kodu")).toBeVisible();
-  await expect(page.getByText("Doğrulama kodu gönderildi.")).toBeVisible();
-  await expect(page.getByRole("textbox", { name: "Şifre", exact: true })).toHaveCount(0);
-});

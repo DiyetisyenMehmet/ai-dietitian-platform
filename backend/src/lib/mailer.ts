@@ -66,8 +66,12 @@ export const mailer = {
   },
 
   /** Sends a password-reset link carrying a single-use token. */
-  async sendPasswordReset(to: string, token: string): Promise<void> {
-    const link = buildLink("/reset-password", token);
+  async sendPasswordReset(
+    to: string,
+    token: string,
+    path = "/reset-password",
+  ): Promise<void> {
+    const link = buildLink(path, token);
     await deliver({
       to,
       subject: "Diewish — Şifre sıfırlama isteği",

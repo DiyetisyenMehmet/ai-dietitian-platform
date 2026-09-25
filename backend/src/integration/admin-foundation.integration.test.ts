@@ -256,6 +256,53 @@ test("Phase 1 admin authorization, RBAC and transactional audit", async (t) => {
     assert.equal(await prisma.adminRole.count({ where: { id: rollbackRoleId } }), 0);
   });
 
+  await t.test("first Super Admin bootstrap requires verified approved Google ownership", async () => {
+    const originalVerify = firebaseAuthProvider.verifyIdToken;
+    const approvedEmail = "admindiewish@gmail.com";
+    let createdId = "";
+    try {
+      firebaseAuthProvider.verifyIdToken = async () => ({
+        uid: "approved-owner",
+        email: approvedEmail,
+        emailVerified: true,
+        phoneNumber: null,
+        displayName: "Diewish Admin",
+        providers: ["google.com"],
+      });
+      const response = await fetch(`${baseUrl}/api/admin/auth/bootstrap`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ idToken: "g".repeat(32), password: "bootstrap-admin-123!" }),
+      });
+      assert.equal(response.status, 200);
+      const body = (await response.json()) as { data: { user: { id: string; role: string } } };
+      createdId = body.data.user.id;
+      createdUserIds.push(createdId);
+      assert.equal(body.data.user.role, "ADMIN");
+      const access = await resolveAdminAccess(createdId);
+      assert.ok(access?.roles.includes("SUPER_ADMIN"));
+      assert.ok(await prisma.adminAuditEvent.findFirst({
+        where: { actorAdminId: createdId, action: "admin.bootstrap.super_admin" },
+      }));
+
+      const second = await fetch(`${baseUrl}/api/admin/auth/bootstrap`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ idToken: "g".repeat(32), password: "bootstrap-admin-123!" }),
+      });
+      assert.equal(second.status, 409);
+    } finally {
+      firebaseAuthProvider.verifyIdToken = originalVerify;
+      if (createdId) {
+        await prisma.adminAuditEvent.deleteMany({ where: { actorAdminId: createdId } });
+        await prisma.adminUserRole.deleteMany({ where: { userId: createdId } });
+        await prisma.user.deleteMany({ where: { id: createdId } });
+        const index = createdUserIds.indexOf(createdId);
+        if (index >= 0) createdUserIds.splice(index, 1);
+      }
+    }
+  });
+
   await t.test("Management Center authentication accepts only existing RBAC admins", async () => {
     const password = "AdminLoginPass123";
     const passwordHash = await hashPassword(password);
@@ -289,28 +336,6 @@ test("Phase 1 admin authorization, RBAC and transactional audit", async (t) => {
       data: { user: { id: string; email: string }; tokens: { accessToken: string } };
     };
     assert.equal(emailLoginBody.success, true);
-
-    const acceptedIdentifier = await fetch(`${baseUrl}/api/admin/auth/identifier`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ kind: "email", value: admin.email }),
-    });
-    assert.equal(acceptedIdentifier.status, 200);
-    assert.deepEqual(
-      ((await acceptedIdentifier.json()) as { data: { accepted: boolean } }).data,
-      { accepted: true },
-    );
-
-    const rejectedIdentifier = await fetch(`${baseUrl}/api/admin/auth/identifier`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ kind: "email", value: "another.valid.admin@example.com" }),
-    });
-    assert.equal(rejectedIdentifier.status, 200);
-    assert.deepEqual(
-      ((await rejectedIdentifier.json()) as { data: { accepted: boolean } }).data,
-      { accepted: false },
-    );
 
     const normal = await prisma.user.create({
       data: {
@@ -390,57 +415,6 @@ test("Phase 1 admin authorization, RBAC and transactional audit", async (t) => {
     assert.ok(emailAudit);
     assert.ok(passwordAudit);
 
-    const phoneNumber = "+905551112233";
-    const phoneAdmin = await prisma.user.create({
-      data: {
-        email: "phone.905551112233@phone.diewish.invalid",
-        passwordHash: "external-login-secret",
-        role: UserRole.ADMIN,
-        isActive: true,
-      },
-    });
-    createdUserIds.push(phoneAdmin.id);
-    await prisma.adminUserRole.create({
-      data: { userId: phoneAdmin.id, roleId: superRole.id },
-    });
-
-    const originalVerify = firebaseAuthProvider.verifyIdToken;
-    try {
-      firebaseAuthProvider.verifyIdToken = async () => ({
-        uid: "admin-phone-fixture",
-        email: null,
-        emailVerified: false,
-        phoneNumber,
-        displayName: null,
-        providers: ["phone"],
-      });
-
-      const phoneLogin = await fetch(`${baseUrl}/api/admin/auth/phone`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ idToken: "x".repeat(32) }),
-      });
-      assert.equal(phoneLogin.status, 200);
-
-      const beforeUnknown = await prisma.user.count();
-      firebaseAuthProvider.verifyIdToken = async () => ({
-        uid: "unknown-phone-fixture",
-        email: null,
-        emailVerified: false,
-        phoneNumber: "+905559998877",
-        displayName: null,
-        providers: ["phone"],
-      });
-      const unknownPhone = await fetch(`${baseUrl}/api/admin/auth/phone`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ idToken: "y".repeat(32) }),
-      });
-      assert.equal(unknownPhone.status, 401);
-      assert.equal(await prisma.user.count(), beforeUnknown);
-    } finally {
-      firebaseAuthProvider.verifyIdToken = originalVerify;
-    }
   });
 
 });

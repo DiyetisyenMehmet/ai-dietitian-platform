@@ -5,11 +5,12 @@ import { authenticate, authorize } from "../../middleware/authenticate";
 import { validate } from "../../middleware/validate";
 import { adminAuthController } from "./admin-auth.controller";
 import {
+  adminBootstrapSchema,
   adminEmailChangeSchema,
   adminEmailLoginSchema,
-  adminIdentifierCheckSchema,
+  adminForgotPasswordSchema,
   adminPasswordChangeSchema,
-  adminPhoneLoginSchema,
+  adminResetPasswordSchema,
 } from "./admin-auth.schemas";
 import { adminController } from "./admin.controller";
 import { requireAdminFoundationEnvironment } from "./admin.environment";
@@ -22,20 +23,17 @@ export const adminRouter = Router();
 adminRouter.use(adminRateLimiter);
 adminRouter.use(requireAdminFoundationEnvironment);
 
+adminRouter.post("/auth/login", validate({ body: adminEmailLoginSchema }), adminAuthController.emailLogin);
+adminRouter.post("/auth/bootstrap", validate({ body: adminBootstrapSchema }), adminAuthController.bootstrap);
 adminRouter.post(
-  "/auth/identifier",
-  validate({ body: adminIdentifierCheckSchema }),
-  adminAuthController.identifierCheck,
+  "/auth/password/forgot",
+  validate({ body: adminForgotPasswordSchema }),
+  adminAuthController.forgotPassword,
 );
 adminRouter.post(
-  "/auth/login",
-  validate({ body: adminEmailLoginSchema }),
-  adminAuthController.emailLogin,
-);
-adminRouter.post(
-  "/auth/phone",
-  validate({ body: adminPhoneLoginSchema }),
-  adminAuthController.phoneLogin,
+  "/auth/password/reset",
+  validate({ body: adminResetPasswordSchema }),
+  adminAuthController.resetPassword,
 );
 
 adminRouter.use(authenticate);
@@ -54,13 +52,5 @@ adminRouter.patch(
   adminAuthController.changePassword,
 );
 
-adminRouter.get(
-  "/session",
-  requireAdminPermission(ADMIN_PERMISSIONS.ACCESS),
-  adminController.session,
-);
-adminRouter.get(
-  "/environment",
-  requireAdminPermission(ADMIN_PERMISSIONS.ACCESS),
-  adminController.environment,
-);
+adminRouter.get("/session", requireAdminPermission(ADMIN_PERMISSIONS.ACCESS), adminController.session);
+adminRouter.get("/environment", requireAdminPermission(ADMIN_PERMISSIONS.ACCESS), adminController.environment);
