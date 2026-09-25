@@ -70,12 +70,15 @@ async function main(): Promise<void> {
         },
         select: { id: true },
       });
+      if (!auditExists) {
+        throw new Error("Existing Super Admin assignment is missing its required audit event.");
+      }
       console.log(
         JSON.stringify({
           userId: target.id,
           role: "ADMIN",
           superAdmin: true,
-          auditEvent: Boolean(auditExists),
+          auditEvent: true,
           status: "already-configured",
         }),
       );

@@ -35,4 +35,4 @@ availableSecrets:
       env: DIRECT_DATABASE_URL
 
 options:
-  logging: CLOUD_LOGGING_ONLY
+  logging: LEGACY
