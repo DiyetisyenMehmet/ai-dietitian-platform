@@ -300,7 +300,9 @@ test("Phase 1 admin authorization, RBAC and transactional audit", async (t) => {
       body: JSON.stringify({ email: normal.email, password }),
     });
     assert.equal(normalLogin.status, 403);
-    const normalLoginBody = await normalLogin.json();
+    const normalLoginBody = (await normalLogin.json()) as {
+      error: { code: string };
+    };
     assert.equal(normalLoginBody.error.code, "ADMIN_AUTH_FORBIDDEN");
 
     const phoneNumber = "+905551112233";
