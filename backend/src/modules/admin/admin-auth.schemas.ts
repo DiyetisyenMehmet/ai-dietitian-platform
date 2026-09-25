@@ -16,8 +16,6 @@ export const adminEmailLoginSchema = z.object({
 
 export const adminBootstrapSchema = z.object({
   email: adminEmailSchema,
-  password: newAdminPasswordSchema,
-  bootstrapCode: z.string().trim().min(24, "Bootstrap code is required").max(128),
 });
 
 export const adminForgotPasswordSchema = z.object({

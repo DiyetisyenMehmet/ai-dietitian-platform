@@ -55,15 +55,10 @@ export const adminAuthController = {
 
   bootstrap: asyncHandler(async (req: Request, res: Response) => {
     const input = req.body as AdminBootstrapInput;
-    const result = await adminAuthService.bootstrapFirstSuperAdmin(
-      input.email,
-      input.password,
-      input.bootstrapCode,
-      context(req),
-      requestIdentity(req),
-    );
-    writeRefreshCookie(res, result.refreshToken, result.refreshExpiresAt);
-    sendSuccess(res, { user: result.user, tokens: result.tokens });
+    await adminAuthService.requestFirstSuperAdminBootstrap(input.email);
+    sendSuccess(res, {
+      message: "Hesap uygunsa kurulum bağlantısı e-posta adresine gönderildi.",
+    });
   }),
 
   forgotPassword: asyncHandler(async (req: Request, res: Response) => {

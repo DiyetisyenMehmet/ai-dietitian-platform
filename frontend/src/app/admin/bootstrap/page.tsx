@@ -1,23 +1,15 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
 import { ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 
-import { authStore } from "@/application/auth/auth-store";
 import { adminClient } from "@/infrastructure/admin/admin-client";
-import { ApiError } from "@/infrastructure/api/http-client";
 import { Button } from "@/presentation/components/ui/button";
 import { Input } from "@/presentation/components/ui/input";
-import { PasswordInput } from "@/presentation/components/ui/password-input";
 
 export default function AdminBootstrapPage() {
-  const router = useRouter();
   const [email, setEmail] = React.useState("");
-  const [password, setPassword] = React.useState("");
-  const [confirm, setConfirm] = React.useState("");
-  const [bootstrapCode, setBootstrapCode] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [feedback, setFeedback] = React.useState("");
 
@@ -28,38 +20,18 @@ export default function AdminBootstrapPage() {
       setFeedback("Yönetici e-posta adresini girin.");
       return;
     }
-    if (password !== confirm) {
-      setFeedback("Şifreler eşleşmiyor.");
-      return;
-    }
-    if (password.length < 12) {
-      setFeedback("Şifre en az 12 karakter olmalıdır.");
-      return;
-    }
-    if (!bootstrapCode.trim()) {
-      setFeedback("Tek kullanımlık kurulum kodunu girin.");
-      return;
-    }
 
     setBusy(true);
     setFeedback("");
     try {
-      const session = await adminClient.bootstrapFirstSuperAdmin(
+      const result = await adminClient.requestFirstSuperAdminBootstrap(
         email.trim().toLowerCase(),
-        password,
-        bootstrapCode.trim(),
       );
-      authStore.setSession(session);
-      router.replace("/admin");
-    } catch (error) {
-      const message =
-        error instanceof ApiError && error.code === "ADMIN_BOOTSTRAP_CLOSED"
-          ? "İlk yönetici kurulumu zaten tamamlandı."
-          : error instanceof ApiError && error.code === "ADMIN_BOOTSTRAP_IDENTITY_CONFLICT"
-            ? "Bu yönetici e-postası için farklı bir parola kimliği zaten mevcut."
-            : "İlk yönetici kurulumu doğrulanamadı.";
-      setFeedback(message);
-      toast.error(message);
+      setFeedback(result.message);
+      toast.success("Kurulum bağlantısı gönderildi.");
+    } catch {
+      setFeedback("Kurulum bağlantısı şu anda gönderilemedi.");
+      toast.error("Kurulum bağlantısı gönderilemedi.");
     } finally {
       setBusy(false);
     }
@@ -82,7 +54,7 @@ export default function AdminBootstrapPage() {
         <h1 className="mt-2 text-2xl font-bold tracking-tight">İlk Yönetici Kurulumu</h1>
 
         {feedback ? (
-          <div role="status" aria-live="polite" className="mt-5 rounded-2xl border border-destructive/15 bg-destructive/[0.04] px-4 py-3 text-sm">
+          <div role="status" aria-live="polite" className="mt-5 rounded-2xl border border-border bg-muted/40 px-4 py-3 text-sm">
             {feedback}
           </div>
         ) : null}
@@ -104,49 +76,13 @@ export default function AdminBootstrapPage() {
             }}
             disabled={busy}
           />
-          <PasswordInput
-            aria-label="Yeni yönetici şifresi"
-            placeholder="Yeni yönetici şifresi"
-            autoComplete="new-password"
-            className="h-14 rounded-2xl"
-            value={password}
-            onChange={(event) => {
-              setPassword(event.target.value);
-              setFeedback("");
-            }}
-            disabled={busy}
-          />
-          <PasswordInput
-            aria-label="Şifre tekrar"
-            placeholder="Şifre tekrar"
-            autoComplete="new-password"
-            className="h-14 rounded-2xl"
-            value={confirm}
-            onChange={(event) => {
-              setConfirm(event.target.value);
-              setFeedback("");
-            }}
-            disabled={busy}
-          />
-          <PasswordInput
-            aria-label="Tek kullanımlık kurulum kodu"
-            placeholder="Tek kullanımlık kurulum kodu"
-            autoComplete="off"
-            className="h-14 rounded-2xl"
-            value={bootstrapCode}
-            onChange={(event) => {
-              setBootstrapCode(event.target.value);
-              setFeedback("");
-            }}
-            disabled={busy}
-          />
           <Button
             type="submit"
             size="lg"
             className="h-14 w-full rounded-2xl text-base font-semibold"
             isLoading={busy}
           >
-            Kurulumu tamamla
+            {busy ? "Gönderiliyor..." : "Kurulum bağlantısı gönder"}
           </Button>
         </form>
       </section>

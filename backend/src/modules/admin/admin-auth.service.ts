@@ -29,8 +29,6 @@ import { adminPasswordIdentityProvider } from "./admin-password-identity.provide
 
 const APPROVED_FIRST_SUPER_ADMIN_EMAIL_SHA256 =
   "ed911dcbf3353a718ab0e6e3039e92287169025cb0a4609de03ade42a6463cb8";
-const STAGING_OWNER_BOOTSTRAP_CODE_SHA256 =
-  "24ad9a7e6f01bd24bb9afd5d7e2e3c5cae53c8ca6bd73b4fc95a632de51c47ef";
 
 interface AdminMutationRequestContext {
   correlationId: string;
@@ -57,22 +55,6 @@ function invalidCurrentPassword(): ApiError {
 
 function sha256(value: string): string {
   return crypto.createHash("sha256").update(value).digest("hex");
-}
-
-function expectedBootstrapCodeHash(): string {
-  const testOverride =
-    process.env.NODE_ENV === "test"
-      ? process.env.ADMIN_BOOTSTRAP_CODE_SHA256?.trim().toLowerCase()
-      : undefined;
-  return testOverride && /^[a-f0-9]{64}$/.test(testOverride)
-    ? testOverride
-    : STAGING_OWNER_BOOTSTRAP_CODE_SHA256;
-}
-
-function bootstrapCodeMatches(value: string): boolean {
-  const actual = Buffer.from(sha256(value.trim()), "hex");
-  const expected = Buffer.from(expectedBootstrapCodeHash(), "hex");
-  return actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
 }
 
 async function hasAdminAccess(user: User | null): Promise<boolean> {
@@ -160,166 +142,64 @@ export const adminAuthService = {
     return issueAuthSession(user, context);
   },
 
-  async bootstrapFirstSuperAdmin(
-    email: string,
-    password: string,
-    bootstrapCode: string,
-    context: SessionContext,
-    requestContext: AdminMutationRequestContext,
-  ): Promise<AuthResult> {
+  async requestFirstSuperAdminBootstrap(email: string): Promise<void> {
     const environment = resolveRuntimeEnvironment();
     if (environment !== "staging" && environment !== "test") {
       throw new ApiError(404, "Not found.", { code: "ADMIN_BOOTSTRAP_UNAVAILABLE" });
     }
 
     const normalizedEmail = email.trim().toLowerCase();
-    if (
-      sha256(normalizedEmail) !== APPROVED_FIRST_SUPER_ADMIN_EMAIL_SHA256 ||
-      !bootstrapCodeMatches(bootstrapCode)
-    ) {
-      throw forbiddenAdminLogin();
+    // Keep the response generic so the bootstrap endpoint never confirms the
+    // approved owner address to an unauthenticated caller.
+    if (sha256(normalizedEmail) !== APPROVED_FIRST_SUPER_ADMIN_EMAIL_SHA256) {
+      return;
     }
 
     const setupAlreadyClosed = await prisma.adminAuditEvent.findFirst({
       where: { action: "admin.bootstrap.super_admin", environment },
       select: { id: true },
     });
-    if (setupAlreadyClosed) {
-      throw new ApiError(409, "Initial Management Center setup is already complete.", {
-        code: "ADMIN_BOOTSTRAP_CLOSED",
-      });
+    if (setupAlreadyClosed) return;
+
+    const superRole = await prisma.adminRole.findUnique({
+      where: { key: ADMIN_SYSTEM_ROLES.SUPER_ADMIN },
+      select: { id: true },
+    });
+    if (
+      superRole &&
+      await prisma.adminUserRole.findFirst({
+        where: { roleId: superRole.id },
+        select: { userId: true },
+      })
+    ) {
+      return;
     }
 
-    let externalIdentity: { idToken: string; email?: string; localId?: string };
-    let externalIdentityCreated = false;
+    const temporaryPassword =
+      `${crypto.randomBytes(32).toString("base64url")}Aa1!`;
+    let createdIdentity: { idToken: string } | null = null;
+
     try {
-      externalIdentity = await adminPasswordIdentityProvider.createUser(
+      createdIdentity = await adminPasswordIdentityProvider.createUser(
         normalizedEmail,
-        password,
+        temporaryPassword,
       );
-      externalIdentityCreated = true;
     } catch (error) {
-      if (
-        error instanceof ApiError &&
-        error.code === "ADMIN_EMAIL_IN_USE"
-      ) {
-        try {
-          externalIdentity = await adminPasswordIdentityProvider.signIn(
-            normalizedEmail,
-            password,
-          );
-        } catch {
-          throw new ApiError(
-            409,
-            "Approved owner identity already exists with different credentials.",
-            { code: "ADMIN_BOOTSTRAP_IDENTITY_CONFLICT" },
-          );
-        }
-      } else {
+      if (!(error instanceof ApiError && error.code === "ADMIN_EMAIL_IN_USE")) {
         throw error;
       }
     }
 
-    const identity = await firebaseAuthProvider.verifyIdToken(externalIdentity.idToken);
-    if (identity.email?.trim().toLowerCase() !== normalizedEmail) {
-      if (externalIdentityCreated) {
-        await adminPasswordIdentityProvider.deleteUser(externalIdentity.idToken).catch(() => undefined);
-      }
-      throw forbiddenAdminLogin();
-    }
-
-    const passwordHash = await hashPassword(password);
-    let user: User;
     try {
-      user = await prisma.$transaction(async (tx) => {
-        await ensureAdminFoundation(tx);
-
-        const consumed = await tx.adminAuditEvent.findFirst({
-          where: { action: "admin.bootstrap.super_admin", environment },
-          select: { id: true },
-        });
-        if (consumed) {
-          throw new ApiError(409, "Initial Management Center setup is already complete.", {
-            code: "ADMIN_BOOTSTRAP_CLOSED",
-          });
-        }
-
-        const superRole = await tx.adminRole.findUniqueOrThrow({
-          where: { key: ADMIN_SYSTEM_ROLES.SUPER_ADMIN },
-          select: { id: true },
-        });
-        const existingSuperAdmin = await tx.adminUserRole.findFirst({
-          where: { roleId: superRole.id },
-          select: { userId: true },
-        });
-        if (existingSuperAdmin) {
-          throw new ApiError(409, "Initial Management Center setup is already complete.", {
-            code: "ADMIN_BOOTSTRAP_CLOSED",
-          });
-        }
-
-        const existing = await tx.user.findUnique({ where: { email: normalizedEmail } });
-        const next = existing
-          ? await tx.user.update({
-              where: { id: existing.id },
-              data: {
-                passwordHash,
-                role: UserRole.ADMIN,
-                isActive: true,
-                deletionRequestedAt: null,
-              },
-            })
-          : await tx.user.create({
-              data: {
-                email: normalizedEmail,
-                passwordHash,
-                role: UserRole.ADMIN,
-                isActive: true,
-              },
-            });
-
-        await tx.adminUserRole.upsert({
-          where: { userId_roleId: { userId: next.id, roleId: superRole.id } },
-          update: { assignedByAdminId: next.id },
-          create: {
-            userId: next.id,
-            roleId: superRole.id,
-            assignedByAdminId: next.id,
-          },
-        });
-
-        await tx.adminAuditEvent.create({
-          data: {
-            actorAdminId: next.id,
-            action: "admin.bootstrap.super_admin",
-            targetType: "user",
-            targetId: next.id,
-            beforeState: existing
-              ? { role: existing.role, isActive: existing.isActive }
-              : undefined,
-            afterState: {
-              role: UserRole.ADMIN,
-              assignedRole: ADMIN_SYSTEM_ROLES.SUPER_ADMIN,
-            },
-            reason: "One-time approved staging owner bootstrap",
-            environment,
-            correlationId: requestContext.correlationId,
-            requestId: requestContext.requestId,
-            riskLevel: AdminAuditRiskLevel.CRITICAL,
-          },
-        });
-
-        return next;
-      });
+      await adminPasswordIdentityProvider.sendPasswordReset(normalizedEmail);
     } catch (error) {
-      if (externalIdentityCreated) {
-        await adminPasswordIdentityProvider.deleteUser(externalIdentity.idToken).catch(() => undefined);
+      if (createdIdentity?.idToken) {
+        await adminPasswordIdentityProvider
+          .deleteUser(createdIdentity.idToken)
+          .catch(() => undefined);
       }
       throw error;
     }
-
-    await authRepository.updateLastLogin(user.id);
-    return issueAuthSession(user, context);
   },
 
   async requestPasswordReset(email: string, _context: SessionContext): Promise<void> {
@@ -340,14 +220,98 @@ export const adminAuthService = {
     const email = identity.email?.trim().toLowerCase();
     if (!email) throw invalidAdminLogin();
 
-    const user = await authRepository.findUserByEmail(email);
-    if (!user || !(await hasAdminAccess(user))) throw invalidAdminLogin();
-
     const passwordHash = await hashPassword(newPassword);
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { passwordHash },
+    const existingUser = await authRepository.findUserByEmail(email);
+    if (existingUser && (await hasAdminAccess(existingUser))) {
+      await prisma.user.update({
+        where: { id: existingUser.id },
+        data: { passwordHash },
+      });
+      await authRepository.revokeAllForUser(existingUser.id);
+      return;
+    }
+
+    const environment = resolveRuntimeEnvironment();
+    const canCompleteOwnerBootstrap =
+      (environment === "staging" || environment === "test") &&
+      sha256(email) === APPROVED_FIRST_SUPER_ADMIN_EMAIL_SHA256;
+    if (!canCompleteOwnerBootstrap) throw invalidAdminLogin();
+
+    const user = await prisma.$transaction(async (tx) => {
+      await ensureAdminFoundation(tx);
+
+      const consumed = await tx.adminAuditEvent.findFirst({
+        where: { action: "admin.bootstrap.super_admin", environment },
+        select: { id: true },
+      });
+      if (consumed) throw invalidAdminLogin();
+
+      const superRole = await tx.adminRole.findUniqueOrThrow({
+        where: { key: ADMIN_SYSTEM_ROLES.SUPER_ADMIN },
+        select: { id: true },
+      });
+      const existingSuperAdmin = await tx.adminUserRole.findFirst({
+        where: { roleId: superRole.id },
+        select: { userId: true },
+      });
+      if (existingSuperAdmin) throw invalidAdminLogin();
+
+      const current = await tx.user.findUnique({ where: { email } });
+      const next = current
+        ? await tx.user.update({
+            where: { id: current.id },
+            data: {
+              passwordHash,
+              role: UserRole.ADMIN,
+              isActive: true,
+              emailVerifiedAt: new Date(),
+              deletionRequestedAt: null,
+            },
+          })
+        : await tx.user.create({
+            data: {
+              email,
+              passwordHash,
+              role: UserRole.ADMIN,
+              isActive: true,
+              emailVerifiedAt: new Date(),
+            },
+          });
+
+      await tx.adminUserRole.upsert({
+        where: { userId_roleId: { userId: next.id, roleId: superRole.id } },
+        update: { assignedByAdminId: next.id },
+        create: {
+          userId: next.id,
+          roleId: superRole.id,
+          assignedByAdminId: next.id,
+        },
+      });
+
+      await tx.adminAuditEvent.create({
+        data: {
+          actorAdminId: next.id,
+          action: "admin.bootstrap.super_admin",
+          targetType: "user",
+          targetId: next.id,
+          beforeState: current
+            ? { role: current.role, isActive: current.isActive }
+            : undefined,
+          afterState: {
+            role: UserRole.ADMIN,
+            assignedRole: ADMIN_SYSTEM_ROLES.SUPER_ADMIN,
+          },
+          reason: "Verified owner email bootstrap completed through password setup link",
+          environment,
+          correlationId: "owner-email-bootstrap",
+          requestId: "owner-email-bootstrap",
+          riskLevel: AdminAuditRiskLevel.CRITICAL,
+        },
+      });
+
+      return next;
     });
+
     await authRepository.revokeAllForUser(user.id);
   },
 

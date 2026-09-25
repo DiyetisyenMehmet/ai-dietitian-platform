@@ -156,16 +156,32 @@ test("production admin hostname fails closed", async ({ request }) => {
 });
 
 
-test("Admin bootstrap uses email password and one-time code without Google", async ({ page }) => {
+test("Admin bootstrap sends an owner setup link without exposing passwords or codes", async ({ page }) => {
   await page.goto(`${WEB_BASE_URL}/admin/bootstrap`);
 
   await expect(page.getByRole("heading", { name: "İlk Yönetici Kurulumu" })).toBeVisible();
-  await expect(page.getByLabel("Yönetici e-postası")).toHaveValue("");
-  await expect(page.getByLabel("Yeni yönetici şifresi")).toHaveValue("");
-  await expect(page.getByLabel("Şifre tekrar")).toHaveValue("");
-  await expect(page.getByLabel("Tek kullanımlık kurulum kodu")).toHaveValue("");
-  await expect(page.getByRole("button", { name: "Kurulumu tamamla" })).toBeVisible();
-  await expect(page.getByText(/Google ile doğrula/i)).toHaveCount(0);
+  const email = page.getByLabel("Yönetici e-postası");
+  await expect(email).toHaveValue("");
+  await expect(page.getByLabel(/şifre/i)).toHaveCount(0);
+  await expect(page.getByText(/kurulum kodu/i)).toHaveCount(0);
+
+  let payload = null;
+  await page.route("**/api/admin/auth/bootstrap", async (route) => {
+    payload = JSON.parse(route.request().postData() || "{}");
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        data: { message: "Hesap uygunsa kurulum bağlantısı e-posta adresine gönderildi." },
+      }),
+    });
+  });
+
+  await email.fill("owner@example.com");
+  await page.getByRole("button", { name: "Kurulum bağlantısı gönder" }).click();
+  expect(payload).toEqual({ email: "owner@example.com" });
+  await expect(page.getByRole("status")).toContainText("kurulum bağlantısı");
 });
 
 

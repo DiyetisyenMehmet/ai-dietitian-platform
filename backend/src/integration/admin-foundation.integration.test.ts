@@ -257,88 +257,89 @@ test("Phase 1 admin authorization, RBAC and transactional audit", async (t) => {
     assert.equal(await prisma.adminRole.count({ where: { id: rollbackRoleId } }), 0);
   });
 
-  await t.test("first Super Admin bootstrap requires approved email and one-time code", async () => {
+  await t.test("first Super Admin bootstrap is completed only through the approved email reset link", async () => {
+    const approvedEmail = "admindiewish@gmail.com";
     const originalCreateUser = adminPasswordIdentityProvider.createUser;
     const originalDeleteUser = adminPasswordIdentityProvider.deleteUser;
-    const originalVerify = firebaseAuthProvider.verifyIdToken;
-    const originalBootstrapHash = process.env.ADMIN_BOOTSTRAP_CODE_SHA256;
-    const approvedEmail = "admindiewish@gmail.com";
-    const testBootstrapCode = "test-only-owner-bootstrap-code-2026";
-    process.env.ADMIN_BOOTSTRAP_CODE_SHA256 = crypto
-      .createHash("sha256")
-      .update(testBootstrapCode)
-      .digest("hex");
-
+    const originalSendReset = adminPasswordIdentityProvider.sendPasswordReset;
+    const originalConfirmReset = adminPasswordIdentityProvider.confirmPasswordReset;
     let createdId = "";
+    let resetEmail = "";
+    let resetSendCount = 0;
+
     try {
       adminPasswordIdentityProvider.createUser = async (email) => ({
-        idToken: `password-owner:${email}`,
+        idToken: `bootstrap-created:${email}`,
         email,
         localId: "approved-owner",
       });
       adminPasswordIdentityProvider.deleteUser = async () => undefined;
-      firebaseAuthProvider.verifyIdToken = async (idToken) => ({
-        uid: "approved-owner",
-        email: idToken.replace("password-owner:", ""),
-        emailVerified: false,
-        phoneNumber: null,
-        displayName: null,
-        providers: ["password"],
+      adminPasswordIdentityProvider.sendPasswordReset = async (email) => {
+        resetEmail = email;
+        resetSendCount += 1;
+      };
+      adminPasswordIdentityProvider.confirmPasswordReset = async (token) => ({
+        email: token === "approved-owner-reset" ? approvedEmail : undefined,
+        requestType: "PASSWORD_RESET",
       });
 
-      const invalidCode = await fetch(`${baseUrl}/api/admin/auth/bootstrap`, {
+      const unknown = await fetch(`${baseUrl}/api/admin/auth/bootstrap`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: "unknown-owner@example.com" }),
+      });
+      assert.equal(unknown.status, 200);
+      assert.equal(resetSendCount, 0);
+
+      const request = await fetch(`${baseUrl}/api/admin/auth/bootstrap`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: approvedEmail }),
+      });
+      assert.equal(request.status, 200);
+      assert.equal(resetEmail, approvedEmail);
+      assert.equal(resetSendCount, 1);
+      assert.equal(await prisma.user.count({ where: { email: approvedEmail } }), 0);
+
+      const reset = await fetch(`${baseUrl}/api/admin/auth/password/reset`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          email: approvedEmail,
-          password: "bootstrap-admin-123!",
-          bootstrapCode: "wrong-test-bootstrap-code-12345",
+          token: "approved-owner-reset",
+          newPassword: "bootstrap-admin-123!",
         }),
       });
-      assert.equal(invalidCode.status, 403);
+      assert.equal(reset.status, 200);
 
-      const response = await fetch(`${baseUrl}/api/admin/auth/bootstrap`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          email: approvedEmail,
-          password: "bootstrap-admin-123!",
-          bootstrapCode: testBootstrapCode,
-        }),
+      const owner = await prisma.user.findUniqueOrThrow({
+        where: { email: approvedEmail },
       });
-      assert.equal(response.status, 200);
-      const body = (await response.json()) as { data: { user: { id: string; role: string } } };
-      createdId = body.data.user.id;
-      createdUserIds.push(createdId);
-      assert.equal(body.data.user.role, "ADMIN");
+      createdId = owner.id;
+      createdUserIds.push(owner.id);
+      assert.equal(owner.role, UserRole.ADMIN);
+      assert.equal(owner.isActive, true);
+      assert.ok(owner.emailVerifiedAt);
 
-      const access = await resolveAdminAccess(createdId);
+      const access = await resolveAdminAccess(owner.id);
       assert.ok(access?.roles.includes("SUPER_ADMIN"));
       const audit = await prisma.adminAuditEvent.findFirst({
-        where: { actorAdminId: createdId, action: "admin.bootstrap.super_admin" },
+        where: { actorAdminId: owner.id, action: "admin.bootstrap.super_admin" },
       });
       assert.ok(audit);
       assert.equal(audit.riskLevel, "CRITICAL");
 
-      const second = await fetch(`${baseUrl}/api/admin/auth/bootstrap`, {
+      const secondRequest = await fetch(`${baseUrl}/api/admin/auth/bootstrap`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          email: approvedEmail,
-          password: "bootstrap-admin-123!",
-          bootstrapCode: testBootstrapCode,
-        }),
+        body: JSON.stringify({ email: approvedEmail }),
       });
-      assert.equal(second.status, 409);
+      assert.equal(secondRequest.status, 200);
+      assert.equal(resetSendCount, 1);
     } finally {
       adminPasswordIdentityProvider.createUser = originalCreateUser;
       adminPasswordIdentityProvider.deleteUser = originalDeleteUser;
-      firebaseAuthProvider.verifyIdToken = originalVerify;
-      if (originalBootstrapHash === undefined) {
-        delete process.env.ADMIN_BOOTSTRAP_CODE_SHA256;
-      } else {
-        process.env.ADMIN_BOOTSTRAP_CODE_SHA256 = originalBootstrapHash;
-      }
+      adminPasswordIdentityProvider.sendPasswordReset = originalSendReset;
+      adminPasswordIdentityProvider.confirmPasswordReset = originalConfirmReset;
       if (createdId) {
         await prisma.adminAuditEvent.deleteMany({ where: { actorAdminId: createdId } });
         await prisma.adminUserRole.deleteMany({ where: { userId: createdId } });
