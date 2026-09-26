@@ -1,6 +1,19 @@
 "use client";
 
-import {\n  Activity,\n  AlertTriangle,\n  Box,\n  Database,\n  Droplet,\n  Dumbbell,\n  Flame,\n  Info,\n  Leaf,\n  Wheat,\n  Zap,\n  type LucideIcon,\n} from "lucide-react";
+import {
+  Activity,
+  AlertTriangle,
+  Box,
+  Database,
+  Droplet,
+  Dumbbell,
+  Flame,
+  Info,
+  Leaf,
+  Wheat,
+  Zap,
+  type LucideIcon,
+} from "lucide-react";
 
 import type {
   NutrientValuesDto,
