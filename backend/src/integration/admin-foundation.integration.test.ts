@@ -452,6 +452,11 @@ test("Phase 1 admin authorization, RBAC and transactional audit", async (t) => {
     });
     assert.equal(deactivate.status, 200);
     assert.equal(await resolveAdminAccess(target.id), null);
+
+    await prisma.adminAuditEvent.deleteMany({ where: { actorAdminId: actor.id } });
+    await prisma.adminUserRole.deleteMany({
+      where: { userId: { in: [actor.id, target.id] } },
+    });
   });
 
   await t.test("first Super Admin bootstrap provisions RBAC after sending the approved reset email", async () => {
