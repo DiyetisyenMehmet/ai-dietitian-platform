@@ -107,6 +107,8 @@ test("ingredient corrections are recalculated deterministically from provider fa
   assert.equal(result.totals.proteinG, 16);
   assert.equal(result.totals.carbohydratesG, 40);
   assert.equal(result.totals.fatG, 12);
+  assert.equal(result.totals.sodiumMg, null);
+  assert.equal(result.totals.saltG, null);
   assert.equal(result.estimatedGrams, 210);
 });
 
