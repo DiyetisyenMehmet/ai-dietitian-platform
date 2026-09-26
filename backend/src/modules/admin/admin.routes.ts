@@ -6,10 +6,19 @@ import { validate } from "../../middleware/validate";
 import { adminAccessController } from "./admin-access.controller";
 import {
   adminAccessUserParamsSchema,
-  adminCreateAccessUserSchema,
-  adminUpdateAccessUserSchema,
   adminStaffUpdateSchema,
 } from "./admin-access.schemas";
+import { adminGovernanceController } from "./admin-governance.controller";
+import {
+  adminAuditQuerySchema,
+  adminInvitationCreateSchema,
+  adminRoleCreateSchema,
+  adminRoleParamsSchema,
+  adminRoleUpdateSchema,
+  adminSessionMutationSchema,
+  adminStaffParamsSchema,
+  adminStaffSessionParamsSchema,
+} from "./admin-governance.schemas";
 import { adminAuthController } from "./admin-auth.controller";
 import {
   adminBootstrapSchema,
@@ -69,34 +78,63 @@ adminRouter.get(
   requireAdminPermission(ADMIN_PERMISSIONS.ROLES_READ),
   adminAccessController.listRoles,
 );
+adminRouter.get(
+  "/access/permissions",
+  requireAdminPermission(ADMIN_PERMISSIONS.ROLES_READ),
+  adminGovernanceController.listPermissions,
+);
+adminRouter.get(
+  "/access/invitations",
+  requireAdminPermission(ADMIN_PERMISSIONS.STAFF_READ),
+  adminGovernanceController.listInvitations,
+);
+adminRouter.post(
+  "/access/invitations",
+  requireAdminPermission(ADMIN_PERMISSIONS.STAFF_MANAGE),
+  validate({ body: adminInvitationCreateSchema }),
+  adminGovernanceController.inviteStaff,
+);
+adminRouter.post(
+  "/access/roles",
+  requireAdminPermission(ADMIN_PERMISSIONS.ROLES_MANAGE),
+  validate({ body: adminRoleCreateSchema }),
+  adminGovernanceController.createRole,
+);
+adminRouter.patch(
+  "/access/roles/:key",
+  requireAdminPermission(ADMIN_PERMISSIONS.ROLES_MANAGE),
+  validate({ params: adminRoleParamsSchema, body: adminRoleUpdateSchema }),
+  adminGovernanceController.updateRole,
+);
 adminRouter.patch(
   "/access/staff/:id",
   requireAdminPermission(ADMIN_PERMISSIONS.STAFF_MANAGE),
   validate({ params: adminAccessUserParamsSchema, body: adminStaffUpdateSchema }),
   adminAccessController.updateStaffAccess,
 );
-
 adminRouter.get(
-  "/access/users",
-  requireAdminPermission(ADMIN_PERMISSIONS.ACCESS_MANAGE),
-  adminAccessController.listUsers,
+  "/access/staff/:id/sessions",
+  requireAdminPermission(ADMIN_PERMISSIONS.STAFF_READ),
+  validate({ params: adminStaffParamsSchema }),
+  adminGovernanceController.listSessions,
 );
-adminRouter.post(
-  "/access/users",
-  requireAdminPermission(ADMIN_PERMISSIONS.ACCESS_MANAGE),
-  validate({ body: adminCreateAccessUserSchema }),
-  adminAccessController.createUser,
+adminRouter.delete(
+  "/access/staff/:id/sessions/:sessionId",
+  requireAdminPermission(ADMIN_PERMISSIONS.STAFF_MANAGE),
+  validate({ params: adminStaffSessionParamsSchema, body: adminSessionMutationSchema }),
+  adminGovernanceController.revokeSession,
 );
-adminRouter.patch(
-  "/access/users/:id",
-  requireAdminPermission(ADMIN_PERMISSIONS.ACCESS_MANAGE),
-  validate({ params: adminAccessUserParamsSchema, body: adminUpdateAccessUserSchema }),
-  adminAccessController.updateUserAccess,
+adminRouter.delete(
+  "/access/staff/:id/sessions",
+  requireAdminPermission(ADMIN_PERMISSIONS.STAFF_MANAGE),
+  validate({ params: adminStaffParamsSchema, body: adminSessionMutationSchema }),
+  adminGovernanceController.revokeAllSessions,
 );
 adminRouter.get(
   "/audit",
   requireAdminPermission(ADMIN_PERMISSIONS.AUDIT_READ),
-  adminAccessController.audit,
+  validate({ query: adminAuditQuerySchema }),
+  adminGovernanceController.audit,
 );
 
 adminRouter.get("/session", requireAdminPermission(ADMIN_PERMISSIONS.ACCESS), adminController.session);

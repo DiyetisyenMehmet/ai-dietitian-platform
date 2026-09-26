@@ -300,11 +300,101 @@ export const adminAuthService = {
 
     const passwordHash = await hashPassword(newPassword);
     const existingUser = await authRepository.findUserByEmail(email);
-    if (existingUser && (await hasAdminAccess(existingUser))) {
-      await prisma.user.update({
-        where: { id: existingUser.id },
-        data: { passwordHash },
+
+    if (
+      existingUser &&
+      existingUser.role === UserRole.ADMIN &&
+      !existingUser.isActive
+    ) {
+      const invitation = await prisma.adminInvitation.findFirst({
+        where: {
+          userId: existingUser.id,
+          email,
+          acceptedAt: null,
+          revokedAt: null,
+          expiresAt: { gt: new Date() },
+        },
+        orderBy: { createdAt: "desc" },
       });
+
+      if (invitation) {
+        await runAuditedAdminMutation(
+          {
+            actorAdminId: existingUser.id,
+            action: "admin.staff.invite_accept",
+            targetType: "user",
+            targetId: existingUser.id,
+            reason: "Invited administrator completed password setup",
+            environment: resolveRuntimeEnvironment(),
+            correlationId: `admin-invite:${invitation.id}`,
+            requestId: `admin-invite:${invitation.id}`,
+            riskLevel: AdminAuditRiskLevel.HIGH,
+          },
+          async (tx) => {
+            const pending = await tx.adminInvitation.findFirst({
+              where: {
+                id: invitation.id,
+                userId: existingUser.id,
+                acceptedAt: null,
+                revokedAt: null,
+                expiresAt: { gt: new Date() },
+              },
+            });
+            if (!pending) throw invalidAdminLogin();
+
+            const next = await tx.user.update({
+              where: { id: existingUser.id },
+              data: {
+                passwordHash,
+                isActive: true,
+                emailVerifiedAt: new Date(),
+                deletionRequestedAt: null,
+              },
+            });
+            await tx.adminInvitation.update({
+              where: { id: pending.id },
+              data: { acceptedAt: new Date() },
+            });
+
+            return {
+              result: next,
+              before: buildAuditSnapshot(
+                { email: existingUser.email, isActive: false },
+                ["email", "isActive"],
+              ),
+              after: buildAuditSnapshot(
+                { email: next.email, isActive: true },
+                ["email", "isActive"],
+              ),
+            };
+          },
+        );
+        await authRepository.revokeAllForUser(existingUser.id);
+        return;
+      }
+    }
+
+    if (existingUser && (await hasAdminAccess(existingUser))) {
+      await runAuditedAdminMutation(
+        {
+          actorAdminId: existingUser.id,
+          action: "admin.security.password_reset_completed",
+          targetType: "user",
+          targetId: existingUser.id,
+          reason: "Management Center password reset completed",
+          environment: resolveRuntimeEnvironment(),
+          correlationId: `password-reset:${existingUser.id}`,
+          requestId: `password-reset:${existingUser.id}`,
+          riskLevel: AdminAuditRiskLevel.HIGH,
+        },
+        async (tx) => {
+          const next = await tx.user.update({
+            where: { id: existingUser.id },
+            data: { passwordHash },
+          });
+          return { result: next };
+        },
+      );
       await authRepository.revokeAllForUser(existingUser.id);
       return;
     }

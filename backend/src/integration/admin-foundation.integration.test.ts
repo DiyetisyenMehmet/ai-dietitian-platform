@@ -73,7 +73,20 @@ test("Phase 1 admin authorization, RBAC and transactional audit", async (t) => {
       server.close((error) => (error ? reject(error) : resolve()));
     });
     await prisma.adminAuditEvent.deleteMany({
-      where: { targetId: { in: [...createdUserIds, ...createdRoleIds] } },
+      where: {
+        OR: [
+          { targetId: { in: [...createdUserIds, ...createdRoleIds] } },
+          { actorAdminId: { in: createdUserIds } },
+        ],
+      },
+    });
+    await prisma.adminInvitation.deleteMany({
+      where: {
+        OR: [
+          { userId: { in: createdUserIds } },
+          { invitedByAdminId: { in: createdUserIds } },
+        ],
+      },
     });
     await prisma.adminUserRole.deleteMany({ where: { userId: { in: createdUserIds } } });
     if (createdRoleIds.length) {
@@ -457,6 +470,335 @@ test("Phase 1 admin authorization, RBAC and transactional audit", async (t) => {
     await prisma.adminUserRole.deleteMany({
       where: { userId: { in: [actor.id, target.id] } },
     });
+  });
+
+  await t.test("Phase 2 invitation, custom roles, sessions and audit filters work end-to-end", async () => {
+    const actor = await createUser(UserRole.ADMIN, "phase2-owner");
+    createdUserIds.push(actor.id);
+    const superRole = await prisma.adminRole.findUniqueOrThrow({
+      where: { key: ADMIN_SYSTEM_ROLES.SUPER_ADMIN },
+    });
+    await prisma.adminUserRole.create({
+      data: { userId: actor.id, roleId: superRole.id, assignedByAdminId: actor.id },
+    });
+    const actorToken = tokenFor(actor);
+
+    const originalCreateUser = adminPasswordIdentityProvider.createUser;
+    const originalDeleteUser = adminPasswordIdentityProvider.deleteUser;
+    const originalSendReset = adminPasswordIdentityProvider.sendPasswordReset;
+    const originalConfirmReset = adminPasswordIdentityProvider.confirmPasswordReset;
+
+    let invitedUserId = "";
+    let customRoleId = "";
+    let resetEmail = "";
+    const inviteEmail = `phase2.invited.${crypto.randomUUID()}@example.com`;
+
+    try {
+      const roleCreate = await fetch(`${baseUrl}/api/admin/access/roles`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${actorToken}`,
+        },
+        body: JSON.stringify({
+          name: "Junior Support",
+          description: "Restricted support role",
+          permissionKeys: ["users.read", "support.manage"],
+          reason: "Create restricted support role",
+        }),
+      });
+      assert.equal(roleCreate.status, 201);
+      const roleBody = (await roleCreate.json()) as {
+        data: {
+          role: {
+            key: string;
+            permissions: string[];
+          };
+        };
+      };
+      assert.equal(roleBody.data.role.key, "CUSTOM_JUNIOR_SUPPORT");
+      assert.ok(roleBody.data.role.permissions.includes(ADMIN_PERMISSIONS.ACCESS));
+      assert.ok(roleBody.data.role.permissions.includes(ADMIN_PERMISSIONS.USERS_READ));
+
+      const customRole = await prisma.adminRole.findUniqueOrThrow({
+        where: { key: roleBody.data.role.key },
+      });
+      customRoleId = customRole.id;
+      createdRoleIds.push(customRole.id);
+
+      adminPasswordIdentityProvider.createUser = async (email) => ({
+        idToken: `invite-created:${email}`,
+        email,
+        localId: "phase2-invite",
+      });
+      adminPasswordIdentityProvider.deleteUser = async () => undefined;
+      adminPasswordIdentityProvider.sendPasswordReset = async (email) => {
+        resetEmail = email;
+      };
+      adminPasswordIdentityProvider.confirmPasswordReset = async (token) => ({
+        email: token === "phase2-invite-reset" ? inviteEmail : undefined,
+        requestType: "PASSWORD_RESET",
+      });
+
+      const invite = await fetch(`${baseUrl}/api/admin/access/invitations`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${actorToken}`,
+        },
+        body: JSON.stringify({
+          email: inviteEmail,
+          fullName: "Junior Support Test",
+          roleKeys: [roleBody.data.role.key],
+          reason: "Support onboarding",
+        }),
+      });
+      assert.equal(invite.status, 201);
+      assert.equal(resetEmail, inviteEmail);
+      const inviteBody = (await invite.json()) as {
+        data: {
+          invitation: {
+            userId: string;
+            email: string;
+            isActive: boolean;
+          };
+        };
+      };
+      invitedUserId = inviteBody.data.invitation.userId;
+      createdUserIds.push(invitedUserId);
+      assert.equal(inviteBody.data.invitation.email, inviteEmail);
+      assert.equal(inviteBody.data.invitation.isActive, false);
+      assert.equal(await resolveAdminAccess(invitedUserId), null);
+
+      const duplicateInvite = await fetch(`${baseUrl}/api/admin/access/invitations`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${actorToken}`,
+        },
+        body: JSON.stringify({
+          email: inviteEmail,
+          roleKeys: [roleBody.data.role.key],
+          reason: "Duplicate invite should be rejected",
+        }),
+      });
+      assert.equal(duplicateInvite.status, 409);
+
+      const maliciousInvite = await fetch(`${baseUrl}/api/admin/access/invitations`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${actorToken}`,
+        },
+        body: JSON.stringify({
+          email: `invalid-role.${crypto.randomUUID()}@example.com`,
+          roleKeys: ["SUPER_ADMIN<script>"],
+          reason: "Invalid role input",
+        }),
+      });
+      assert.equal(maliciousInvite.status, 422);
+
+      const accept = await fetch(`${baseUrl}/api/admin/auth/password/reset`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          token: "phase2-invite-reset",
+          newPassword: "InvitedAdminPass123!",
+        }),
+      });
+      assert.equal(accept.status, 200);
+
+      const activated = await prisma.user.findUniqueOrThrow({
+        where: { id: invitedUserId },
+      });
+      assert.equal(activated.isActive, true);
+      assert.ok(activated.emailVerifiedAt);
+
+      const invitation = await prisma.adminInvitation.findFirstOrThrow({
+        where: { userId: invitedUserId },
+        orderBy: { createdAt: "desc" },
+      });
+      assert.ok(invitation.acceptedAt);
+
+      const invitedAccess = await resolveAdminAccess(invitedUserId);
+      assert.ok(invitedAccess);
+      assert.ok(invitedAccess.roles.includes(roleBody.data.role.key));
+      assert.ok(invitedAccess.permissions.includes(ADMIN_PERMISSIONS.ACCESS));
+      assert.ok(invitedAccess.permissions.includes(ADMIN_PERMISSIONS.USERS_READ));
+
+      const roleUpdate = await fetch(
+        `${baseUrl}/api/admin/access/roles/${encodeURIComponent(roleBody.data.role.key)}`,
+        {
+          method: "PATCH",
+          headers: {
+            "content-type": "application/json",
+            authorization: `Bearer ${actorToken}`,
+          },
+          body: JSON.stringify({
+            name: "Junior Support",
+            description: "Restricted support role updated",
+            permissionKeys: ["support.read"],
+            reason: "Narrow role permissions",
+          }),
+        },
+      );
+      assert.equal(roleUpdate.status, 200);
+      const updatedAccess = await resolveAdminAccess(invitedUserId);
+      assert.ok(updatedAccess);
+      assert.ok(updatedAccess.permissions.includes(ADMIN_PERMISSIONS.ACCESS));
+      assert.ok(updatedAccess.permissions.includes(ADMIN_PERMISSIONS.SUPPORT_READ));
+      assert.equal(updatedAccess.permissions.includes(ADMIN_PERMISSIONS.USERS_READ), false);
+
+      const now = Date.now();
+      await prisma.refreshToken.createMany({
+        data: [
+          {
+            id: crypto.randomUUID(),
+            userId: invitedUserId,
+            tokenHash: crypto.randomBytes(32).toString("hex"),
+            expiresAt: new Date(now + 86_400_000),
+            userAgent: "Phase2 Browser A",
+            ipAddress: "127.0.0.1",
+          },
+          {
+            id: crypto.randomUUID(),
+            userId: invitedUserId,
+            tokenHash: crypto.randomBytes(32).toString("hex"),
+            expiresAt: new Date(now + 86_400_000),
+            userAgent: "Phase2 Browser B",
+            ipAddress: "127.0.0.1",
+          },
+        ],
+      });
+
+      const sessionList = await fetch(
+        `${baseUrl}/api/admin/access/staff/${invitedUserId}/sessions`,
+        { headers: { authorization: `Bearer ${actorToken}` } },
+      );
+      assert.equal(sessionList.status, 200);
+      const sessionBody = (await sessionList.json()) as {
+        data: {
+          sessions: Array<{ id: string; isActive: boolean }>;
+        };
+      };
+      const activeSessions = sessionBody.data.sessions.filter((session) => session.isActive);
+      assert.equal(activeSessions.length, 2);
+
+      const revokeOne = await fetch(
+        `${baseUrl}/api/admin/access/staff/${invitedUserId}/sessions/${activeSessions[0]!.id}`,
+        {
+          method: "DELETE",
+          headers: {
+            "content-type": "application/json",
+            authorization: `Bearer ${actorToken}`,
+          },
+          body: JSON.stringify({ reason: "Security session review" }),
+        },
+      );
+      assert.equal(revokeOne.status, 200);
+
+      const revokeAll = await fetch(
+        `${baseUrl}/api/admin/access/staff/${invitedUserId}/sessions`,
+        {
+          method: "DELETE",
+          headers: {
+            "content-type": "application/json",
+            authorization: `Bearer ${actorToken}`,
+          },
+          body: JSON.stringify({ reason: "Close remaining sessions" }),
+        },
+      );
+      assert.equal(revokeAll.status, 200);
+      assert.equal(
+        await prisma.refreshToken.count({
+          where: { userId: invitedUserId, revokedAt: null },
+        }),
+        0,
+      );
+
+      const audit = await fetch(
+        `${baseUrl}/api/admin/audit?user=${encodeURIComponent(inviteEmail)}&module=staff&risk=HIGH`,
+        { headers: { authorization: `Bearer ${actorToken}` } },
+      );
+      assert.equal(audit.status, 200);
+      const auditBody = (await audit.json()) as {
+        data: {
+          events: Array<{
+            action: string;
+            correlationId: string;
+            requestId: string;
+          }>;
+        };
+      };
+      assert.ok(
+        auditBody.data.events.some(
+          (event) => event.action === "admin.staff.invite_create",
+        ),
+      );
+      assert.ok(
+        auditBody.data.events.every(
+          (event) => Boolean(event.correlationId) && Boolean(event.requestId),
+        ),
+      );
+
+      const inviteAudit = await prisma.adminAuditEvent.findFirst({
+        where: {
+          targetId: invitedUserId,
+          action: "admin.staff.invite_create",
+        },
+      });
+      const acceptAudit = await prisma.adminAuditEvent.findFirst({
+        where: {
+          targetId: invitedUserId,
+          action: "admin.staff.invite_accept",
+        },
+      });
+      assert.ok(inviteAudit);
+      assert.ok(acceptAudit);
+    } finally {
+      adminPasswordIdentityProvider.createUser = originalCreateUser;
+      adminPasswordIdentityProvider.deleteUser = originalDeleteUser;
+      adminPasswordIdentityProvider.sendPasswordReset = originalSendReset;
+      adminPasswordIdentityProvider.confirmPasswordReset = originalConfirmReset;
+
+      const cleanupUsers = [actor.id, ...(invitedUserId ? [invitedUserId] : [])];
+      await prisma.adminInvitation.deleteMany({
+        where: {
+          OR: [
+            { userId: { in: cleanupUsers } },
+            { invitedByAdminId: { in: cleanupUsers } },
+          ],
+        },
+      });
+      await prisma.adminAuditEvent.deleteMany({
+        where: {
+          OR: [
+            { actorAdminId: { in: cleanupUsers } },
+            { targetId: { in: cleanupUsers } },
+            ...(customRoleId ? [{ targetId: customRoleId }] : []),
+          ],
+        },
+      });
+      await prisma.refreshToken.deleteMany({
+        where: { userId: { in: cleanupUsers } },
+      });
+      await prisma.adminUserRole.deleteMany({
+        where: { userId: { in: cleanupUsers } },
+      });
+      if (customRoleId) {
+        await prisma.adminRolePermission.deleteMany({
+          where: { roleId: customRoleId },
+        });
+        await prisma.adminRole.deleteMany({ where: { id: customRoleId } });
+        const roleIndex = createdRoleIds.indexOf(customRoleId);
+        if (roleIndex >= 0) createdRoleIds.splice(roleIndex, 1);
+      }
+      await prisma.user.deleteMany({ where: { id: { in: cleanupUsers } } });
+      for (const id of cleanupUsers) {
+        const index = createdUserIds.indexOf(id);
+        if (index >= 0) createdUserIds.splice(index, 1);
+      }
+    }
   });
 
   await t.test("first Super Admin bootstrap provisions RBAC after sending the approved reset email", async () => {
