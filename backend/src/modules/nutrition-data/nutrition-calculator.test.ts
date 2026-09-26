@@ -23,13 +23,58 @@ test("scales per-100g nutrients deterministically", () => {
   assert.equal(result.nutrients.sodiumMg, 148);
 });
 
+const waferPer100g: NutrientValues = {
+  energyKcal: 509,
+  proteinG: 1.4,
+  carbohydratesG: 60,
+  fatG: 26,
+  saturatedFatG: 13.1,
+  sugarsG: 35.17,
+  fiberG: 2.41,
+  sodiumMg: 227.59,
+  saltG: 0.586,
+};
+
+test("scales the food scanner reference portion from 509 kcal per 100 g", () => {
+  const result = calculatePortion(waferPer100g, 29);
+  assert.equal(result.grams, 29);
+  assert.equal(result.nutrients.energyKcal, 147.61);
+  assert.equal(result.nutrients.proteinG, 0.41);
+  assert.equal(result.nutrients.carbohydratesG, 17.4);
+  assert.equal(result.nutrients.fatG, 7.54);
+  assert.equal(result.nutrients.saturatedFatG, 3.8);
+  assert.equal(result.nutrients.sugarsG, 10.2);
+  assert.equal(result.nutrients.fiberG, 0.7);
+  assert.equal(result.nutrients.sodiumMg, 66);
+  assert.equal(result.nutrients.saltG, 0.17);
+});
+
+test("keeps 1 g, 29 g, 50 g, 100 g and 150 g portions finite", () => {
+  const matrix = new Map([
+    [1, 5.09],
+    [29, 147.61],
+    [50, 254.5],
+    [100, 509],
+    [150, 763.5],
+  ]);
+  for (const [grams, kcal] of matrix) {
+    const result = calculatePortion(waferPer100g, grams);
+    assert.equal(result.nutrients.energyKcal, kcal);
+    for (const value of Object.values(result.nutrients)) {
+      assert.equal(value === null || Number.isFinite(value), true);
+    }
+  }
+});
+
 test("preserves missing nutrients instead of inventing values", () => {
   const result = calculatePortion({ ...base, fiberG: null }, 150);
   assert.equal(result.nutrients.fiberG, null);
 });
 
-test("rejects zero and extreme servings", () => {
+test("rejects zero, non-finite and extreme servings", () => {
   assert.throws(() => calculatePortion(base, 0), RangeError);
+  assert.throws(() => calculatePortion(base, Number.NaN), RangeError);
+  assert.throws(() => calculatePortion(base, Number.POSITIVE_INFINITY), RangeError);
   assert.throws(() => calculatePortion(base, 5001), RangeError);
 });
 

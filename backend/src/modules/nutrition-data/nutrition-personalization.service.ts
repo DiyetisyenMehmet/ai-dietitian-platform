@@ -131,7 +131,7 @@ async function personalizeLocal(userId: string, nutrients: NutrientValues, food?
   if (food && dietary === "INCOMPATIBLE") {
     warnings.push("Ürün, profilindeki beslenme tercihiyle uyumlu görünmüyor.");
   }
-  if (food && food.allergens.length === 0 && (profile?.allergies.length ?? 0) > 0) {
+  if (food && food.allergens.length === 0) {
     warnings.push(
       "Bu ürün için alerjen verisi eksik olabilir; alerjen güvenliği doğrulanmış kabul edilmemelidir.",
     );

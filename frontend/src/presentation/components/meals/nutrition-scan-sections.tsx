@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Database, Info } from "lucide-react";
+import { AlertTriangle, Database, Info, Zap } from "lucide-react";
 
 import type {
   NutrientValuesDto,
@@ -8,8 +8,12 @@ import type {
   NutritionProvenanceDto,
 } from "@/infrastructure/nutrition/nutrition-client";
 
-function value(value: number | null, unit: string): string {
-  return value === null ? "—" : `${Math.round(value * 10) / 10} ${unit}`;
+function formatValue(value: number | null, unit: string): string {
+  if (value === null) return "Bilgi bulunamadı";
+  if (unit === "kcal") return `${Math.round(value)} ${unit}`;
+  if (unit === "mg") return `${Math.round(value)} ${unit}`;
+  const rounded = Math.round(value * (Math.abs(value) < 1 ? 100 : 10)) / (Math.abs(value) < 1 ? 100 : 10);
+  return `${rounded} ${unit}`;
 }
 
 function providerLabel(source: NutritionProvenanceDto): string {
@@ -21,53 +25,56 @@ function providerLabel(source: NutritionProvenanceDto): string {
   return "Diewish";
 }
 
-const NUTRIENTS: readonly [keyof NutrientValuesDto, string, string][] = [
-  ["energyKcal", "Enerji", "kcal"],
-  ["proteinG", "Protein", "g"],
-  ["carbohydratesG", "Karbonhidrat", "g"],
-  ["fatG", "Yağ", "g"],
-  ["saturatedFatG", "Doymuş yağ", "g"],
-  ["fiberG", "Lif", "g"],
-  ["sugarsG", "Şeker", "g"],
-  ["saltG", "Tuz", "g"],
-  ["sodiumMg", "Sodyum", "mg"],
+const NUTRIENTS: readonly [keyof NutrientValuesDto, string, string, string][] = [
+  ["proteinG", "Protein", "g", "P"],
+  ["carbohydratesG", "Karbonhidrat", "g", "KH"],
+  ["fatG", "Yağ", "g", "Y"],
+  ["saturatedFatG", "Doymuş yağ", "g", "DY"],
+  ["fiberG", "Lif", "g", "L"],
+  ["sugarsG", "Şeker", "g", "Ş"],
+  ["saltG", "Tuz", "g", "T"],
+  ["sodiumMg", "Sodyum", "mg", "Na"],
 ];
 
 export function NutritionFactsGrid({
-  per100g,
   portion,
   portionLabel,
 }: {
-  per100g?: NutrientValuesDto | null;
   portion: NutrientValuesDto;
   portionLabel: string;
 }) {
   return (
     <div className="space-y-3">
-      {per100g && (
-        <div>
-          <p className="mb-2 text-xs font-semibold text-muted-foreground">100 g / 100 ml bazında</p>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {NUTRIENTS.map(([key, label, unit]) => (
-              <div key={`100-${key}`} className="rounded-xl bg-muted/50 p-3">
-                <p className="text-xs text-muted-foreground">{label}</p>
-                <p className="font-semibold">{value(per100g[key], unit)}</p>
-              </div>
-            ))}
+      <div className="relative overflow-hidden rounded-2xl border border-primary/10 bg-primary/5 p-4">
+        <div className="absolute -bottom-8 -right-5 size-28 rounded-full bg-primary/5" aria-hidden="true" />
+        <div className="relative flex items-center gap-4">
+          <span className="flex size-14 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm">
+            <Zap className="size-7" aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-muted-foreground">Enerji</p>
+            <p className="break-words text-3xl font-extrabold leading-none tracking-tight text-foreground">
+              {formatValue(portion.energyKcal, "kcal")}
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">{portionLabel}</p>
           </div>
         </div>
-      )}
+      </div>
 
-      <div>
-        <p className="mb-2 text-xs font-semibold text-muted-foreground">{portionLabel}</p>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {NUTRIENTS.map(([key, label, unit]) => (
-            <div key={`portion-${key}`} className="rounded-xl border p-3">
-              <p className="text-xs text-muted-foreground">{label}</p>
-              <p className="font-semibold">{value(portion[key], unit)}</p>
+      <div className="grid grid-cols-2 gap-2.5">
+        {NUTRIENTS.map(([key, label, unit, mark]) => (
+          <div key={key} className="flex min-h-[78px] items-center gap-3 rounded-2xl border bg-card p-3 shadow-sm">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-extrabold text-primary" aria-hidden="true">
+              {mark}
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-xs text-muted-foreground">{label}</p>
+              <p className="break-words text-lg font-bold leading-tight text-foreground">
+                {formatValue(portion[key], unit)}
+              </p>
             </div>
-          ))}
-        </div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -82,38 +89,44 @@ export function NutritionAttentionSection({
 }) {
   if (flags.length === 0 && (!warnings || warnings.length === 0)) {
     return (
-      <p className="text-sm text-muted-foreground">
-        Mevcut değerlerle ayrıca işaretlenmesi gereken bir durum görünmüyor. Sayısal değeri olmayan alanlar değerlendirme dışında tutulur.
+      <p className="rounded-2xl border bg-muted/30 p-3 text-sm text-muted-foreground">
+        Mevcut verilerde ayrıca öne çıkarılması gereken bir uyarı bulunmuyor. Eksik alanlar değerlendirmeye dahil edilmez.
       </p>
     );
   }
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2.5">
       {flags.map((flag) => (
         <div
           key={`${flag.code}-${flag.basis}`}
-          className={`flex gap-2 rounded-xl border p-3 text-sm ${
-            flag.severity === "WATCH" ? "border-amber-500/30 bg-amber-500/5" : "bg-muted/40"
+          className={`flex gap-3 rounded-2xl border p-3.5 text-sm ${
+            flag.severity === "WATCH"
+              ? "border-amber-500/30 bg-amber-500/5"
+              : "border-border bg-muted/35"
           }`}
         >
-          {flag.severity === "WATCH" ? (
-            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
-          ) : (
-            <Info className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-          )}
-          <div>
-            <p>{flag.message}</p>
+          <span className={`mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full ${flag.severity === "WATCH" ? "bg-amber-500/10 text-amber-600" : "bg-muted text-muted-foreground"}`}>
+            {flag.severity === "WATCH" ? (
+              <AlertTriangle className="size-4" aria-hidden="true" />
+            ) : (
+              <Info className="size-4" aria-hidden="true" />
+            )}
+          </span>
+          <div className="min-w-0">
+            <p className="font-medium text-foreground">{flag.message}</p>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              {flag.basis === "PER_100_G" ? "100 g bazlı deterministik kural" : "Seçilen porsiyon bazlı deterministik kural"}
+              {flag.basis === "PER_100_G" ? "100 g bazlı değerlendirme" : "Seçilen porsiyon bazlı değerlendirme"}
             </p>
           </div>
         </div>
       ))}
       {warnings?.map((warning) => (
-        <div key={warning} className="flex gap-2 rounded-xl border border-amber-500/30 p-3 text-sm">
-          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
-          <span>{warning}</span>
+        <div key={warning} className="flex gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-3.5 text-sm">
+          <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-amber-500/10 text-amber-600">
+            <AlertTriangle className="size-4" aria-hidden="true" />
+          </span>
+          <span className="min-w-0 font-medium text-foreground">{warning}</span>
         </div>
       ))}
     </div>
@@ -126,24 +139,58 @@ function dateText(value: string | null | undefined): string | null {
   return Number.isNaN(date.getTime()) ? null : date.toLocaleString("tr-TR");
 }
 
+function confidenceText(value: number): string | null {
+  if (!Number.isFinite(value) || value < 0 || value > 1) return null;
+  return `%${Math.round(value * 100)}`;
+}
+
 export function NutritionProvenanceSection({ sources }: { sources: NutritionProvenanceDto[] }) {
   if (sources.length === 0) return null;
   return (
-    <div className="space-y-2">
+    <div className="space-y-2.5">
       {sources.map((source) => {
         const validated = dateText(source.lastValidatedAt ?? source.retrievedAt);
         const updated = dateText(source.providerUpdatedAt);
+        const confidence = confidenceText(source.confidence);
         return (
-          <div key={`${source.provider}-${source.externalId}`} className="rounded-xl border p-3 text-xs text-muted-foreground">
-            <div className="flex items-center gap-2 font-semibold text-foreground">
-              <Database className="size-4" />
-              <span>{providerLabel(source)}</span>
-              {source.stale && <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-amber-700">önbellek</span>}
+          <div key={`${source.provider}-${source.externalId}`} className="rounded-2xl border bg-card p-4 shadow-sm">
+            <div className="flex items-center gap-3">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <Database className="size-5" aria-hidden="true" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-bold text-foreground">{providerLabel(source)}</p>
+                {source.stale && (
+                  <span className="mt-1 inline-flex rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold text-amber-700 dark:text-amber-300">
+                    Son doğrulanmış kayıt
+                  </span>
+                )}
+              </div>
             </div>
-            <p className="mt-1">Kaynak kimliği: {source.externalId}</p>
-            {validated && <p>Diewish son doğrulama: {validated}</p>}
-            {updated && <p>Kaynak son güncelleme: {updated}</p>}
-            <p>Güven: %{Math.round(source.confidence * 100)}</p>
+            <dl className="mt-3 divide-y text-xs">
+              <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)] gap-3 py-1.5">
+                <dt className="text-muted-foreground">Kaynak kodu</dt>
+                <dd className="break-all font-medium text-foreground">{source.externalId}</dd>
+              </div>
+              {validated && (
+                <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)] gap-3 py-1.5">
+                  <dt className="text-muted-foreground">Diewish son doğrulama</dt>
+                  <dd className="font-medium text-foreground">{validated}</dd>
+                </div>
+              )}
+              {updated && (
+                <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)] gap-3 py-1.5">
+                  <dt className="text-muted-foreground">Kaynak son güncelleme</dt>
+                  <dd className="font-medium text-foreground">{updated}</dd>
+                </div>
+              )}
+              {confidence && (
+                <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)] gap-3 py-1.5">
+                  <dt className="text-muted-foreground">Güven</dt>
+                  <dd className="font-medium text-foreground">{confidence}</dd>
+                </div>
+              )}
+            </dl>
           </div>
         );
       })}

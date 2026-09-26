@@ -4,12 +4,17 @@ import * as React from "react";
 import Link from "next/link";
 import {
   Camera,
+  Flame,
   Heart,
+  Info,
   MessageCircle,
+  Package,
+  Plus,
   RefreshCcw,
   Scale,
   Search,
   Square,
+  Target,
   TriangleAlert,
   Utensils,
 } from "lucide-react";
@@ -22,6 +27,7 @@ import {
   type ComparisonDto,
   type MealTypeDto,
   type NormalizedNutritionScanDto,
+  type NutrientValuesDto,
   type PersonalizationDto,
 } from "@/infrastructure/nutrition/nutrition-client";
 import { Button } from "@/presentation/components/ui/button";
@@ -69,7 +75,17 @@ function validDecodedBarcode(value: string): string {
 }
 
 function nutrient(value: number | null, unit: string): string {
-  return value === null ? "Bilgi yok" : `${Math.round(value * 10) / 10} ${unit}`;
+  return value === null ? "Bilgi bulunamadı" : `${Math.round(value * 10) / 10} ${unit}`;
+}
+
+function roundedGrams(value: number): string {
+  const rounded = Math.round(value * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
+
+function parseGrams(value: string): number | null {
+  const parsed = Number(value.replace(",", "."));
+  return Number.isFinite(parsed) && parsed > 0 && parsed <= 5000 ? parsed : null;
 }
 
 function defaultMealType(): MealTypeDto {
@@ -81,13 +97,59 @@ function yesNoUnknown(value: boolean | null, yes: string, no: string): string {
   return value === true ? yes : value === false ? no : "Bilgi bulunamadı";
 }
 
-function coachHref(food: CanonicalFoodDto, grams: number): string {
+function sourceBasis(food: CanonicalFoodDto): string {
+  if (food.provenance.dataBasis === "PER_100_G") return "100 g";
+  const serving = food.serving?.description?.trim();
+  if (serving) return serving;
+  if (food.serving?.gramWeight) return `${roundedGrams(food.serving.gramWeight)} g`;
+  return "Porsiyon";
+}
+
+function portionDescriptor(food: CanonicalFoodDto): string | null {
+  const description = food.serving?.description?.trim();
+  if (!description) return null;
+  const compact = description.replace(/\s+/g, " ");
+  if (/^\d+(?:[.,]\d+)?\s*(?:g|gram|ml)$/i.test(compact)) return null;
+  return compact;
+}
+
+function portionLabel(food: CanonicalFoodDto, grams: number): string {
+  const description = portionDescriptor(food);
+  return description ? `${description} / ${roundedGrams(grams)} g` : `${roundedGrams(grams)} g`;
+}
+
+function coachHref(food: CanonicalFoodDto, grams: number, nutrients: NutrientValuesDto): string {
   const code = food.barcode ? ` Barkodu ${food.barcode}.` : "";
+  const facts = [
+    nutrients.energyKcal === null ? null : `${Math.round(nutrients.energyKcal)} kcal`,
+    nutrients.proteinG === null ? null : `${Math.round(nutrients.proteinG * 10) / 10} g protein`,
+    nutrients.carbohydratesG === null ? null : `${Math.round(nutrients.carbohydratesG * 10) / 10} g karbonhidrat`,
+    nutrients.fatG === null ? null : `${Math.round(nutrients.fatG * 10) / 10} g yağ`,
+    nutrients.sugarsG === null ? null : `${Math.round(nutrients.sugarsG * 10) / 10} g şeker`,
+  ].filter((item): item is string => Boolean(item));
+  const nutrition = facts.length > 0 ? ` Seçili porsiyon değerleri: ${facts.join(", ")}.` : "";
   const source = food.provenance.sourceReference === "USER_CONFIRMED_PACKAGE_LABEL"
     ? " Besin değerleri benim paket üzerinde kontrol edip doğruladığım etiketten geliyor; bunu üretici veritabanı doğrulaması gibi sunma."
     : "";
-  const prompt = `${grams} g ${food.displayNameTr || food.name} hakkında, doğrulanmış besin verilerini ve günlük hedeflerimi kullanarak benim için ne ifade ettiğini açıklar mısın?${code}${source}`;
+  const prompt = `${roundedGrams(grams)} g ${food.displayNameTr || food.name} hakkında, doğrulanmış besin verilerini ve günlük hedeflerimi kullanarak benim için ne ifade ettiğini açıklar mısın?${nutrition}${code}${source}`;
   return `/ai?prompt=${encodeURIComponent(prompt)}`;
+}
+
+function productInfoRows(food: CanonicalFoodDto): Array<[string, string]> {
+  return [
+    ["Nutri-Score", food.nutriScore?.toUpperCase() ?? "Bilgi bulunamadı"],
+    ["NOVA", food.novaGroup === null ? "Bilgi bulunamadı" : String(food.novaGroup)],
+    ["Vegan", yesNoUnknown(food.vegan, "Evet", "Hayır")],
+    ["Vejetaryen", yesNoUnknown(food.vegetarian, "Evet", "Hayır")],
+    ["Gluten bilgisi", yesNoUnknown(food.glutenFree, "Glutensiz", "Gluten içeriyor")],
+    ["İçerik", food.ingredients.length > 0 ? food.ingredients.join(", ") : "Bilgi bulunamadı"],
+    ["Alerjenler", food.allergens.length > 0 ? food.allergens.join(", ") : "Bilgi bulunamadı"],
+    ["Katkı maddeleri", food.additives.length > 0 ? food.additives.join(", ") : "Bilgi bulunamadı"],
+  ];
+}
+
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return <h2 className="text-base font-extrabold uppercase tracking-tight text-primary">{children}</h2>;
 }
 
 export function BarcodeScannerPanel() {
@@ -95,6 +157,7 @@ export function BarcodeScannerPanel() {
   const [food, setFood] = React.useState<CanonicalFoodDto | null>(null);
   const [scan, setScan] = React.useState<NormalizedNutritionScanDto | null>(null);
   const [grams, setGrams] = React.useState(100);
+  const [portionInput, setPortionInput] = React.useState("100");
   const [personalization, setPersonalization] = React.useState<PersonalizationDto | null>(null);
   const [comparison, setComparison] = React.useState<ComparisonDto | null>(null);
   const [notFound, setNotFound] = React.useState(false);
@@ -105,6 +168,7 @@ export function BarcodeScannerPanel() {
   const [comparing, setComparing] = React.useState(false);
   const [mealType, setMealType] = React.useState<MealTypeDto>(() => defaultMealType());
   const [loggingMeal, setLoggingMeal] = React.useState(false);
+  const [favoriting, setFavoriting] = React.useState(false);
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const streamRef = React.useRef<MediaStream | null>(null);
   const timerRef = React.useRef<number | null>(null);
@@ -121,13 +185,17 @@ export function BarcodeScannerPanel() {
   }, []);
   React.useEffect(() => stopCamera, [stopCamera]);
 
-  const loadPersonalization = React.useCallback(async (code: string, portionGrams: number) => {
+  const loadPersonalization = React.useCallback(async (code: string, portionGrams: number, notify = false) => {
     setPersonalizing(true);
     try {
       const result = await nutritionClient.personalize(code, portionGrams);
       setPersonalization(result.personalization);
-    } catch {
-      setPersonalization(null);
+      return result.personalization;
+    } catch (error) {
+      if (notify) {
+        toast.error(error instanceof ApiError ? error.message : "Porsiyon değerleri güncellenemedi.");
+      }
+      return null;
     } finally {
       setPersonalizing(false);
     }
@@ -139,6 +207,7 @@ export function BarcodeScannerPanel() {
       setScan(nextScan);
       setNotFound(false);
       setComparison(null);
+      setPersonalization(null);
       const initialGrams =
         nextScan?.serving.grams && nextScan.serving.grams > 0
           ? nextScan.serving.grams
@@ -146,6 +215,7 @@ export function BarcodeScannerPanel() {
             ? nextFood.serving.gramWeight
             : 100;
       setGrams(initialGrams);
+      setPortionInput(roundedGrams(initialGrams));
       void loadPersonalization(code, initialGrams);
     },
     [loadPersonalization],
@@ -262,9 +332,7 @@ export function BarcodeScannerPanel() {
         if (current.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
           try {
             const hits = await detector.detect(current);
-            const code = hits
-              .map((hit) => validDecodedBarcode(hit.rawValue))
-              .find(Boolean);
+            const code = hits.map((hit) => validDecodedBarcode(hit.rawValue)).find(Boolean);
             if (code) {
               stopCamera();
               void lookup(code);
@@ -289,13 +357,24 @@ export function BarcodeScannerPanel() {
   }, [cameraActive, loading, lookup, nativeScanning, stopCamera]);
 
   const updatePortion = React.useCallback(async () => {
-    if (!food?.barcode || !Number.isFinite(grams) || grams <= 0) return;
-    await loadPersonalization(food.barcode, grams);
+    if (!food?.barcode) return;
+    const nextGrams = parseGrams(portionInput);
+    if (nextGrams === null) {
+      toast.error("Porsiyon 1 g ile 5000 g arasında olmalıdır.");
+      return;
+    }
+    const next = await loadPersonalization(food.barcode, nextGrams, true);
+    if (!next) return;
+    setGrams(next.grams);
+    setPortionInput(roundedGrams(next.grams));
     setComparison(null);
-  }, [food, grams, loadPersonalization]);
+  }, [food, loadPersonalization, portionInput]);
+
+  const portionInputValue = parseGrams(portionInput);
+  const portionDirty = portionInputValue === null || Math.abs(portionInputValue - grams) > 0.0001;
 
   const compare = React.useCallback(async () => {
-    if (!food?.barcode) return;
+    if (!food?.barcode || portionDirty) return;
     setComparing(true);
     try {
       setComparison((await nutritionClient.compare(food.barcode, grams)).comparison);
@@ -304,84 +383,101 @@ export function BarcodeScannerPanel() {
     } finally {
       setComparing(false);
     }
-  }, [food, grams]);
+  }, [food, grams, portionDirty]);
 
   const logMeal = React.useCallback(async () => {
-    if (!food || !personalization) return;
+    if (!food || !personalization || portionDirty) return;
     setLoggingMeal(true);
     try {
       await nutritionClient.logMeal(mealType, food, personalization);
-      toast.success("Öğüne eklendi.");
+      toast.success(`${roundedGrams(grams)} g porsiyon öğüne eklendi.`);
     } catch {
       toast.error("Öğüne eklenemedi.");
     } finally {
       setLoggingMeal(false);
     }
-  }, [food, mealType, personalization]);
+  }, [food, grams, mealType, personalization, portionDirty]);
 
-  const portionNutrients = personalization?.nutrients ?? scan?.nutrients.perServing ?? food?.nutrientsPer100g;
-  const portionLabel = `${Math.round(grams * 10) / 10} g porsiyon`;
+  const addFavorite = React.useCallback(async () => {
+    if (!food) return;
+    setFavoriting(true);
+    try {
+      await nutritionClient.setFavorite(food.barcode ?? barcode, true);
+      toast.success("Favorilere eklendi.");
+    } catch {
+      toast.error("Favorilere eklenemedi.");
+    } finally {
+      setFavoriting(false);
+    }
+  }, [barcode, food]);
+
+  const portionNutrients = personalization?.nutrients
+    ?? (scan?.serving.grams === grams ? scan.nutrients.perServing : null)
+    ?? (grams === 100 ? food?.nutrientsPer100g : null);
 
   return (
-    <div className="space-y-4">
-      <Card>
-        <CardContent className="space-y-4 p-5">
-          <div>
-            <h2 className="font-bold">Barkod Tara</h2>
-            <p className="text-sm text-muted-foreground">
-              GTIN/EAN/UPC barkodu cihazında çözülür. Diewish önce doğrulanmış ürün kaynaklarını arar; ürün yoksa paketteki gerçek besin etiketini okuyup senin doğrulamana sunar.
-            </p>
-          </div>
-          <div className={cameraActive ? "overflow-hidden rounded-2xl border bg-black" : "hidden"}>
-            <video
-              ref={videoRef}
-              playsInline
-              muted
-              autoPlay
-              className="aspect-video w-full object-cover"
-              aria-label="Barkod kamera önizlemesi"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <Button onClick={() => void startCamera()} disabled={cameraActive || nativeScanning || loading}>
-              <Camera /> {nativeScanning ? "Barkod taranıyor…" : cameraActive ? "Kamera açık" : "Kamerayı aç"}
-            </Button>
-            <Button variant="outline" onClick={stopCamera} disabled={!cameraActive}>
-              <Square /> Durdur
-            </Button>
-          </div>
-          <div className="flex gap-2">
-            <input
-              value={barcode}
-              onChange={(event) => setBarcode(event.target.value.replace(/\D/g, "").slice(0, 14))}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") void lookup(barcode);
-              }}
-              inputMode="numeric"
-              placeholder="GTIN / EAN / UPC barkod numarası"
-              className="min-w-0 flex-1 rounded-xl border px-3 py-2 text-sm"
-            />
-            <Button
-              variant="outline"
-              onClick={() => void lookup(barcode)}
-              isLoading={loading}
-              disabled={loading || !validDecodedBarcode(barcode)}
-            >
-              <Search /> Sorgula
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+    <div className="space-y-4 overflow-x-hidden">
+      {!food && (
+        <Card>
+          <CardContent className="space-y-4 p-5">
+            <div>
+              <h2 className="font-bold">Barkod Tara</h2>
+              <p className="text-sm text-muted-foreground">
+                GTIN/EAN/UPC barkodu cihazında çözülür. Diewish doğrulanmış ürün kaynaklarını arar; ürün bulunamazsa paket etiketini tarayarak devam edebilirsin.
+              </p>
+            </div>
+            <div className={cameraActive ? "overflow-hidden rounded-2xl border bg-black" : "hidden"}>
+              <video
+                ref={videoRef}
+                playsInline
+                muted
+                autoPlay
+                className="aspect-video w-full object-cover"
+                aria-label="Barkod kamera önizlemesi"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <Button onClick={() => void startCamera()} disabled={cameraActive || nativeScanning || loading}>
+                <Camera aria-hidden="true" /> {nativeScanning ? "Barkod taranıyor…" : cameraActive ? "Kamera açık" : "Kamerayı aç"}
+              </Button>
+              <Button variant="outline" onClick={stopCamera} disabled={!cameraActive}>
+                <Square aria-hidden="true" /> Durdur
+              </Button>
+            </div>
+            <div className="flex gap-2">
+              <input
+                value={barcode}
+                onChange={(event) => setBarcode(event.target.value.replace(/\D/g, "").slice(0, 14))}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") void lookup(barcode);
+                }}
+                inputMode="numeric"
+                aria-label="Barkod numarası"
+                placeholder="GTIN / EAN / UPC barkod numarası"
+                className="min-w-0 flex-1 rounded-xl border bg-background px-3 py-2 text-sm"
+              />
+              <Button
+                variant="outline"
+                onClick={() => void lookup(barcode)}
+                isLoading={loading}
+                disabled={loading || !validDecodedBarcode(barcode)}
+              >
+                <Search aria-hidden="true" /> Sorgula
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-      {notFound && (
+      {notFound && !food && (
         <Card>
           <CardContent className="space-y-4 p-5">
             <div className="flex gap-3 text-sm">
-              <TriangleAlert className="size-5 shrink-0 text-amber-600" />
+              <TriangleAlert className="size-5 shrink-0 text-amber-600" aria-hidden="true" />
               <div>
                 <p className="font-semibold">Ürün ortak kaynaklarda henüz yok</p>
                 <p className="text-muted-foreground">
-                  Analiz burada durmaz. Paketin besin tablosunu fotoğraflayabilir, okunan değerleri kontrol edip bu barkoda yalnız kendi hesabın için bağlayabilirsin.
+                  Paketin besin tablosunu fotoğraflayabilir, okunan değerleri kontrol edip bu barkoda yalnız kendi hesabın için bağlayabilirsin.
                 </p>
               </div>
             </div>
@@ -391,7 +487,7 @@ export function BarcodeScannerPanel() {
             />
             <div className="grid gap-2 sm:grid-cols-2">
               <Button variant="outline" onClick={() => void startCamera()}>
-                <RefreshCcw /> Tekrar barkod tara
+                <RefreshCcw aria-hidden="true" /> Tekrar barkod tara
               </Button>
               <Button asChild variant="outline">
                 <Link href="/meals/add">Ürünü elle gir</Link>
@@ -401,167 +497,235 @@ export function BarcodeScannerPanel() {
         </Card>
       )}
 
-      {food && portionNutrients && (
+      {food && !portionNutrients && personalizing && (
         <Card>
-          <CardContent className="space-y-6 p-5">
-            <section>
-              <p className="text-xs font-semibold uppercase tracking-wide text-primary">1. Bu ne?</p>
-              <div className="mt-2 flex gap-4">
+          <CardContent className="p-5 text-sm text-muted-foreground">Porsiyon değerleri hazırlanıyor…</CardContent>
+        </Card>
+      )}
+
+      {food && portionNutrients && (
+        <>
+          <Card>
+            <CardContent className="space-y-4 p-4 sm:p-5">
+              <SectionTitle>1. Bu ne?</SectionTitle>
+              <div className="flex items-start gap-4">
                 {food.imageUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={food.imageUrl} alt={food.displayNameTr} className="size-24 rounded-2xl border object-contain" />
+                  <img
+                    src={food.imageUrl}
+                    alt={food.displayNameTr || food.name}
+                    className="size-28 shrink-0 rounded-[1.75rem] border bg-primary/5 object-contain p-2 sm:size-32"
+                  />
                 ) : (
-                  <div className="size-24 rounded-2xl border bg-muted" />
+                  <div className="flex size-28 shrink-0 items-center justify-center rounded-[1.75rem] border bg-primary/5 sm:size-32" aria-label="Ürün görseli bulunamadı">
+                    <Package className="size-10 text-primary/60" aria-hidden="true" />
+                  </div>
                 )}
-                <div className="min-w-0">
-                  <h3 className="text-lg font-bold">{food.displayNameTr || food.name}</h3>
-                  {food.brand && <p className="text-sm text-muted-foreground">{food.brand}</p>}
-                  <p className="text-xs text-muted-foreground">{food.quantity ?? "Net miktar bilgisi yok"}</p>
-                  <p className="text-xs tabular-nums text-muted-foreground">Barkod: {food.barcode}</p>
-                  {food.serving && (
-                    <p className="text-xs text-muted-foreground">
-                      Kaynak porsiyonu: {food.serving.description ?? `${food.serving.amount} ${food.serving.unit}`}
-                    </p>
-                  )}
-                  {food.provenance.sourceReference === "USER_CONFIRMED_PACKAGE_LABEL" && (
-                    <p className="mt-1 text-xs font-semibold text-primary">
-                      Kullanıcı doğrulamalı paket etiketi
-                    </p>
-                  )}
+                <div className="min-w-0 flex-1 pt-1">
+                  <h3 className="break-words text-xl font-extrabold leading-tight text-foreground sm:text-2xl">
+                    {food.displayNameTr || food.name}
+                  </h3>
+                  {food.brand && <p className="mt-0.5 text-sm font-medium text-muted-foreground">{food.brand}</p>}
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {portionDescriptor(food) && (
+                      <span className="inline-flex min-h-9 items-center gap-1.5 rounded-xl bg-primary/10 px-2.5 py-1.5 text-sm font-bold text-primary">
+                        <Package className="size-4" aria-hidden="true" /> {portionDescriptor(food)}
+                      </span>
+                    )}
+                    <span className="inline-flex min-h-9 items-center rounded-xl bg-primary/10 px-2.5 py-1.5 text-sm font-bold text-primary">
+                      {roundedGrams(grams)} g
+                    </span>
+                    {portionNutrients.energyKcal !== null && (
+                      <span className="inline-flex min-h-9 items-center gap-1.5 rounded-xl bg-primary/10 px-2.5 py-1.5 text-sm font-bold text-primary">
+                        <Flame className="size-4" aria-hidden="true" /> {Math.round(portionNutrients.energyKcal)} kcal
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-3 space-y-0.5 text-xs text-muted-foreground">
+                    <p className="break-all tabular-nums">Barkod: {food.barcode ?? barcode}</p>
+                    <p>Kaynak değer: {sourceBasis(food)}</p>
+                  </div>
                 </div>
               </div>
-            </section>
+              {food.provenance.sourceReference === "USER_CONFIRMED_PACKAGE_LABEL" && (
+                <p className="rounded-xl bg-primary/5 px-3 py-2 text-xs font-semibold text-primary">
+                  Kullanıcı doğrulamalı paket etiketi
+                </p>
+              )}
+            </CardContent>
+          </Card>
 
-            <section>
-              <p className="text-xs font-semibold uppercase tracking-wide text-primary">2. Besin değerleri</p>
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <input
-                  type="number"
-                  min={1}
-                  max={5000}
-                  value={grams}
-                  onChange={(event) => setGrams(Math.max(1, Math.min(5000, Number(event.target.value) || 1)))}
-                  className="w-24 rounded-xl border px-3 py-2 text-sm"
-                />
-                <span className="text-sm">g</span>
-                <Button size="sm" variant="outline" onClick={() => void updatePortion()} isLoading={personalizing}>
-                  <RefreshCcw /> Porsiyonu değiştir
-                </Button>
+          <Card>
+            <CardContent className="space-y-4 p-4 sm:p-5">
+              <SectionTitle>2. Porsiyon ve besin değerleri</SectionTitle>
+              <div>
+                <label htmlFor="portion-grams" className="mb-2 block text-sm font-medium text-muted-foreground">
+                  Seçilen porsiyon
+                </label>
+                <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] gap-2.5">
+                  <div className="relative">
+                    <input
+                      id="portion-grams"
+                      type="text"
+                      inputMode="decimal"
+                      value={portionInput}
+                      onChange={(event) => setPortionInput(event.target.value.replace(/[^0-9.,]/g, "").slice(0, 7))}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") void updatePortion();
+                      }}
+                      aria-label="Seçilen porsiyon gramı"
+                      className="h-12 w-full rounded-2xl border bg-background px-4 pr-10 text-lg font-bold tabular-nums outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    />
+                    <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-sm font-semibold text-muted-foreground">g</span>
+                  </div>
+                  <Button
+                    className="h-12 rounded-2xl"
+                    variant="secondary"
+                    onClick={() => void updatePortion()}
+                    isLoading={personalizing}
+                    disabled={personalizing || !portionDirty}
+                    aria-label="Porsiyonu değiştir ve besin değerlerini güncelle"
+                  >
+                    <RefreshCcw aria-hidden="true" /> Porsiyonu Değiştir
+                  </Button>
+                </div>
+                {portionDirty && !personalizing && (
+                  <p className="mt-2 text-xs text-muted-foreground">Yeni miktarı uyguladığında tüm değerler aynı porsiyona göre güncellenir.</p>
+                )}
               </div>
-              <div className="mt-3">
-                <NutritionFactsGrid
-                  per100g={scan?.nutrients.per100g ?? food.nutrientsPer100g}
-                  portion={portionNutrients}
-                  portionLabel={portionLabel}
-                />
-              </div>
-            </section>
 
-            <section>
-              <p className="text-xs font-semibold uppercase tracking-wide text-primary">3. Senin İçin</p>
+              <div className="flex gap-2 text-xs text-muted-foreground">
+                <Info className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
+                <p>Kaynak veri {sourceBasis(food)} bazındadır. Değerler seçilen porsiyona göre hesaplanır.</p>
+              </div>
+
+              <NutritionFactsGrid portion={portionNutrients} portionLabel={portionLabel(food, grams)} />
+
+              <Button
+                className="h-12 w-full rounded-2xl text-base font-bold"
+                onClick={() => void logMeal()}
+                isLoading={loggingMeal}
+                disabled={!personalization || portionDirty || personalizing}
+                aria-label={`${roundedGrams(grams)} gram porsiyonu ${MEALS.find((meal) => meal.value === mealType)?.label ?? "öğüne"} ekle`}
+              >
+                <Plus aria-hidden="true" /> Öğüne Ekle
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="space-y-3 p-4 sm:p-5">
+              <SectionTitle>3. Senin İçin</SectionTitle>
               {personalizing && (
-                <p className="mt-2 text-sm text-muted-foreground">Aktif planın ve bugünkü kayıtlarınla karşılaştırılıyor…</p>
+                <p className="text-sm text-muted-foreground">Aktif planın ve bugünkü kayıtlarınla karşılaştırılıyor…</p>
               )}
               {!personalizing && personalization?.metrics && (
-                <div className="mt-2 space-y-2">
-                  {personalization.metrics.lines.map((line) => (
-                    <p key={line} className="rounded-xl bg-primary/5 p-3 text-sm">
-                      {line}
-                    </p>
+                <div className="space-y-2">
+                  {personalization.metrics.lines.slice(0, 4).map((line) => (
+                    <div key={line} className="flex gap-3 rounded-2xl bg-primary/5 p-3 text-sm">
+                      <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                        <Target className="size-4" aria-hidden="true" />
+                      </span>
+                      <p className="self-center text-foreground">{line}</p>
+                    </div>
                   ))}
                 </div>
               )}
               {!personalizing && !personalization?.metrics && (
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Aktif bir beslenme planın olduğunda bu ürünün günlük hedeflerine katkısı burada gösterilir.
-                </p>
+                <div className="flex gap-3 rounded-2xl bg-primary/5 p-3 text-sm">
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                    <Target className="size-4" aria-hidden="true" />
+                  </span>
+                  <p className="self-center text-muted-foreground">
+                    Aktif bir beslenme planın olduğunda bu ürünün günlük hedeflerine katkısı burada gösterilir.
+                  </p>
+                </div>
               )}
-            </section>
+            </CardContent>
+          </Card>
 
-            <section>
-              <p className="text-xs font-semibold uppercase tracking-wide text-primary">4. Dikkat edilebilecekler</p>
-              <div className="mt-2">
-                <NutritionAttentionSection
-                  flags={personalization?.attentionFlags ?? []}
-                  warnings={personalization?.warnings}
-                />
-              </div>
-            </section>
+          <Card>
+            <CardContent className="space-y-4 p-4 sm:p-5">
+              <SectionTitle>4. Dikkat edilebilecekler</SectionTitle>
+              <NutritionAttentionSection
+                flags={personalization?.attentionFlags ?? []}
+                warnings={personalization?.warnings}
+              />
+            </CardContent>
+          </Card>
 
-            <section className="space-y-3 text-sm">
-              <p className="font-semibold">Ürün bilgileri</p>
-              <div className="grid gap-2 sm:grid-cols-2">
-                <p>Nutri-Score: <strong>{food.nutriScore?.toUpperCase() ?? "Bilgi bulunamadı"}</strong></p>
-                <p>NOVA: <strong>{food.novaGroup ?? "Bilgi bulunamadı"}</strong></p>
-                <p>Vegan: <strong>{yesNoUnknown(food.vegan, "Evet", "Hayır")}</strong></p>
-                <p>Vejetaryen: <strong>{yesNoUnknown(food.vegetarian, "Evet", "Hayır")}</strong></p>
-                <p>Gluten bilgisi: <strong>{yesNoUnknown(food.glutenFree, "Glutensiz", "Gluten içeriyor")}</strong></p>
-              </div>
-              <div>
-                <p className="font-semibold">İçerik</p>
-                <p className="text-muted-foreground">
-                  {food.ingredients.length > 0 ? food.ingredients.join(", ") : "Bilgi bulunamadı"}
-                </p>
-              </div>
-              <div>
-                <p className="font-semibold">Alerjenler</p>
-                <p className="text-muted-foreground">
-                  {food.allergens.length > 0 ? food.allergens.join(", ") : "Bilgi bulunamadı"}
-                </p>
-              </div>
-              <div>
-                <p className="font-semibold">Katkı maddeleri</p>
-                <p className="text-muted-foreground">
-                  {food.additives.length > 0 ? food.additives.join(", ") : "Bilgi bulunamadı"}
-                </p>
-              </div>
-            </section>
+          <section className="space-y-2" aria-labelledby="product-info-title">
+            <h2 id="product-info-title" className="px-1 text-lg font-extrabold text-foreground">Ürün bilgileri</h2>
+            <Card>
+              <CardContent className="p-0">
+                <dl className="divide-y">
+                  {productInfoRows(food).map(([label, value]) => (
+                    <div key={label} className="grid grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] gap-3 px-4 py-2 text-sm">
+                      <dt className="text-muted-foreground">{label}</dt>
+                      <dd className="break-words text-right font-semibold text-foreground">{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </CardContent>
+            </Card>
+          </section>
 
-            <section>
-              <p className="text-xs font-semibold uppercase tracking-wide text-primary">5. Veri kaynağı</p>
-              <div className="mt-2">
-                <NutritionProvenanceSection sources={scan?.provenance.nutrition ?? [food.provenance]} />
-              </div>
+          <Card>
+            <CardContent className="space-y-3 p-4 sm:p-5">
+              <SectionTitle>5. Veri kaynağı</SectionTitle>
+              <NutritionProvenanceSection sources={scan?.provenance.nutrition ?? [food.provenance]} />
               {scan?.disclaimer && (
-                <p className="mt-2 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-muted-foreground">
+                <p className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-muted-foreground">
                   {scan.disclaimer}
                 </p>
               )}
-            </section>
+            </CardContent>
+          </Card>
 
-            <section>
-              <p className="text-xs font-semibold uppercase tracking-wide text-primary">6. Ne yapabilirsin?</p>
-              <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                <div className="flex gap-2">
+          <Card>
+            <CardContent className="space-y-3 p-4 sm:p-5">
+              <SectionTitle>6. Ne yapabilirsin?</SectionTitle>
+              <div className="grid grid-cols-[minmax(0,0.95fr)_minmax(0,1.15fr)] gap-2.5">
+                <label className="sr-only" htmlFor="meal-type">Öğün seçimi</label>
+                <div className="relative">
+                  <Utensils className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-primary" aria-hidden="true" />
                   <select
+                    id="meal-type"
                     value={mealType}
                     onChange={(event) => setMealType(event.target.value as MealTypeDto)}
-                    className="min-w-0 flex-1 rounded-xl border bg-background px-2 text-sm"
+                    className="h-12 w-full appearance-none rounded-2xl border bg-background pl-9 pr-8 text-sm font-semibold outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   >
                     {MEALS.map((meal) => (
                       <option key={meal.value} value={meal.value}>{meal.label}</option>
                     ))}
                   </select>
-                  <Button onClick={() => void logMeal()} isLoading={loggingMeal} disabled={!personalization}>
-                    <Utensils /> Öğüne ekle
-                  </Button>
                 </div>
-                <Button variant="outline" onClick={() => void compare()} isLoading={comparing}>
-                  <Scale /> Kalori karşılaştır
-                </Button>
                 <Button
-                  variant="outline"
-                  onClick={() => void nutritionClient.setFavorite(food.barcode ?? barcode, true).then(() => toast.success("Favorilere eklendi."))}
+                  className="h-12 rounded-2xl font-bold"
+                  onClick={() => void logMeal()}
+                  isLoading={loggingMeal}
+                  disabled={!personalization || portionDirty || personalizing}
                 >
-                  <Heart /> Favorilere ekle
-                </Button>
-                <Button asChild variant="outline">
-                  <Link href={coachHref(food, grams)}><MessageCircle /> Diewish Koç&apos;a sor</Link>
+                  <Plus aria-hidden="true" /> Öğüne ekle
                 </Button>
               </div>
-            </section>
-          </CardContent>
-        </Card>
+              <Button className="h-11 w-full rounded-2xl" variant="outline" onClick={() => void compare()} isLoading={comparing} disabled={portionDirty || personalizing}>
+                <Scale aria-hidden="true" /> Kalori karşılaştır
+              </Button>
+              <Button className="h-11 w-full rounded-2xl" variant="outline" onClick={() => void addFavorite()} isLoading={favoriting}>
+                <Heart aria-hidden="true" /> Favorilere ekle
+              </Button>
+              <Button className="h-11 w-full rounded-2xl" asChild variant="outline">
+                <Link href={coachHref(food, grams, portionNutrients)}>
+                  <MessageCircle aria-hidden="true" /> Diewish Koç&apos;a sor
+                </Link>
+              </Button>
+              {portionDirty && (
+                <p className="text-center text-xs text-muted-foreground">Karşılaştırma ve öğüne ekleme için önce yeni porsiyonu uygula.</p>
+              )}
+            </CardContent>
+          </Card>
+        </>
       )}
 
       {comparison && (
@@ -575,12 +739,12 @@ export function BarcodeScannerPanel() {
               <p className="text-sm text-muted-foreground">Güvenilir alternatif bulunamadı.</p>
             ) : (
               comparison.comparisons.map((item) => (
-                <div key={`${item.food.provider}-${item.food.externalId}`} className="rounded-xl border p-3">
+                <div key={`${item.food.provider}-${item.food.externalId}`} className="rounded-2xl border p-3">
                   <div className="flex justify-between gap-3">
-                    <p className="font-semibold">{item.food.displayNameTr}</p>
-                    <p className="font-semibold">~{Math.round(item.servingGrams)} g</p>
+                    <p className="min-w-0 break-words font-semibold">{item.food.displayNameTr}</p>
+                    <p className="shrink-0 font-semibold">~{Math.round(item.servingGrams)} g</p>
                   </div>
-                  <p className="mt-1 text-xs text-muted-foreground">
+                  <p className="mt-1 break-words text-xs text-muted-foreground">
                     Protein {nutrient(item.nutrients.proteinG, "g")} · Lif {nutrient(item.nutrients.fiberG, "g")} · Şeker {nutrient(item.nutrients.sugarsG, "g")}
                   </p>
                   <p className="text-xs text-muted-foreground">
