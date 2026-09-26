@@ -1,9 +1,9 @@
 "use client";
 
+import type * as React from "react";
 import {
   Activity,
   AlertTriangle,
-  Box,
   Database,
   Droplet,
   Dumbbell,
@@ -12,7 +12,6 @@ import {
   Leaf,
   Wheat,
   Zap,
-  type LucideIcon,
 } from "lucide-react";
 
 import type {
@@ -38,11 +37,34 @@ function providerLabel(source: NutritionProvenanceDto): string {
   return "Diewish";
 }
 
+type NutrientIcon = React.ComponentType<React.SVGProps<SVGSVGElement>>;
+
+function SugarCubeIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="m12 3 7 4-7 4-7-4 7-4Z" />
+      <path d="m5 7 7 4 7-4v9l-7 4-7-4V7Z" />
+      <path d="M12 11v9" />
+    </svg>
+  );
+}
+
+function SaltShakerIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M9 4h6" />
+      <path d="M10 7h4" />
+      <path d="M8 10h8l1 9H7l1-9Z" />
+      <path d="M10 4v3M12 4v3M14 4v3" />
+    </svg>
+  );
+}
+
 const NUTRIENTS: readonly [
   keyof NutrientValuesDto,
   string,
   string,
-  LucideIcon,
+  NutrientIcon,
   string,
 ][] = [
   ["proteinG", "Protein", "g", Dumbbell, "bg-emerald-500/10 text-emerald-600 dark:text-emerald-300"],
@@ -50,8 +72,8 @@ const NUTRIENTS: readonly [
   ["fatG", "Yağ", "g", Droplet, "bg-orange-500/10 text-orange-600 dark:text-orange-300"],
   ["saturatedFatG", "Doymuş yağ", "g", Flame, "bg-rose-500/10 text-rose-600 dark:text-rose-300"],
   ["fiberG", "Lif", "g", Leaf, "bg-green-500/10 text-green-600 dark:text-green-300"],
-  ["sugarsG", "Şeker", "g", Box, "bg-blue-500/10 text-blue-600 dark:text-blue-300"],
-  ["saltG", "Tuz", "g", Box, "bg-violet-500/10 text-violet-600 dark:text-violet-300"],
+  ["sugarsG", "Şeker", "g", SugarCubeIcon, "bg-blue-500/10 text-blue-600 dark:text-blue-300"],
+  ["saltG", "Tuz", "g", SaltShakerIcon, "bg-violet-500/10 text-violet-600 dark:text-violet-300"],
   ["sodiumMg", "Sodyum", "mg", Activity, "bg-teal-500/10 text-teal-600 dark:text-teal-300"],
 ];
 
@@ -94,7 +116,7 @@ export function NutritionFactsGrid({
               <Icon className="size-5" strokeWidth={2.25} />
             </span>
             <div className="min-w-0">
-              <p className="truncate text-xs text-muted-foreground">{label}</p>
+              <p className="break-words text-[11px] leading-tight text-muted-foreground sm:text-xs">{label}</p>
               <p className="break-words text-lg font-bold leading-tight text-foreground">
                 {formatValue(portion[key], unit)}
               </p>
@@ -115,9 +137,12 @@ export function NutritionAttentionSection({
 }) {
   if (flags.length === 0 && (!warnings || warnings.length === 0)) {
     return (
-      <p className="rounded-2xl border bg-muted/30 p-3 text-sm text-muted-foreground">
-        Mevcut verilerde ayrıca öne çıkarılması gereken bir uyarı bulunmuyor. Eksik alanlar değerlendirmeye dahil edilmez.
-      </p>
+      <div className="flex items-center gap-2 rounded-xl bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
+        <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary" aria-hidden="true">
+          <Info className="size-3.5" />
+        </span>
+        <span>Ek bir uyarı bulunmuyor.</span>
+      </div>
     );
   }
 
