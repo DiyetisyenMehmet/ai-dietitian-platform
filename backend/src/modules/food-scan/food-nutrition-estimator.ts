@@ -20,7 +20,8 @@ type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<
 
 type Provider =
   | { kind: "vertex"; project: string; location: string; model: string }
-  | { kind: "openai" | "abacus"; baseUrl: string; apiKey: string; model: string };
+  | { kind: "openai"; baseUrl: string; apiKey: string; model: string }
+  | { kind: "abacus"; baseUrl: string; apiKey: string; model: string };
 
 function nullNutrients(): NutrientValues {
   return {
