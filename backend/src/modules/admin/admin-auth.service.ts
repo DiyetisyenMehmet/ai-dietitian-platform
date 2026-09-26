@@ -200,6 +200,81 @@ export const adminAuthService = {
       }
       throw error;
     }
+
+    const placeholderHash = await hashPassword(temporaryPassword);
+    await prisma.$transaction(async (tx) => {
+      await ensureAdminFoundation(tx);
+
+      const consumed = await tx.adminAuditEvent.findFirst({
+        where: { action: "admin.bootstrap.super_admin", environment },
+        select: { id: true },
+      });
+      if (consumed) return;
+
+      const role = await tx.adminRole.findUniqueOrThrow({
+        where: { key: ADMIN_SYSTEM_ROLES.SUPER_ADMIN },
+        select: { id: true },
+      });
+      const existingSuperAdmin = await tx.adminUserRole.findFirst({
+        where: { roleId: role.id },
+        select: { userId: true },
+      });
+      if (existingSuperAdmin) return;
+
+      const current = await tx.user.findUnique({
+        where: { email: normalizedEmail },
+      });
+      const next = current
+        ? await tx.user.update({
+            where: { id: current.id },
+            data: {
+              passwordHash: placeholderHash,
+              role: UserRole.ADMIN,
+              isActive: true,
+              deletionRequestedAt: null,
+            },
+          })
+        : await tx.user.create({
+            data: {
+              email: normalizedEmail,
+              passwordHash: placeholderHash,
+              role: UserRole.ADMIN,
+              isActive: true,
+            },
+          });
+
+      await tx.adminUserRole.upsert({
+        where: { userId_roleId: { userId: next.id, roleId: role.id } },
+        update: { assignedByAdminId: next.id },
+        create: {
+          userId: next.id,
+          roleId: role.id,
+          assignedByAdminId: next.id,
+        },
+      });
+
+      await tx.adminAuditEvent.create({
+        data: {
+          actorAdminId: next.id,
+          action: "admin.bootstrap.super_admin",
+          targetType: "user",
+          targetId: next.id,
+          beforeState: current
+            ? { role: current.role, isActive: current.isActive }
+            : undefined,
+          afterState: {
+            role: UserRole.ADMIN,
+            assignedRole: ADMIN_SYSTEM_ROLES.SUPER_ADMIN,
+            credentialState: "PASSWORD_RESET_REQUIRED",
+          },
+          reason: "Approved staging owner provisioned after password reset email dispatch",
+          environment,
+          correlationId: "owner-email-bootstrap",
+          requestId: "owner-email-bootstrap",
+          riskLevel: AdminAuditRiskLevel.CRITICAL,
+        },
+      });
+    });
   },
 
   async requestPasswordReset(email: string, _context: SessionContext): Promise<void> {

@@ -257,7 +257,7 @@ test("Phase 1 admin authorization, RBAC and transactional audit", async (t) => {
     assert.equal(await prisma.adminRole.count({ where: { id: rollbackRoleId } }), 0);
   });
 
-  await t.test("first Super Admin bootstrap is completed only through the approved email reset link", async () => {
+  await t.test("first Super Admin bootstrap provisions RBAC after sending the approved reset email", async () => {
     const approvedEmail = "admindiewish@gmail.com";
     const originalCreateUser = adminPasswordIdentityProvider.createUser;
     const originalDeleteUser = adminPasswordIdentityProvider.deleteUser;
@@ -299,7 +299,25 @@ test("Phase 1 admin authorization, RBAC and transactional audit", async (t) => {
       assert.equal(request.status, 200);
       assert.equal(resetEmail, approvedEmail);
       assert.equal(resetSendCount, 1);
-      assert.equal(await prisma.user.count({ where: { email: approvedEmail } }), 0);
+
+      const provisionedOwner = await prisma.user.findUniqueOrThrow({
+        where: { email: approvedEmail },
+      });
+      createdId = provisionedOwner.id;
+      createdUserIds.push(provisionedOwner.id);
+      assert.equal(provisionedOwner.role, UserRole.ADMIN);
+      assert.equal(provisionedOwner.isActive, true);
+
+      const provisionedAccess = await resolveAdminAccess(provisionedOwner.id);
+      assert.ok(provisionedAccess?.roles.includes("SUPER_ADMIN"));
+      const provisionedAudit = await prisma.adminAuditEvent.findFirst({
+        where: {
+          actorAdminId: provisionedOwner.id,
+          action: "admin.bootstrap.super_admin",
+        },
+      });
+      assert.ok(provisionedAudit);
+      assert.equal(provisionedAudit.riskLevel, "CRITICAL");
 
       const reset = await fetch(`${baseUrl}/api/admin/auth/password/reset`, {
         method: "POST",
@@ -314,11 +332,9 @@ test("Phase 1 admin authorization, RBAC and transactional audit", async (t) => {
       const owner = await prisma.user.findUniqueOrThrow({
         where: { email: approvedEmail },
       });
-      createdId = owner.id;
-      createdUserIds.push(owner.id);
+      assert.equal(owner.id, createdId);
       assert.equal(owner.role, UserRole.ADMIN);
       assert.equal(owner.isActive, true);
-      assert.ok(owner.emailVerifiedAt);
 
       const access = await resolveAdminAccess(owner.id);
       assert.ok(access?.roles.includes("SUPER_ADMIN"));
