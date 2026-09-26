@@ -446,7 +446,7 @@ export function FoodScannerView() {
                 >
                   <Utensils /> Öğüne ekle
                 </Button>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid gap-2 sm:grid-cols-2">
                   <Button asChild variant="outline" className="min-h-11">
                     <Link href={coachHref(analysis)}><MessageCircle /> Diewish Koç&apos;a sor</Link>
                   </Button>
