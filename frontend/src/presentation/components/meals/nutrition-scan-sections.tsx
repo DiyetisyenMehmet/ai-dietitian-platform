@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Database, Info, Zap } from "lucide-react";
+import {\n  Activity,\n  AlertTriangle,\n  Box,\n  Database,\n  Droplet,\n  Dumbbell,\n  Flame,\n  Info,\n  Leaf,\n  Wheat,\n  Zap,\n  type LucideIcon,\n} from "lucide-react";
 
 import type {
   NutrientValuesDto,
@@ -25,15 +25,21 @@ function providerLabel(source: NutritionProvenanceDto): string {
   return "Diewish";
 }
 
-const NUTRIENTS: readonly [keyof NutrientValuesDto, string, string, string][] = [
-  ["proteinG", "Protein", "g", "P"],
-  ["carbohydratesG", "Karbonhidrat", "g", "KH"],
-  ["fatG", "Yağ", "g", "Y"],
-  ["saturatedFatG", "Doymuş yağ", "g", "DY"],
-  ["fiberG", "Lif", "g", "L"],
-  ["sugarsG", "Şeker", "g", "Ş"],
-  ["saltG", "Tuz", "g", "T"],
-  ["sodiumMg", "Sodyum", "mg", "Na"],
+const NUTRIENTS: readonly [
+  keyof NutrientValuesDto,
+  string,
+  string,
+  LucideIcon,
+  string,
+][] = [
+  ["proteinG", "Protein", "g", Dumbbell, "bg-emerald-500/10 text-emerald-600 dark:text-emerald-300"],
+  ["carbohydratesG", "Karbonhidrat", "g", Wheat, "bg-amber-500/10 text-amber-600 dark:text-amber-300"],
+  ["fatG", "Yağ", "g", Droplet, "bg-orange-500/10 text-orange-600 dark:text-orange-300"],
+  ["saturatedFatG", "Doymuş yağ", "g", Flame, "bg-rose-500/10 text-rose-600 dark:text-rose-300"],
+  ["fiberG", "Lif", "g", Leaf, "bg-green-500/10 text-green-600 dark:text-green-300"],
+  ["sugarsG", "Şeker", "g", Box, "bg-blue-500/10 text-blue-600 dark:text-blue-300"],
+  ["saltG", "Tuz", "g", Box, "bg-violet-500/10 text-violet-600 dark:text-violet-300"],
+  ["sodiumMg", "Sodyum", "mg", Activity, "bg-teal-500/10 text-teal-600 dark:text-teal-300"],
 ];
 
 export function NutritionFactsGrid({
@@ -46,7 +52,11 @@ export function NutritionFactsGrid({
   return (
     <div className="space-y-3">
       <div className="relative overflow-hidden rounded-2xl border border-primary/10 bg-primary/5 p-4">
-        <div className="absolute -bottom-8 -right-5 size-28 rounded-full bg-primary/5" aria-hidden="true" />
+        <Leaf
+          className="absolute -bottom-6 -right-3 size-28 rotate-[-18deg] text-primary/[0.07]"
+          strokeWidth={1.5}
+          aria-hidden="true"
+        />
         <div className="relative flex items-center gap-4">
           <span className="flex size-14 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm">
             <Zap className="size-7" aria-hidden="true" />
@@ -62,10 +72,13 @@ export function NutritionFactsGrid({
       </div>
 
       <div className="grid grid-cols-2 gap-2.5">
-        {NUTRIENTS.map(([key, label, unit, mark]) => (
+        {NUTRIENTS.map(([key, label, unit, Icon, iconClass]) => (
           <div key={key} className="flex min-h-[78px] items-center gap-3 rounded-2xl border bg-card p-3 shadow-sm">
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-extrabold text-primary" aria-hidden="true">
-              {mark}
+            <span
+              className={`flex size-10 shrink-0 items-center justify-center rounded-full ${iconClass}`}
+              aria-hidden="true"
+            >
+              <Icon className="size-5" strokeWidth={2.25} />
             </span>
             <div className="min-w-0">
               <p className="truncate text-xs text-muted-foreground">{label}</p>
