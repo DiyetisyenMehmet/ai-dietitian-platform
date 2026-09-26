@@ -1,11 +1,16 @@
 import type { AuthSession } from "@/domain/auth/types";
 import { apiRequest } from "@/infrastructure/api/http-client";
 
-export type AdminPermission =
-  | "admin.access"
-  | "admin.security.read"
-  | "admin.access.manage"
-  | "admin.audit.read";
+export type AdminPermission = string;
+
+export interface AdminRoleAssignment {
+  roleKey: string;
+  roleName: string;
+  assignedAt: string;
+  assignedByAdminId: string | null;
+  assignedByName: string | null;
+  assignedByEmail: string | null;
+}
 
 export interface AdminManagedUser {
   id: string;
@@ -15,7 +20,17 @@ export interface AdminManagedUser {
   createdAt: string;
   lastLoginAt: string | null;
   roles: string[];
+  permissions: string[];
+  roleAssignments: AdminRoleAssignment[];
   accessLevel: "LIMITED" | "FULL";
+}
+
+export interface AdminRoleDefinition {
+  key: string;
+  name: string;
+  description: string | null;
+  isSystem: boolean;
+  permissions: string[];
 }
 
 export interface AdminAuditRecord {
@@ -98,6 +113,34 @@ export const adminClient = {
   changePassword(payload: { currentPassword: string; newPassword: string }): Promise<AuthSession> {
     return apiRequest<AuthSession>({
       path: "/admin/account/password",
+      method: "PATCH",
+      auth: true,
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listStaff(): Promise<{ users: AdminManagedUser[] }> {
+    return apiRequest<{ users: AdminManagedUser[] }>({
+      path: "/admin/access/staff",
+      method: "GET",
+      auth: true,
+    });
+  },
+
+  listRoles(): Promise<{ roles: AdminRoleDefinition[] }> {
+    return apiRequest<{ roles: AdminRoleDefinition[] }>({
+      path: "/admin/access/roles",
+      method: "GET",
+      auth: true,
+    });
+  },
+
+  updateStaff(
+    id: string,
+    payload: { roleKeys: string[]; isActive?: boolean; reason: string },
+  ): Promise<{ user: { id: string; email: string; isActive: boolean; roles: string[] } }> {
+    return apiRequest({
+      path: `/admin/access/staff/${encodeURIComponent(id)}`,
       method: "PATCH",
       auth: true,
       body: JSON.stringify(payload),

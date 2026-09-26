@@ -362,6 +362,98 @@ test("Phase 1 admin authorization, RBAC and transactional audit", async (t) => {
     assert.equal(await prisma.adminRole.count({ where: { id: rollbackRoleId } }), 0);
   });
 
+  await t.test("Phase 2 staff access lists assignments and applies audited role changes", async () => {
+    const actor = await createUser(UserRole.ADMIN, "staff-manager");
+    const target = await createUser(UserRole.ADMIN, "staff-target");
+    createdUserIds.push(actor.id, target.id);
+
+    const superRole = await prisma.adminRole.findUniqueOrThrow({
+      where: { key: ADMIN_SYSTEM_ROLES.SUPER_ADMIN },
+    });
+    const supportRole = await prisma.adminRole.findUniqueOrThrow({
+      where: { key: ADMIN_SYSTEM_ROLES.SUPPORT },
+    });
+    await prisma.adminUserRole.create({
+      data: { userId: actor.id, roleId: superRole.id, assignedByAdminId: actor.id },
+    });
+    await prisma.adminUserRole.create({
+      data: { userId: target.id, roleId: supportRole.id, assignedByAdminId: actor.id },
+    });
+
+    const actorToken = tokenFor(actor);
+    const list = await fetch(`${baseUrl}/api/admin/access/staff`, {
+      headers: { authorization: `Bearer ${actorToken}` },
+    });
+    assert.equal(list.status, 200);
+    const listBody = (await list.json()) as {
+      data: {
+        users: Array<{
+          id: string;
+          roleAssignments: Array<{
+            roleKey: string;
+            assignedByAdminId: string | null;
+          }>;
+        }>;
+      };
+    };
+    const listedTarget = listBody.data.users.find((user) => user.id === target.id);
+    assert.ok(listedTarget);
+    assert.ok(
+      listedTarget.roleAssignments.some(
+        (assignment) =>
+          assignment.roleKey === ADMIN_SYSTEM_ROLES.SUPPORT &&
+          assignment.assignedByAdminId === actor.id,
+      ),
+    );
+
+    const update = await fetch(`${baseUrl}/api/admin/access/staff/${target.id}`, {
+      method: "PATCH",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${actorToken}`,
+      },
+      body: JSON.stringify({
+        roleKeys: [ADMIN_SYSTEM_ROLES.SUPPORT, ADMIN_SYSTEM_ROLES.FINANCE],
+        reason: "Support and finance coverage",
+      }),
+    });
+    assert.equal(update.status, 200);
+
+    const resolved = await resolveAdminAccess(target.id);
+    assert.ok(resolved);
+    assert.deepEqual(
+      new Set(resolved.roles),
+      new Set([ADMIN_SYSTEM_ROLES.SUPPORT, ADMIN_SYSTEM_ROLES.FINANCE]),
+    );
+
+    const audit = await prisma.adminAuditEvent.findFirst({
+      where: {
+        actorAdminId: actor.id,
+        targetId: target.id,
+        action: "admin.staff.access_update",
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    assert.ok(audit);
+    assert.equal(audit.reason, "Support and finance coverage");
+    assert.equal(audit.riskLevel, "CRITICAL");
+
+    const deactivate = await fetch(`${baseUrl}/api/admin/access/staff/${target.id}`, {
+      method: "PATCH",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${actorToken}`,
+      },
+      body: JSON.stringify({
+        roleKeys: [ADMIN_SYSTEM_ROLES.SUPPORT, ADMIN_SYSTEM_ROLES.FINANCE],
+        isActive: false,
+        reason: "Employment access suspended",
+      }),
+    });
+    assert.equal(deactivate.status, 200);
+    assert.equal(await resolveAdminAccess(target.id), null);
+  });
+
   await t.test("first Super Admin bootstrap provisions RBAC after sending the approved reset email", async () => {
     const approvedEmail = "admindiewish@gmail.com";
     const originalCreateUser = adminPasswordIdentityProvider.createUser;

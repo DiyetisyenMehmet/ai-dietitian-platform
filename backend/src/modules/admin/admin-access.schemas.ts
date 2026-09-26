@@ -29,3 +29,12 @@ export const adminAccessUserParamsSchema = z.object({
 export type AdminAccessLevel = z.infer<typeof adminAccessLevelSchema>;
 export type AdminCreateAccessUserInput = z.infer<typeof adminCreateAccessUserSchema>;
 export type AdminUpdateAccessUserInput = z.infer<typeof adminUpdateAccessUserSchema>;
+
+
+export const adminStaffUpdateSchema = z.object({
+  roleKeys: z.array(z.string().trim().min(1).max(64)).max(12).transform((items) => [...new Set(items)]),
+  isActive: z.boolean().optional(),
+  reason: z.string().trim().min(3).max(500),
+});
+
+export type AdminStaffUpdateInput = z.infer<typeof adminStaffUpdateSchema>;

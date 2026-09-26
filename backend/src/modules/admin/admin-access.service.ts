@@ -17,6 +17,7 @@ import type {
   AdminAccessLevel,
   AdminCreateAccessUserInput,
   AdminUpdateAccessUserInput,
+  AdminStaffUpdateInput,
 } from "./admin-access.schemas";
 
 interface AdminMutationRequestContext {
@@ -51,13 +52,50 @@ export const adminAccessService = {
         createdAt: true,
         lastLoginAt: true,
         adminRoleMemberships: {
-          select: { role: { select: { key: true } } },
+          select: {
+            assignedByAdminId: true,
+            createdAt: true,
+            role: {
+              select: {
+                key: true,
+                name: true,
+                permissions: {
+                  select: { permission: { select: { key: true } } },
+                },
+              },
+            },
+          },
         },
       },
     });
 
+    const assignedByIds = Array.from(
+      new Set(
+        users
+          .flatMap((user) =>
+            user.adminRoleMemberships.map((membership) => membership.assignedByAdminId),
+          )
+          .filter((id): id is string => typeof id === "string"),
+      ),
+    );
+    const assigners = assignedByIds.length
+      ? await prisma.user.findMany({
+          where: { id: { in: assignedByIds } },
+          select: { id: true, email: true, fullName: true },
+        })
+      : [];
+    const assignerMap = new Map(assigners.map((user) => [user.id, user]));
+
     return users.map((user) => {
       const roles = user.adminRoleMemberships.map((membership) => membership.role.key);
+      const permissions = Array.from(
+        new Set(
+          user.adminRoleMemberships.flatMap((membership) =>
+            membership.role.permissions.map((mapping) => mapping.permission.key),
+          ),
+        ),
+      ).sort();
+
       return {
         id: user.id,
         email: user.email,
@@ -66,9 +104,46 @@ export const adminAccessService = {
         createdAt: user.createdAt.toISOString(),
         lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
         roles,
+        permissions,
+        roleAssignments: user.adminRoleMemberships.map((membership) => {
+          const assignedBy = membership.assignedByAdminId
+            ? assignerMap.get(membership.assignedByAdminId)
+            : null;
+          return {
+            roleKey: membership.role.key,
+            roleName: membership.role.name,
+            assignedAt: membership.createdAt.toISOString(),
+            assignedByAdminId: membership.assignedByAdminId,
+            assignedByName: assignedBy?.fullName ?? null,
+            assignedByEmail: assignedBy?.email ?? null,
+          };
+        }),
         accessLevel: accessLevelFromRoles(roles),
       };
     });
+  },
+
+  async listRoles() {
+    const roles = await prisma.adminRole.findMany({
+      orderBy: [{ isSystem: "desc" }, { name: "asc" }],
+      select: {
+        key: true,
+        name: true,
+        description: true,
+        isSystem: true,
+        permissions: {
+          select: { permission: { select: { key: true } } },
+        },
+      },
+    });
+
+    return roles.map((role) => ({
+      key: role.key,
+      name: role.name,
+      description: role.description,
+      isSystem: role.isSystem,
+      permissions: role.permissions.map((mapping) => mapping.permission.key).sort(),
+    }));
   },
 
   async createAdmin(
@@ -321,6 +396,133 @@ export const adminAccessService = {
 
     await authRepository.revokeAllForUser(targetUserId);
     return result;
+  },
+
+  async updateStaffAccess(
+    actorAdminId: string,
+    targetUserId: string,
+    input: AdminStaffUpdateInput,
+    requestContext: AdminMutationRequestContext,
+  ) {
+    if (actorAdminId === targetUserId) {
+      throw new ApiError(400, "You cannot change your own access configuration.", {
+        code: "ADMIN_SELF_ACCESS_CHANGE_BLOCKED",
+      });
+    }
+
+    const nextRoleKeys = [...input.roleKeys].sort();
+
+    return runAuditedAdminMutation(
+      {
+        actorAdminId,
+        action: "admin.staff.access_update",
+        targetType: "user",
+        targetId: targetUserId,
+        reason: input.reason,
+        environment: resolveRuntimeEnvironment(),
+        correlationId: requestContext.correlationId,
+        requestId: requestContext.requestId,
+        riskLevel: AdminAuditRiskLevel.CRITICAL,
+      },
+      async (tx) => {
+        const target = await tx.user.findUnique({
+          where: { id: targetUserId },
+          select: {
+            id: true,
+            email: true,
+            role: true,
+            isActive: true,
+            adminRoleMemberships: {
+              select: { role: { select: { id: true, key: true } } },
+            },
+          },
+        });
+        if (!target || target.role !== UserRole.ADMIN) {
+          throw new ApiError(404, "Administrator account not found.", {
+            code: "ADMIN_ACCOUNT_NOT_FOUND",
+          });
+        }
+
+        const roles = nextRoleKeys.length
+          ? await tx.adminRole.findMany({
+              where: { key: { in: nextRoleKeys } },
+              select: { id: true, key: true },
+            })
+          : [];
+        if (roles.length !== nextRoleKeys.length) {
+          throw new ApiError(400, "One or more administrator roles are invalid.", {
+            code: "ADMIN_ROLE_INVALID",
+          });
+        }
+
+        const currentRoleKeys = target.adminRoleMemberships
+          .map((membership) => membership.role.key)
+          .sort();
+        const nextIsActive = input.isActive ?? target.isActive;
+        const removingSuperAdmin =
+          currentRoleKeys.includes(ADMIN_SYSTEM_ROLES.SUPER_ADMIN) &&
+          (!nextRoleKeys.includes(ADMIN_SYSTEM_ROLES.SUPER_ADMIN) || !nextIsActive);
+
+        if (removingSuperAdmin) {
+          const superRole = await tx.adminRole.findUniqueOrThrow({
+            where: { key: ADMIN_SYSTEM_ROLES.SUPER_ADMIN },
+            select: { id: true },
+          });
+          const remainingActiveSuperAdmins = await tx.adminUserRole.count({
+            where: {
+              roleId: superRole.id,
+              userId: { not: targetUserId },
+              user: { role: UserRole.ADMIN, isActive: true },
+            },
+          });
+          if (remainingActiveSuperAdmins === 0) {
+            throw new ApiError(409, "The last active Super Admin cannot be changed.", {
+              code: "ADMIN_LAST_SUPER_ADMIN",
+            });
+          }
+        }
+
+        if (target.isActive !== nextIsActive) {
+          await tx.user.update({
+            where: { id: targetUserId },
+            data: { isActive: nextIsActive },
+          });
+        }
+
+        await tx.adminUserRole.deleteMany({ where: { userId: targetUserId } });
+        if (roles.length) {
+          await tx.adminUserRole.createMany({
+            data: roles.map((role) => ({
+              userId: targetUserId,
+              roleId: role.id,
+              assignedByAdminId: actorAdminId,
+            })),
+          });
+        }
+
+        await tx.refreshToken.updateMany({
+          where: { userId: targetUserId, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+
+        return {
+          result: {
+            id: target.id,
+            email: target.email,
+            isActive: nextIsActive,
+            roles: nextRoleKeys,
+          },
+          before: buildAuditSnapshot(
+            { email: target.email, roles: currentRoleKeys, isActive: target.isActive },
+            ["email", "roles", "isActive"],
+          ),
+          after: buildAuditSnapshot(
+            { email: target.email, roles: nextRoleKeys, isActive: nextIsActive },
+            ["email", "roles", "isActive"],
+          ),
+        };
+      },
+    );
   },
 
   async listAudit(limit = 100) {

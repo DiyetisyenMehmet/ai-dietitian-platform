@@ -1,226 +1,288 @@
 "use client";
 
 import * as React from "react";
-import { ShieldPlus, ScrollText } from "lucide-react";
+import { ShieldCheck, UserRoundCog } from "lucide-react";
 import { toast } from "sonner";
 
 import {
   adminClient,
-  type AdminAuditRecord,
   type AdminManagedUser,
+  type AdminRoleDefinition,
 } from "@/infrastructure/admin/admin-client";
 import { Button } from "@/presentation/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/presentation/components/ui/card";
+import { Checkbox } from "@/presentation/components/ui/checkbox";
 import { Input } from "@/presentation/components/ui/input";
-import { PasswordInput } from "@/presentation/components/ui/password-input";
+
+const ROLE_LABELS: Record<string, string> = {
+  SUPER_ADMIN: "Super Admin",
+  ADMIN_STAFF: "Sınırlı Yönetici",
+  SUPPORT: "Destek",
+  CONTENT_MANAGER: "İçerik Yöneticisi",
+  FINANCE: "Finans",
+  OPERATIONS: "Operasyon",
+};
+
+function roleLabel(role: AdminRoleDefinition | string) {
+  if (typeof role === "string") return ROLE_LABELS[role] ?? role;
+  return ROLE_LABELS[role.key] ?? role.name;
+}
+
+function formatDate(value: string | null) {
+  if (!value) return "Henüz giriş yapmadı";
+  return new Date(value).toLocaleString("tr-TR");
+}
 
 export function AdminAccessManagement({
   currentAdminId,
-  canReadAudit,
+  canManage,
 }: {
   currentAdminId: string;
-  canReadAudit: boolean;
+  canManage: boolean;
 }) {
   const [users, setUsers] = React.useState<AdminManagedUser[]>([]);
-  const [events, setEvents] = React.useState<AdminAuditRecord[]>([]);
-  const [email, setEmail] = React.useState("");
-  const [fullName, setFullName] = React.useState("");
-  const [temporaryPassword, setTemporaryPassword] = React.useState("");
-  const [accessLevel, setAccessLevel] = React.useState<"LIMITED" | "FULL">("LIMITED");
-  const [busy, setBusy] = React.useState(false);
+  const [roles, setRoles] = React.useState<AdminRoleDefinition[]>([]);
+  const [draftRoles, setDraftRoles] = React.useState<Record<string, string[]>>({});
+  const [reasons, setReasons] = React.useState<Record<string, string>>({});
+  const [busyUserId, setBusyUserId] = React.useState<string | null>(null);
 
   const load = React.useCallback(async () => {
-    const access = await adminClient.listAccessUsers();
-    setUsers(access.users);
-    if (canReadAudit) {
-      const audit = await adminClient.getAudit();
-      setEvents(audit.events);
-    }
-  }, [canReadAudit]);
+    const [staffResult, roleResult] = await Promise.all([
+      adminClient.listStaff(),
+      adminClient.listRoles(),
+    ]);
+    setUsers(staffResult.users);
+    setRoles(roleResult.roles);
+    setDraftRoles(
+      Object.fromEntries(staffResult.users.map((user) => [user.id, [...user.roles]])),
+    );
+  }, []);
 
   React.useEffect(() => {
-    void load().catch(() => toast.error("Yetkili listesi yüklenemedi."));
+    void load().catch(() => toast.error("Yetkili çalışanlar yüklenemedi."));
   }, [load]);
 
-  const createUser = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (busy) return;
-    setBusy(true);
+  const toggleRole = (userId: string, roleKey: string, checked: boolean) => {
+    setDraftRoles((current) => {
+      const next = new Set(current[userId] ?? []);
+      if (checked) next.add(roleKey);
+      else next.delete(roleKey);
+      return { ...current, [userId]: [...next].sort() };
+    });
+  };
+
+  const saveRoles = async (user: AdminManagedUser) => {
+    const reason = (reasons[user.id] ?? "").trim();
+    if (reason.length < 3) {
+      toast.error("Değişiklik nedeni yazılmalı.");
+      return;
+    }
+
+    setBusyUserId(user.id);
     try {
-      await adminClient.createAccessUser({
-        email: email.trim().toLowerCase(),
-        ...(fullName.trim() ? { fullName: fullName.trim() } : {}),
-        temporaryPassword,
-        accessLevel,
+      await adminClient.updateStaff(user.id, {
+        roleKeys: draftRoles[user.id] ?? [],
+        reason,
       });
-      setEmail("");
-      setFullName("");
-      setTemporaryPassword("");
-      setAccessLevel("LIMITED");
+      setReasons((current) => ({ ...current, [user.id]: "" }));
       await load();
-      toast.success("Yetkili hesabı oluşturuldu.");
+      toast.success("Çalışanın görevleri güncellendi.");
     } catch {
-      toast.error("Yetkili hesabı oluşturulamadı.");
+      toast.error("Görev değişikliği uygulanamadı.");
     } finally {
-      setBusy(false);
+      setBusyUserId(null);
     }
   };
 
-  const updateAccess = async (
-    user: AdminManagedUser,
-    next: { accessLevel?: "LIMITED" | "FULL"; isActive?: boolean },
-  ) => {
+  const toggleActive = async (user: AdminManagedUser) => {
+    const reason = (reasons[user.id] ?? "").trim();
+    if (reason.length < 3) {
+      toast.error("Hesap durumu değişikliği için neden yazılmalı.");
+      return;
+    }
+
+    setBusyUserId(user.id);
     try {
-      await adminClient.updateAccessUser(user.id, {
-        accessLevel: next.accessLevel ?? user.accessLevel,
-        ...(typeof next.isActive === "boolean" ? { isActive: next.isActive } : {}),
+      await adminClient.updateStaff(user.id, {
+        roleKeys: draftRoles[user.id] ?? user.roles,
+        isActive: !user.isActive,
+        reason,
       });
+      setReasons((current) => ({ ...current, [user.id]: "" }));
       await load();
       toast.success(
-        typeof next.isActive === "boolean"
-          ? next.isActive
-            ? "Yetkili hesap etkinleştirildi."
-            : "Yetkili hesap devre dışı bırakıldı."
-          : "Yetki seviyesi güncellendi.",
+        user.isActive
+          ? "Çalışan hesabı devre dışı bırakıldı."
+          : "Çalışan hesabı etkinleştirildi.",
       );
     } catch {
-      toast.error("Yetkili hesabı güncellenemedi.");
+      toast.error("Hesap durumu değiştirilemedi.");
+    } finally {
+      setBusyUserId(null);
     }
-  };
-
-  const actionLabel = (action: string) => {
-    const labels: Record<string, string> = {
-      "admin.bootstrap.super_admin": "İlk Super Admin kurulumu",
-      "admin.access.user_create": "Yetkili hesabı oluşturuldu",
-      "admin.access.level_change": "Yetki / hesap durumu değiştirildi",
-      "admin.security.email_change": "Yönetici e-postası değiştirildi",
-      "admin.security.password_change": "Yönetici şifresi değiştirildi",
-    };
-    return labels[action] ?? action;
-  };
-
-  const snapshotText = (value: Record<string, unknown> | null) => {
-    if (!value || Object.keys(value).length === 0) return "—";
-    return Object.entries(value)
-      .map(([key, item]) => {
-        const labels: Record<string, string> = {
-          email: "E-posta",
-          fullName: "Ad",
-          accessLevel: "Yetki",
-          isActive: "Durum",
-          roles: "Roller",
-          role: "Rol",
-          assignedRole: "Atanan rol",
-        };
-        const rendered = Array.isArray(item)
-          ? item.join(", ")
-          : typeof item === "boolean"
-            ? item
-              ? "Etkin"
-              : "Devre dışı"
-            : String(item ?? "—");
-        return `${labels[key] ?? key}: ${rendered}`;
-      })
-      .join(" · ");
   };
 
   return (
     <div className="space-y-6">
+      <div>
+        <p className="text-sm font-medium text-primary">Access & Security</p>
+        <h1 className="mt-1 text-2xl font-bold tracking-tight">Yetkili çalışanlar</h1>
+        <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
+          Yönetim merkezine erişebilen çalışanların görevlerini ve hesap durumunu buradan yönetin.
+          Yeni çalışan daveti sonraki adımda eklenecektir.
+        </p>
+      </div>
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <ShieldPlus className="size-5" aria-hidden="true" />
-            Yetkili erişimi
+            <UserRoundCog className="size-5" aria-hidden="true" />
+            Administrators
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <form onSubmit={createUser} className="grid gap-3 md:grid-cols-2">
-            <Input aria-label="Yetkili adı" placeholder="Ad Soyad" value={fullName} onChange={(e)=>setFullName(e.target.value)} />
-            <Input aria-label="Yetkili e-postası" type="email" placeholder="E-posta" value={email} onChange={(e)=>setEmail(e.target.value)} required />
-            <PasswordInput aria-label="Geçici şifre" placeholder="Geçici şifre" value={temporaryPassword} onChange={(e)=>setTemporaryPassword(e.target.value)} required />
-            <select
-              aria-label="Yetki seviyesi"
-              className="h-11 rounded-xl border border-input bg-background px-4 text-sm"
-              value={accessLevel}
-              onChange={(e)=>setAccessLevel(e.target.value as "LIMITED" | "FULL")}
-            >
-              <option value="LIMITED">Sınırlı yetki</option>
-              <option value="FULL">Tam yetki</option>
-            </select>
-            <Button type="submit" className="md:col-span-2" isLoading={busy}>Yetkili hesabı oluştur</Button>
-          </form>
+        <CardContent className="space-y-4">
+          {users.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Yetkili çalışan bulunmuyor.</p>
+          ) : (
+            users.map((user) => {
+              const isSelf = user.id === currentAdminId;
+              const selected = new Set(draftRoles[user.id] ?? user.roles);
+              const hasChanges =
+                [...selected].sort().join("|") !== [...user.roles].sort().join("|");
 
-          <div className="space-y-3">
-            {users.map((user) => (
-              <div key={user.id} className="flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0">
-                  <p className="truncate font-medium">{user.fullName || user.email}</p>
-                  <p className="truncate text-xs text-muted-foreground">{user.email}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {user.accessLevel === "FULL" ? "Tam yetki" : "Sınırlı yetki"} · {user.isActive ? "Etkin" : "Devre dışı"}
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <select
-                    aria-label={`${user.email} yetki seviyesi`}
-                    className="h-10 rounded-xl border border-input bg-background px-3 text-sm"
-                    value={user.accessLevel}
-                    disabled={user.id === currentAdminId}
-                    onChange={(e)=>void updateAccess(user, { accessLevel: e.target.value as "LIMITED" | "FULL" })}
-                  >
-                    <option value="LIMITED">Sınırlı</option>
-                    <option value="FULL">Tam</option>
-                  </select>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={user.id === currentAdminId}
-                    onClick={() => void updateAccess(user, { isActive: !user.isActive })}
-                  >
-                    {user.isActive ? "Devre dışı bırak" : "Etkinleştir"}
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
+              return (
+                <section key={user.id} className="rounded-2xl border p-4">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="truncate font-semibold">{user.fullName || user.email}</p>
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                            user.isActive
+                              ? "bg-primary/10 text-primary"
+                              : "bg-muted text-muted-foreground"
+                          }`}
+                        >
+                          {user.isActive ? "Aktif" : "Devre dışı"}
+                        </span>
+                        {isSelf ? (
+                          <span className="rounded-full bg-secondary px-2 py-0.5 text-xs font-medium">
+                            Siz
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="mt-1 truncate text-sm text-muted-foreground">{user.email}</p>
+                      <div className="mt-2 grid gap-1 text-xs text-muted-foreground sm:grid-cols-2">
+                        <span>Son giriş: {formatDate(user.lastLoginAt)}</span>
+                        <span>Oluşturulma: {formatDate(user.createdAt)}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      {user.roles.length ? (
+                        user.roles.map((key) => (
+                          <span key={key} className="rounded-full border px-2.5 py-1 text-xs font-medium">
+                            {roleLabel(key)}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="rounded-full border px-2.5 py-1 text-xs text-muted-foreground">
+                          Yetki atanmamış
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    {roles.map((role) => (
+                      <label
+                        key={role.key}
+                        className="flex items-start gap-3 rounded-xl border p-3 text-sm"
+                      >
+                        <Checkbox
+                          aria-label={`${user.email} ${roleLabel(role)} görevi`}
+                          checked={selected.has(role.key)}
+                          disabled={!canManage || isSelf || busyUserId === user.id}
+                          onCheckedChange={(checked) =>
+                            toggleRole(user.id, role.key, checked === true)
+                          }
+                        />
+                        <span className="min-w-0">
+                          <span className="block font-medium">{roleLabel(role)}</span>
+                          <span className="mt-0.5 block text-xs text-muted-foreground">
+                            {role.description || "Özel yönetici görevi"}
+                          </span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+
+                  <div className="mt-4 space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground">Görev atama bilgisi</p>
+                    {user.roleAssignments.length ? (
+                      <div className="space-y-1 text-xs text-muted-foreground">
+                        {user.roleAssignments.map((assignment) => (
+                          <p key={`${assignment.roleKey}-${assignment.assignedAt}`}>
+                            <span className="font-medium text-foreground">
+                              {roleLabel(assignment.roleKey)}
+                            </span>
+                            {" · "}
+                            {assignment.assignedByName ||
+                              assignment.assignedByEmail ||
+                              "Sistem / önceki kayıt"}
+                          </p>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">Rol atama kaydı yok.</p>
+                    )}
+                  </div>
+
+                  {canManage && !isSelf ? (
+                    <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_auto_auto]">
+                      <Input
+                        aria-label={`${user.email} değişiklik nedeni`}
+                        placeholder="Değişiklik nedeni"
+                        value={reasons[user.id] ?? ""}
+                        onChange={(event) =>
+                          setReasons((current) => ({
+                            ...current,
+                            [user.id]: event.target.value,
+                          }))
+                        }
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={!hasChanges || busyUserId === user.id}
+                        isLoading={busyUserId === user.id && hasChanges}
+                        onClick={() => void saveRoles(user)}
+                      >
+                        Görevleri Kaydet
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={user.isActive ? "destructive" : "default"}
+                        disabled={busyUserId === user.id}
+                        onClick={() => void toggleActive(user)}
+                      >
+                        {user.isActive ? "Devre dışı bırak" : "Etkinleştir"}
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="mt-4 flex items-center gap-2 rounded-xl bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+                      <ShieldCheck className="size-4" aria-hidden="true" />
+                      {isSelf
+                        ? "Kendi yönetici yetkilerinizi bu ekrandan değiştiremezsiniz."
+                        : "Bu hesap için değişiklik yetkiniz yok."}
+                    </div>
+                  )}
+                </section>
+              );
+            })
+          )}
         </CardContent>
       </Card>
-
-      {canReadAudit ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ScrollText className="size-5" aria-hidden="true" />
-              İşlem geçmişi
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {events.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Henüz yönetici işlemi kaydı yok.</p>
-            ) : events.map((event) => (
-              <div key={event.id} className="rounded-xl border p-3 text-sm">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-medium">{event.actorName || event.actorEmail || event.actorAdminId}</span>
-                  <time className="text-xs text-muted-foreground">{new Date(event.createdAt).toLocaleString("tr-TR")}</time>
-                </div>
-                <p className="mt-1 break-words font-medium">{actionLabel(event.action)}</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Hedef: {event.targetEmail || event.targetId} · Risk: {event.riskLevel}
-                </p>
-                <div className="mt-2 grid gap-2 text-xs sm:grid-cols-2">
-                  <div className="rounded-lg bg-muted/50 px-3 py-2">
-                    <span className="font-medium">Önce:</span> {snapshotText(event.beforeState)}
-                  </div>
-                  <div className="rounded-lg bg-muted/50 px-3 py-2">
-                    <span className="font-medium">Sonra:</span> {snapshotText(event.afterState)}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      ) : null}
     </div>
   );
 }

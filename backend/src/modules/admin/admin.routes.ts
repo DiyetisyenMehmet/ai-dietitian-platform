@@ -8,6 +8,7 @@ import {
   adminAccessUserParamsSchema,
   adminCreateAccessUserSchema,
   adminUpdateAccessUserSchema,
+  adminStaffUpdateSchema,
 } from "./admin-access.schemas";
 import { adminAuthController } from "./admin-auth.controller";
 import {
@@ -56,6 +57,23 @@ adminRouter.patch(
   requireAdminPermission(ADMIN_PERMISSIONS.ACCESS),
   validate({ body: adminPasswordChangeSchema }),
   adminAuthController.changePassword,
+);
+
+adminRouter.get(
+  "/access/staff",
+  requireAdminPermission(ADMIN_PERMISSIONS.STAFF_READ),
+  adminAccessController.listUsers,
+);
+adminRouter.get(
+  "/access/roles",
+  requireAdminPermission(ADMIN_PERMISSIONS.ROLES_READ),
+  adminAccessController.listRoles,
+);
+adminRouter.patch(
+  "/access/staff/:id",
+  requireAdminPermission(ADMIN_PERMISSIONS.STAFF_MANAGE),
+  validate({ params: adminAccessUserParamsSchema, body: adminStaffUpdateSchema }),
+  adminAccessController.updateStaffAccess,
 );
 
 adminRouter.get(

@@ -80,13 +80,17 @@ test("authorized admin sees shell and backend environment identity", async ({ pa
   await expect(page.getByText("Diewish Management Center", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Yönetim merkezi hazır" })).toBeVisible();
   await expect(page.getByTestId("admin-environment-banner")).toHaveText("TEST");
-  await expect(page.getByText("Access / Security", { exact: true })).toBeVisible();
-  await expect(page.getByText(/Kullanıcı veya abonelik operasyonları henüz açık değildir/)).toBeVisible();
+  await expect(page.getByText("Access & Security", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Hesap ve güvenlik" })).toBeVisible();
-  await expect(page.getByText("Yetkili erişimi", { exact: true })).toBeVisible();
-  await expect(page.getByText("İşlem geçmişi", { exact: true })).toBeVisible();
   await expect(page.getByText("E-posta değiştir", { exact: true })).toBeVisible();
   await expect(page.getByText("Şifre değiştir", { exact: true })).toBeVisible();
+
+  await page.getByRole("link", { name: "Access & Security" }).click();
+  await expect(page).toHaveURL(/\/admin\/access$/);
+  await expect(page.getByRole("heading", { name: "Yetkili çalışanlar" })).toBeVisible();
+  await expect(page.getByText("Administrators", { exact: true })).toBeVisible();
+  await expect(page.getByText(credentials.email, { exact: true })).toBeVisible();
+  await expect(page.getByText("Yeni çalışan daveti sonraki adımda eklenecektir.")).toBeVisible();
 });
 
 test("auth loading never flashes admin content", async ({ page }) => {

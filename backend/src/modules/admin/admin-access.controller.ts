@@ -6,6 +6,7 @@ import { asyncHandler } from "../../utils/async-handler";
 import type {
   AdminCreateAccessUserInput,
   AdminUpdateAccessUserInput,
+  AdminStaffUpdateInput,
 } from "./admin-access.schemas";
 import { adminAccessService } from "./admin-access.service";
 
@@ -22,6 +23,20 @@ function requestIdentity(req: Request) {
 export const adminAccessController = {
   listUsers: asyncHandler(async (_req: Request, res: Response) => {
     sendSuccess(res, { users: await adminAccessService.listAdmins() });
+  }),
+
+  listRoles: asyncHandler(async (_req: Request, res: Response) => {
+    sendSuccess(res, { roles: await adminAccessService.listRoles() });
+  }),
+
+  updateStaffAccess: asyncHandler(async (req: Request, res: Response) => {
+    const user = await adminAccessService.updateStaffAccess(
+      requireUserId(req),
+      req.params.id!,
+      req.body as AdminStaffUpdateInput,
+      requestIdentity(req),
+    );
+    sendSuccess(res, { user });
   }),
 
   createUser: asyncHandler(async (req: Request, res: Response) => {
