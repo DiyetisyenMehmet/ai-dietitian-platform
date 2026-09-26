@@ -4,8 +4,9 @@ import * as React from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
-  AlertCircle,
   Camera,
+  ChevronDown,
+  Database,
   ImageUp,
   Images,
   MessageCircle,
@@ -60,46 +61,88 @@ function defaultMealType(): MealTypeDto {
   return "SNACK";
 }
 
+function providerLabel(provider: "USDA" | "OPEN_FOOD_FACTS" | "DIEWISH"): string {
+  if (provider === "USDA") return "USDA FoodData Central";
+  if (provider === "OPEN_FOOD_FACTS") return "Open Food Facts";
+  return "Diewish";
+}
+
 function resolutionSummary(analysis: FoodScanResultDto): string {
-  const resolution = analysis.nutritionResolution;
-  if (!resolution) return "Besin değerlerinin kaynağı ve belirsizlik düzeyi aşağıda gösterilir.";
-  if (resolution.method === "AI_ESTIMATE") {
-    return `Diewish AI tahmini · güven yaklaşık %${Math.round(resolution.confidence * 100)}. ${resolution.note}`;
+  const method = analysis.nutritionResolution?.method;
+  if (method === "AI_ESTIMATE") {
+    return "Doğrulanmış kaynak verisi yetersiz olduğu için yaklaşık değerler kullanıldı.";
   }
-  return resolution.note;
+  if (method === "UNAVAILABLE") {
+    return "Besin değerleri için yeterli kaynak bulunamadı.";
+  }
+  if (method === "COMPONENT_AGGREGATE") {
+    return "Besin değerleri eşleşen malzemelerin kaynak verileriyle hesaplandı.";
+  }
+  if (method === "VERIFIED_SOURCE") {
+    return "Besin değerleri doğrulanmış bir kaynakla eşleştirildi.";
+  }
+  return "Besin değerleri mevcut kaynaklara göre gösterilir.";
+}
+
+function sourceSummary(analysis: FoodScanResultDto): { title: string; detail: string } {
+  const resolution = analysis.nutritionResolution;
+  if (!resolution) {
+    return {
+      title: "Kaynak bilgisi",
+      detail: "Besin değerlerinin kaynak bilgisi bu sonuç için sınırlı.",
+    };
+  }
+  if (resolution.method === "AI_ESTIMATE") {
+    return {
+      title: "Diewish tahmini",
+      detail: "Doğrulanmış kaynak verisi yeterli olmadığı için yaklaşık besin değerleri kullanıldı.",
+    };
+  }
+  if (resolution.method === "UNAVAILABLE") {
+    return {
+      title: "Kaynak bilgisi bulunamadı",
+      detail: "Gıda adını veya porsiyonu düzenleyip yeniden hesaplayabilirsin.",
+    };
+  }
+  const providers = resolution.providers.map(providerLabel);
+  const providerText = providers.length > 0 ? providers.join(", ") : "mevcut besin kaynakları";
+  return {
+    title: resolution.method === "VERIFIED_SOURCE" ? "Doğrulanmış kaynak" : "Kaynak destekli hesaplama",
+    detail: resolution.method === "VERIFIED_SOURCE"
+      ? `Besin değerleri ${providerText} ile eşleştirildi.`
+      : `Besin değerleri eşleşen malzemeler için ${providerText} kullanılarak hesaplandı.`,
+  };
+}
+
+function visualConfidenceLabel(confidence: number): string {
+  if (confidence >= 85) return "yüksek";
+  if (confidence >= 65) return "orta";
+  return "düşük";
+}
+
+function portionDisplayLabel(analysis: FoodScanResultDto, fallbackGrams: number): string {
+  const grams = analysis.estimatedGrams ?? fallbackGrams;
+  if (analysis.estimatedPortion === "Düzeltilmiş porsiyon" || /kullanıcı porsiyonu/i.test(analysis.estimatedPortion)) {
+    return `Seçilen porsiyon: ${grams} g`;
+  }
+  return `Yaklaşık ${grams} g porsiyon`;
 }
 
 function analysisToast(analysis: FoodScanResultDto): string {
   if (analysis.nutritionResolution?.method === "AI_ESTIMATE") {
-    return "Yemek tanındı; besin değerleri açıkça etiketlenmiş Diewish AI tahminiyle tamamlandı.";
+    return "Yemek tanındı; yaklaşık besin değerleri Diewish tarafından oluşturuldu.";
   }
   if (analysis.nutritionResolution?.method === "UNAVAILABLE") {
     return "Yemek tanındı; gıda adını ve porsiyonu doğrulayarak analizi tamamlayabilirsin.";
   }
-  return "Yemek tanındı; besin değerleri güvenilir kaynaklar ve tarif bileşimiyle hesaplandı.";
-}
-
-function unmatchedIngredientLabel(analysis: FoodScanResultDto): string {
-  if (analysis.nutritionResolution?.method === "AI_ESTIMATE") return "AI tarif tahminine dahil";
-  if (analysis.nutritionResolution?.method === "UNAVAILABLE") return "Adını doğrulayarak geliştir";
-  return "Toplam hesap diğer kaynaklı bileşenlerden";
-}
-
-function unmatchedIngredientSource(analysis: FoodScanResultDto): string {
-  if (analysis.nutritionResolution?.method === "AI_ESTIMATE") {
-    return "Diewish AI tarif tahmini; doğrulanmış kaynak değildir";
-  }
-  if (analysis.nutritionResolution?.method === "UNAVAILABLE") {
-    return "Gıda adı/porsiyon doğrulamasıyla yeniden çözümlenebilir";
-  }
-  return "Bu bileşen için ayrı kaynak kullanılmadı; toplam yalnız kaynaklı bileşenlerden hesaplandı";
+  return "Yemek tanındı; besin değerleri güvenilir kaynaklarla hesaplandı.";
 }
 
 function coachHref(analysis: FoodScanResultDto): string {
   const grams = analysis.estimatedGrams ?? 100;
   const sourceContext = analysis.nutritionResolution?.method === "AI_ESTIMATE"
-    ? "Besin değerlerinin Diewish AI tahmini olduğunu ve doğrulanmış kaynak olmadığını dikkate al."
-    : "Kullanılan besin verilerinin kaynak/provenance bilgisini dikkate al.";
+    ? "Besin değerlerinin yaklaşık olduğunu ve doğrulanmış kaynak verisinin yetersiz olduğunu dikkate al."
+    : "Kullanılan besin değerlerinin kaynak bilgisini dikkate al.";
   const prompt = `${grams} g ${analysis.dishName} ve günlük hedeflerim açısından benim için ne ifade ediyor? Fotoğraftaki tarif ve porsiyonun tahmini olduğunu dikkate al. ${sourceContext}`;
   return `/ai?prompt=${encodeURIComponent(prompt)}`;
 }
@@ -254,7 +297,7 @@ export function FoodScannerView() {
           <div>
             <h2 className="text-base font-bold">Fotoğrafla Tara</h2>
             <p className="mt-0.5 text-sm text-muted-foreground">
-              AI yemeği, porsiyonu ve muhtemel malzemeleri tanır. Diewish önce güvenilir besin kaynakları ve tarif bileşimiyle hesaplar; yeterli veri yoksa son çare AI tahmini açıkça etiketlenir.
+              Diewish yemeği, yaklaşık porsiyonu ve muhtemel malzemeleri belirler. Besin değerleri güvenilir kaynaklarla eşleştirilir; kaynak yetersizse yaklaşık değer açıkça belirtilir.
             </p>
           </div>
         </div>
