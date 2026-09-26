@@ -76,13 +76,13 @@ export async function applyFoodNutritionFallback(
         ? analysis.estimatedPortion
         : `${analysis.estimatedPortion}; ${portionGrams} g referans porsiyon kullanıldı`,
       totals: calculatePortion(estimate.per100g, portionGrams).nutrients,
-      disclaimer: "Bu besin değerleri, yeterli doğrulanmış kaynak verisi bulunamadığı için tanınan gıda ve porsiyon üzerinden Diewish AI tarafından tahmin edilmiştir. Gerçek değerler tarif ve miktara göre değişebilir.",
+      disclaimer: "Doğrulanmış kaynak verisi yetersiz olduğu için bu besin değerleri Diewish tarafından yaklaşık olarak hesaplandı. Gerçek değerler tarif ve miktara göre değişebilir.",
       nutritionResolution: {
         method: "AI_ESTIMATE",
         providers: [],
         confidence: estimate.confidence,
         estimated: true,
-        note: "Yeterli doğrulanmış kaynak verisi bulunamadı; değerler son çare Diewish AI tahminidir ve doğrulanmış kaynak olarak kaydedilmez.",
+        note: "Yeterli doğrulanmış kaynak verisi bulunamadı; değerler Diewish tarafından yaklaşık olarak oluşturuldu ve doğrulanmış kaynak olarak kaydedilmez.",
       },
     };
   }
@@ -146,7 +146,7 @@ export async function analyzeConfirmedFoodName(
     estimatedGrams: grams,
     ingredients: [ingredient],
     totals: ingredient.nutrients ?? { ...EMPTY_NUTRIENTS },
-    disclaimer: "Gıda adı ve porsiyon kullanıcı tarafından doğrulandı; besin değerlerinin çözüm yöntemi aşağıda ayrıca belirtilir.",
+    disclaimer: "Gıda adı ve porsiyon kullanıcı tarafından doğrulandı. Kaynak bilgisi aşağıda gösterilir.",
   };
   return applyFoodNutritionFallback(base, estimator);
 }
@@ -166,7 +166,7 @@ export async function finalizeFoodScanRecalculation(
     estimatedGrams: recalculation.estimatedGrams,
     ingredients: recalculation.ingredients,
     totals: recalculation.totals,
-    disclaimer: "Malzemeler ve porsiyon kullanıcı tarafından düzeltildi; besin değerlerinin çözüm yöntemi aşağıda ayrıca belirtilir.",
+    disclaimer: "Malzemeler ve porsiyon kullanıcı tarafından düzeltildi. Kaynak bilgisi aşağıda gösterilir.",
   };
   return applyFoodNutritionFallback(base, estimator);
 }
