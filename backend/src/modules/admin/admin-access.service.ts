@@ -245,6 +245,10 @@ export const adminAccessService = {
             where: {
               roleId: superRole.id,
               userId: { not: targetUserId },
+              user: {
+                isActive: true,
+                role: UserRole.ADMIN,
+              },
             },
           });
           if (remainingSuperAdmins === 0) {

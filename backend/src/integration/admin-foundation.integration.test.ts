@@ -9,9 +9,14 @@ import { createApp } from "../app";
 import { prisma } from "../lib/prisma";
 import { signAccessToken } from "../utils/jwt";
 import { hashPassword } from "../utils/password";
+import { adminAccessService } from "../modules/admin/admin-access.service";
 import { buildAuditSnapshot, runAuditedAdminMutation } from "../modules/admin/admin-audit.service";
 import { resolveRuntimeEnvironment } from "../modules/admin/admin.environment";
-import { ADMIN_PERMISSIONS, isAdminPermissionKey } from "../modules/admin/admin.permissions";
+import {
+  ADMIN_PERMISSIONS,
+  ADMIN_SYSTEM_ROLES,
+  isAdminPermissionKey,
+} from "../modules/admin/admin.permissions";
 import { resolveAdminAccess } from "../modules/admin/admin-rbac.repository";
 import { bootstrapAdminFoundation } from "../modules/admin/admin.bootstrap";
 import { firebaseAuthProvider } from "../modules/identity/firebase-auth.provider";
@@ -131,6 +136,98 @@ test("Phase 1 admin authorization, RBAC and transactional audit", async (t) => {
     });
     await prisma.user.update({ where: { id: admin.id }, data: { role: UserRole.USER } });
     assert.equal((await getEnvironment(baseUrl, adminToken)).status, 403);
+  });
+
+  await t.test("Phase 2 system roles and granular permission registry are seeded", async () => {
+    const expectedRoles = [
+      ADMIN_SYSTEM_ROLES.SUPER_ADMIN,
+      ADMIN_SYSTEM_ROLES.SUPPORT,
+      ADMIN_SYSTEM_ROLES.CONTENT_MANAGER,
+      ADMIN_SYSTEM_ROLES.FINANCE,
+      ADMIN_SYSTEM_ROLES.OPERATIONS,
+    ];
+    const roles = await prisma.adminRole.findMany({
+      where: { key: { in: expectedRoles } },
+      include: {
+        permissions: {
+          include: { permission: true },
+        },
+      },
+    });
+    assert.deepEqual(
+      new Set(roles.map((role) => role.key)),
+      new Set(expectedRoles),
+    );
+
+    const superAdmin = roles.find((role) => role.key === ADMIN_SYSTEM_ROLES.SUPER_ADMIN);
+    assert.ok(superAdmin);
+    const superPermissions = new Set(
+      superAdmin.permissions.map((mapping) => mapping.permission.key),
+    );
+    for (const permission of [
+      ADMIN_PERMISSIONS.ROLES_MANAGE,
+      ADMIN_PERMISSIONS.STAFF_MANAGE,
+      ADMIN_PERMISSIONS.AUDIT_READ,
+      ADMIN_PERMISSIONS.HEALTH_SENSITIVE_READ,
+      ADMIN_PERMISSIONS.NOTIFICATIONS_BULK_SEND,
+    ]) {
+      assert.ok(superPermissions.has(permission));
+    }
+
+    const support = roles.find((role) => role.key === ADMIN_SYSTEM_ROLES.SUPPORT);
+    assert.ok(support);
+    const supportPermissions = new Set(
+      support.permissions.map((mapping) => mapping.permission.key),
+    );
+    assert.ok(supportPermissions.has(ADMIN_PERMISSIONS.SUPPORT_MANAGE));
+    assert.ok(supportPermissions.has(ADMIN_PERMISSIONS.USERS_READ));
+    assert.equal(supportPermissions.has(ADMIN_PERMISSIONS.HEALTH_SENSITIVE_READ), false);
+    assert.equal(supportPermissions.has(ADMIN_PERMISSIONS.ENTITLEMENTS_GRANT), false);
+  });
+
+  await t.test("last active Super Admin cannot be downgraded while only inactive Super Admins remain", async () => {
+    const actor = await createUser(UserRole.ADMIN, "last-super-actor");
+    const target = await createUser(UserRole.ADMIN, "last-super-target");
+    const inactiveBackup = await createUser(UserRole.ADMIN, "last-super-inactive", false);
+    createdUserIds.push(actor.id, target.id, inactiveBackup.id);
+
+    const superRole = await prisma.adminRole.findUniqueOrThrow({
+      where: { key: ADMIN_SYSTEM_ROLES.SUPER_ADMIN },
+    });
+    await prisma.adminUserRole.createMany({
+      data: [
+        { userId: target.id, roleId: superRole.id, assignedByAdminId: actor.id },
+        { userId: inactiveBackup.id, roleId: superRole.id, assignedByAdminId: actor.id },
+      ],
+    });
+
+    await assert.rejects(
+      adminAccessService.updateAccess(
+        actor.id,
+        target.id,
+        { accessLevel: "LIMITED" },
+        { correlationId: "last-super-blocked", requestId: "last-super-blocked" },
+      ),
+      (error: unknown) =>
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        error.code === "ADMIN_LAST_SUPER_ADMIN",
+    );
+
+    await prisma.user.update({
+      where: { id: inactiveBackup.id },
+      data: { isActive: true },
+    });
+
+    const downgraded = await adminAccessService.updateAccess(
+      actor.id,
+      target.id,
+      { accessLevel: "LIMITED" },
+      { correlationId: "last-super-allowed", requestId: "last-super-allowed" },
+    );
+    assert.equal(downgraded.accessLevel, "LIMITED");
+    assert.equal(downgraded.roles.includes(ADMIN_SYSTEM_ROLES.SUPER_ADMIN), false);
   });
 
   await t.test("RBAC constraints, multiple roles and permission union", async () => {
