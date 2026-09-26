@@ -21,8 +21,8 @@ function vision(overrides: Partial<FoodVisionResult> = {}): FoodVisionResult {
 test("simple single-food scan does not show recipe oil or sauce warning", () => {
   const disclaimer = buildFoodScanDisclaimer(vision(), false);
 
-  assert.match(disclaimer, /Görsel tanıma ve yenilebilir porsiyon miktarı tahminidir/);
-  assert.match(disclaimer, /güvenilir besin verilerinden deterministik olarak hesaplanır/);
+  assert.match(disclaimer, /Görsel tanıma ve porsiyon miktarı yaklaşık olabilir/);
+  assert.match(disclaimer, /mevcut güvenilir kaynaklara göre hesaplanır/);
   assert.doesNotMatch(disclaimer, /tarif/i);
   assert.doesNotMatch(disclaimer, /yağ/i);
   assert.doesNotMatch(disclaimer, /sos/i);
@@ -42,9 +42,9 @@ test("mixed dish receives cooking and uncertain ingredient warning", () => {
     false,
   );
 
-  assert.match(disclaimer, /tarif bileşimi tahminidir/i);
+  assert.match(disclaimer, /tarif içeriği yaklaşık olabilir/i);
   assert.match(disclaimer, /yağ, sos/i);
-  assert.match(disclaimer, /siz dahil etmedikçe toplama eklenmez/i);
+  assert.match(disclaimer, /sen eklemedikçe hesaba katılmaz/i);
 });
 
 test("edible-weight safety notice is preserved when guard blocks gross weight", () => {
