@@ -33,12 +33,46 @@ export interface AdminRoleDefinition {
   permissions: string[];
 }
 
+export interface AdminPermissionDefinition {
+  key: string;
+  description: string | null;
+}
+
+export interface AdminInvitation {
+  id: string;
+  userId: string;
+  email: string;
+  fullName: string | null;
+  roles: Array<{ key: string; name: string }>;
+  isActive: boolean;
+  expiresAt: string;
+  acceptedAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+  invitedBy: {
+    id: string;
+    email: string;
+    fullName: string | null;
+  };
+}
+
+export interface AdminStaffSession {
+  id: string;
+  createdAt: string;
+  expiresAt: string;
+  revokedAt: string | null;
+  userAgent: string | null;
+  ipAddress: string | null;
+  isActive: boolean;
+}
+
 export interface AdminAuditRecord {
   id: string;
   actorAdminId: string;
   actorEmail: string | null;
   actorName: string | null;
   action: string;
+  module: string;
   targetType: string;
   targetId: string;
   targetEmail: string | null;
@@ -46,8 +80,22 @@ export interface AdminAuditRecord {
   afterState: Record<string, unknown> | null;
   reason: string | null;
   environment: string;
+  correlationId: string;
+  requestId: string;
   riskLevel: string;
   createdAt: string;
+}
+
+export interface AdminAuditFilters {
+  admin?: string;
+  user?: string;
+  action?: string;
+  module?: string;
+  risk?: string;
+  environment?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  limit?: number;
 }
 
 export interface AdminEnvironmentIdentity {
@@ -66,6 +114,17 @@ export interface AdminSession {
   roles: string[];
   permissions: AdminPermission[];
   environment: AdminEnvironmentIdentity;
+}
+
+function auditQuery(filters: AdminAuditFilters): string {
+  const params = new URLSearchParams();
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && String(value).trim() !== "") {
+      params.set(key, String(value));
+    }
+  });
+  const query = params.toString();
+  return query ? `?${query}` : "";
 }
 
 export const adminClient = {
@@ -135,6 +194,67 @@ export const adminClient = {
     });
   },
 
+  listPermissions(): Promise<{ permissions: AdminPermissionDefinition[] }> {
+    return apiRequest<{ permissions: AdminPermissionDefinition[] }>({
+      path: "/admin/access/permissions",
+      method: "GET",
+      auth: true,
+    });
+  },
+
+  listInvitations(): Promise<{ invitations: AdminInvitation[] }> {
+    return apiRequest<{ invitations: AdminInvitation[] }>({
+      path: "/admin/access/invitations",
+      method: "GET",
+      auth: true,
+    });
+  },
+
+  inviteStaff(payload: {
+    email: string;
+    fullName?: string;
+    roleKeys: string[];
+    reason: string;
+  }): Promise<{ invitation: { id: string; userId: string; email: string; expiresAt: string } }> {
+    return apiRequest({
+      path: "/admin/access/invitations",
+      method: "POST",
+      auth: true,
+      body: JSON.stringify(payload),
+    });
+  },
+
+  createRole(payload: {
+    name: string;
+    description?: string;
+    permissionKeys: string[];
+    reason: string;
+  }): Promise<{ role: AdminRoleDefinition }> {
+    return apiRequest({
+      path: "/admin/access/roles",
+      method: "POST",
+      auth: true,
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updateRole(
+    key: string,
+    payload: {
+      name: string;
+      description?: string;
+      permissionKeys: string[];
+      reason: string;
+    },
+  ): Promise<{ role: AdminRoleDefinition }> {
+    return apiRequest({
+      path: `/admin/access/roles/${encodeURIComponent(key)}`,
+      method: "PATCH",
+      auth: true,
+      body: JSON.stringify(payload),
+    });
+  },
+
   updateStaff(
     id: string,
     payload: { roleKeys: string[]; isActive?: boolean; reason: string },
@@ -147,43 +267,35 @@ export const adminClient = {
     });
   },
 
-  listAccessUsers(): Promise<{ users: AdminManagedUser[] }> {
-    return apiRequest<{ users: AdminManagedUser[] }>({
-      path: "/admin/access/users",
+  listStaffSessions(id: string): Promise<{ sessions: AdminStaffSession[] }> {
+    return apiRequest({
+      path: `/admin/access/staff/${encodeURIComponent(id)}/sessions`,
       method: "GET",
       auth: true,
     });
   },
 
-  createAccessUser(payload: {
-    email: string;
-    fullName?: string;
-    temporaryPassword: string;
-    accessLevel: "LIMITED" | "FULL";
-  }): Promise<{ user: AdminManagedUser }> {
-    return apiRequest<{ user: AdminManagedUser }>({
-      path: "/admin/access/users",
-      method: "POST",
-      auth: true,
-      body: JSON.stringify(payload),
-    });
-  },
-
-  updateAccessUser(
-    id: string,
-    payload: { accessLevel: "LIMITED" | "FULL"; isActive?: boolean },
-  ): Promise<{ user: { id: string; email: string; accessLevel: "LIMITED" | "FULL"; isActive: boolean; roles: string[] } }> {
+  revokeStaffSession(id: string, sessionId: string, reason: string): Promise<{ id: string; revoked: boolean }> {
     return apiRequest({
-      path: `/admin/access/users/${encodeURIComponent(id)}`,
-      method: "PATCH",
+      path: `/admin/access/staff/${encodeURIComponent(id)}/sessions/${encodeURIComponent(sessionId)}`,
+      method: "DELETE",
       auth: true,
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ reason }),
     });
   },
 
-  getAudit(): Promise<{ events: AdminAuditRecord[] }> {
+  revokeAllStaffSessions(id: string, reason: string): Promise<{ revokedCount: number }> {
+    return apiRequest({
+      path: `/admin/access/staff/${encodeURIComponent(id)}/sessions`,
+      method: "DELETE",
+      auth: true,
+      body: JSON.stringify({ reason }),
+    });
+  },
+
+  getAudit(filters: AdminAuditFilters = {}): Promise<{ events: AdminAuditRecord[] }> {
     return apiRequest<{ events: AdminAuditRecord[] }>({
-      path: "/admin/audit",
+      path: `/admin/audit${auditQuery(filters)}`,
       method: "GET",
       auth: true,
     });

@@ -34,7 +34,11 @@ function AccessDenied() {
   );
 }
 
-export function AdminAccessBoundary({ view = "overview" }: { view?: "overview" | "access" }) {
+export function AdminAccessBoundary({
+  view = "overview",
+}: {
+  view?: "overview" | "access" | "audit";
+}) {
   const { status, user } = useAuth();
   const [state, setState] = React.useState<State>({ status: "checking" });
   const rejectingSession = React.useRef(false);
@@ -96,7 +100,11 @@ export function AdminAccessBoundary({ view = "overview" }: { view?: "overview" |
     const canOpenAccess =
       state.session.permissions.includes("admin.staff.read") &&
       state.session.permissions.includes("admin.roles.read");
+    const canOpenAudit = state.session.permissions.includes("audit.read");
     if (view === "access" && !canOpenAccess) {
+      return <AccessDenied />;
+    }
+    if (view === "audit" && !canOpenAudit) {
       return <AccessDenied />;
     }
     return <AdminShell session={state.session} view={view} />;

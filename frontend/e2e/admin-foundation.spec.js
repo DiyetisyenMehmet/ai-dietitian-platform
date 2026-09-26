@@ -90,7 +90,13 @@ test("authorized admin sees shell and backend environment identity", async ({ pa
   await expect(page.getByRole("heading", { name: "Yetkili çalışanlar" })).toBeVisible();
   await expect(page.getByText("Administrators", { exact: true })).toBeVisible();
   await expect(page.getByText(credentials.email, { exact: true })).toBeVisible();
-  await expect(page.getByText("Yeni çalışan daveti sonraki adımda eklenecektir.")).toBeVisible();
+  await expect(page.getByText("Yeni çalışan davet et", { exact: true })).toBeVisible();
+  await expect(page.getByText("Özel görevler", { exact: true })).toBeVisible();
+
+  await page.getByRole("link", { name: "İşlem Geçmişi" }).click();
+  await expect(page).toHaveURL(/\/admin\/audit$/);
+  await expect(page.getByRole("heading", { name: "İşlem geçmişi" })).toBeVisible();
+  await expect(page.getByText("Filtreler", { exact: true })).toBeVisible();
 });
 
 test("auth loading never flashes admin content", async ({ page }) => {
