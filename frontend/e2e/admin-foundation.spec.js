@@ -78,7 +78,7 @@ test("authorized admin sees shell and backend environment identity", async ({ pa
   await page.goto(`${WEB_BASE_URL}/admin`);
 
   await expect(page.getByText("Diewish Management Center", { exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Yönetim merkezi hazır" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Yönetim merkezi" })).toBeVisible();
   await expect(page.getByTestId("admin-environment-banner")).toHaveText("TEST");
   await expect(page.getByText("Access & Security", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Hesap ve güvenlik" })).toBeVisible();
