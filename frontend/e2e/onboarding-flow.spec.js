@@ -379,6 +379,7 @@ test("register -> consent -> onboarding -> scanner -> same-day weigh-in preserve
     });
   });
 
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("tab", { name: "Fotoğrafla Tara" }).click();
   const cameraInput = page.getByLabel("Kamera fotoğraf girişi");
   const galleryInput = page.getByLabel("Galeri fotoğraf girişi");
@@ -394,6 +395,8 @@ test("register -> consent -> onboarding -> scanner -> same-day weigh-in preserve
   await expect(page.getByText("Görsel eşleşme: yüksek", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("3. Ne yapabilirsin?", { exact: true })).toBeVisible();
   await expect(page.getByText("6. Veri kaynağı", { exact: true })).toBeVisible();
+  await expect(page.getByText("Hesaplama notu", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Öğünü elle ekle/ })).toBeVisible();
   await expect(page.getByText(/Diewish AI|AI yemeği|AI tarafından/i)).toHaveCount(0);
   for (const label of ["Karbonhidrat", "Yağ", "Şeker", "Tuz"]) {
     const nutrientLabel = page.getByText(label, { exact: true }).last();
@@ -405,6 +408,18 @@ test("register -> consent -> onboarding -> scanner -> same-day weigh-in preserve
   await page.getByRole("button", { name: /Yeniden hesapla/ }).click();
   await expect(page.getByText("Seçilen porsiyon: 250 g", { exact: true })).toBeVisible();
   await expect(page.getByText("Bu porsiyonda sodyum miktarı dikkat gerektirecek düzeyde.")).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+  await page.getByRole("button", { name: "Koyu temaya geç" }).evaluate((element) => element.click());
+  await expect(page.locator("html")).toHaveClass(/dark/);
+  await expect(page.getByText("Seçilen porsiyon: 250 g", { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+  await page.setViewportSize({ width: 412, height: 915 });
+  await expect(page.getByText("Kuru fasulye", { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.getByRole("button", { name: "Açık temaya geç" }).evaluate((element) => element.click());
+  await expect(page.locator("html")).not.toHaveClass(/dark/);
 
   await page.goto(`${WEB_BASE_URL}/progress`);
   await expect(page.getByText("Kilo İlerlemen")).toBeVisible();
