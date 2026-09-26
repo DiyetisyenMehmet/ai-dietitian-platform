@@ -260,7 +260,7 @@ test("register -> consent -> onboarding -> scanner -> same-day weigh-in preserve
       body: JSON.stringify(success({ log: { id: "scanner-meal-e2e" } })),
     });
   });
-  await page.getByRole("button", { name: /Öğüne Ekle/ }).first().click();
+  await page.getByRole("button", { name: /50 gram porsiyonu .* ekle/i }).click();
   expect(mealPayload).toMatchObject({
     calories: 260,
     proteinG: 10,
