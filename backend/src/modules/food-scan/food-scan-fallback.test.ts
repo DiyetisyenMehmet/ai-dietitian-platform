@@ -58,6 +58,9 @@ test("recognized fig jam receives clearly labeled AI nutrition only after determ
   assert.equal(result.totals.carbohydratesG, 128);
   assert.equal(result.nutritionResolution?.method, "AI_ESTIMATE");
   assert.equal(result.nutritionResolution?.providers.length, 0);
+  assert.doesNotMatch(result.disclaimer, /\bAI\b/i);
+  assert.doesNotMatch(result.nutritionResolution?.note ?? "", /\bAI\b/i);
+  assert.match(result.disclaimer, /Diewish/);
 });
 
 test("complete deterministic core nutrition suppresses the AI estimator", async () => {
