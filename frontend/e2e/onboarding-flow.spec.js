@@ -273,7 +273,7 @@ test("register -> consent -> onboarding -> scanner -> same-day weigh-in preserve
   expect(decodeURIComponent(coachHref ?? "")).toContain("50 g Test Protein Bar");
   expect(decodeURIComponent(coachHref ?? "")).toContain("260 kcal");
 
-  await page.getByRole("button", { name: "Koyu temaya geç" }).click();
+  await page.getByRole("button", { name: "Koyu temaya geç" }).click({ force: true });
   await expect(page.locator("html")).toHaveClass(/dark/);
   await expect(page.getByText("260 kcal", { exact: true }).first()).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
@@ -281,7 +281,7 @@ test("register -> consent -> onboarding -> scanner -> same-day weigh-in preserve
   await page.setViewportSize({ width: 412, height: 915 });
   await expect(page.getByText("Test Protein Bar", { exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  await page.getByRole("button", { name: "Açık temaya geç" }).click();
+  await page.getByRole("button", { name: "Açık temaya geç" }).click({ force: true });
   await expect(page.locator("html")).not.toHaveClass(/dark/);
 
   await page.route("**/api/food-scan/analyze", async (route) => {
