@@ -166,14 +166,25 @@ test("register -> consent -> onboarding -> scanner -> same-day weigh-in preserve
       })),
     });
   });
+  const personalizationRequests = [];
   await page.route("**/api/nutrition/personalize", async (route) => {
+    const body = route.request().postDataJSON();
+    personalizationRequests.push(body);
+    const grams = Number(body.grams);
+    const factor = grams / 100;
+    const scaled = Object.fromEntries(
+      Object.entries(nutrients100).map(([key, value]) => [
+        key,
+        value === null ? null : Math.round(value * factor * 100) / 100,
+      ]),
+    );
     await route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify(success({
         personalization: {
-          grams: 25,
-          nutrients: nutrients25,
+          grams,
+          nutrients: scaled,
           metrics: {
             contribution: { caloriesPercent: 6.5, proteinPercent: 5, carbohydratesPercent: 7, fatPercent: 9 },
             remainingAfter: { calories: 1870, proteinG: 95, carbohydratesG: 186, fatG: 64 },
@@ -195,17 +206,83 @@ test("register -> consent -> onboarding -> scanner -> same-day weigh-in preserve
     });
   });
 
+  await page.emulateMedia({ colorScheme: "light" });
+  await page.evaluate(() => window.localStorage.removeItem("theme"));
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`${WEB_BASE_URL}/meals/scan`);
   await page.getByRole("tab", { name: "Barkod Tara" }).click();
   await page.getByPlaceholder("EAN / UPC barkod numarası").fill("4006381333931");
   await page.getByRole("button", { name: /Sorgula/ }).click();
+
   await expect(page.getByText("Test Protein Bar", { exact: true })).toBeVisible();
-  await expect(page.getByText("100 g / 100 ml bazında")).toBeVisible();
-  await expect(page.getByText("25 g porsiyon")).toBeVisible();
+  await expect(page.getByLabel("Seçilen porsiyon gramı")).toHaveValue("25");
+  await expect(page.getByText("130 kcal", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Kaynak değer: 100 g", { exact: true })).toBeVisible();
+  await expect(page.getByText(/Kaynak veri 100 g bazındadır/)).toBeVisible();
   await expect(page.getByText("100 g için şeker miktarı yüksek.")).toBeVisible();
   await expect(page.getByText("Open Food Facts", { exact: false }).first()).toBeVisible();
+  expect(personalizationRequests.at(-1)).toMatchObject({ barcode: "4006381333931", grams: 25 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+  await page.getByLabel("Seçilen porsiyon gramı").fill("50");
+  await expect(page.getByRole("button", { name: /Kalori karşılaştır/ })).toBeDisabled();
+  await page.getByRole("button", { name: /Porsiyonu Değiştir/ }).click();
+  await expect(page.getByLabel("Seçilen porsiyon gramı")).toHaveValue("50");
+  await expect(page.getByText("260 kcal", { exact: true }).first()).toBeVisible();
+  expect(personalizationRequests.at(-1)).toMatchObject({ barcode: "4006381333931", grams: 50 });
+
+  let comparisonPayload = null;
+  await page.route("**/api/nutrition/compare", async (route) => {
+    comparisonPayload = route.request().postDataJSON();
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(success({
+        comparison: {
+          source: { food: { displayNameTr: food.displayNameTr, provider: food.provider }, grams: 50, nutrients: { ...nutrients100, energyKcal: 260 } },
+          comparisons: [],
+          warning: "Aynı kalori, besinsel eşdeğerlik anlamına gelmez.",
+        },
+      })),
+    });
+  });
+  await page.getByRole("button", { name: /Kalori karşılaştır/ }).click();
+  await expect(page.getByText("Aynı kaloride neler var?")).toBeVisible();
+  expect(comparisonPayload).toMatchObject({ barcode: "4006381333931", grams: 50 });
+
+  let mealPayload = null;
+  await page.route("**/api/tracking/meals", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    mealPayload = route.request().postDataJSON();
+    await route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: JSON.stringify(success({ log: { id: "scanner-meal-e2e" } })),
+    });
+  });
+  await page.getByRole("button", { name: /Öğüne Ekle/ }).first().click();
+  expect(mealPayload).toMatchObject({
+    calories: 260,
+    proteinG: 10,
+    carbsG: 27.5,
+    fatG: 12.5,
+  });
+
   const coachLink = page.getByRole("link", { name: /Diewish Koç/ });
-  await expect(coachLink).toHaveAttribute("href", /prompt=/);
+  const coachHref = await coachLink.getAttribute("href");
+  expect(decodeURIComponent(coachHref ?? "")).toContain("50 g Test Protein Bar");
+  expect(decodeURIComponent(coachHref ?? "")).toContain("260 kcal");
+
+  await page.getByRole("button", { name: "Koyu temaya geç" }).click();
+  await expect(page.locator("html")).toHaveClass(/dark/);
+  await expect(page.getByText("260 kcal", { exact: true }).first()).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+  await page.setViewportSize({ width: 412, height: 915 });
+  await expect(page.getByText("Test Protein Bar", { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.getByRole("button", { name: "Açık temaya geç" }).click();
+  await expect(page.locator("html")).not.toHaveClass(/dark/);
 
   await page.route("**/api/food-scan/analyze", async (route) => {
     await route.fulfill({
