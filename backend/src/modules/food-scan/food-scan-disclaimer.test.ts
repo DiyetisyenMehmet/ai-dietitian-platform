@@ -27,6 +27,7 @@ test("simple single-food scan does not show recipe oil or sauce warning", () => 
   assert.doesNotMatch(disclaimer, /yağ/i);
   assert.doesNotMatch(disclaimer, /sos/i);
   assert.doesNotMatch(disclaimer, /isteğe bağlı malzemeler/i);
+  assert.doesNotMatch(disclaimer, /\bAI\b/i);
 });
 
 test("mixed dish receives cooking and uncertain ingredient warning", () => {
