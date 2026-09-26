@@ -226,7 +226,7 @@ test("register -> consent -> onboarding -> scanner -> same-day weigh-in preserve
 
   await page.getByLabel("Seçilen porsiyon gramı").fill("50");
   await expect(page.getByRole("button", { name: /Kalori karşılaştır/ })).toBeDisabled();
-  await page.getByRole("button", { name: /Porsiyonu Değiştir/ }).click();
+  await page.getByRole("button", { name: "Porsiyonu değiştir ve besin değerlerini güncelle" }).click();
   await expect(page.getByLabel("Seçilen porsiyon gramı")).toHaveValue("50");
   await expect(page.getByText("260 kcal", { exact: true }).first()).toBeVisible();
   expect(personalizationRequests.at(-1)).toMatchObject({ barcode: "4006381333931", grams: 50 });
