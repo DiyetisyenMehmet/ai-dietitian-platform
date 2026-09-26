@@ -107,8 +107,34 @@ export class OpenFoodFactsProvider implements NutritionProvider {
   readonly id = "OPEN_FOOD_FACTS" as const;
   constructor(private readonly fetchImpl: FetchLike = fetch) {}
 
-  async search(_query: string, _limit = 10): Promise<CanonicalFood[]> {
-    return [];
+  async search(query: string, limit = 10): Promise<CanonicalFood[]> {
+    const trimmed = query.trim();
+    if (!trimmed) return [];
+    const fields = [
+      "code","product_name","product_name_tr","generic_name","brands","quantity","serving_size","serving_quantity",
+      "image_front_url","image_url","ingredients_text","ingredients_text_tr","allergens_tags","additives_tags","labels_tags",
+      "nutriscore_grade","nutrition_grades","nova_group","last_modified_t","last_modified_datetime","nutriments"
+    ].join(",");
+    const params = new URLSearchParams({
+      search_terms: trimmed,
+      search_simple: "1",
+      action: "process",
+      json: "1",
+      page_size: String(Math.min(Math.max(limit, 1), 25)),
+      fields,
+    });
+    const url = `${env.OPEN_FOOD_FACTS_BASE_URL.replace(/\/$/, "")}/cgi/search.pl?${params.toString()}`;
+    const response = await this.fetchImpl(url, {
+      headers: { "User-Agent": env.OPEN_FOOD_FACTS_USER_AGENT },
+      signal: AbortSignal.timeout(env.NUTRITION_PROVIDER_TIMEOUT_MS),
+    });
+    if (response.status === 429) throw new Error("OPEN_FOOD_FACTS_RATE_LIMIT");
+    if (!response.ok) throw new Error(`OPEN_FOOD_FACTS_${response.status}`);
+    const body = record(await response.json());
+    const products = Array.isArray(body.products) ? body.products : [];
+    return products
+      .map((product) => normalizeOpenFoodFactsProduct(product))
+      .filter((food): food is CanonicalFood => food !== null);
   }
 
   async getByExternalId(externalId: string): Promise<CanonicalFood | null> {

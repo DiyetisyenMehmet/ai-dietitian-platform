@@ -157,3 +157,22 @@ test("recalculation receives a fresh provenance decision and cannot retain stale
   assert.equal(result.nutritionResolution?.method, "VERIFIED_SOURCE");
   assert.deepEqual(result.nutritionResolution?.providers, ["USDA"]);
 });
+
+
+test("web-grounded nutrition fallback is labeled separately and preserves research sources", async () => {
+  const result = await applyFoodNutritionFallback(emptyResult(), async () => ({
+    ...figJamEstimate,
+    researchMode: "WEB_GROUNDED",
+    sourceReferences: [
+      "https://example.com/nutrition-source-a",
+      "https://example.org/nutrition-source-b",
+    ],
+  }));
+  assert.equal(result.nutritionResolution?.method, "WEB_RESEARCH_ESTIMATE");
+  assert.deepEqual(result.nutritionResolution?.sourceReferences, [
+    "https://example.com/nutrition-source-a",
+    "https://example.org/nutrition-source-b",
+  ]);
+  assert.match(result.disclaimer, /web araştırması/i);
+  assert.equal(result.totals.energyKcal, 520);
+});

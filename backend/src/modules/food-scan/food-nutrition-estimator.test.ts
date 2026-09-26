@@ -23,6 +23,8 @@ test("AI estimate accepts a plausible internally consistent fig-jam profile", ()
   assert.equal(value.per100g.energyKcal, 260);
   assert.equal(value.per100g.saltG, 0.03);
   assert.equal(value.confidence, 0.58);
+  assert.equal(value.researchMode, "MODEL_ESTIMATE");
+  assert.deepEqual(value.sourceReferences, []);
 });
 
 test("AI estimate rejects impossible sugar and calorie relationships", () => {

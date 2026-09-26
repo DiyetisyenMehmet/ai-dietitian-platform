@@ -76,13 +76,22 @@ export async function applyFoodNutritionFallback(
         ? analysis.estimatedPortion
         : `${analysis.estimatedPortion}; ${portionGrams} g referans porsiyon kullanıldı`,
       totals: calculatePortion(estimate.per100g, portionGrams).nutrients,
-      disclaimer: "Doğrulanmış kaynak verisi yetersiz olduğu için bu besin değerleri Diewish tarafından yaklaşık olarak hesaplandı. Gerçek değerler tarif ve miktara göre değişebilir.",
+      disclaimer: estimate.researchMode === "WEB_GROUNDED"
+        ? "Yapılandırılmış besin kaynakları yeterli olmadığında Diewish web araştırmasıyla kaynakları karşılaştırıp yaklaşık değer oluşturdu. Tarif, marka ve porsiyon farklılıkları gerçek değerleri değiştirebilir."
+        : "Doğrulanmış kaynak verisi yetersiz olduğu için bu besin değerleri Diewish tarafından yaklaşık olarak hesaplandı. Gerçek değerler tarif ve miktara göre değişebilir.",
       nutritionResolution: {
-        method: "AI_ESTIMATE",
+        method: estimate.researchMode === "WEB_GROUNDED"
+          ? "WEB_RESEARCH_ESTIMATE"
+          : "AI_ESTIMATE",
         providers: [],
         confidence: estimate.confidence,
         estimated: true,
-        note: "Yeterli doğrulanmış kaynak verisi bulunamadı; değerler Diewish tarafından yaklaşık olarak oluşturuldu ve doğrulanmış kaynak olarak kaydedilmez.",
+        note: estimate.researchMode === "WEB_GROUNDED"
+          ? "Yapılandırılmış besin kaynakları yetersiz kaldı; Diewish web araştırmasıyla kaynakları karşılaştırarak yaklaşık değer oluşturdu. Bu sonuç doğrulanmış veri tabanı kaydı değildir."
+          : "Yeterli doğrulanmış kaynak verisi bulunamadı; değerler Diewish tarafından yaklaşık olarak oluşturuldu ve doğrulanmış kaynak olarak kaydedilmez.",
+        ...(estimate.sourceReferences?.length
+          ? { sourceReferences: estimate.sourceReferences.slice(0, 8) }
+          : {}),
       },
     };
   }

@@ -17,6 +17,7 @@ export interface UsdaNutritionProviderPort {
 }
 
 export interface OpenFoodFactsProviderPort {
+  search?(query: string, limit?: number): Promise<CanonicalFood[]>;
   getByBarcode(barcode: string): Promise<CanonicalFood | null>;
 }
 
@@ -91,30 +92,70 @@ export class NutritionDataService {
       }
     }
 
-    if (!this.providers.usda.isConfigured()) {
-      throw new ApiError(503, "USDA FoodData Central sunucuda yapılandırılmamış.", {
-        code: "NUTRITION_PROVIDER_NOT_CONFIGURED",
-      });
+    const collected: CanonicalFood[] = [];
+    const errors: string[] = [];
+    const queries = expandNutritionProviderQueries(query);
+
+    const offSearchAvailable = Boolean(this.providers.openFoodFacts.search);
+    const usdaBudget = offSearchAvailable
+      ? Math.max(1, Math.ceil(boundedLimit * 0.7))
+      : boundedLimit;
+
+    if (this.providers.usda.isConfigured()) {
+      try {
+        for (const providerQuery of queries) {
+          const remaining = usdaBudget - uniqueFoods(collected, boundedLimit).filter((food) => food.provider === "USDA").length;
+          if (remaining <= 0) break;
+          const foods = await timedProvider("USDA", "search", () =>
+            this.providers.usda.search(providerQuery, remaining),
+          );
+          collected.push(...foods);
+          if (
+            uniqueFoods(collected, boundedLimit)
+              .filter((food) => food.provider === "USDA").length >= usdaBudget
+          ) break;
+        }
+      } catch (error) {
+        errors.push(`USDA: ${String(error)}`);
+      }
     }
 
-    try {
-      const collected: CanonicalFood[] = [];
-      for (const providerQuery of expandNutritionProviderQueries(query)) {
-        const remaining = boundedLimit - uniqueFoods(collected, boundedLimit).length;
-        if (remaining <= 0) break;
-        const foods = await timedProvider("USDA", "search", () => this.providers.usda.search(providerQuery, remaining));
-        collected.push(...foods);
-        if (uniqueFoods(collected, boundedLimit).length >= boundedLimit) break;
+    if (
+      uniqueFoods(collected, boundedLimit).length < boundedLimit &&
+      offSearchAvailable &&
+      this.providers.openFoodFacts.search
+    ) {
+      try {
+        for (const providerQuery of queries) {
+          const remaining = boundedLimit - uniqueFoods(collected, boundedLimit).length;
+          if (remaining <= 0) break;
+          const foods = await timedProvider("OPEN_FOOD_FACTS", "search", () =>
+            this.providers.openFoodFacts.search!(providerQuery, remaining),
+          );
+          collected.push(...foods);
+          if (uniqueFoods(collected, boundedLimit).length >= boundedLimit) break;
+        }
+      } catch (error) {
+        errors.push(`OPEN_FOOD_FACTS: ${String(error)}`);
       }
-      const foods = uniqueFoods(collected, boundedLimit);
-      this.searchCache.set(key, foods, env.USDA_CACHE_TTL_HOURS * 60 * 60 * 1000);
-      if (this.persistence) {
-        await Promise.all(foods.map((food) => this.persistence!.upsertFood(food, expiresAt(food))));
-      }
-      return foods;
-    } catch (error) {
-      throw providerError("Besin veri kaynağına şu anda ulaşılamıyor.", String(error));
     }
+
+    const foods = uniqueFoods(collected, boundedLimit);
+    if (foods.length === 0 && errors.length > 0) {
+      throw providerError("Besin veri kaynaklarına şu anda ulaşılamıyor.", errors.join("; "));
+    }
+
+    this.searchCache.set(
+      key,
+      foods,
+      foods.some((food) => food.provider === "OPEN_FOOD_FACTS")
+        ? env.OPEN_FOOD_FACTS_CACHE_TTL_HOURS * 60 * 60 * 1000
+        : env.USDA_CACHE_TTL_HOURS * 60 * 60 * 1000,
+    );
+    if (this.persistence) {
+      await Promise.all(foods.map((food) => this.persistence!.upsertFood(food, expiresAt(food))));
+    }
+    return foods;
   }
 
   private async userConfirmedFallback(

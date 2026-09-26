@@ -69,6 +69,9 @@ function providerLabel(provider: "USDA" | "OPEN_FOOD_FACTS" | "DIEWISH"): string
 
 function resolutionSummary(analysis: FoodScanResultDto): string {
   const method = analysis.nutritionResolution?.method;
+  if (method === "WEB_RESEARCH_ESTIMATE") {
+    return "Yapılandırılmış kaynaklar yetersiz kaldı; Diewish web araştırmasıyla yaklaşık değerler oluşturuldu.";
+  }
   if (method === "AI_ESTIMATE") {
     return "Doğrulanmış kaynak verisi yetersiz olduğu için yaklaşık değerler kullanıldı.";
   }
@@ -90,6 +93,12 @@ function sourceSummary(analysis: FoodScanResultDto): { title: string; detail: st
     return {
       title: "Kaynak bilgisi",
       detail: "Besin değerlerinin kaynak bilgisi bu sonuç için sınırlı.",
+    };
+  }
+  if (resolution.method === "WEB_RESEARCH_ESTIMATE") {
+    return {
+      title: "Diewish web araştırması",
+      detail: "Yapılandırılmış kaynaklar yeterli olmadığında Diewish internetteki kaynakları karşılaştırarak yaklaşık besin değerleri oluşturdu.",
     };
   }
   if (resolution.method === "AI_ESTIMATE") {
@@ -129,6 +138,9 @@ function portionDisplayLabel(analysis: FoodScanResultDto, fallbackGrams: number)
 }
 
 function analysisToast(analysis: FoodScanResultDto): string {
+  if (analysis.nutritionResolution?.method === "WEB_RESEARCH_ESTIMATE") {
+    return "Yemek tanındı; besin değerleri web araştırmasıyla yaklaşık olarak tamamlandı.";
+  }
   if (analysis.nutritionResolution?.method === "AI_ESTIMATE") {
     return "Yemek tanındı; yaklaşık besin değerleri Diewish tarafından oluşturuldu.";
   }
@@ -140,9 +152,11 @@ function analysisToast(analysis: FoodScanResultDto): string {
 
 function coachHref(analysis: FoodScanResultDto): string {
   const grams = analysis.estimatedGrams ?? 100;
-  const sourceContext = analysis.nutritionResolution?.method === "AI_ESTIMATE"
-    ? "Besin değerlerinin yaklaşık olduğunu ve doğrulanmış kaynak verisinin yetersiz olduğunu dikkate al."
-    : "Kullanılan besin değerlerinin kaynak bilgisini dikkate al.";
+  const sourceContext = analysis.nutritionResolution?.method === "WEB_RESEARCH_ESTIMATE"
+    ? "Besin değerlerinin web araştırmasıyla yaklaşık oluşturulduğunu ve tarifler arasında değişebileceğini dikkate al."
+    : analysis.nutritionResolution?.method === "AI_ESTIMATE"
+      ? "Besin değerlerinin yaklaşık olduğunu ve doğrulanmış kaynak verisinin yetersiz olduğunu dikkate al."
+      : "Kullanılan besin değerlerinin kaynak bilgisini dikkate al.";
   const prompt = `${grams} g ${analysis.dishName} ve günlük hedeflerim açısından benim için ne ifade ediyor? Fotoğraftaki tarif ve porsiyonun tahmini olduğunu dikkate al. ${sourceContext}`;
   return `/ai?prompt=${encodeURIComponent(prompt)}`;
 }
@@ -578,6 +592,21 @@ export function FoodScannerView() {
                   <div className="min-w-0">
                     <p className="font-semibold">{source?.title}</p>
                     <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{source?.detail}</p>
+                    {analysis.nutritionResolution?.sourceReferences?.length ? (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {analysis.nutritionResolution.sourceReferences.slice(0, 3).map((url, index) => (
+                          <a
+                            key={url}
+                            href={url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-xs font-medium text-primary underline-offset-2 hover:underline"
+                          >
+                            Kaynak {index + 1}
+                          </a>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
                 <details className="group mt-3 border-t pt-3">

@@ -35,6 +35,7 @@ export interface ResolvedFoodScanIngredient extends FoodVisionIngredientCandidat
 export type FoodScanNutritionResolutionMethod =
   | "VERIFIED_SOURCE"
   | "COMPONENT_AGGREGATE"
+  | "WEB_RESEARCH_ESTIMATE"
   | "AI_ESTIMATE"
   | "UNAVAILABLE";
 
@@ -46,6 +47,7 @@ export interface FoodScanNutritionResolution {
   confidence: number;
   estimated: boolean;
   note: string;
+  sourceReferences?: string[];
 }
 
 export interface FoodScanResult {

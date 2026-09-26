@@ -235,3 +235,37 @@ test("Turkish ingredient search uses deterministic English alias before USDA fal
   assert.equal(queries[0], "cooked chicken breast");
   assert.equal(queries.includes("Pişmiş tavuk göğsü"), true);
 });
+
+
+test("food-name search falls back to Open Food Facts when structured USDA search has no result", async () => {
+  const usdaQueries: string[] = [];
+  const offQueries: string[] = [];
+  const offFood = {
+    ...food("OPEN_FOOD_FACTS", ""),
+    externalId: "OFF-churchkhela",
+    name: "Walnut Churchkhela",
+    displayNameTr: "Cevizli Sucuk",
+  };
+  const service = new NutritionDataService({
+    usda: {
+      isConfigured() { return true; },
+      async search(query) {
+        usdaQueries.push(query);
+        return [];
+      },
+      async searchBrandedBarcode() { return null; },
+    },
+    openFoodFacts: {
+      async search(query) {
+        offQueries.push(query);
+        return query === "walnut churchkhela" ? [offFood] : [];
+      },
+      async getByBarcode() { return null; },
+    },
+  });
+
+  const results = await service.search("Cevizli sucuk", 10);
+  assert.equal(results[0]?.externalId, "OFF-churchkhela");
+  assert.equal(usdaQueries[0], "walnut churchkhela");
+  assert.equal(offQueries[0], "walnut churchkhela");
+});

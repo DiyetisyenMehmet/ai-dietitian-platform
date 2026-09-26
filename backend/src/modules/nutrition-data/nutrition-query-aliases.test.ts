@@ -10,6 +10,11 @@ const cases: readonly [string, string][] = [
   ["su", "water"],
   ["limon suyu", "lemon juice raw"],
   ["susam", "sesame seeds"],
+  ["cevizli sucuk", "walnut churchkhela"],
+  ["üzüm pekmezi", "grape molasses"],
+  ["ceviz", "walnuts"],
+  ["nişasta", "cornstarch"],
+  ["un", "wheat flour all purpose"],
 ];
 
 for (const [input, expected] of cases) {

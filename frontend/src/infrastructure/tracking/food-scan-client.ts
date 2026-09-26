@@ -29,11 +29,12 @@ export interface FoodScanIngredientDto {
 }
 
 export interface FoodScanNutritionResolutionDto {
-  method: "VERIFIED_SOURCE" | "COMPONENT_AGGREGATE" | "AI_ESTIMATE" | "UNAVAILABLE";
+  method: "VERIFIED_SOURCE" | "COMPONENT_AGGREGATE" | "WEB_RESEARCH_ESTIMATE" | "AI_ESTIMATE" | "UNAVAILABLE";
   providers: Array<"USDA" | "OPEN_FOOD_FACTS" | "DIEWISH">;
   confidence: number;
   estimated: boolean;
   note: string;
+  sourceReferences?: string[];
 }
 
 export interface FoodScanResultDto {
