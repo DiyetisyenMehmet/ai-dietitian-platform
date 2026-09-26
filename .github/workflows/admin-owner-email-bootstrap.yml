@@ -63,7 +63,7 @@ jobs:
             --async \
             --no-source \
             --project "${PROJECT_ID}" \
-            --config .github/cloudbuild/admin-first-super-admin-staging.yaml \
+            --config .github/cloudbuild/admin-owner-verify-staging.yaml \
             --substitutions "_GIT_SHA=${GITHUB_SHA},_ADMIN_EMAIL_SHA256=${ADMIN_EMAIL_SHA256}" \
             --format='value(id)' \
             --quiet)"
