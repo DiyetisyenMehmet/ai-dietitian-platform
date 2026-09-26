@@ -1,11 +1,11 @@
 import type { FoodVisionResult } from "./types";
 
 const DETERMINISTIC_NUTRITION_NOTICE =
-  "Kalori ve besin değerleri AI tarafından üretilmez; eşleşen güvenilir besin verilerinden deterministik olarak hesaplanır.";
+  "Besin değerleri mevcut güvenilir kaynaklara göre hesaplanır.";
 const OPTIONAL_INGREDIENT_NOTICE =
-  "Görselden doğrulanamayan isteğe bağlı malzemeler, siz dahil etmedikçe toplama eklenmez.";
+  "Kesin görünmeyen malzemeler, sen eklemedikçe hesaba katılmaz.";
 const EDIBLE_WEIGHT_GUARD_NOTICE =
-  "Görsel açıklaması yenmeyen kısımları ağırlığa dahil ettiği için otomatik gram ve besin hesabı yapılmadı; yenilebilir miktarı Malzemeleri Düzenle alanından girebilirsiniz.";
+  "Fotoğrafta yenmeyen kısımlar da ağırlığa dahil göründüğü için otomatik gram hesabı yapılmadı. Yenilebilir miktarı Malzemeleri Düzenle bölümünden girebilirsin.";
 
 /**
  * Generates uncertainty copy from structured scan evidence instead of using a
@@ -19,8 +19,8 @@ export function buildFoodScanDisclaimer(vision: FoodVisionResult, edibleWeightGu
   const isSimpleSingleFood = coreIngredients.length === 1 && !hasOptionalIngredients;
 
   const uncertaintyNotice = isSimpleSingleFood
-    ? "Görsel tanıma ve yenilebilir porsiyon miktarı tahminidir. Besinin gerçek bileşimi ve yenilebilir miktarı ürüne göre değişebilir."
-    : "Görsel tanıma, porsiyon ve tarif bileşimi tahminidir. Pişirme yöntemi ile görselden kesin doğrulanamayan yağ, sos ve benzeri eklemeler sonucu değiştirebilir.";
+    ? "Görsel tanıma ve porsiyon miktarı yaklaşık olabilir. Gerçek miktar ürüne göre değişebilir."
+    : "Görsel tanıma, porsiyon ve tarif içeriği yaklaşık olabilir. Pişirme yöntemi, yağ ve sos gibi eklemeler sonucu değiştirebilir.";
 
   return [
     edibleWeightGuarded ? EDIBLE_WEIGHT_GUARD_NOTICE : null,
