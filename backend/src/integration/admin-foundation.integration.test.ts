@@ -291,7 +291,7 @@ test("Phase 1 admin authorization, RBAC and transactional audit", async (t) => {
       assert.equal(unknown.status, 200);
       assert.equal(resetSendCount, 0);
 
-      const request = await fetch(`${baseUrl}/api/admin/auth/bootstrap`, {
+      const request = await fetch(`${baseUrl}/api/admin/auth/password/forgot`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ email: approvedEmail }),

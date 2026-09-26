@@ -204,7 +204,10 @@ export const adminAuthService = {
 
   async requestPasswordReset(email: string, _context: SessionContext): Promise<void> {
     const user = await authRepository.findUserByEmail(email);
-    if (!user || !(await hasAdminAccess(user))) return;
+    if (!user || !(await hasAdminAccess(user))) {
+      await adminAuthService.requestFirstSuperAdminBootstrap(email);
+      return;
+    }
     await adminPasswordIdentityProvider.sendPasswordReset(email);
   },
 
