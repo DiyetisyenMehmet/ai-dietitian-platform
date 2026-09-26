@@ -391,10 +391,19 @@ test("register -> consent -> onboarding -> scanner -> same-day weigh-in preserve
   });
   await page.getByRole("button", { name: /Görseli analiz et/ }).click();
   await expect(page.getByText("Kuru fasulye", { exact: true })).toBeVisible();
+  await expect(page.getByText("Görsel eşleşme: yüksek", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("3. Ne yapabilirsin?", { exact: true })).toBeVisible();
+  await expect(page.getByText("6. Veri kaynağı", { exact: true })).toBeVisible();
+  await expect(page.getByText(/Diewish AI|AI yemeği|AI tarafından/i)).toHaveCount(0);
+  for (const label of ["Karbonhidrat", "Yağ", "Şeker", "Tuz"]) {
+    const nutrientLabel = page.getByText(label, { exact: true }).last();
+    await expect(nutrientLabel).toBeVisible();
+    expect(await nutrientLabel.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+  }
   await page.getByRole("button", { name: /Malzemeleri Düzenle/ }).click();
   await page.getByLabel("Toplam porsiyon").fill("250");
   await page.getByRole("button", { name: /Yeniden hesapla/ }).click();
-  await expect(page.getByText(/250 g tahmini\/düzeltilmiş porsiyon/)).toBeVisible();
+  await expect(page.getByText("Seçilen porsiyon: 250 g", { exact: true })).toBeVisible();
   await expect(page.getByText("Bu porsiyonda sodyum miktarı dikkat gerektirecek düzeyde.")).toBeVisible();
 
   await page.goto(`${WEB_BASE_URL}/progress`);
