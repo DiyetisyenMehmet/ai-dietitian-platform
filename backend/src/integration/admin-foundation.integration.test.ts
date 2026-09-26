@@ -228,6 +228,14 @@ test("Phase 1 admin authorization, RBAC and transactional audit", async (t) => {
     );
     assert.equal(downgraded.accessLevel, "LIMITED");
     assert.equal(downgraded.roles.includes(ADMIN_SYSTEM_ROLES.SUPER_ADMIN), false);
+
+    await prisma.adminUserRole.deleteMany({
+      where: { userId: inactiveBackup.id, roleId: superRole.id },
+    });
+    await prisma.user.update({
+      where: { id: inactiveBackup.id },
+      data: { isActive: false },
+    });
   });
 
   await t.test("RBAC constraints, multiple roles and permission union", async () => {
