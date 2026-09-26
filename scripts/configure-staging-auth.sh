@@ -170,12 +170,10 @@ if [[ "$(jq 'length' <<<"$region_json")" -eq 0 ]]; then
   exit 1
 fi
 
-admin_reset_callback="${ADMIN_STAGING_URL%/}/admin/reset-password"
 patch_body="$(jq -cn \
   --argjson domains "$authorized_domains" \
   --argjson regions "$region_json" \
-  --arg callback "$admin_reset_callback" \
-  '{signIn:{email:{enabled:true,passwordRequired:true},phoneNumber:{enabled:true},anonymous:{enabled:false}},authorizedDomains:$domains,smsRegionConfig:{allowlistOnly:{allowedRegions:$regions}},notification:{sendEmail:{callbackUri:$callback}}}')"
+  '{signIn:{email:{enabled:true,passwordRequired:true},phoneNumber:{enabled:true},anonymous:{enabled:false}},authorizedDomains:$domains,smsRegionConfig:{allowlistOnly:{allowedRegions:$regions}}}')"
 
 patch_file="$(mktemp)"
 patch_code="$(curl -sS -o "$patch_file" -w '%{http_code}' \
@@ -183,7 +181,7 @@ patch_code="$(curl -sS -o "$patch_file" -w '%{http_code}' \
   -H "$(auth_header)" \
   -H 'Content-Type: application/json' \
   -d "$patch_body" \
-  "https://identitytoolkit.googleapis.com/admin/v2/projects/${PROJECT_ID}/config?updateMask=signIn.email.enabled,signIn.email.passwordRequired,signIn.phoneNumber.enabled,signIn.anonymous.enabled,authorizedDomains,smsRegionConfig,notification.sendEmail.callbackUri")"
+  "https://identitytoolkit.googleapis.com/admin/v2/projects/${PROJECT_ID}/config?updateMask=signIn.email.enabled,signIn.email.passwordRequired,signIn.phoneNumber.enabled,signIn.anonymous.enabled,authorizedDomains,smsRegionConfig")"
 if [[ "$patch_code" != "200" ]]; then
   fail_from_json "$patch_file" "Could not enforce staging phone/anonymous/domain configuration."
 fi
@@ -218,7 +216,6 @@ email_enabled="$(jq -r '.signIn.email.enabled // false' "$verify_file")"
 email_password_required="$(jq -r '.signIn.email.passwordRequired // false' "$verify_file")"
 phone_enabled="$(jq -r '.signIn.phoneNumber.enabled // false' "$verify_file")"
 anonymous_enabled="$(jq -r '.signIn.anonymous.enabled // false' "$verify_file")"
-admin_callback="$(jq -r '.notification.sendEmail.callbackUri // ""' "$verify_file")"
 frontend_authorized="$(jq -r --arg host "$frontend_host" '(.authorizedDomains // []) | index($host) != null' "$verify_file")"
 canonical_authorized="$(jq -r --arg host "$canonical_frontend_host" '(.authorizedDomains // []) | index($host) != null' "$verify_file")"
 custom_authorized="$(jq -r --arg host "$custom_frontend_host" '(.authorizedDomains // []) | index($host) != null' "$verify_file")"
@@ -227,7 +224,7 @@ sms_allowed_regions="$(jq -c '(.smsRegionConfig.allowlistOnly.allowedRegions // 
 expected_sms_regions="$(jq -c 'sort | unique' <<<"$region_json")"
 rm -f "$verify_file"
 
-if [[ "$email_enabled" != "true" || "$email_password_required" != "true" || "$phone_enabled" != "true" || "$anonymous_enabled" != "false" || "$frontend_authorized" != "true" || "$canonical_authorized" != "true" || "$custom_authorized" != "true" || "$admin_authorized" != "true" || "$admin_callback" != "$admin_reset_callback" || "$sms_allowed_regions" != "$expected_sms_regions" ]]; then
+if [[ "$email_enabled" != "true" || "$email_password_required" != "true" || "$phone_enabled" != "true" || "$anonymous_enabled" != "false" || "$frontend_authorized" != "true" || "$canonical_authorized" != "true" || "$custom_authorized" != "true" || "$admin_authorized" != "true" || "$sms_allowed_regions" != "$expected_sms_regions" ]]; then
   echo "Staging auth contract verification failed after update." >&2
   exit 1
 fi
@@ -246,5 +243,5 @@ fi
   echo "CUSTOM_FRONTEND_URL=https://${custom_frontend_host}"
 } >> "$GITHUB_ENV"
 
-echo "Staging Authentication contract verified: email/password + Google + phone enabled, anonymous disabled, admin reset callback and authorized domains enforced, SMS allowlist enforced."
+echo "Staging Authentication contract verified: email/password + Google + phone enabled, anonymous disabled, authorized domains enforced, SMS allowlist enforced. Password reset email uses the provider-managed action handler."
 echo "Staging phone reCAPTCHA diagnostic: enforcement=${recaptcha_phone_enforcement}, smsTollFraudProtection=${recaptcha_sms_toll_fraud}, tollFraudManagedRules=${recaptcha_toll_fraud_rules}, smsBotScore=${recaptcha_sms_bot_score}."
