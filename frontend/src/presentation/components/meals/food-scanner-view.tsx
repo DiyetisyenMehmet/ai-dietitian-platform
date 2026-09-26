@@ -287,6 +287,8 @@ export function FoodScannerView() {
     }
   }, [analysis, loggingMeal, mealType]);
 
+  const source = analysis ? sourceSummary(analysis) : null;
+
   return (
     <div className="space-y-5">
       <section className="rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/10 via-accent to-background p-5 shadow-card">
@@ -395,16 +397,14 @@ export function FoodScannerView() {
           <CardContent className="space-y-6 p-5">
             <section>
               <p className="text-xs font-semibold uppercase tracking-wide text-primary">1. Bu ne?</p>
-              <div className="mt-1 flex items-start justify-between gap-3">
-                <div>
-                  <h3 className="text-xl font-bold">{analysis.dishName}</h3>
-                  <p className="text-sm text-muted-foreground">
-                    {analysis.estimatedPortion}
-                    {analysis.estimatedGrams ? ` · yaklaşık ${analysis.estimatedGrams} g` : ""}
-                  </p>
-                </div>
-                <span className="rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-600">
-                  Görsel güveni %{Math.round(analysis.confidence)}
+              <div className="mt-1">
+                <h3 className="break-words text-xl font-bold">{analysis.dishName}</h3>
+                <p className="mt-0.5 text-sm text-muted-foreground">
+                  {analysis.estimatedPortion}
+                  {analysis.estimatedGrams ? ` · yaklaşık ${analysis.estimatedGrams} g` : ""}
+                </p>
+                <span className="mt-2 inline-flex rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                  Görsel eşleşme: {visualConfidenceLabel(analysis.confidence)}
                 </span>
               </div>
             </section>
@@ -422,8 +422,38 @@ export function FoodScannerView() {
               <div className="mt-3">
                 <NutritionFactsGrid
                   portion={analysis.totals}
-                  portionLabel={`${analysis.estimatedGrams ?? targetGrams} g tahmini/düzeltilmiş porsiyon`}
+                  portionLabel={portionDisplayLabel(analysis, targetGrams)}
                 />
+              </div>
+            </section>
+
+            <section>
+              <p className="text-xs font-semibold uppercase tracking-wide text-primary">3. Ne yapabilirsin?</p>
+              <div className="mt-2 grid gap-2">
+                <select
+                  value={mealType}
+                  onChange={(event) => setMealType(event.target.value as MealTypeDto)}
+                  className="min-h-11 w-full rounded-xl border bg-background px-3 py-2 text-sm"
+                  aria-label="Öğün seçimi"
+                >
+                  {MEAL_TYPES.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+                <Button
+                  className="min-h-11 w-full"
+                  onClick={() => void onLogMeal()}
+                  isLoading={loggingMeal}
+                  aria-label="Seçilen porsiyonu öğüne ekle"
+                >
+                  <Utensils /> Öğüne ekle
+                </Button>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button asChild variant="outline" className="min-h-11">
+                    <Link href={coachHref(analysis)}><MessageCircle /> Diewish Koç&apos;a sor</Link>
+                  </Button>
+                  <Button asChild variant="outline" className="min-h-11">
+                    <Link href="/meals/add"><Plus /> Öğünü elle ekle</Link>
+                  </Button>
+                </div>
               </div>
             </section>
 
@@ -443,7 +473,7 @@ export function FoodScannerView() {
                       className="w-28 rounded-lg border px-2 py-1.5 text-sm"
                     />
                     <span className="text-sm">g</span>
-                    <span className="text-xs text-muted-foreground">Malzeme gramları sunucuda oransal ve deterministik ölçeklenir.</span>
+                    <span className="text-xs text-muted-foreground">Malzeme miktarları toplam porsiyona göre birlikte güncellenir.</span>
                   </div>
                 </div>
               )}
@@ -479,20 +509,14 @@ export function FoodScannerView() {
                     </div>
                   );
                 }
-                const matched = Boolean(display?.matchedFood);
-                const estimated = analysis.nutritionResolution?.method === "AI_ESTIMATE";
                 return (
-                  <div key={`${display?.name ?? index}`} className="flex items-center justify-between gap-3 rounded-xl border p-3 text-sm">
-                    <div>
-                      <p className="font-semibold">{display?.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {display?.estimatedGrams ? `~${display.estimatedGrams} g` : "Miktar belirsiz"} · görsel güveni %{Math.round(display?.confidence ?? 0)}
-                        {display?.optional ? " · muhtemel" : ""}
-                      </p>
+                  <div key={`${display?.name ?? index}`} className="rounded-xl border p-3 text-sm">
+                    <p className="break-words font-semibold">{display?.name}</p>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                      <span>{display?.estimatedGrams ? `~${display.estimatedGrams} g` : "Miktar belirsiz"}</span>
+                      {display?.optional && <span>Muhtemel içerik</span>}
+                      <span>Görsel eşleşme: {visualConfidenceLabel(display?.confidence ?? 0)}</span>
                     </div>
-                    <span className={`text-xs font-semibold ${matched ? "text-emerald-600" : estimated ? "text-violet-600" : "text-muted-foreground"}`}>
-                      {display?.matchedFood ? `${display.matchedFood.provider} ile eşleşti` : unmatchedIngredientLabel(analysis)}
-                    </span>
                   </div>
                 );
               })}
@@ -513,7 +537,7 @@ export function FoodScannerView() {
             </section>
 
             <section>
-              <p className="text-xs font-semibold uppercase tracking-wide text-primary">3. Senin İçin</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-primary">4. Senin İçin</p>
               {personalizing && <p className="mt-2 text-sm text-muted-foreground">Aktif planın ve bugünkü kayıtlarınla karşılaştırılıyor…</p>}
               {!personalizing && personalization?.metrics && (
                 <div className="mt-2 space-y-2">
@@ -529,13 +553,13 @@ export function FoodScannerView() {
               )}
               {!personalizing && !personalization && (
                 <p className="mt-2 text-sm text-muted-foreground">
-                  Kişisel değerlendirme şu anda alınamadı; yukarıdaki besin çözümü bundan etkilenmez.
+                  Kişisel değerlendirme şu anda alınamadı; yukarıdaki besin değerleri bundan etkilenmez.
                 </p>
               )}
             </section>
 
             <section>
-              <p className="text-xs font-semibold uppercase tracking-wide text-primary">4. Dikkat edilebilecekler</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-primary">5. Dikkat edilebilecekler</p>
               <div className="mt-2">
                 <NutritionAttentionSection
                   flags={personalization?.attentionFlags ?? []}
@@ -545,62 +569,30 @@ export function FoodScannerView() {
             </section>
 
             <section>
-              <p className="text-xs font-semibold uppercase tracking-wide text-primary">5. Kaynak ve belirsizlik</p>
-              {analysis.nutritionResolution && (
-                <div className={`mt-2 rounded-xl border p-3 text-xs ${analysis.nutritionResolution.method === "AI_ESTIMATE" ? "border-violet-500/30 bg-violet-500/5" : "bg-muted/20"}`}>
-                  <p className="font-semibold">
-                    {analysis.nutritionResolution.method === "AI_ESTIMATE" ? "Diewish AI tahmini" : "Besin veri çözümü"}
-                  </p>
-                  <p className="mt-1 text-muted-foreground">{analysis.nutritionResolution.note}</p>
-                </div>
-              )}
-              <div className="mt-2 space-y-2">
-                {analysis.ingredients.filter((item) => item.included).map((item) => (
-                  <div key={`${item.name}-${item.matchedFood?.externalId ?? "unmatched"}`} className="rounded-xl border p-3 text-xs">
-                    <p className="font-semibold">{item.name}</p>
-                    <p className="text-muted-foreground">
-                      Görsel tahmini: %{Math.round(item.confidence)} · {item.optional ? "muhtemel içerik" : "ana içerik adayı"}
-                    </p>
-                    <p className="text-muted-foreground">
-                      Besin çözümü: {item.matchedFood ? `${item.matchedFood.provider} (${item.matchedFood.displayNameTr})` : unmatchedIngredientSource(analysis)}
-                    </p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-primary">6. Veri kaynağı</p>
+              <div className="mt-2 rounded-2xl border bg-muted/15 p-4">
+                <div className="flex items-start gap-3">
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary" aria-hidden="true">
+                    <Database className="size-4.5" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="font-semibold">{source?.title}</p>
+                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{source?.detail}</p>
                   </div>
-                ))}
-              </div>
-              <div className="mt-2 flex gap-2 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-muted-foreground">
-                <AlertCircle className="size-4 shrink-0 text-amber-600" />
-                <p>{analysis.disclaimer}</p>
-              </div>
-            </section>
-
-            <section>
-              <p className="text-xs font-semibold uppercase tracking-wide text-primary">6. Ne yapabilirsin?</p>
-              <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                <div className="flex gap-2">
-                  <select
-                    value={mealType}
-                    onChange={(event) => setMealType(event.target.value as MealTypeDto)}
-                    className="min-w-0 flex-1 rounded-xl border bg-background px-3 py-2 text-sm"
-                  >
-                    {MEAL_TYPES.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                  </select>
-                  <Button onClick={() => void onLogMeal()} isLoading={loggingMeal}><Utensils /> Öğüne ekle</Button>
                 </div>
-                <Button asChild variant="outline">
-                  <Link href={coachHref(analysis)}><MessageCircle /> Diewish Koç&apos;a sor</Link>
-                </Button>
+                <details className="group mt-3 border-t pt-3">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-xs font-semibold text-foreground">
+                    Hesaplama notu
+                    <ChevronDown className="size-4 text-muted-foreground transition-transform group-open:rotate-180" aria-hidden="true" />
+                  </summary>
+                  <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{analysis.disclaimer}</p>
+                </details>
               </div>
             </section>
           </CardContent>
         </Card>
       )}
 
-      <Card>
-        <CardContent className="flex flex-col items-center gap-3 p-5 text-center">
-          <p className="text-sm text-muted-foreground">İstersen öğününü tamamen elle de girebilirsin.</p>
-          <Button asChild variant="outline" className="w-full"><Link href="/meals/add"><Plus /> Öğünü elle ekle</Link></Button>
-        </CardContent>
-      </Card>
     </div>
   );
 }
