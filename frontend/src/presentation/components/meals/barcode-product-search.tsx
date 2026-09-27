@@ -195,7 +195,7 @@ export function BarcodeProductSearch({
           )}
 
           <p className="mt-2 px-1 text-[11px] leading-relaxed text-muted-foreground">
-            Yazarken yalnız Diewish'in kayıtlı ürün kataloğu aranır; dış kaynaklara her tuşta sorgu gönderilmez.
+            Yazarken yalnız Diewish’in kayıtlı ürün kataloğu aranır; dış kaynaklara her tuşta sorgu gönderilmez.
           </p>
         </div>
       )}
