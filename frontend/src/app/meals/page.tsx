@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { CalendarDays, ChevronRight, Plus, ScanLine } from "lucide-react";
+import { CalendarDays, ChevronRight, Clock3, Plus, ScanLine } from "lucide-react";
 
 import { nutritionPlanStore, useNutritionPlan } from "@/application/health/nutrition-plan-store";
 import { useMeals, computeTotals } from "@/application/meals/meals-store";
@@ -65,6 +65,22 @@ export default function MealsPage() {
                 : hydrated
                   ? "Hedeflerine, tercihlerine ve alerjilerine göre kişisel plan oluştur"
                   : "Kişisel planın yükleniyor…"}
+            </span>
+          </span>
+          <ChevronRight className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+        </Link>
+
+        <Link
+          href="/meals/recent"
+          className="flex items-center gap-3 rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 via-background to-background p-4 shadow-card transition-shadow hover:shadow-card-hover"
+        >
+          <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/15 text-primary">
+            <Clock3 className="size-6" aria-hidden="true" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold">Son Yediklerim</span>
+            <span className="block text-xs text-muted-foreground">
+              Öğüne eklediğin gerçek tüketim kayıtlarını tarih ve öğün türüne göre gör
             </span>
           </span>
           <ChevronRight className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
