@@ -5,6 +5,7 @@ import { ApiError } from "../../utils/api-error";
 import { calculatePortion } from "../nutrition-data/nutrition-calculator";
 import { nutritionDataService } from "../nutrition-data/nutrition-data.service";
 import { selectBestNutritionMatch, type NutritionMatch } from "../nutrition-data/nutrition-match";
+import { expandNutritionProviderQueries } from "../nutrition-data/nutrition-query-aliases";
 import { EMPTY_NUTRIENTS, type CanonicalFood, type NutrientValues } from "../nutrition-data/nutrition-data.types";
 import { FOOD_IMAGE_MIN_CONFIDENCE, FOOD_IMAGE_REJECTION_MESSAGE } from "./constants";
 import { buildFoodScanDisclaimer } from "./food-scan-disclaimer";
@@ -139,12 +140,17 @@ function includedByDefault(candidate: FoodVisionIngredientCandidate): boolean {
 }
 
 async function bestFoodMatch(service: NutritionLookupPort, name: string): Promise<NutritionMatch | null> {
-  try {
-    const candidates = await service.search(name, NUTRITION_MATCH_CANDIDATES);
-    return selectBestNutritionMatch(name, candidates);
-  } catch {
-    return null;
+  const queries = [...new Set(expandNutritionProviderQueries(name))];
+  for (const query of queries) {
+    try {
+      const candidates = await service.search(query, NUTRITION_MATCH_CANDIDATES);
+      const match = selectBestNutritionMatch(query, candidates);
+      if (match) return match;
+    } catch {
+      // A single provider/query miss must not stop the remaining safe aliases.
+    }
   }
+  return null;
 }
 
 function boundedMatchConfidence(match: NutritionMatch): number {

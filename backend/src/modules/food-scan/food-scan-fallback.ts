@@ -23,6 +23,55 @@ function hasCoreNutrition(nutrients: NutrientValues): boolean {
     && nutrients.fatG !== null;
 }
 
+function normalizedFoodName(value: string): string {
+  return value.trim().toLocaleLowerCase("tr-TR");
+}
+
+function isDirectDishMatch(analysis: FoodScanResult): boolean {
+  return analysis.ingredients.some(
+    (item) =>
+      item.included &&
+      item.matchedFood &&
+      item.nutrients &&
+      hasCoreNutrition(item.nutrients) &&
+      normalizedFoodName(item.name) === normalizedFoodName(analysis.dishName),
+  );
+}
+
+function hasSufficientDeterministicCoverage(analysis: FoodScanResult): boolean {
+  if (!hasCoreNutrition(analysis.totals)) return false;
+  if (isDirectDishMatch(analysis)) return true;
+
+  const included = analysis.ingredients.filter((item) => item.included);
+  if (included.length === 0) return false;
+
+  const totalGrams = included.reduce(
+    (sum, item) => sum + (item.estimatedGrams && item.estimatedGrams > 0 ? item.estimatedGrams : 0),
+    0,
+  );
+  if (totalGrams > 0) {
+    const matchedCoreGrams = included.reduce(
+      (sum, item) =>
+        sum +
+        (item.matchedFood &&
+        item.nutrients &&
+        hasCoreNutrition(item.nutrients) &&
+        item.estimatedGrams &&
+        item.estimatedGrams > 0
+          ? item.estimatedGrams
+          : 0),
+      0,
+    );
+    const unmatchedGrams = Math.max(0, totalGrams - matchedCoreGrams);
+    const coverage = matchedCoreGrams / totalGrams;
+    return coverage >= 0.97 && unmatchedGrams <= Math.max(5, totalGrams * 0.03);
+  }
+
+  return included.every(
+    (item) => item.matchedFood && item.nutrients && hasCoreNutrition(item.nutrients),
+  );
+}
+
 function boundedPortion(analysis: FoodScanResult): number {
   if (analysis.estimatedGrams && analysis.estimatedGrams > 0) return analysis.estimatedGrams;
   const componentTotal = analysis.ingredients
@@ -47,7 +96,7 @@ function verifiedResolution(analysis: FoodScanResult, partial = false): FoodScan
       confidence,
       estimated: !directDishMatch,
       note: partial
-        ? "Mevcut güvenilir kaynak verileri korundu; temel makroların tamamı kaynakta olmadığı için bazı alanlar yaklaşık analiz dışında bırakıldı."
+        ? "Kaynak verisi kısmi kaldı; bazı önemli malzemeler eşleşmediği için gösterilen toplam yalnız eşleşen malzemeleri kapsıyor."
         : directDishMatch
           ? "Besin değerleri lisansı uygun yapılandırılmış bir kaynaktan eşleştirildi."
           : "Besin değerleri eşleşen tarif bileşenlerinin güvenilir kaynak verileri kullanılarak hesaplandı.",
@@ -64,7 +113,7 @@ export async function applyFoodNutritionFallback(
   analysis: FoodScanResult,
   estimator: FoodNutritionEstimator = estimateFoodNutritionWithAi,
 ): Promise<FoodScanResult> {
-  if (hasCoreNutrition(analysis.totals)) return verifiedResolution(analysis);
+  if (hasSufficientDeterministicCoverage(analysis)) return verifiedResolution(analysis);
 
   const estimate = await estimator(analysis);
   if (estimate) {

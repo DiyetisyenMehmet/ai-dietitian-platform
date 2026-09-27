@@ -79,6 +79,9 @@ function resolutionSummary(analysis: FoodScanResultDto): string {
     return "Besin değerleri için yeterli kaynak bulunamadı.";
   }
   if (method === "COMPONENT_AGGREGATE") {
+    if (/kısmi|eşleşmedi/i.test(analysis.nutritionResolution?.note ?? "")) {
+      return "Bazı malzemeler kaynakla eşleşmedi; gösterilen değerler yalnız eşleşen malzemeleri kapsıyor.";
+    }
     return "Besin değerleri eşleşen malzemelerin kaynak verileriyle hesaplandı.";
   }
   if (method === "VERIFIED_SOURCE") {
@@ -119,7 +122,7 @@ function sourceSummary(analysis: FoodScanResultDto): { title: string; detail: st
     title: resolution.method === "VERIFIED_SOURCE" ? "Doğrulanmış kaynak" : "Kaynak destekli hesaplama",
     detail: resolution.method === "VERIFIED_SOURCE"
       ? `Besin değerleri ${providerText} ile eşleştirildi.`
-      : `Besin değerleri eşleşen malzemeler için ${providerText} kullanılarak hesaplandı.`,
+      : `${resolution.note} Kaynaklar: ${providerText}.`,
   };
 }
 
@@ -146,6 +149,12 @@ function analysisToast(analysis: FoodScanResultDto): string {
   }
   if (analysis.nutritionResolution?.method === "UNAVAILABLE") {
     return "Yemek tanındı; gıda adını ve porsiyonu doğrulayarak analizi tamamlayabilirsin.";
+  }
+  if (
+    analysis.nutritionResolution?.method === "COMPONENT_AGGREGATE" &&
+    /kısmi|eşleşmedi/i.test(analysis.nutritionResolution.note)
+  ) {
+    return "Yemek tanındı; bazı malzemeler eşleşmediği için gösterilen değerler kısmi.";
   }
   return "Yemek tanındı; besin değerleri güvenilir kaynaklarla hesaplandı.";
 }

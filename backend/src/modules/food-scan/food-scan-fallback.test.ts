@@ -63,19 +63,21 @@ test("recognized fig jam receives clearly labeled AI nutrition only after determ
   assert.match(result.disclaimer, /Diewish/);
 });
 
-test("complete deterministic core nutrition suppresses the AI estimator", async () => {
+test("complete deterministic ingredient coverage suppresses the AI estimator", async () => {
   const base = emptyResult();
   base.totals.energyKcal = 300;
   base.totals.proteinG = 1;
   base.totals.carbohydratesG = 72;
   base.totals.fatG = 0.5;
-  base.ingredients[0]!.matchedFood = {
-    externalId: "usda-fig",
-    provider: "USDA",
-    displayNameTr: "İncir",
-    confidence: 0.9,
-  };
-  base.ingredients[0]!.nutrients = { ...base.totals };
+  for (const [index, externalId] of ["usda-fig", "usda-sugar"].entries()) {
+    base.ingredients[index]!.matchedFood = {
+      externalId,
+      provider: "USDA",
+      displayNameTr: base.ingredients[index]!.name,
+      confidence: 0.9,
+    };
+    base.ingredients[index]!.nutrients = { ...base.totals };
+  }
   let called = 0;
   const result = await applyFoodNutritionFallback(base, async () => {
     called += 1;
@@ -175,4 +177,90 @@ test("web-grounded nutrition fallback is labeled separately and preserves resear
   ]);
   assert.match(result.disclaimer, /web araştırması/i);
   assert.equal(result.totals.energyKcal, 520);
+});
+
+
+test("complete-looking macros do not hide a missing high-weight ingredient", async () => {
+  const base = emptyResult();
+  base.dishName = "Cevizli Sucuk";
+  base.estimatedGrams = 380;
+  base.ingredients = [
+    {
+      name: "ceviz",
+      estimatedGrams: 150,
+      confidence: 95,
+      optional: false,
+      included: true,
+      matchedFood: {
+        externalId: "usda-walnut",
+        provider: "USDA",
+        displayNameTr: "Ceviz",
+        confidence: 0.9,
+      },
+      nutrients: {
+        energyKcal: 981,
+        proteinG: 22.8,
+        carbohydratesG: 20.6,
+        fatG: 97.8,
+        saturatedFatG: 9.2,
+        sugarsG: 3.9,
+        fiberG: 10.1,
+        sodiumMg: 3,
+        saltG: 0.01,
+      },
+    },
+    {
+      name: "üzüm pekmezi",
+      estimatedGrams: 180,
+      confidence: 95,
+      optional: false,
+      included: true,
+      matchedFood: null,
+      nutrients: null,
+    },
+    {
+      name: "nişasta",
+      estimatedGrams: 50,
+      confidence: 90,
+      optional: false,
+      included: true,
+      matchedFood: null,
+      nutrients: null,
+    },
+  ];
+  base.totals = { ...base.ingredients[0]!.nutrients! };
+
+  let called = 0;
+  const result = await applyFoodNutritionFallback(base, async () => {
+    called += 1;
+    return {
+      ...figJamEstimate,
+      researchMode: "WEB_GROUNDED",
+      sourceReferences: ["https://example.com/churchkhela"],
+    };
+  });
+
+  assert.equal(called, 1);
+  assert.equal(result.nutritionResolution?.method, "WEB_RESEARCH_ESTIMATE");
+  assert.equal(result.estimatedGrams, 380);
+  assert.notEqual(result.totals.energyKcal, base.totals.energyKcal);
+});
+
+test("failed fallback labels incomplete component coverage instead of presenting it as complete", async () => {
+  const base = emptyResult();
+  base.totals.energyKcal = 300;
+  base.totals.proteinG = 1;
+  base.totals.carbohydratesG = 72;
+  base.totals.fatG = 0.5;
+  base.ingredients[0]!.matchedFood = {
+    externalId: "partial-source",
+    provider: "USDA",
+    displayNameTr: "İncir",
+    confidence: 0.8,
+  };
+  base.ingredients[0]!.nutrients = { ...base.totals };
+
+  const result = await applyFoodNutritionFallback(base, async () => null);
+  assert.equal(result.nutritionResolution?.method, "COMPONENT_AGGREGATE");
+  assert.match(result.nutritionResolution?.note ?? "", /kısmi|eşleşmedi/i);
 });

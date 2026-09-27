@@ -22,6 +22,7 @@ const TURKISH_PROVIDER_PHRASES: readonly [string, string][] = [
   ["cevizli sucuk", "walnut churchkhela"],
   ["cevizli kome", "walnut churchkhela"],
   ["uzum pekmezi", "grape molasses"],
+  ["bugday unu", "wheat flour all purpose"],
   ["misir nisastasi", "cornstarch"],
   ["bugday nisastasi", "wheat starch"],
   ["ceviz ici", "walnuts"],
@@ -92,6 +93,12 @@ const TURKISH_PROVIDER_PHRASES: readonly [string, string][] = [
   ["cig", "raw"],
 ] as const;
 
+const SAFE_PROVIDER_FALLBACKS: Readonly<Record<string, readonly string[]>> = {
+  "uzum pekmezi": ["molasses"],
+  "cevizli sucuk": ["churchkhela"],
+  "cevizli kome": ["churchkhela"],
+};
+
 /**
  * Provider queries are facts-only food-name lookups. This normalization never
  * receives profile, health, allergy or tracking data.
@@ -141,6 +148,7 @@ export function expandNutritionProviderQueries(input: string): string[] {
   if (translated && translated.toLocaleLowerCase("en-US") !== original.toLocaleLowerCase("en-US")) {
     queries.push(translated);
   }
+  queries.push(...(SAFE_PROVIDER_FALLBACKS[normalizeTurkishSearch(original)] ?? []));
   queries.push(original);
-  return [...new Set(queries)].slice(0, 2);
+  return [...new Set(queries)].slice(0, 4);
 }

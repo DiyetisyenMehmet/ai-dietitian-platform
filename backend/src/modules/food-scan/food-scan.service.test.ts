@@ -194,3 +194,25 @@ test("zero and extreme serving corrections are rejected", async () => {
   await assert.rejects(service.recalculate([{ name: "fasulye", grams: 100, included: true }], 0));
   await assert.rejects(service.recalculate([{ name: "fasulye", grams: 100, included: true }], 5001));
 });
+
+
+test("grape molasses retries a safe generic provider alias before giving up", async () => {
+  const queries: string[] = [];
+  const aliasLookup: NutritionLookupPort = {
+    async search(query) {
+      queries.push(query);
+      if (query === "molasses") {
+        return [food("Molasses", 290, 0, 75, 0.1)];
+      }
+      return [];
+    },
+  };
+  const service = new FoodScanService(aliasLookup);
+  const result = await service.recalculate([
+    { name: "üzüm pekmezi", grams: 100, included: true },
+  ]);
+  assert.equal(result.ingredients[0]?.matchedFood?.provider, "USDA");
+  assert.equal(result.totals.carbohydratesG, 75);
+  assert.equal(queries.includes("grape molasses"), true);
+  assert.equal(queries.includes("molasses"), true);
+});
