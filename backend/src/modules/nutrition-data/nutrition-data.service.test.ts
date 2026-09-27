@@ -311,3 +311,114 @@ test("general food search reserves room for CNF instead of letting USDA crowd ou
   assert.ok(results.some((item) => item.provider === "CNF"));
   assert.ok(calls.some((call) => call.startsWith("CNF:")));
 });
+
+
+test("fresh Diewish nutrition cache is used before any external provider", async () => {
+  let providerCalls = 0;
+  const cached = {
+    ...food("USDA", ""),
+    externalId: "cached-walnut",
+    name: "Walnuts",
+    displayNameTr: "Ceviz",
+  };
+  const persistence = {
+    async searchLocal() { return [cached]; },
+    async searchLocalStale() { return []; },
+  } as unknown as NutritionDataRepository;
+  const service = new NutritionDataService({
+    usda: {
+      isConfigured() { return true; },
+      async search() { providerCalls += 1; return []; },
+      async searchBrandedBarcode() { return null; },
+    },
+    cnf: {
+      async search() { providerCalls += 1; return []; },
+    },
+    openFoodFacts: {
+      async search() { providerCalls += 1; return []; },
+      async getByBarcode() { return null; },
+    },
+  }, persistence);
+
+  const results = await service.search("ceviz", 5);
+  assert.equal(results[0]?.externalId, "cached-walnut");
+  assert.equal(providerCalls, 0);
+});
+
+test("expired verified Diewish cache keeps food search working when live sources have no usable result", async () => {
+  const stale = {
+    ...food("CNF", ""),
+    externalId: "stale-walnut",
+    name: "Walnuts",
+    displayNameTr: "Ceviz",
+    provenance: {
+      ...food("CNF", "").provenance,
+      stale: true,
+    },
+  };
+  const persistence = {
+    async searchLocal() { return []; },
+    async searchLocalStale() { return [stale]; },
+  } as unknown as NutritionDataRepository;
+  const service = new NutritionDataService({
+    usda: {
+      isConfigured() { return false; },
+      async search() { return []; },
+      async searchBrandedBarcode() { return null; },
+    },
+    cnf: {
+      async search() { return []; },
+    },
+    openFoodFacts: {
+      async search() { return []; },
+      async getByBarcode() { return null; },
+    },
+  }, persistence);
+
+  const results = await service.search("ceviz", 5);
+  assert.equal(results[0]?.externalId, "stale-walnut");
+  assert.equal(results[0]?.provenance.stale, true);
+});
+
+test("provider discovery stores only relevant food knowledge and remembers the original Turkish query", async () => {
+  const saved: CanonicalFood[] = [];
+  const aliases: Array<{ query: string; externalId: string; confidence: number }> = [];
+  const walnut = {
+    ...food("USDA", ""),
+    externalId: "USDA-walnut",
+    name: "Walnuts",
+    displayNameTr: "Ceviz",
+  };
+  const irrelevant = {
+    ...food("USDA", ""),
+    externalId: "USDA-salmon",
+    name: "Salmon, cooked",
+    displayNameTr: "Somon",
+  };
+  const persistence = {
+    async searchLocal() { return []; },
+    async searchLocalStale() { return []; },
+    async upsertFood(value: CanonicalFood) { saved.push(value); },
+    async rememberSearchAlias(query: string, value: CanonicalFood, confidence: number) {
+      aliases.push({ query, externalId: value.externalId, confidence });
+    },
+  } as unknown as NutritionDataRepository;
+  const service = new NutritionDataService({
+    usda: {
+      isConfigured() { return true; },
+      async search() { return [walnut, irrelevant]; },
+      async searchBrandedBarcode() { return null; },
+    },
+    openFoodFacts: {
+      async search() { return []; },
+      async getByBarcode() { return null; },
+    },
+  }, persistence);
+
+  await service.search("ceviz", 5);
+  assert.deepEqual(saved.map((item) => item.externalId), ["USDA-walnut"]);
+  assert.equal(aliases.length, 1);
+  assert.equal(aliases[0]?.query, "ceviz");
+  assert.equal(aliases[0]?.externalId, "USDA-walnut");
+  assert.ok((aliases[0]?.confidence ?? 0) >= 0.7);
+});

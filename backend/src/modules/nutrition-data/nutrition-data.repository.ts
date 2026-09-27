@@ -171,6 +171,60 @@ export const nutritionDataRepository = {
     return rows.map((row) => hydrateFood(row, false)).filter((food): food is CanonicalFood => food !== null);
   },
 
+  /**
+   * Expired provider records are retained as Diewish's resilience layer.
+   * They are never presented as fresh facts: provenance.stale is always true.
+   */
+  async searchLocalStale(query: string, limit: number, now = new Date()): Promise<CanonicalFood[]> {
+    const normalized = normalizeAlias(query);
+    if (!normalized) return [];
+    const pattern = `%${normalized}%`;
+    const rows = await prisma.$queryRaw<Array<FoodRow>>`
+      SELECT ranked.payload, ranked.expires_at, ranked.last_validated_at, ranked.payload_hash
+      FROM (
+        SELECT DISTINCT ON (f.provider, f.external_id)
+          f.provider,
+          f.external_id,
+          f.payload,
+          f.retrieved_at,
+          f.expires_at,
+          f.last_validated_at,
+          f.payload_hash
+        FROM nutrition_foods f
+        LEFT JOIN nutrition_food_aliases a
+          ON a.provider = f.provider AND a.external_id = f.external_id
+        WHERE f.expires_at <= ${now}
+          AND (
+            LOWER(f.display_name_tr) LIKE ${pattern}
+            OR LOWER(f.name) LIKE ${pattern}
+            OR a.normalized_alias LIKE ${pattern}
+          )
+        ORDER BY f.provider, f.external_id, COALESCE(f.last_validated_at, f.retrieved_at) DESC
+      ) ranked
+      ORDER BY COALESCE(ranked.last_validated_at, ranked.retrieved_at) DESC
+      LIMIT ${limit}
+    `;
+    return rows.map((row) => hydrateFood(row, true)).filter((food): food is CanonicalFood => food !== null);
+  },
+
+  /**
+   * Remembers a user-facing search term only when the service has already
+   * selected a sufficiently relevant verified provider record.
+   */
+  async rememberSearchAlias(query: string, food: CanonicalFood, confidence: number): Promise<void> {
+    const alias = query.trim().slice(0, 120);
+    const normalized = normalizeAlias(alias);
+    if (!normalized) return;
+    const boundedConfidence = Math.max(0, Math.min(1, confidence));
+    await prisma.$executeRaw`
+      INSERT INTO nutrition_food_aliases (alias, normalized_alias, provider, external_id, confidence)
+      VALUES (${alias}, ${normalized}, ${food.provider}, ${food.externalId}, ${boundedConfidence})
+      ON CONFLICT (normalized_alias, provider, external_id) DO UPDATE SET
+        alias = EXCLUDED.alias,
+        confidence = GREATEST(nutrition_food_aliases.confidence, EXCLUDED.confidence)
+    `;
+  },
+
   async upsertFood(food: CanonicalFood, expiresAt: Date): Promise<void> {
     const validatedAt = new Date();
     const enriched: CanonicalFood = {

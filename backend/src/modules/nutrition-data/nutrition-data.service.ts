@@ -9,6 +9,7 @@ import {
   type PhotoScanHistoryInput,
 } from "./nutrition-data.repository";
 import type { CanonicalFood } from "./nutrition-data.types";
+import { rankNutritionMatches } from "./nutrition-match";
 import { expandNutritionProviderQueries } from "./nutrition-query-aliases";
 import { canadianNutrientFileProvider } from "./providers/cnf.provider";
 import { openFoodFactsProvider } from "./providers/open-food-facts.provider";
@@ -94,12 +95,18 @@ export class NutritionDataService {
     const cached = this.searchCache.lookup(key);
     if (cached.hit) return cached.value ?? [];
 
+    let staleLocal: CanonicalFood[] = [];
     if (this.persistence) {
       const local = await this.persistence.searchLocal(query, boundedLimit);
       if (local.length > 0) {
         this.searchCache.set(key, local, 15 * 60 * 1000);
+        logger.info(
+          { event: "nutrition_search_cache_hit", layer: "database", count: local.length },
+          "Nutrition search served from Diewish cache",
+        );
         return local;
       }
+      staleLocal = await this.persistence.searchLocalStale(query, boundedLimit);
     }
 
     const collected: CanonicalFood[] = [];
@@ -179,8 +186,27 @@ export class NutritionDataService {
     }
 
     const foods = uniqueFoods(collected, boundedLimit);
-    if (foods.length === 0 && errors.length > 0) {
-      throw providerError("Besin veri kaynaklarına şu anda ulaşılamıyor.", errors.join("; "));
+    if (foods.length === 0) {
+      if (staleLocal.length > 0) {
+        this.searchCache.set(key, staleLocal, 5 * 60 * 1000);
+        logger.warn(
+          {
+            event: "nutrition_search_stale_fallback",
+            count: staleLocal.length,
+            providerErrors: errors.length,
+          },
+          "Nutrition search served from retained Diewish cache",
+        );
+        return staleLocal;
+      }
+      if (errors.length > 0) {
+        throw providerError("Besin veri kaynaklarına şu anda ulaşılamıyor.", errors.join("; "));
+      }
+
+      // Do not keep an empty provider result for hours. A short negative cache
+      // prevents request storms while still allowing newly-added foods to appear.
+      this.searchCache.set(key, [], 10 * 60 * 1000);
+      return [];
     }
 
     const searchTtlHours = foods.reduce(
@@ -188,8 +214,24 @@ export class NutritionDataService {
       env.USDA_CACHE_TTL_HOURS,
     );
     this.searchCache.set(key, foods, searchTtlHours * 60 * 60 * 1000);
+
     if (this.persistence) {
-      await Promise.all(foods.map((food) => this.persistence!.upsertFood(food, expiresAt(food))));
+      // Persist only relevant candidates. This keeps Diewish resilient without
+      // turning broad provider search noise into an ever-growing data dump.
+      const ranked = rankNutritionMatches(query, foods);
+      const persistable = ranked.slice(0, Math.min(5, boundedLimit));
+      await Promise.all(
+        persistable.map((match) => this.persistence!.upsertFood(match.food, expiresAt(match.food))),
+      );
+
+      const best = persistable[0];
+      if (best && best.relevance >= 0.72 && best.food.provenance.confidence >= 0.7) {
+        await this.persistence.rememberSearchAlias(
+          query,
+          best.food,
+          Math.min(best.relevance, best.food.provenance.confidence),
+        );
+      }
     }
     return foods;
   }
