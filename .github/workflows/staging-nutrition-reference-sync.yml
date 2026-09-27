@@ -102,51 +102,44 @@ jobs:
           gcloud secrets describe "$DIRECT_DATABASE_SECRET_NAME" \
             --project "$PROJECT_ID" >/dev/null
 
-      - name: Download and normalize official reference datasets
+      - name: Run isolated staging reference sync in Cloud Build
         shell: bash
         run: |
           set -euo pipefail
-          OUTPUT_DIR="${RUNNER_TEMP}/diewish-nutrition-reference"
-          python3 scripts/nutrition-reference-sync.py --output-dir "$OUTPUT_DIR"
-          test -s "$OUTPUT_DIR/ciqual.ndjson"
-          test -s "$OUTPUT_DIR/cofid.ndjson"
-          jq -e '.ciqual.count >= 3000 and .cofid.count >= 2000' "$OUTPUT_DIR/summary.json" >/dev/null
-          echo "REFERENCE_OUTPUT_DIR=$OUTPUT_DIR" >> "$GITHUB_ENV"
+          SYNC_BUILD_ID="$(gcloud builds submit \
+            --no-source \
+            --project "$PROJECT_ID" \
+            --config .github/cloudbuild/nutrition-reference-sync-staging.yaml \
+            --substitutions "_GIT_SHA=$GITHUB_SHA" \
+            --async \
+            --format='value(id)' \
+            --quiet)"
+          test -n "$SYNC_BUILD_ID"
+          echo "SYNC_BUILD_ID=$SYNC_BUILD_ID" >> "$GITHUB_ENV"
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: npm
-          cache-dependency-path: backend/package-lock.json
-
-      - name: Install backend dependencies
-        working-directory: backend
-        run: npm ci
-
-      - name: Generate Prisma client
-        working-directory: backend
-        run: npm run prisma:generate
-
-      - name: Bind only the isolated staging database
-        shell: bash
-        run: |
-          set -euo pipefail
-          database_url="$(gcloud secrets versions access latest \
-            --secret "$DIRECT_DATABASE_SECRET_NAME" \
-            --project "$PROJECT_ID")"
-          test -n "$database_url"
-          echo "::add-mask::$database_url"
-          echo "DATABASE_URL=$database_url" >> "$GITHUB_ENV"
-
-      - name: Import reference foods into Diewish staging cache
-        working-directory: backend
-        shell: bash
-        run: |
-          set -euo pipefail
-          npm run nutrition:sync-reference -- \
-            "${REFERENCE_OUTPUT_DIR}/ciqual.ndjson" \
-            "${REFERENCE_OUTPUT_DIR}/cofid.ndjson"
+          for attempt in {1..240}; do
+            build_status="$(gcloud builds describe "$SYNC_BUILD_ID" \
+              --project "$PROJECT_ID" \
+              --region=global \
+              --format='value(status)')"
+            case "$build_status" in
+              SUCCESS)
+                echo "Nutrition reference Cloud Build succeeded."
+                exit 0
+                ;;
+              FAILURE|INTERNAL_ERROR|TIMEOUT|CANCELLED|EXPIRED)
+                echo "Nutrition reference Cloud Build failed with status: $build_status" >&2
+                gcloud builds describe "$SYNC_BUILD_ID" \
+                  --project "$PROJECT_ID" \
+                  --region=global \
+                  --format='yaml(status,statusDetail,failureInfo,steps.id,steps.status)' || true
+                exit 1
+                ;;
+            esac
+            sleep 5
+          done
+          echo "Timed out waiting for nutrition reference Cloud Build." >&2
+          exit 1
 
       - name: Reference sync summary
         shell: bash
@@ -156,9 +149,8 @@ jobs:
             echo ""
             echo "- Environment: isolated staging only"
             echo "- Commit: $GITHUB_SHA"
-            echo "- CIQUAL: $(jq -r '.ciqual.count' "${REFERENCE_OUTPUT_DIR}/summary.json") normalized foods"
-            echo "- CoFID: $(jq -r '.cofid.count' "${REFERENCE_OUTPUT_DIR}/summary.json") normalized foods"
-            echo "- CIQUAL source SHA-256: $(jq -r '.ciqual.sha256' "${REFERENCE_OUTPUT_DIR}/summary.json")"
-            echo "- CoFID source SHA-256: $(jq -r '.cofid.sha256' "${REFERENCE_OUTPUT_DIR}/summary.json")"
+            echo "- Cloud Build: $SYNC_BUILD_ID"
+            echo "- Sources: ANSES-CIQUAL 2025 + UK CoFID 2021"
+            echo "- Database secret: injected only inside Cloud Build"
             echo "- Production: not touched"
           } >> "$GITHUB_STEP_SUMMARY"

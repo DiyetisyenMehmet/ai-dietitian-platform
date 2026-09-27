@@ -1,0 +1,57 @@
+steps:
+  - name: gcr.io/cloud-builders/git
+    entrypoint: sh
+    args:
+      - -c
+      - |
+        set -eu
+        git init /workspace/repo
+        cd /workspace/repo
+        git remote add origin https://github.com/DiyetisyenMehmet/ai-dietitian-platform.git
+        git fetch --depth=1 origin "${_GIT_SHA}"
+        git checkout --detach FETCH_HEAD
+        test "$(git rev-parse HEAD)" = "${_GIT_SHA}"
+
+  - name: python:3.12-slim
+    id: normalize-official-reference-foods
+    dir: /workspace/repo
+    entrypoint: sh
+    args:
+      - -c
+      - |
+        set -eu
+        python3 scripts/nutrition-reference-sync.py --output-dir /workspace/reference
+        test -s /workspace/reference/ciqual.ndjson
+        test -s /workspace/reference/cofid.ndjson
+        python3 - <<'PY'
+        import json
+        from pathlib import Path
+        summary = json.loads(Path("/workspace/reference/summary.json").read_text())
+        if summary["ciqual"]["count"] < 3000:
+            raise SystemExit("CIQUAL snapshot below safety threshold")
+        if summary["cofid"]["count"] < 2000:
+            raise SystemExit("CoFID snapshot below safety threshold")
+        print(json.dumps(summary, ensure_ascii=False))
+        PY
+
+  - name: node:20-alpine
+    id: import-reference-foods-to-staging
+    dir: /workspace/repo/backend
+    entrypoint: sh
+    secretEnv:
+      - DIRECT_DATABASE_URL
+    args:
+      - -c
+      - |
+        set -eu
+        npm ci
+        npx prisma generate
+        DATABASE_URL="$$DIRECT_DATABASE_URL" npm run nutrition:sync-reference --           /workspace/reference/ciqual.ndjson           /workspace/reference/cofid.ndjson
+
+availableSecrets:
+  secretManager:
+    - versionName: projects/project-a2e260c1-839d-4f1d-b90/secrets/diewish-staging-direct-database-url/versions/latest
+      env: DIRECT_DATABASE_URL
+
+options:
+  logging: LEGACY

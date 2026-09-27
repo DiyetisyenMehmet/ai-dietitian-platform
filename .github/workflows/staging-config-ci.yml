@@ -43,6 +43,7 @@ jobs:
           next_config=frontend/next.config.ts
           frontend_build=.github/cloudbuild/frontend-staging.yaml
           nutrition_sync=.github/workflows/staging-nutrition-reference-sync.yml
+          nutrition_sync_build=.github/cloudbuild/nutrition-reference-sync-staging.yaml
 
           grep -q 'BACKEND_SERVICE: diewish-backend-staging' "$workflow"
           grep -q 'FRONTEND_SERVICE: diewish-frontend-staging' "$workflow"
@@ -56,9 +57,13 @@ jobs:
           grep -q 'PROJECT_ID: project-a2e260c1-839d-4f1d-b90' "$nutrition_sync"
           grep -q 'DIRECT_DATABASE_SECRET_NAME: diewish-staging-direct-database-url' "$nutrition_sync"
           grep -q 'diewish-staging-deployer@' "$nutrition_sync"
-          grep -q 'nutrition-reference-sync.py' "$nutrition_sync"
-          grep -q 'nutrition:sync-reference' "$nutrition_sync"
+          grep -q 'nutrition-reference-sync-staging.yaml' "$nutrition_sync"
           grep -q 'environment: staging' "$nutrition_sync"
+          grep -q 'nutrition-reference-sync.py' "$nutrition_sync_build"
+          grep -q 'nutrition:sync-reference' "$nutrition_sync_build"
+          grep -q 'diewish-staging-direct-database-url' "$nutrition_sync_build"
+          grep -q 'DIRECT_DATABASE_URL' "$nutrition_sync_build"
+          grep -q 'project-a2e260c1-839d-4f1d-b90' "$nutrition_sync_build"
 
           # WIF trust is pinned to immutable GitHub IDs and the exact staging ref.
           grep -q 'GITHUB_REPOSITORY_ID="1295514788"' "$script"
