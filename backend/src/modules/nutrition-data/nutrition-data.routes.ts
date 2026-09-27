@@ -19,6 +19,7 @@ const labelLimiter = rateLimit({
 nutritionDataRouter.use(authenticate, requireConsent);
 nutritionDataRouter.get("/search", nutritionDataController.search);
 nutritionDataRouter.get("/history", nutritionDataController.history);
+nutritionDataRouter.get("/scan-history", nutritionDataController.scanHistory);
 nutritionDataRouter.get("/favorites", nutritionDataController.favorites);
 nutritionDataRouter.get("/barcode/:barcode", nutritionDataController.barcode);
 nutritionDataRouter.post("/barcode/:barcode/label-extract", labelLimiter, uploadPackageLabel(), nutritionDataController.extractPackageLabel);

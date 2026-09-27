@@ -114,6 +114,33 @@ export interface BarcodeHistoryDto {
   scannedAt: string;
 }
 
+export interface PhotoScanHistoryDto {
+  dishName: string;
+  estimatedPortion: string;
+  estimatedGrams: number | null;
+  totals: NutrientValuesDto;
+  ingredients: Array<{
+    name: string;
+    estimatedGrams: number | null;
+    included: boolean;
+  }>;
+  disclaimer: string;
+}
+
+export interface ScanHistoryItemDto {
+  id: string;
+  scanType: "PHOTO" | "BARCODE";
+  title: string;
+  brand: string | null;
+  barcode: string | null;
+  imageUrl: string | null;
+  grams: number | null;
+  calories: number | null;
+  food: CanonicalFoodDto | null;
+  photo: PhotoScanHistoryDto | null;
+  scannedAt: string;
+}
+
 export interface NutritionAttentionFlagDto {
   code:
     | "HIGH_SUGARS"
@@ -213,6 +240,14 @@ export const nutritionClient = {
   history(limit = 12) {
     return apiRequest<{ scans: BarcodeHistoryDto[] }>({
       path: `/nutrition/history?limit=${limit}`,
+      method: "GET",
+      auth: true,
+    });
+  },
+
+  scanHistory(limit = 50) {
+    return apiRequest<{ scans: ScanHistoryItemDto[] }>({
+      path: `/nutrition/scan-history?limit=${limit}`,
       method: "GET",
       auth: true,
     });

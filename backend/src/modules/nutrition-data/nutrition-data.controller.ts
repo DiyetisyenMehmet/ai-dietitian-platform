@@ -95,6 +95,11 @@ export const nutritionDataController = {
     sendSuccess(res, { scans });
   }),
 
+  scanHistory: asyncHandler(async (req: Request, res: Response) => {
+    const scans = await nutritionDataService.listScanHistory(requireUserId(req), parsedLimit(req, 50));
+    sendSuccess(res, { scans });
+  }),
+
   favorites: asyncHandler(async (req: Request, res: Response) => {
     const favorites = await nutritionDataService.listFavorites(requireUserId(req), parsedLimit(req, 50));
     sendSuccess(res, { favorites });

@@ -1,8 +1,10 @@
 import type { Request, Response } from "express";
 
+import { logger } from "../../lib/logger";
 import { ApiError } from "../../utils/api-error";
 import { sendSuccess } from "../../utils/api-response";
 import { asyncHandler } from "../../utils/async-handler";
+import { nutritionDataService } from "../nutrition-data/nutrition-data.service";
 import { toPhotoScanResult } from "../nutrition-data/nutrition-scan-result";
 import {
   analyzeConfirmedFoodName,
@@ -20,7 +22,24 @@ export const foodScanController = {
     }
     const deterministic = await foodScanService.analyze(req.file.buffer);
     const analysis = await applyFoodNutritionFallback(deterministic);
-    sendSuccess(res, { analysis, scan: toPhotoScanResult(analysis) });
+    const scan = toPhotoScanResult(analysis);
+    try {
+      await nutritionDataService.recordPhotoScan(req.user.id, {
+        dishName: analysis.dishName,
+        estimatedPortion: analysis.estimatedPortion,
+        estimatedGrams: analysis.estimatedGrams,
+        totals: analysis.totals,
+        ingredients: analysis.ingredients.map((item) => ({
+          name: item.name,
+          estimatedGrams: item.estimatedGrams,
+          included: item.included,
+        })),
+        disclaimer: analysis.disclaimer,
+      });
+    } catch (error) {
+      logger.warn({ err: error, userId: req.user.id }, "Food photo scan history persistence failed");
+    }
+    sendSuccess(res, { analysis, scan });
   }),
 
   analyzeByName: asyncHandler(async (req: Request, res: Response) => {

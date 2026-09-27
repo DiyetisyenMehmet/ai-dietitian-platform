@@ -3,7 +3,11 @@ import { logger } from "../../lib/logger";
 import { ApiError } from "../../utils/api-error";
 import { normalizeBarcode } from "./barcode";
 import { NutritionTtlCache } from "./nutrition-cache";
-import { nutritionDataRepository, type NutritionDataRepository } from "./nutrition-data.repository";
+import {
+  nutritionDataRepository,
+  type NutritionDataRepository,
+  type PhotoScanHistoryInput,
+} from "./nutrition-data.repository";
 import type { CanonicalFood } from "./nutrition-data.types";
 import { expandNutritionProviderQueries } from "./nutrition-query-aliases";
 import { openFoodFactsProvider } from "./providers/open-food-facts.provider";
@@ -296,6 +300,15 @@ export class NutritionDataService {
   listRecentScans(userId: string, limit = 20) {
     const boundedLimit = Math.min(Math.max(Math.trunc(limit) || 20, 1), 50);
     return this.persistence?.listRecentScans(userId, boundedLimit) ?? Promise.resolve([]);
+  }
+
+  recordPhotoScan(userId: string, input: PhotoScanHistoryInput): Promise<void> {
+    return this.persistence?.recordPhotoScan(userId, input) ?? Promise.resolve();
+  }
+
+  listScanHistory(userId: string, limit = 50) {
+    const boundedLimit = Math.min(Math.max(Math.trunc(limit) || 50, 1), 100);
+    return this.persistence?.listScanHistory(userId, boundedLimit) ?? Promise.resolve([]);
   }
 
   listFavorites(userId: string, limit = 50) {

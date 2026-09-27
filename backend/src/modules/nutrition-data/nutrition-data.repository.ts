@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 
 import { prisma } from "../../lib/prisma";
-import type { CanonicalFood } from "./nutrition-data.types";
+import type { CanonicalFood, NutrientValues } from "./nutrition-data.types";
 
 interface FoodRow {
   payload: unknown;
@@ -24,6 +24,28 @@ interface FavoriteRow {
   product_name: string | null;
   payload: unknown;
   created_at: Date;
+}
+
+interface UnifiedScanRow {
+  history_id: string;
+  scan_type: "PHOTO" | "BARCODE";
+  barcode: string | null;
+  product_name: string | null;
+  payload: unknown;
+  scanned_at: Date;
+}
+
+export interface PhotoScanHistoryInput {
+  dishName: string;
+  estimatedPortion: string;
+  estimatedGrams: number | null;
+  totals: NutrientValues;
+  ingredients: Array<{
+    name: string;
+    estimatedGrams: number | null;
+    included: boolean;
+  }>;
+  disclaimer: string;
 }
 
 function normalizeAlias(value: string): string {
@@ -59,6 +81,21 @@ function hydrateFood(row: FoodRow, stale: boolean): CanonicalFood | null {
 
 function payloadHash(payload: string): string {
   return crypto.createHash("sha256").update(payload).digest("hex");
+}
+
+function asPhotoScan(value: unknown): PhotoScanHistoryInput | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const candidate = value as Partial<PhotoScanHistoryInput>;
+  if (
+    typeof candidate.dishName !== "string" ||
+    typeof candidate.estimatedPortion !== "string" ||
+    !candidate.totals ||
+    typeof candidate.totals !== "object" ||
+    !Array.isArray(candidate.ingredients)
+  ) {
+    return null;
+  }
+  return candidate as PhotoScanHistoryInput;
 }
 
 /** Persistent server-side nutrition cache and user-scoped barcode history. */
@@ -204,6 +241,93 @@ export const nutritionDataRepository = {
       food: asFood(row.payload),
       scannedAt: row.scanned_at.toISOString(),
     }));
+  },
+
+  async recordPhotoScan(userId: string, input: PhotoScanHistoryInput): Promise<void> {
+    const payload = JSON.stringify(input);
+    await prisma.$executeRaw`
+      INSERT INTO nutrition_photo_scans
+        (user_id, dish_name, portion_text, portion_grams, calories, payload)
+      VALUES
+        (${userId}, ${input.dishName}, ${input.estimatedPortion}, ${input.estimatedGrams}, ${input.totals.energyKcal}, ${payload}::jsonb)
+    `;
+  },
+
+  async listScanHistory(userId: string, limit: number): Promise<Array<{
+    id: string;
+    scanType: "PHOTO" | "BARCODE";
+    title: string;
+    brand: string | null;
+    barcode: string | null;
+    imageUrl: string | null;
+    grams: number | null;
+    calories: number | null;
+    food: CanonicalFood | null;
+    photo: PhotoScanHistoryInput | null;
+    scannedAt: string;
+  }>> {
+    const rows = await prisma.$queryRaw<UnifiedScanRow[]>`
+      SELECT *
+      FROM (
+        SELECT
+          ('barcode:' || id::text) AS history_id,
+          'BARCODE'::text AS scan_type,
+          barcode,
+          product_name,
+          payload,
+          scanned_at
+        FROM nutrition_barcode_scans
+        WHERE user_id = ${userId}
+
+        UNION ALL
+
+        SELECT
+          ('photo:' || id::text) AS history_id,
+          'PHOTO'::text AS scan_type,
+          NULL::text AS barcode,
+          dish_name AS product_name,
+          payload,
+          scanned_at
+        FROM nutrition_photo_scans
+        WHERE user_id = ${userId}
+      ) history
+      ORDER BY scanned_at DESC
+      LIMIT ${limit}
+    `;
+
+    return rows.map((row) => {
+      if (row.scan_type === "BARCODE") {
+        const food = asFood(row.payload);
+        return {
+          id: row.history_id,
+          scanType: "BARCODE" as const,
+          title: food?.displayNameTr || food?.name || row.product_name || "Barkodlu ürün",
+          brand: food?.brand ?? null,
+          barcode: row.barcode,
+          imageUrl: food?.imageUrl ?? null,
+          grams: food?.serving?.gramWeight ?? null,
+          calories: food?.nutrientsPerServing?.energyKcal ?? null,
+          food,
+          photo: null,
+          scannedAt: row.scanned_at.toISOString(),
+        };
+      }
+
+      const photo = asPhotoScan(row.payload);
+      return {
+        id: row.history_id,
+        scanType: "PHOTO" as const,
+        title: photo?.dishName || row.product_name || "Fotoğraf taraması",
+        brand: null,
+        barcode: null,
+        imageUrl: null,
+        grams: photo?.estimatedGrams ?? null,
+        calories: photo?.totals.energyKcal ?? null,
+        food: null,
+        photo,
+        scannedAt: row.scanned_at.toISOString(),
+      };
+    });
   },
 
   async setFavorite(userId: string, barcode: string, food: CanonicalFood | null, favorite: boolean): Promise<void> {

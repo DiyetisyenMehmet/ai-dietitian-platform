@@ -2,13 +2,24 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ChevronRight, Clock3, Package, ScanBarcode } from "lucide-react";
+import {
+  ArrowLeft,
+  Camera,
+  ChevronRight,
+  Clock3,
+  Flame,
+  Package,
+  ScanBarcode,
+} from "lucide-react";
 
 import {
   nutritionClient,
-  type BarcodeHistoryDto,
+  type ScanHistoryItemDto,
 } from "@/infrastructure/nutrition/nutrition-client";
 import { Card, CardContent } from "@/presentation/components/ui/card";
+import { NutritionFactsGrid } from "@/presentation/components/meals/nutrition-scan-sections";
+
+type Filter = "ALL" | "PHOTO" | "BARCODE";
 
 function localDayKey(value: string): string {
   const date = new Date(value);
@@ -46,26 +57,110 @@ function timeLabel(value: string): string {
   }).format(date);
 }
 
-function displayName(scan: BarcodeHistoryDto): string {
-  return scan.food?.displayNameTr || scan.food?.name || scan.productName || "Barkodlu ürün";
+function compactNumber(value: number): string {
+  const rounded = Math.round(value * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 }
 
-function subtitle(scan: BarcodeHistoryDto): string {
-  const parts = [scan.food?.brand, scan.food?.quantity].filter(
-    (item): item is string => Boolean(item?.trim()),
+function PhotoDetail({
+  item,
+  onBack,
+}: {
+  item: ScanHistoryItemDto;
+  onBack(): void;
+}) {
+  const photo = item.photo;
+  if (!photo) return null;
+
+  return (
+    <div className="space-y-4">
+      <button
+        type="button"
+        onClick={onBack}
+        className="inline-flex min-h-10 items-center gap-2 rounded-xl border bg-background px-3 py-2 text-sm font-semibold"
+      >
+        <ArrowLeft className="size-4" aria-hidden="true" />
+        Tarama geçmişine dön
+      </button>
+
+      <Card>
+        <CardContent className="space-y-4 p-5">
+          <div className="flex items-start gap-3">
+            <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+              <Camera className="size-5" aria-hidden="true" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-semibold uppercase tracking-wide text-primary">
+                Fotoğraf taraması
+              </p>
+              <h2 className="mt-1 break-words text-xl font-extrabold">{photo.dishName}</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {photo.estimatedPortion}
+                {photo.estimatedGrams !== null ? ` · ${compactNumber(photo.estimatedGrams)} g` : ""}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {dateLabel(item.scannedAt)} · {timeLabel(item.scannedAt)}
+              </p>
+            </div>
+          </div>
+
+          <NutritionFactsGrid
+            portion={photo.totals}
+            portionLabel={photo.estimatedGrams !== null ? `${compactNumber(photo.estimatedGrams)} g` : "Taranan porsiyon"}
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="space-y-3 p-5">
+          <h3 className="font-bold">Taramada belirlenen içerikler</h3>
+          {photo.ingredients.filter((item) => item.included).length === 0 ? (
+            <p className="text-sm text-muted-foreground">İçerik ayrıntısı bulunamadı.</p>
+          ) : (
+            <div className="space-y-2">
+              {photo.ingredients
+                .filter((ingredient) => ingredient.included)
+                .map((ingredient, index) => (
+                  <div
+                    key={`${ingredient.name}-${index}`}
+                    className="flex items-center justify-between gap-3 rounded-xl border p-3 text-sm"
+                  >
+                    <span className="min-w-0 break-words font-semibold">{ingredient.name}</span>
+                    <span className="shrink-0 text-muted-foreground">
+                      {ingredient.estimatedGrams === null
+                        ? "Miktar belirsiz"
+                        : `~${compactNumber(ingredient.estimatedGrams)} g`}
+                    </span>
+                  </div>
+                ))}
+            </div>
+          )}
+          {photo.disclaimer && (
+            <p className="rounded-xl bg-muted/50 p-3 text-xs leading-relaxed text-muted-foreground">
+              {photo.disclaimer}
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      <p className="px-1 text-xs leading-relaxed text-muted-foreground">
+        Bu kayıt yalnız Besin Tarayıcı geçmişidir. Taranmış olması, yemeğin tüketildiği anlamına gelmez ve İlerleme &gt; Geçmişim verisine dönüşmez.
+      </p>
+    </div>
   );
-  return parts.join(" · ");
 }
 
 export function ScanHistoryView() {
-  const [scans, setScans] = React.useState<BarcodeHistoryDto[]>([]);
+  const [scans, setScans] = React.useState<ScanHistoryItemDto[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [failed, setFailed] = React.useState(false);
+  const [filter, setFilter] = React.useState<Filter>("ALL");
+  const [selectedPhotoId, setSelectedPhotoId] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     let alive = true;
     void nutritionClient
-      .history(50)
+      .scanHistory(100)
       .then(({ scans: next }) => {
         if (!alive) return;
         setScans(next);
@@ -84,19 +179,30 @@ export function ScanHistoryView() {
     };
   }, []);
 
+  const selectedPhoto =
+    selectedPhotoId === null
+      ? null
+      : scans.find((item) => item.id === selectedPhotoId && item.scanType === "PHOTO") ?? null;
+
+  const filtered = React.useMemo(
+    () => scans.filter((item) => filter === "ALL" || item.scanType === filter),
+    [filter, scans],
+  );
+
   const groups = React.useMemo(() => {
-    const result: Array<{ key: string; label: string; items: BarcodeHistoryDto[] }> = [];
-    for (const scan of scans) {
+    const result: Array<{ key: string; label: string; items: ScanHistoryItemDto[] }> = [];
+    for (const scan of filtered) {
       const key = localDayKey(scan.scannedAt);
       const existing = result.find((group) => group.key === key);
-      if (existing) {
-        existing.items.push(scan);
-      } else {
-        result.push({ key, label: dateLabel(scan.scannedAt), items: [scan] });
-      }
+      if (existing) existing.items.push(scan);
+      else result.push({ key, label: dateLabel(scan.scannedAt), items: [scan] });
     }
     return result;
-  }, [scans]);
+  }, [filtered]);
+
+  if (selectedPhoto) {
+    return <PhotoDetail item={selectedPhoto} onBack={() => setSelectedPhotoId(null)} />;
+  }
 
   if (loading) {
     return (
@@ -121,94 +227,144 @@ export function ScanHistoryView() {
     );
   }
 
-  if (scans.length === 0) {
-    return (
-      <Card>
-        <CardContent className="p-6 text-center">
-          <span className="mx-auto flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-            <Clock3 className="size-6" aria-hidden="true" />
-          </span>
-          <h2 className="mt-3 font-bold">Henüz tarama geçmişin yok</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Barkodla bulduğun ürünler burada tarihleriyle listelenir.
-          </p>
-          <Link
-            href="/meals/scan?mode=barcode"
-            className="mt-4 inline-flex min-h-10 items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
-          >
-            Barkod tara
-          </Link>
-        </CardContent>
-      </Card>
-    );
-  }
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
         <div className="flex gap-3">
           <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-            <ScanBarcode className="size-4" aria-hidden="true" />
+            <Clock3 className="size-4" aria-hidden="true" />
           </span>
           <div>
-            <h2 className="text-sm font-bold">Taradığın ürünler</h2>
+            <h2 className="text-sm font-bold">Besin Tarayıcı geçmişi</h2>
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              Bu liste yalnız Besin Tarayıcı geçmişidir. Bir ürünü taraman, onu yediğin anlamına gelmez ve İlerleme &gt; Geçmişim kayıtlarına eklenmez.
+              Fotoğraf ve barkod taramaları burada tutulur. Tarama, tüketim kaydı değildir. Bu alan İlerleme &gt; Geçmişim sisteminden tamamen ayrıdır.
             </p>
           </div>
         </div>
       </div>
 
-      {groups.map((group) => (
-        <section key={group.key} className="space-y-2" aria-labelledby={`scan-day-${group.key}`}>
-          <h2 id={`scan-day-${group.key}`} className="px-1 text-sm font-bold text-muted-foreground">
-            {group.label}
-          </h2>
-          <div className="space-y-2">
-            {group.items.map((scan, index) => {
-              const href = `/meals/scan?mode=barcode&barcode=${encodeURIComponent(scan.barcode)}`;
-              const meta = subtitle(scan);
-              return (
-                <Link
-                  key={`${scan.barcode}-${scan.scannedAt}-${index}`}
-                  href={href}
-                  aria-label={`${displayName(scan)} ürün bilgilerini aç`}
-                  className="flex min-h-[76px] items-center gap-3 rounded-2xl border bg-card p-3 shadow-sm transition hover:bg-muted/30"
-                >
-                  {scan.food?.imageUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={scan.food.imageUrl}
-                      alt=""
-                      className="size-14 shrink-0 rounded-xl border bg-primary/5 object-contain p-1"
-                    />
-                  ) : (
-                    <span className="flex size-14 shrink-0 items-center justify-center rounded-xl border bg-primary/5 text-primary">
-                      <Package className="size-6" aria-hidden="true" />
-                    </span>
-                  )}
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-bold text-foreground">
-                      {displayName(scan)}
-                    </span>
-                    {meta && (
-                      <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-                        {meta}
+      <div className="grid grid-cols-3 gap-2" role="tablist" aria-label="Tarama geçmişi filtresi">
+        {([
+          ["ALL", "Tümü"],
+          ["PHOTO", "Fotoğraf"],
+          ["BARCODE", "Barkod"],
+        ] as const).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            role="tab"
+            aria-selected={filter === value}
+            onClick={() => setFilter(value)}
+            className={`min-h-10 rounded-xl border px-2 text-sm font-semibold transition ${
+              filter === value
+                ? "border-primary bg-primary text-primary-foreground"
+                : "bg-background text-muted-foreground"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {filtered.length === 0 ? (
+        <Card>
+          <CardContent className="p-6 text-center">
+            <Clock3 className="mx-auto size-7 text-primary" aria-hidden="true" />
+            <h2 className="mt-3 font-bold">Bu kategoride henüz tarama yok</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Yeni fotoğraf veya barkod taramaların tarihleriyle burada görünür.
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        groups.map((group) => (
+          <section key={group.key} className="space-y-2" aria-labelledby={`scan-day-${group.key}`}>
+            <h2 id={`scan-day-${group.key}`} className="px-1 text-sm font-bold text-muted-foreground">
+              {group.label}
+            </h2>
+            <div className="space-y-2">
+              {group.items.map((scan) => {
+                const meta = [
+                  scan.brand,
+                  scan.grams === null ? null : `${compactNumber(scan.grams)} g`,
+                  scan.calories === null ? null : `${Math.round(scan.calories)} kcal`,
+                ].filter((item): item is string => Boolean(item));
+
+                const body = (
+                  <>
+                    {scan.imageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={scan.imageUrl}
+                        alt=""
+                        className="size-14 shrink-0 rounded-xl border bg-primary/5 object-contain p-1"
+                      />
+                    ) : (
+                      <span className="flex size-14 shrink-0 items-center justify-center rounded-xl border bg-primary/5 text-primary">
+                        {scan.scanType === "PHOTO" ? (
+                          <Camera className="size-6" aria-hidden="true" />
+                        ) : (
+                          <Package className="size-6" aria-hidden="true" />
+                        )}
                       </span>
                     )}
-                    <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-                      <span>Barkod</span>
-                      <span className="tabular-nums">{scan.barcode}</span>
-                      <span>{timeLabel(scan.scannedAt)}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-bold text-foreground">{scan.title}</span>
+                      {meta.length > 0 && (
+                        <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                          {meta.join(" · ")}
+                        </span>
+                      )}
+                      <span className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+                        <span className="inline-flex items-center gap-1">
+                          {scan.scanType === "PHOTO" ? (
+                            <Camera className="size-3.5" aria-hidden="true" />
+                          ) : (
+                            <ScanBarcode className="size-3.5" aria-hidden="true" />
+                          )}
+                          {scan.scanType === "PHOTO" ? "Fotoğraf" : "Barkod"}
+                        </span>
+                        {scan.barcode && <span className="tabular-nums">{scan.barcode}</span>}
+                        <span>{timeLabel(scan.scannedAt)}</span>
+                      </span>
                     </span>
-                  </span>
-                  <ChevronRight className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
-                </Link>
-              );
-            })}
-          </div>
-        </section>
-      ))}
+                    <ChevronRight className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                  </>
+                );
+
+                if (scan.scanType === "BARCODE" && scan.barcode) {
+                  return (
+                    <Link
+                      key={scan.id}
+                      href={`/meals/scan?mode=barcode&barcode=${encodeURIComponent(scan.barcode)}`}
+                      aria-label={`${scan.title} ürün bilgilerini aç`}
+                      className="flex min-h-[76px] items-center gap-3 rounded-2xl border bg-card p-3 shadow-sm transition hover:bg-muted/30"
+                    >
+                      {body}
+                    </Link>
+                  );
+                }
+
+                return (
+                  <button
+                    key={scan.id}
+                    type="button"
+                    onClick={() => setSelectedPhotoId(scan.id)}
+                    aria-label={`${scan.title} tarama bilgilerini aç`}
+                    className="flex min-h-[76px] w-full items-center gap-3 rounded-2xl border bg-card p-3 text-left shadow-sm transition hover:bg-muted/30"
+                  >
+                    {body}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        ))
+      )}
+
+      <p className="px-1 text-xs leading-relaxed text-muted-foreground">
+        Tarama Geçmişi, Son Yediklerim, Plan Geçmişi ve İlerleme &gt; Geçmişim birbirinden ayrı veri anlamlarına sahiptir. Bu ekran yalnız tarama olaylarını gösterir.
+      </p>
     </div>
   );
 }
