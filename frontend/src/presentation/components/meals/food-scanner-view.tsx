@@ -61,8 +61,13 @@ function defaultMealType(): MealTypeDto {
   return "SNACK";
 }
 
-function providerLabel(provider: "USDA" | "OPEN_FOOD_FACTS" | "DIEWISH"): string {
+function providerLabel(
+  provider: "USDA" | "CNF" | "CIQUAL" | "COFID" | "OPEN_FOOD_FACTS" | "DIEWISH",
+): string {
   if (provider === "USDA") return "USDA FoodData Central";
+  if (provider === "CNF") return "Canadian Nutrient File";
+  if (provider === "CIQUAL") return "ANSES-CIQUAL";
+  if (provider === "COFID") return "UK CoFID";
   if (provider === "OPEN_FOOD_FACTS") return "Open Food Facts";
   return "Diewish";
 }

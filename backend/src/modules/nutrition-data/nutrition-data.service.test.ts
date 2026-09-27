@@ -6,7 +6,7 @@ import type { NutritionDataRepository } from "./nutrition-data.repository";
 import type { CanonicalFood } from "./nutrition-data.types";
 
 function food(
-  provider: "USDA" | "OPEN_FOOD_FACTS" | "DIEWISH",
+  provider: CanonicalFood["provider"],
   barcode = "4006381333931",
 ): CanonicalFood {
   return {
@@ -44,7 +44,7 @@ function food(
       externalId: `${provider}-1`,
       retrievedAt: new Date(0).toISOString(),
       dataBasis: "PER_100_G",
-      confidence: provider === "USDA" ? 0.95 : 0.75,
+      confidence: provider === "USDA" ? 0.95 : provider === "CNF" ? 0.92 : 0.75,
       ...(provider === "DIEWISH"
         ? { sourceReference: "USER_CONFIRMED_PACKAGE_LABEL" }
         : {}),
@@ -268,4 +268,46 @@ test("food-name search falls back to Open Food Facts when structured USDA search
   assert.equal(results[0]?.externalId, "OFF-churchkhela");
   assert.equal(usdaQueries[0], "walnut churchkhela");
   assert.equal(offQueries[0], "walnut churchkhela");
+});
+
+
+test("general food search reserves room for CNF instead of letting USDA crowd out every candidate", async () => {
+  const calls: string[] = [];
+  const usdaFood = {
+    ...food("USDA", ""),
+    externalId: "USDA-walnut",
+    name: "Walnuts, english",
+    displayNameTr: "Ceviz",
+  };
+  const cnfFood = {
+    ...food("CNF", ""),
+    externalId: "CNF-101",
+    name: "Walnuts, english, dried",
+    displayNameTr: "Walnuts, english, dried",
+  };
+  const service = new NutritionDataService({
+    usda: {
+      isConfigured() { return true; },
+      async search(query) {
+        calls.push(`USDA:${query}`);
+        return [usdaFood];
+      },
+      async searchBrandedBarcode() { return null; },
+    },
+    cnf: {
+      async search(query) {
+        calls.push(`CNF:${query}`);
+        return [cnfFood];
+      },
+    },
+    openFoodFacts: {
+      async search() { return []; },
+      async getByBarcode() { return null; },
+    },
+  });
+
+  const results = await service.search("ceviz", 5);
+  assert.ok(results.some((item) => item.provider === "USDA"));
+  assert.ok(results.some((item) => item.provider === "CNF"));
+  assert.ok(calls.some((call) => call.startsWith("CNF:")));
 });

@@ -21,7 +21,7 @@ export interface FoodScanIngredientDto {
   included: boolean;
   matchedFood: {
     externalId: string;
-    provider: "USDA" | "OPEN_FOOD_FACTS" | "DIEWISH";
+    provider: "USDA" | "CNF" | "CIQUAL" | "COFID" | "OPEN_FOOD_FACTS" | "DIEWISH";
     displayNameTr: string;
     confidence: number;
   } | null;
@@ -30,7 +30,7 @@ export interface FoodScanIngredientDto {
 
 export interface FoodScanNutritionResolutionDto {
   method: "VERIFIED_SOURCE" | "COMPONENT_AGGREGATE" | "WEB_RESEARCH_ESTIMATE" | "AI_ESTIMATE" | "UNAVAILABLE";
-  providers: Array<"USDA" | "OPEN_FOOD_FACTS" | "DIEWISH">;
+  providers: Array<"USDA" | "CNF" | "CIQUAL" | "COFID" | "OPEN_FOOD_FACTS" | "DIEWISH">;
   confidence: number;
   estimated: boolean;
   note: string;

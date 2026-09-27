@@ -15,7 +15,7 @@ export interface NutrientValuesDto {
 export type MealTypeDto = "BREAKFAST" | "LUNCH" | "DINNER" | "SNACK";
 
 export interface NutritionProvenanceDto {
-  provider: "USDA" | "OPEN_FOOD_FACTS" | "DIEWISH";
+  provider: "USDA" | "CNF" | "CIQUAL" | "COFID" | "OPEN_FOOD_FACTS" | "DIEWISH";
   externalId: string;
   retrievedAt: string;
   dataBasis: "PER_100_G" | "PER_SERVING";
@@ -30,7 +30,7 @@ export interface NutritionProvenanceDto {
 
 export interface CanonicalFoodDto {
   externalId: string;
-  provider: "USDA" | "OPEN_FOOD_FACTS" | "DIEWISH";
+  provider: "USDA" | "CNF" | "CIQUAL" | "COFID" | "OPEN_FOOD_FACTS" | "DIEWISH";
   name: string;
   displayNameTr: string;
   brand: string | null;

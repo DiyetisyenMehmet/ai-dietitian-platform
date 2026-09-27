@@ -10,6 +10,7 @@ import {
 } from "./nutrition-data.repository";
 import type { CanonicalFood } from "./nutrition-data.types";
 import { expandNutritionProviderQueries } from "./nutrition-query-aliases";
+import { canadianNutrientFileProvider } from "./providers/cnf.provider";
 import { openFoodFactsProvider } from "./providers/open-food-facts.provider";
 import { usdaFoodDataCentralProvider } from "./providers/usda.provider";
 import { selectPreferredFood } from "./source-policy";
@@ -20,6 +21,10 @@ export interface UsdaNutritionProviderPort {
   searchBrandedBarcode(barcode: string): Promise<CanonicalFood | null>;
 }
 
+export interface GeneralNutritionProviderPort {
+  search(query: string, limit?: number): Promise<CanonicalFood[]>;
+}
+
 export interface OpenFoodFactsProviderPort {
   search?(query: string, limit?: number): Promise<CanonicalFood[]>;
   getByBarcode(barcode: string): Promise<CanonicalFood | null>;
@@ -27,6 +32,7 @@ export interface OpenFoodFactsProviderPort {
 
 export interface NutritionServiceProviders {
   usda: UsdaNutritionProviderPort;
+  cnf?: GeneralNutritionProviderPort;
   openFoodFacts: OpenFoodFactsProviderPort;
 }
 
@@ -35,9 +41,9 @@ function providerError(message: string, details?: unknown): ApiError {
 }
 
 function ttlHoursFor(food: CanonicalFood): number {
-  return food.provider === "OPEN_FOOD_FACTS"
-    ? env.OPEN_FOOD_FACTS_CACHE_TTL_HOURS
-    : env.USDA_CACHE_TTL_HOURS;
+  if (food.provider === "OPEN_FOOD_FACTS") return env.OPEN_FOOD_FACTS_CACHE_TTL_HOURS;
+  if (food.provider === "CNF") return env.CNF_CACHE_TTL_HOURS;
+  return env.USDA_CACHE_TTL_HOURS;
 }
 
 function expiresAt(food: CanonicalFood): Date {
@@ -101,26 +107,54 @@ export class NutritionDataService {
     const queries = expandNutritionProviderQueries(query);
 
     const offSearchAvailable = Boolean(this.providers.openFoodFacts.search);
-    const usdaBudget = offSearchAvailable
-      ? Math.max(1, Math.ceil(boundedLimit * 0.7))
-      : boundedLimit;
+    const cnfAvailable = Boolean(this.providers.cnf);
+    const usdaBudget = cnfAvailable
+      ? Math.max(1, Math.ceil(boundedLimit * 0.55))
+      : offSearchAvailable
+        ? Math.max(1, Math.ceil(boundedLimit * 0.7))
+        : boundedLimit;
 
+    let usdaCount = 0;
     if (this.providers.usda.isConfigured()) {
       try {
         for (const providerQuery of queries) {
-          const remaining = usdaBudget - uniqueFoods(collected, boundedLimit).filter((food) => food.provider === "USDA").length;
+          const remaining = usdaBudget - usdaCount;
           if (remaining <= 0) break;
           const foods = await timedProvider("USDA", "search", () =>
             this.providers.usda.search(providerQuery, remaining),
           );
           collected.push(...foods);
-          if (
-            uniqueFoods(collected, boundedLimit)
-              .filter((food) => food.provider === "USDA").length >= usdaBudget
-          ) break;
+          usdaCount = uniqueFoods(collected, boundedLimit)
+            .filter((food) => food.provider === "USDA").length;
+          if (usdaCount >= usdaBudget) break;
         }
       } catch (error) {
         errors.push(`USDA: ${String(error)}`);
+      }
+    }
+
+    if (this.providers.cnf && uniqueFoods(collected, boundedLimit).length < boundedLimit) {
+      const unusedUsdaBudget = Math.max(0, usdaBudget - usdaCount);
+      const cnfBudget = Math.min(
+        boundedLimit,
+        Math.max(1, Math.ceil(boundedLimit * 0.35) + unusedUsdaBudget),
+      );
+      let cnfCount = 0;
+      try {
+        for (const providerQuery of queries) {
+          const room = boundedLimit - uniqueFoods(collected, boundedLimit).length;
+          const remaining = Math.min(room, cnfBudget - cnfCount);
+          if (remaining <= 0) break;
+          const foods = await timedProvider("CNF", "search", () =>
+            this.providers.cnf!.search(providerQuery, remaining),
+          );
+          collected.push(...foods);
+          cnfCount = uniqueFoods(collected, boundedLimit)
+            .filter((food) => food.provider === "CNF").length;
+          if (cnfCount >= cnfBudget) break;
+        }
+      } catch (error) {
+        errors.push(`CNF: ${String(error)}`);
       }
     }
 
@@ -149,13 +183,11 @@ export class NutritionDataService {
       throw providerError("Besin veri kaynaklarına şu anda ulaşılamıyor.", errors.join("; "));
     }
 
-    this.searchCache.set(
-      key,
-      foods,
-      foods.some((food) => food.provider === "OPEN_FOOD_FACTS")
-        ? env.OPEN_FOOD_FACTS_CACHE_TTL_HOURS * 60 * 60 * 1000
-        : env.USDA_CACHE_TTL_HOURS * 60 * 60 * 1000,
+    const searchTtlHours = foods.reduce(
+      (minimum, food) => Math.min(minimum, ttlHoursFor(food)),
+      env.USDA_CACHE_TTL_HOURS,
     );
+    this.searchCache.set(key, foods, searchTtlHours * 60 * 60 * 1000);
     if (this.persistence) {
       await Promise.all(foods.map((food) => this.persistence!.upsertFood(food, expiresAt(food))));
     }
@@ -331,6 +363,7 @@ export class NutritionDataService {
 export const nutritionDataService = new NutritionDataService(
   {
     usda: usdaFoodDataCentralProvider,
+    cnf: canadianNutrientFileProvider,
     openFoodFacts: openFoodFactsProvider,
   },
   nutritionDataRepository,

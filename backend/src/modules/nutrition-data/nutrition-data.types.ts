@@ -1,4 +1,4 @@
-export type NutritionProviderId = "USDA" | "OPEN_FOOD_FACTS" | "DIEWISH";
+export type NutritionProviderId = "USDA" | "CNF" | "CIQUAL" | "COFID" | "OPEN_FOOD_FACTS" | "DIEWISH";
 
 export type NutritionDataBasis = "PER_100_G" | "PER_SERVING";
 

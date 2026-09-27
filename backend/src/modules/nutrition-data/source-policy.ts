@@ -4,14 +4,20 @@ export type NutritionLookupContext = "GENERAL" | "BARCODE";
 
 const GENERAL_PRIORITY: Record<NutritionProviderId, number> = {
   DIEWISH: 100,
-  USDA: 90,
+  USDA: 95,
+  CNF: 92,
+  CIQUAL: 90,
+  COFID: 88,
   OPEN_FOOD_FACTS: 70,
 };
 
 const BARCODE_PRIORITY: Record<NutritionProviderId, number> = {
   DIEWISH: 100,
-  OPEN_FOOD_FACTS: 90,
-  USDA: 80,
+  OPEN_FOOD_FACTS: 95,
+  USDA: 90,
+  CNF: 60,
+  CIQUAL: 60,
+  COFID: 60,
 };
 
 export function sourcePriority(provider: NutritionProviderId, context: NutritionLookupContext): number {
