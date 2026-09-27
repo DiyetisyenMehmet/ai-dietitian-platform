@@ -58,10 +58,7 @@ jobs:
           grep -q 'diewish-staging-deployer@' "$nutrition_sync"
           grep -q 'nutrition-reference-sync.py' "$nutrition_sync"
           grep -q 'nutrition:sync-reference' "$nutrition_sync"
-          if grep -Eq 'wild-dawn-63542383|diewish-(backend|frontend)-prod|production-database|prod-database' "$nutrition_sync"; then
-            echo 'Production resource reference detected in nutrition reference sync.' >&2
-            exit 1
-          fi
+          grep -q 'environment: staging' "$nutrition_sync"
 
           # WIF trust is pinned to immutable GitHub IDs and the exact staging ref.
           grep -q 'GITHUB_REPOSITORY_ID="1295514788"' "$script"

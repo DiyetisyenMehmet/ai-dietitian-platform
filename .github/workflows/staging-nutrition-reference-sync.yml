@@ -38,11 +38,7 @@ jobs:
           set -euo pipefail
           test "$PROJECT_ID" = "project-a2e260c1-839d-4f1d-b90"
           [[ "$DEPLOY_SERVICE_ACCOUNT" == diewish-staging-deployer@* ]]
-          [[ "$DIRECT_DATABASE_SECRET_NAME" == diewish-staging-* ]]
-          if grep -Eq 'wild-dawn-63542383|production-database|prod-database' "$GITHUB_WORKSPACE/.github/workflows/staging-nutrition-reference-sync.yml"; then
-            echo "Production resource reference detected." >&2
-            exit 1
-          fi
+          test "$DIRECT_DATABASE_SECRET_NAME" = "diewish-staging-direct-database-url"
 
       - name: Wait for exact-SHA staging CI gates
         if: ${{ github.event_name == 'push' }}
