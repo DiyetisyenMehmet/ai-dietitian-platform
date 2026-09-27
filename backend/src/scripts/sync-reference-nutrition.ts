@@ -30,7 +30,7 @@ export function parseReferenceFoodLine(line: string): CanonicalFood {
 
   const provider = parsed.provider;
   if (provider !== "CIQUAL" && provider !== "COFID") {
-    throw new Error(\`Unsupported reference nutrition provider: \${String(provider)}\`);
+    throw new Error(`Unsupported reference nutrition provider: ${String(provider)}`);
   }
   if (
     typeof parsed.externalId !== "string" ||
@@ -40,11 +40,11 @@ export function parseReferenceFoodLine(line: string): CanonicalFood {
     typeof parsed.displayNameTr !== "string" ||
     !parsed.displayNameTr.trim()
   ) {
-    throw new Error(\`\${provider}: invalid food identity.\`);
+    throw new Error(`${provider}: invalid food identity.`);
   }
 
   if (!isRecord(parsed.nutrientsPer100g)) {
-    throw new Error(\`\${provider}:\${parsed.externalId} has no nutrient object.\`);
+    throw new Error(`${provider}:${parsed.externalId} has no nutrient object.`);
   }
   const nutrients = parsed.nutrientsPer100g;
   for (const key of [
@@ -59,15 +59,15 @@ export function parseReferenceFoodLine(line: string): CanonicalFood {
     "saltG",
   ] as const) {
     if (!isNullableFiniteNumber(nutrients[key])) {
-      throw new Error(\`\${provider}:\${parsed.externalId} has invalid \${key}.\`);
+      throw new Error(`${provider}:${parsed.externalId} has invalid ${key}.`);
     }
   }
   if (REQUIRED_NUTRIENTS.filter((key) => nutrients[key] !== null).length < 3) {
-    throw new Error(\`\${provider}:\${parsed.externalId} has insufficient core nutrition.\`);
+    throw new Error(`${provider}:${parsed.externalId} has insufficient core nutrition.`);
   }
 
   if (!isRecord(parsed.provenance)) {
-    throw new Error(\`\${provider}:\${parsed.externalId} has no provenance.\`);
+    throw new Error(`${provider}:${parsed.externalId} has no provenance.`);
   }
   if (
     parsed.provenance.provider !== provider ||
@@ -75,7 +75,7 @@ export function parseReferenceFoodLine(line: string): CanonicalFood {
     typeof parsed.provenance.sourceReference !== "string" ||
     !parsed.provenance.sourceReference.trim()
   ) {
-    throw new Error(\`\${provider}:\${parsed.externalId} has invalid provenance.\`);
+    throw new Error(`${provider}:${parsed.externalId} has invalid provenance.`);
   }
 
   return parsed as unknown as CanonicalFood;
@@ -90,7 +90,7 @@ async function loadFile(filePath: string): Promise<CanonicalFood[]> {
     .map(parseReferenceFoodLine);
 
   if (foods.length < 1_000) {
-    throw new Error(\`\${path.basename(filePath)} contains only \${foods.length} valid foods.\`);
+    throw new Error(`${path.basename(filePath)} contains only ${foods.length} valid foods.`);
   }
   return foods;
 }
@@ -103,7 +103,7 @@ export async function syncReferenceFiles(filePaths: readonly string[]): Promise<
     for (const food of await loadFile(filePath)) {
       const provider = food.provider as ReferenceNutritionProvider;
       if (!REFERENCE_PROVIDERS.has(provider)) {
-        throw new Error(\`Unexpected provider after validation: \${food.provider}\`);
+        throw new Error(`Unexpected provider after validation: ${food.provider}`);
       }
       const foods = grouped.get(provider) ?? [];
       foods.push(food);
@@ -126,7 +126,7 @@ async function main(): Promise<void> {
   const files = process.argv.slice(2);
   try {
     const result = await syncReferenceFiles(files);
-    process.stdout.write(\`\${JSON.stringify({ ok: true, imported: result })}\\n\`);
+    process.stdout.write(`${JSON.stringify({ ok: true, imported: result })}\\n`);
   } finally {
     await disconnectPrisma();
   }
@@ -135,7 +135,7 @@ async function main(): Promise<void> {
 if (require.main === module) {
   main().catch((error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(\`Reference nutrition import failed: \${message}\\n\`);
+    process.stderr.write(`Reference nutrition import failed: ${message}\\n`);
     process.exitCode = 1;
   });
 }

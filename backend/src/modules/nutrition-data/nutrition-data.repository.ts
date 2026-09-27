@@ -323,10 +323,10 @@ export const nutritionDataRepository = {
     expiresAt: Date,
   ): Promise<number> {
     if (foods.length < 1_000) {
-      throw new Error(\`Refusing suspiciously small \${provider} reference snapshot: \${foods.length}\`);
+      throw new Error(`Refusing suspiciously small ${provider} reference snapshot: ${foods.length}`);
     }
     if (foods.some((food) => food.provider !== provider)) {
-      throw new Error(\`Reference snapshot contains a provider other than \${provider}\`);
+      throw new Error(`Reference snapshot contains a provider other than ${provider}`);
     }
 
     const validatedAt = new Date();
@@ -361,7 +361,7 @@ export const nutritionDataRepository = {
       });
 
       const serialized = JSON.stringify(records);
-      await prisma.$executeRaw\`
+      await prisma.$executeRaw`
         INSERT INTO nutrition_foods
           (provider, external_id, barcode, name, display_name_tr, brand, payload, retrieved_at, expires_at, last_validated_at, payload_hash, updated_at)
         SELECT
@@ -377,7 +377,7 @@ export const nutritionDataRepository = {
           x.last_validated_at::timestamptz,
           x.payload_hash,
           x.updated_at::timestamptz
-        FROM jsonb_to_recordset(\${serialized}::jsonb) AS x(
+        FROM jsonb_to_recordset(${serialized}::jsonb) AS x(
           provider text,
           external_id text,
           barcode text,
@@ -402,24 +402,24 @@ export const nutritionDataRepository = {
           last_validated_at = EXCLUDED.last_validated_at,
           payload_hash = EXCLUDED.payload_hash,
           updated_at = EXCLUDED.updated_at
-      \`;
+      `;
     }
 
-    await prisma.$executeRaw\`
+    await prisma.$executeRaw`
       DELETE FROM nutrition_foods
-      WHERE provider = \${provider}
-        AND updated_at < \${validatedAt}
-    \`;
-    await prisma.$executeRaw\`
+      WHERE provider = ${provider}
+        AND updated_at < ${validatedAt}
+    `;
+    await prisma.$executeRaw`
       DELETE FROM nutrition_food_aliases a
-      WHERE a.provider = \${provider}
+      WHERE a.provider = ${provider}
         AND NOT EXISTS (
           SELECT 1
           FROM nutrition_foods f
           WHERE f.provider = a.provider
             AND f.external_id = a.external_id
         )
-    \`;
+    `;
 
     return foods.length;
   },
