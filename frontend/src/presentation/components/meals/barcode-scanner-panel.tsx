@@ -173,6 +173,7 @@ export function BarcodeScannerPanel() {
   const streamRef = React.useRef<MediaStream | null>(null);
   const timerRef = React.useRef<number | null>(null);
   const scanningRef = React.useRef(false);
+  const historyLookupRef = React.useRef(false);
 
   const stopCamera = React.useCallback(() => {
     scanningRef.current = false;
@@ -251,6 +252,16 @@ export function BarcodeScannerPanel() {
     },
     [applyFoundFood],
   );
+
+  React.useEffect(() => {
+    if (historyLookupRef.current) return;
+    const params = new URLSearchParams(window.location.search);
+    const code = validDecodedBarcode(params.get("barcode") ?? "");
+    if (!code) return;
+    historyLookupRef.current = true;
+    setBarcode(code);
+    void lookup(code);
+  }, [lookup]);
 
   React.useEffect(() => {
     const onResult = (event: Event) => {

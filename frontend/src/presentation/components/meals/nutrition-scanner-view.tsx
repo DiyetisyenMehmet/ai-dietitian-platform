@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { Camera, ScanBarcode } from "lucide-react";
+import Link from "next/link";
+import { Camera, History, ScanBarcode } from "lucide-react";
 
 import { BarcodeScannerPanel } from "@/presentation/components/meals/barcode-scanner-panel";
 import { FoodNameFallbackPanel } from "@/presentation/components/meals/food-name-fallback-panel";
@@ -17,6 +18,17 @@ export function NutritionScannerView() {
 
   return (
     <div className="space-y-5">
+      <div className="flex justify-end">
+        <Link
+          href="/meals/scan/history"
+          aria-label="Tarama geçmişini aç"
+          className="inline-flex min-h-10 items-center gap-2 rounded-xl border bg-background px-3 py-2 text-sm font-semibold text-foreground shadow-sm transition hover:bg-muted/50"
+        >
+          <History className="size-4 text-primary" aria-hidden="true" />
+          Tarama geçmişi
+        </Link>
+      </div>
+
       <div className="grid grid-cols-2 gap-2 rounded-2xl bg-muted/50 p-1" role="tablist" aria-label="Besin tarama modu">
         <button
           type="button"
