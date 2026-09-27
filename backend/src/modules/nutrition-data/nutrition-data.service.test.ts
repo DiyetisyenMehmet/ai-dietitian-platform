@@ -422,3 +422,41 @@ test("provider discovery stores only relevant food knowledge and remembers the o
   assert.equal(aliases[0]?.externalId, "USDA-walnut");
   assert.ok((aliases[0]?.confidence ?? 0) >= 0.7);
 });
+
+
+test("third-party package-label consensus is promoted into the shared Diewish nutrition cache", async () => {
+  const barcode = "4006381333931";
+  const submitted = food("DIEWISH", barcode);
+  const consensus: CanonicalFood = {
+    ...submitted,
+    externalId: `package-consensus:${barcode}`,
+    provenance: {
+      ...submitted.provenance,
+      externalId: `package-consensus:${barcode}`,
+      sourceReference: "DIEWISH_PACKAGE_LABEL_CONSENSUS",
+      confidence: 0.93,
+    },
+  };
+  const events: string[] = [];
+  let persisted: CanonicalFood | null = null;
+  const persistence = {
+    async recordBarcodeScan() {
+      events.push("record");
+    },
+    async getUserConfirmedBarcodeConsensus() {
+      events.push("consensus");
+      return consensus;
+    },
+    async upsertFood(value: CanonicalFood) {
+      events.push("upsert");
+      persisted = value;
+    },
+  } as unknown as NutritionDataRepository;
+
+  const service = new NutritionDataService(providers({ off: null, usda: null }), persistence);
+  await service.saveUserConfirmedBarcode("user-3", barcode, submitted);
+
+  assert.deepEqual(events, ["record", "consensus", "upsert"]);
+  assert.equal(persisted?.externalId, `package-consensus:${barcode}`);
+  assert.equal(persisted?.provenance.sourceReference, "DIEWISH_PACKAGE_LABEL_CONSENSUS");
+});
