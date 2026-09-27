@@ -499,3 +499,45 @@ test("Diewish local cache searches deterministic provider aliases before externa
   assert.equal(providerCalls, 0);
   assert.ok(calls.includes("fresh:walnuts"));
 });
+
+
+test("catalog type-ahead searches only Diewish stored barcode products", async () => {
+  let providerCalls = 0;
+  const catalogFood: CanonicalFood = {
+    ...food("OPEN_FOOD_FACTS", "8690000000001"),
+    externalId: "tomurcuk-125",
+    name: "Tomurcuk",
+    displayNameTr: "Tomurcuk",
+    brand: "Çaykur",
+    quantity: "125 g",
+  };
+  const persistence = {
+    async searchCatalogProducts(query: string, limit: number) {
+      assert.equal(query, "Tomurcuk");
+      assert.equal(limit, 20);
+      return [catalogFood];
+    },
+  } as unknown as NutritionDataRepository;
+  const service = new NutritionDataService({
+    usda: {
+      isConfigured() { return true; },
+      async search() { providerCalls += 1; return []; },
+      async searchBrandedBarcode() { providerCalls += 1; return null; },
+    },
+    openFoodFacts: {
+      async search() { providerCalls += 1; return []; },
+      async getByBarcode() { providerCalls += 1; return null; },
+    },
+  }, persistence);
+
+  const results = await service.searchCatalog("Tomurcuk", 20);
+  assert.equal(results.length, 1);
+  assert.equal(results[0]?.brand, "Çaykur");
+  assert.equal(results[0]?.quantity, "125 g");
+  assert.equal(providerCalls, 0);
+});
+
+test("catalog type-ahead rejects one-character queries", async () => {
+  const service = new NutritionDataService(providers());
+  await assert.rejects(() => service.searchCatalog("T"), /2-120/);
+});

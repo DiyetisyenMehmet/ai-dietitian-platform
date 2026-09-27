@@ -257,6 +257,23 @@ export class NutritionDataService {
     return foods;
   }
 
+  async searchCatalog(queryInput: string, limit = 20): Promise<CanonicalFood[]> {
+    const query = queryInput.trim();
+    if (query.length < 2 || query.length > 120) {
+      throw ApiError.badRequest("Ürün araması 2-120 karakter olmalıdır.");
+    }
+    if (!this.persistence) return [];
+
+    const boundedLimit = Math.min(Math.max(Math.trunc(limit) || 20, 1), 40);
+    const key = `catalog:${query.toLocaleLowerCase("tr-TR")}:${boundedLimit}`;
+    const cached = this.searchCache.lookup(key);
+    if (cached.hit) return cached.value ?? [];
+
+    const foods = await this.persistence.searchCatalogProducts(query, boundedLimit);
+    this.searchCache.set(key, foods, 2 * 60 * 1000);
+    return foods;
+  }
+
   private async userConfirmedFallback(
     userId: string | undefined,
     barcode: string,

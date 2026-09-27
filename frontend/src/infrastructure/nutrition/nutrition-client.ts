@@ -205,6 +205,14 @@ export interface ComparisonDto {
 }
 
 export const nutritionClient = {
+  catalogSearch(query: string, limit = 20) {
+    return apiRequest<{ foods: CanonicalFoodDto[] }>({
+      path: `/nutrition/catalog/search?q=${encodeURIComponent(query)}&limit=${Math.min(Math.max(limit, 1), 40)}`,
+      method: "GET",
+      auth: true,
+    });
+  },
+
   barcode(barcode: string) {
     return apiRequest<{
       found: boolean;

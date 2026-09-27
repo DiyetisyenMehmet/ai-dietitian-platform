@@ -55,6 +55,12 @@ export const nutritionDataController = {
     sendSuccess(res, { foods, sourcePolicy: "DIEWISH_CACHE_THEN_USDA" });
   }),
 
+  catalogSearch: asyncHandler(async (req: Request, res: Response) => {
+    const query = typeof req.query.q === "string" ? req.query.q : "";
+    const foods = await nutritionDataService.searchCatalog(query, parsedLimit(req, 20));
+    sendSuccess(res, { foods, sourcePolicy: "DIEWISH_STORED_BARCODE_CATALOG_ONLY" });
+  }),
+
   barcode: asyncHandler(async (req: Request, res: Response) => {
     const userId = requireUserId(req);
     const barcode = req.params.barcode ?? "";

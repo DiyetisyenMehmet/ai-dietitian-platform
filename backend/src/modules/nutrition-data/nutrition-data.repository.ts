@@ -11,6 +11,11 @@ interface FoodRow {
   payload_hash: string | null;
 }
 
+interface CatalogFoodRow extends FoodRow {
+  is_stale: boolean;
+  match_rank: number;
+}
+
 interface ConfirmedLabelRow {
   user_id: string;
   payload: unknown;
@@ -215,6 +220,76 @@ export const nutritionDataRepository = {
       LIMIT ${limit}
     `;
     return rows.map((row) => hydrateFood(row, false)).filter((food): food is CanonicalFood => food !== null);
+  },
+
+  /**
+   * Searches only Diewish's stored barcode catalog. Used by type-ahead product
+   * discovery so keystrokes never fan out to external nutrition providers.
+   */
+  async searchCatalogProducts(query: string, limit: number, now = new Date()): Promise<CanonicalFood[]> {
+    const normalized = normalizeAlias(query);
+    if (!normalized) return [];
+    const pattern = `%${normalized}%`;
+    const prefix = `${normalized}%`;
+    const rows = await prisma.$queryRaw<CatalogFoodRow[]>`
+      SELECT
+        ranked.payload,
+        ranked.expires_at,
+        ranked.last_validated_at,
+        ranked.payload_hash,
+        ranked.is_stale,
+        ranked.match_rank
+      FROM (
+        SELECT DISTINCT ON (f.barcode)
+          f.barcode,
+          f.payload,
+          f.expires_at,
+          f.last_validated_at,
+          f.payload_hash,
+          (f.expires_at <= ${now}) AS is_stale,
+          CASE
+            WHEN LOWER(COALESCE(f.brand, '') || ' ' || COALESCE(f.display_name_tr, '')) = ${normalized} THEN 0
+            WHEN LOWER(COALESCE(f.display_name_tr, '')) = ${normalized} THEN 1
+            WHEN LOWER(COALESCE(f.name, '')) = ${normalized} THEN 2
+            WHEN LOWER(COALESCE(f.brand, '')) = ${normalized} THEN 3
+            WHEN LOWER(COALESCE(f.display_name_tr, '')) LIKE ${prefix} THEN 4
+            WHEN LOWER(COALESCE(f.brand, '')) LIKE ${prefix} THEN 5
+            WHEN LOWER(COALESCE(f.brand, '') || ' ' || COALESCE(f.display_name_tr, '')) LIKE ${pattern} THEN 6
+            WHEN LOWER(COALESCE(f.name, '')) LIKE ${pattern} THEN 7
+            ELSE 8
+          END AS match_rank
+        FROM nutrition_foods f
+        LEFT JOIN nutrition_food_aliases a
+          ON a.provider = f.provider AND a.external_id = f.external_id
+        WHERE f.barcode IS NOT NULL
+          AND f.barcode <> ''
+          AND (
+            LOWER(COALESCE(f.display_name_tr, '')) LIKE ${pattern}
+            OR LOWER(COALESCE(f.name, '')) LIKE ${pattern}
+            OR LOWER(COALESCE(f.brand, '')) LIKE ${pattern}
+            OR LOWER(COALESCE(f.brand, '') || ' ' || COALESCE(f.display_name_tr, '')) LIKE ${pattern}
+            OR a.normalized_alias LIKE ${pattern}
+          )
+        ORDER BY
+          f.barcode,
+          CASE
+            WHEN f.provider = 'DIEWISH' THEN 0
+            WHEN f.provider = 'OPEN_FOOD_FACTS' THEN 1
+            WHEN f.provider = 'USDA' THEN 2
+            WHEN f.provider = 'CNF' THEN 3
+            WHEN f.provider = 'CIQUAL' THEN 4
+            WHEN f.provider = 'COFID' THEN 5
+            ELSE 6
+          END,
+          (f.expires_at > ${now}) DESC,
+          COALESCE(f.last_validated_at, f.retrieved_at) DESC
+      ) ranked
+      ORDER BY ranked.match_rank ASC, ranked.is_stale ASC, ranked.last_validated_at DESC NULLS LAST
+      LIMIT ${limit}
+    `;
+    return rows
+      .map((row) => hydrateFood(row, row.is_stale))
+      .filter((food): food is CanonicalFood => food !== null);
   },
 
   /**

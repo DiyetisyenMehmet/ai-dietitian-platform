@@ -37,6 +37,7 @@ import {
   NutritionFactsGrid,
   NutritionProvenanceSection,
 } from "./nutrition-scan-sections";
+import { BarcodeProductSearch } from "./barcode-product-search";
 import { PackageLabelRecovery } from "./package-label-recovery";
 
 interface DetectedBarcode {
@@ -203,23 +204,41 @@ export function BarcodeScannerPanel() {
   }, []);
 
   const applyFoundFood = React.useCallback(
-    (code: string, nextFood: CanonicalFoodDto, nextScan: NormalizedNutritionScanDto | null) => {
+    (
+      code: string,
+      nextFood: CanonicalFoodDto,
+      nextScan: NormalizedNutritionScanDto | null,
+      preferredGrams?: number,
+    ) => {
       setFood(nextFood);
       setScan(nextScan);
       setNotFound(false);
       setComparison(null);
       setPersonalization(null);
       const initialGrams =
-        nextScan?.serving.grams && nextScan.serving.grams > 0
-          ? nextScan.serving.grams
-          : nextFood.serving?.gramWeight && nextFood.serving.gramWeight > 0
-            ? nextFood.serving.gramWeight
-            : 100;
+        preferredGrams && preferredGrams > 0
+          ? preferredGrams
+          : nextScan?.serving.grams && nextScan.serving.grams > 0
+            ? nextScan.serving.grams
+            : nextFood.serving?.gramWeight && nextFood.serving.gramWeight > 0
+              ? nextFood.serving.gramWeight
+              : 100;
       setGrams(initialGrams);
       setPortionInput(roundedGrams(initialGrams));
       void loadPersonalization(code, initialGrams);
     },
     [loadPersonalization],
+  );
+
+  const selectCatalogProduct = React.useCallback(
+    (nextFood: CanonicalFoodDto) => {
+      if (!nextFood.barcode) return;
+      // Name search is product discovery, not a barcode scan. It must not add
+      // another scan-history event. Start from the neutral 100 g reference;
+      // package size and consumed portion are separate concepts.
+      applyFoundFood(nextFood.barcode, nextFood, null, 100);
+    },
+    [applyFoundFood],
   );
 
   const lookup = React.useCallback(
@@ -428,6 +447,10 @@ export function BarcodeScannerPanel() {
 
   return (
     <div className="space-y-4 overflow-x-hidden">
+      <div className="flex justify-end">
+        <BarcodeProductSearch onSelect={selectCatalogProduct} />
+      </div>
+
       {!food && (
         <Card>
           <CardContent className="space-y-4 p-5">
