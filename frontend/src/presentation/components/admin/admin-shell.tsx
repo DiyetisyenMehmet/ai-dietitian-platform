@@ -73,7 +73,7 @@ export function AdminShell({
             <ModalContent className="left-0 top-0 flex h-dvh w-[min(20rem,calc(100%-3rem))] max-w-none translate-x-0 translate-y-0 flex-col gap-6 overflow-y-auto rounded-none border-y-0 border-l-0 pb-[max(1.5rem,env(safe-area-inset-bottom))] pl-[max(1.5rem,env(safe-area-inset-left))] pt-[max(1.5rem,env(safe-area-inset-top))]">
               <div className="pr-6">
                 <ModalTitle>Yönetim menüsü</ModalTitle>
-                <ModalDescription className="mt-2">
+                <ModalDescription className="mt-2 text-foreground/70">
                   Diewish Management Center · {environment}
                 </ModalDescription>
               </div>
@@ -120,11 +120,11 @@ export function AdminShell({
             ) : (
               <>
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-foreground/70">
                     Genel Bakış
                   </p>
                   <h1 className="mt-1 text-2xl font-bold tracking-tight">Yönetim merkezi</h1>
-                  <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+                  <p className="mt-2 max-w-2xl text-sm text-foreground/70">
                     Yönetici hesabınızı ve açılmış yönetim modüllerini buradan kontrol
                     edebilirsiniz.
                   </p>
@@ -156,7 +156,7 @@ export function AdminShell({
                       <p>
                         Çalışma ortamı: <span className="font-medium">{environment}</span>
                       </p>
-                      <p className="break-all text-muted-foreground">
+                      <p className="break-all text-foreground/70">
                         Sürüm: {session.environment.commit}
                       </p>
                     </CardContent>

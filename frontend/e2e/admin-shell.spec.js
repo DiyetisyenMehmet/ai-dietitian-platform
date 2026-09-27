@@ -169,7 +169,18 @@ test("mobile drawer traps focus, closes on Escape, outside interaction and deskt
   await page.keyboard.press("Escape");
   await expect(trigger).toBeFocused();
   await trigger.click();
-  await page.mouse.click(385, 500);
+  // Wait for the dialog, then click the middle of the exposed backdrop.
+  // Avoid both the opening animation and the browser's right scrollbar edge.
+  await expect(page.getByRole("dialog")).toHaveCSS("opacity", "1");
+  const backdrop = page.locator('[data-state="open"].fixed.inset-0');
+  const backdropBox = await backdrop.boundingBox();
+  const drawerBox = await page.getByRole("dialog").boundingBox();
+  await backdrop.click({
+    position: {
+      x: (drawerBox.x + drawerBox.width + backdropBox.x + backdropBox.width) / 2 - backdropBox.x,
+      y: backdropBox.height / 2,
+    },
+  });
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await trigger.click();
   await page.setViewportSize({ width: 1440, height: 900 });

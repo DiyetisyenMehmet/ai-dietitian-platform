@@ -92,7 +92,7 @@ export function AdminAuditViewer() {
   return (
     <div className="space-y-6">
       <div>
-        <p className="text-sm font-medium text-primary">Güvenlik</p>
+        <p className="text-sm font-medium text-foreground/70">Güvenlik</p>
         <h1 className="mt-1 text-2xl font-bold tracking-tight">İşlem geçmişi</h1>
         <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
           Yönetim merkezinde yapılan kritik değişiklikleri ve erişim işlemlerini filtreleyerek inceleyin.

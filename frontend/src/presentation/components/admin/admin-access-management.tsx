@@ -298,7 +298,7 @@ export function AdminAccessManagement({
   return (
     <div className="space-y-6">
       <div>
-        <p className="text-sm font-medium text-primary">Güvenlik</p>
+        <p className="text-sm font-medium text-foreground/70">Güvenlik</p>
         <h1 className="mt-1 text-2xl font-bold tracking-tight">Yetkili çalışanlar</h1>
         <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
           Yönetim merkezine erişebilen çalışanları, görevlerini ve aktif oturumlarını buradan yönetin.
