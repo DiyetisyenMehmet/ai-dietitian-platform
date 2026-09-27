@@ -44,6 +44,7 @@ function providerError(message: string, details?: unknown): ApiError {
 function ttlHoursFor(food: CanonicalFood): number {
   if (food.provider === "OPEN_FOOD_FACTS") return env.OPEN_FOOD_FACTS_CACHE_TTL_HOURS;
   if (food.provider === "CNF") return env.CNF_CACHE_TTL_HOURS;
+  if (food.provider === "DIEWISH") return env.DIEWISH_CONSENSUS_CACHE_TTL_HOURS;
   return env.USDA_CACHE_TTL_HOURS;
 }
 
@@ -362,6 +363,20 @@ export class NutritionDataService {
       });
     }
     await this.persistence.recordBarcodeScan(userId, barcode, food);
+
+    const consensus = await this.persistence.getUserConfirmedBarcodeConsensus(barcode, 3);
+    if (consensus) {
+      await this.persistence.upsertFood(consensus, expiresAt(consensus));
+      this.foodCache.set(
+        `barcode:${barcode}`,
+        consensus,
+        15 * 60 * 1000,
+      );
+      logger.info(
+        { event: "barcode_label_consensus_promoted", barcodeLength: barcode.length },
+        "Independent package-label confirmations promoted to Diewish shared knowledge",
+      );
+    }
   }
 
   async recordBarcodeScan(userId: string, input: string, food: CanonicalFood | null): Promise<void> {

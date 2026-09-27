@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 
 import { prisma } from "../../lib/prisma";
+import { buildPackageLabelConsensus } from "./nutrition-learning";
 import type { CanonicalFood, NutrientValues } from "./nutrition-data.types";
 
 interface FoodRow {
@@ -8,6 +9,11 @@ interface FoodRow {
   expires_at: Date;
   last_validated_at: Date | null;
   payload_hash: string | null;
+}
+
+interface ConfirmedLabelRow {
+  user_id: string;
+  payload: unknown;
 }
 
 interface ScanRow {
@@ -105,7 +111,15 @@ export const nutritionDataRepository = {
       SELECT payload, expires_at, last_validated_at, payload_hash
       FROM nutrition_foods
       WHERE barcode = ${barcode} AND expires_at > ${now}
-      ORDER BY retrieved_at DESC
+      ORDER BY
+        CASE
+          WHEN provider = 'OPEN_FOOD_FACTS' THEN 0
+          WHEN provider = 'USDA' THEN 1
+          WHEN provider = 'CNF' THEN 2
+          WHEN provider = 'DIEWISH' THEN 3
+          ELSE 4
+        END,
+        retrieved_at DESC
       LIMIT 1
     `;
     return rows[0] ? hydrateFood(rows[0], false) : null;
@@ -125,6 +139,36 @@ export const nutritionDataRepository = {
       LIMIT 1
     `;
     return rows[0] ? asFood(rows[0].payload) : null;
+  },
+
+  /**
+   * Builds shared package knowledge only when independent users confirmed the
+   * same barcode nutrition panel. Raw label images are never stored here.
+   */
+  async getUserConfirmedBarcodeConsensus(
+    barcode: string,
+    minimumDistinctUsers = 3,
+  ): Promise<CanonicalFood | null> {
+    const rows = await prisma.$queryRaw<ConfirmedLabelRow[]>`
+      SELECT user_id, payload
+      FROM nutrition_barcode_scans
+      WHERE barcode = ${barcode}
+        AND provider = 'DIEWISH'
+        AND payload IS NOT NULL
+        AND payload->'provenance'->>'sourceReference' = 'USER_CONFIRMED_PACKAGE_LABEL'
+      ORDER BY scanned_at DESC
+      LIMIT 100
+    `;
+
+    return buildPackageLabelConsensus(
+      rows
+        .map((row) => {
+          const food = asFood(row.payload);
+          return food ? { userId: row.user_id, food } : null;
+        })
+        .filter((value): value is { userId: string; food: CanonicalFood } => value !== null),
+      minimumDistinctUsers,
+    );
   },
 
   /** Most recently validated expired record, used only when live providers fail. */

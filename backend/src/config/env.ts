@@ -64,6 +64,7 @@ const envSchema = z.object({
   CNF_API_BASE_URL: z.string().url().default("https://food-nutrition.canada.ca/api/canadian-nutrient-file"),
   CNF_INDEX_CACHE_TTL_HOURS: z.coerce.number().int().positive().max(24 * 30).default(24),
   CNF_CACHE_TTL_HOURS: z.coerce.number().int().positive().max(24 * 365).default(720),
+  DIEWISH_CONSENSUS_CACHE_TTL_HOURS: z.coerce.number().int().positive().max(24 * 365).default(720),
   NUTRITION_PROVIDER_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(30_000).default(8_000),
   USDA_CACHE_TTL_HOURS: z.coerce.number().int().positive().max(24 * 365).default(168),
   OPEN_FOOD_FACTS_CACHE_TTL_HOURS: z.coerce.number().int().positive().max(24 * 30).default(24),
