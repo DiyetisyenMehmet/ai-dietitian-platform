@@ -38,6 +38,11 @@ steps:
     id: import-reference-foods-to-staging
     dir: /workspace/repo/backend
     entrypoint: sh
+    env:
+      - NODE_ENV=test
+      - DIEWISH_ENVIRONMENT=staging
+      - JWT_ACCESS_SECRET=reference-sync-unused-access-secret-0000000000000000
+      - JWT_REFRESH_SECRET=reference-sync-unused-refresh-secret-000000000000000
     secretEnv:
       - DIRECT_DATABASE_URL
     args:
