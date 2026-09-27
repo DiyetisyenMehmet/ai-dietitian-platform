@@ -133,6 +133,11 @@ jobs:
                   --project "$PROJECT_ID" \
                   --region=global \
                   --format='yaml(status,statusDetail,failureInfo,steps.id,steps.status)' || true
+                echo "---- Cloud Build logs ----" >&2
+                gcloud builds log "$SYNC_BUILD_ID" \
+                  --project "$PROJECT_ID" \
+                  --region=global \
+                  --stream || true
                 exit 1
                 ;;
             esac
