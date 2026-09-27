@@ -438,7 +438,7 @@ test("third-party package-label consensus is promoted into the shared Diewish nu
     },
   };
   const events: string[] = [];
-  let persisted: CanonicalFood | null = null;
+  const persisted: CanonicalFood[] = [];
   const persistence = {
     async recordBarcodeScan() {
       events.push("record");
@@ -449,7 +449,7 @@ test("third-party package-label consensus is promoted into the shared Diewish nu
     },
     async upsertFood(value: CanonicalFood) {
       events.push("upsert");
-      persisted = value;
+      persisted.push(value);
     },
   } as unknown as NutritionDataRepository;
 
@@ -457,6 +457,6 @@ test("third-party package-label consensus is promoted into the shared Diewish nu
   await service.saveUserConfirmedBarcode("user-3", barcode, submitted);
 
   assert.deepEqual(events, ["record", "consensus", "upsert"]);
-  assert.equal(persisted?.externalId, `package-consensus:${barcode}`);
-  assert.equal(persisted?.provenance.sourceReference, "DIEWISH_PACKAGE_LABEL_CONSENSUS");
+  assert.equal(persisted[0]?.externalId, `package-consensus:${barcode}`);
+  assert.equal(persisted[0]?.provenance.sourceReference, "DIEWISH_PACKAGE_LABEL_CONSENSUS");
 });
