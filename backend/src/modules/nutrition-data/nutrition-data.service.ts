@@ -14,7 +14,7 @@ import { expandNutritionProviderQueries } from "./nutrition-query-aliases";
 import { canadianNutrientFileProvider } from "./providers/cnf.provider";
 import { openFoodFactsProvider } from "./providers/open-food-facts.provider";
 import { usdaFoodDataCentralProvider } from "./providers/usda.provider";
-import { selectPreferredFood } from "./source-policy";
+import { assessBarcodeFoodQuality, selectBestBarcodeFood } from "./barcode-quality";
 
 export interface UsdaNutritionProviderPort {
   isConfigured(): boolean;
@@ -325,11 +325,39 @@ export class NutritionDataService {
       offError = error;
     }
 
-    if (offFood) {
-      this.foodCache.set(key, offFood, env.OPEN_FOOD_FACTS_CACHE_TTL_HOURS * 60 * 60 * 1000);
-      if (this.persistence) await this.persistence.upsertFood(offFood, expiresAt(offFood));
-      logger.info({ event: "barcode_lookup_success", provider: offFood.provider, barcodeLength: barcode.length }, "Barcode lookup succeeded");
+    const offQuality = offFood ? assessBarcodeFoodQuality(offFood, barcode) : null;
+    if (offFood && offQuality && !offQuality.shouldCrossCheck && offQuality.tier !== "REJECT") {
+      const ttlHours = ttlHoursFor(offFood);
+      this.foodCache.set(key, offFood, ttlHours * 60 * 60 * 1000);
+      if (this.persistence && offQuality.persistable) {
+        await this.persistence.upsertFood(offFood, expiresAt(offFood));
+      }
+      logger.info(
+        {
+          event: "barcode_lookup_success",
+          provider: offFood.provider,
+          barcodeLength: barcode.length,
+          qualityScore: offQuality.score,
+          qualityTier: offQuality.tier,
+          crossChecked: false,
+        },
+        "Barcode lookup succeeded",
+      );
       return offFood;
+    }
+
+    if (offFood && offQuality) {
+      logger.info(
+        {
+          event: "barcode_quality_crosscheck",
+          provider: offFood.provider,
+          barcodeLength: barcode.length,
+          qualityScore: offQuality.score,
+          qualityTier: offQuality.tier,
+          qualityIssues: offQuality.issues,
+        },
+        "Barcode candidate requires quality cross-check",
+      );
     }
 
     let usdaFood: CanonicalFood | null = null;
@@ -342,15 +370,30 @@ export class NutritionDataService {
       }
     }
 
-    const selected = selectPreferredFood(
+    const selection = selectBestBarcodeFood(
       [offFood, usdaFood].filter((value): value is CanonicalFood => value !== null),
-      "BARCODE",
+      barcode,
     );
-    if (selected) {
+    if (selection) {
+      const selected = selection.food;
       const ttlHours = ttlHoursFor(selected);
       this.foodCache.set(key, selected, ttlHours * 60 * 60 * 1000);
-      if (this.persistence) await this.persistence.upsertFood(selected, expiresAt(selected));
-      logger.info({ event: "barcode_lookup_success", provider: selected.provider, barcodeLength: barcode.length }, "Barcode lookup succeeded");
+      if (this.persistence && selection.assessment.persistable) {
+        await this.persistence.upsertFood(selected, expiresAt(selected));
+      }
+      logger.info(
+        {
+          event: "barcode_lookup_success",
+          provider: selected.provider,
+          barcodeLength: barcode.length,
+          qualityScore: selection.assessment.score,
+          qualityTier: selection.assessment.tier,
+          qualityIssues: selection.assessment.issues,
+          crossChecked: Boolean(offFood && this.providers.usda.isConfigured()),
+          crossSourceAgreement: selection.comparison,
+        },
+        "Barcode lookup succeeded",
+      );
       return selected;
     }
 

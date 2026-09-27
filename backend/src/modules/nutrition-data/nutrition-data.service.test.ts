@@ -541,3 +541,106 @@ test("catalog type-ahead rejects one-character queries", async () => {
   const service = new NutritionDataService(providers());
   await assert.rejects(() => service.searchCatalog("T"), /2-120/);
 });
+
+
+test("suspicious Open Food Facts barcode data is cross-checked and stronger USDA data wins", async () => {
+  let usdaCalls = 0;
+  const weakOff: CanonicalFood = {
+    ...food("OPEN_FOOD_FACTS"),
+    name: "Product",
+    displayNameTr: "Ürün",
+    nutrientsPer100g: {
+      energyKcal: null,
+      proteinG: null,
+      carbohydratesG: null,
+      fatG: null,
+      saturatedFatG: null,
+      sugarsG: null,
+      fiberG: null,
+      sodiumMg: null,
+      saltG: null,
+    },
+  };
+  const service = new NutritionDataService(
+    providers({
+      off: weakOff,
+      usda: food("USDA"),
+      onUsdaCall: () => (usdaCalls += 1),
+    }),
+  );
+
+  const result = await service.getByBarcode("4006381333931");
+  assert.equal(result?.provider, "USDA");
+  assert.equal(usdaCalls, 1);
+});
+
+test("barcode quality gate rejects a provider candidate whose barcode does not match the scanned GTIN", async () => {
+  const mismatched = food("OPEN_FOOD_FACTS", "5901234123457");
+  const service = new NutritionDataService(
+    providers({
+      off: mismatched,
+      usda: null,
+      usdaConfigured: false,
+    }),
+  );
+
+  assert.equal(await service.getByBarcode("4006381333931"), null);
+});
+
+test("salt product with legitimate zero macros remains a strong barcode result", async () => {
+  let usdaCalls = 0;
+  const salt: CanonicalFood = {
+    ...food("OPEN_FOOD_FACTS"),
+    name: "Rock Salt",
+    displayNameTr: "Kaya Tuzu",
+    brand: "Kristal",
+    quantity: "500 g",
+    nutrientsPer100g: {
+      energyKcal: 0,
+      proteinG: 0,
+      carbohydratesG: 0,
+      fatG: 0,
+      saturatedFatG: 0,
+      sugarsG: 0,
+      fiberG: 0,
+      sodiumMg: 40_000,
+      saltG: 100,
+    },
+  };
+  const service = new NutritionDataService(
+    providers({
+      off: salt,
+      usda: food("USDA"),
+      onUsdaCall: () => (usdaCalls += 1),
+    }),
+  );
+
+  const result = await service.getByBarcode("4006381333931");
+  assert.equal(result?.provider, "OPEN_FOOD_FACTS");
+  assert.equal(result?.displayNameTr, "Kaya Tuzu");
+  assert.equal(usdaCalls, 0);
+});
+
+test("logically inconsistent Open Food Facts nutrients trigger a USDA cross-check", async () => {
+  let usdaCalls = 0;
+  const inconsistent: CanonicalFood = {
+    ...food("OPEN_FOOD_FACTS"),
+    brand: "Test",
+    nutrientsPer100g: {
+      ...food("OPEN_FOOD_FACTS").nutrientsPer100g,
+      carbohydratesG: 10,
+      sugarsG: 40,
+    },
+  };
+  const service = new NutritionDataService(
+    providers({
+      off: inconsistent,
+      usda: food("USDA"),
+      onUsdaCall: () => (usdaCalls += 1),
+    }),
+  );
+
+  const result = await service.getByBarcode("4006381333931");
+  assert.equal(result?.provider, "USDA");
+  assert.equal(usdaCalls, 1);
+});
