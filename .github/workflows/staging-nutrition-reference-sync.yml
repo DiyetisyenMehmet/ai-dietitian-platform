@@ -1,0 +1,168 @@
+name: Staging Nutrition Reference Sync
+
+on:
+  push:
+    branches:
+      - feature/staging-preview
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+  id-token: write
+
+concurrency:
+  group: diewish-staging-nutrition-reference-sync
+  cancel-in-progress: false
+
+env:
+  PROJECT_ID: project-a2e260c1-839d-4f1d-b90
+  WIF_PROVIDER: projects/730419163638/locations/global/workloadIdentityPools/github-actions/providers/diewish-staging
+  DEPLOY_SERVICE_ACCOUNT: diewish-staging-deployer@project-a2e260c1-839d-4f1d-b90.iam.gserviceaccount.com
+  DIRECT_DATABASE_SECRET_NAME: diewish-staging-direct-database-url
+
+jobs:
+  sync-reference-nutrition:
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[nutrition-ref-sync]')) }}
+    name: Sync CIQUAL and CoFID into isolated staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: staging
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate staging-only target
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$PROJECT_ID" = "project-a2e260c1-839d-4f1d-b90"
+          [[ "$DEPLOY_SERVICE_ACCOUNT" == diewish-staging-deployer@* ]]
+          [[ "$DIRECT_DATABASE_SECRET_NAME" == diewish-staging-* ]]
+          if grep -Eq 'wild-dawn-63542383|production-database|prod-database' "$GITHUB_WORKSPACE/.github/workflows/staging-nutrition-reference-sync.yml"; then
+            echo "Production resource reference detected." >&2
+            exit 1
+          fi
+
+      - name: Wait for exact-SHA staging CI gates
+        if: ${{ github.event_name == 'push' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          required=("Hardening CI" "Staging Config CI")
+          for attempt in {1..180}; do
+            runs="$(curl --fail --silent --show-error \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${GITHUB_SHA}&per_page=100")"
+            ready=1
+            for workflow_name in "${required[@]}"; do
+              record="$(jq -c --arg name "${workflow_name}" '
+                [.workflow_runs[]
+                  | select(.name == $name)
+                  | {status, conclusion, run_attempt, updated_at}]
+                | sort_by(.run_attempt, .updated_at)
+                | last // empty
+              ' <<<"${runs}")"
+              if [[ -z "${record}" ]]; then
+                ready=0
+                continue
+              fi
+              status="$(jq -r '.status' <<<"${record}")"
+              conclusion="$(jq -r '.conclusion // ""' <<<"${record}")"
+              if [[ "${status}" == "completed" && "${conclusion}" != "success" ]]; then
+                echo "Pre-sync gate failed: ${workflow_name} => ${conclusion}" >&2
+                exit 1
+              fi
+              if [[ "${status}" != "completed" || "${conclusion}" != "success" ]]; then
+                ready=0
+              fi
+            done
+            if [[ "${ready}" == "1" ]]; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Timed out waiting for exact-SHA staging CI gates." >&2
+          exit 1
+
+      - name: Authenticate to isolated staging Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Verify isolated staging database secret
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcloud secrets describe "$DIRECT_DATABASE_SECRET_NAME" \
+            --project "$PROJECT_ID" >/dev/null
+
+      - name: Download and normalize official reference datasets
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUTPUT_DIR="${RUNNER_TEMP}/diewish-nutrition-reference"
+          python3 scripts/nutrition-reference-sync.py --output-dir "$OUTPUT_DIR"
+          test -s "$OUTPUT_DIR/ciqual.ndjson"
+          test -s "$OUTPUT_DIR/cofid.ndjson"
+          jq -e '.ciqual.count >= 3000 and .cofid.count >= 2000' "$OUTPUT_DIR/summary.json" >/dev/null
+          echo "REFERENCE_OUTPUT_DIR=$OUTPUT_DIR" >> "$GITHUB_ENV"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Generate Prisma client
+        working-directory: backend
+        run: npm run prisma:generate
+
+      - name: Bind only the isolated staging database
+        shell: bash
+        run: |
+          set -euo pipefail
+          database_url="$(gcloud secrets versions access latest \
+            --secret "$DIRECT_DATABASE_SECRET_NAME" \
+            --project "$PROJECT_ID")"
+          test -n "$database_url"
+          echo "::add-mask::$database_url"
+          echo "DATABASE_URL=$database_url" >> "$GITHUB_ENV"
+
+      - name: Import reference foods into Diewish staging cache
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run nutrition:sync-reference -- \
+            "${REFERENCE_OUTPUT_DIR}/ciqual.ndjson" \
+            "${REFERENCE_OUTPUT_DIR}/cofid.ndjson"
+
+      - name: Reference sync summary
+        shell: bash
+        run: |
+          {
+            echo "## Diewish staging nutrition reference sync"
+            echo ""
+            echo "- Environment: isolated staging only"
+            echo "- Commit: $GITHUB_SHA"
+            echo "- CIQUAL: $(jq -r '.ciqual.count' "${REFERENCE_OUTPUT_DIR}/summary.json") normalized foods"
+            echo "- CoFID: $(jq -r '.cofid.count' "${REFERENCE_OUTPUT_DIR}/summary.json") normalized foods"
+            echo "- CIQUAL source SHA-256: $(jq -r '.ciqual.sha256' "${REFERENCE_OUTPUT_DIR}/summary.json")"
+            echo "- CoFID source SHA-256: $(jq -r '.cofid.sha256' "${REFERENCE_OUTPUT_DIR}/summary.json")"
+            echo "- Production: not touched"
+          } >> "$GITHUB_STEP_SUMMARY"

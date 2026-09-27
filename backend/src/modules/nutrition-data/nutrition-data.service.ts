@@ -96,9 +96,31 @@ export class NutritionDataService {
     const cached = this.searchCache.lookup(key);
     if (cached.hit) return cached.value ?? [];
 
+    const queries = expandNutritionProviderQueries(query);
     let staleLocal: CanonicalFood[] = [];
     if (this.persistence) {
-      const local = await this.persistence.searchLocal(query, boundedLimit);
+      const localCandidates: CanonicalFood[] = [];
+      const staleCandidates: CanonicalFood[] = [];
+      for (const localQuery of queries) {
+        if (localCandidates.length < boundedLimit) {
+          localCandidates.push(
+            ...(await this.persistence.searchLocal(localQuery, boundedLimit - localCandidates.length)),
+          );
+        }
+        if (staleCandidates.length < boundedLimit) {
+          staleCandidates.push(
+            ...(await this.persistence.searchLocalStale(localQuery, boundedLimit - staleCandidates.length)),
+          );
+        }
+      }
+
+      const local = rankNutritionMatches(query, uniqueFoods(localCandidates, boundedLimit))
+        .map((match) => match.food)
+        .slice(0, boundedLimit);
+      staleLocal = rankNutritionMatches(query, uniqueFoods(staleCandidates, boundedLimit))
+        .map((match) => match.food)
+        .slice(0, boundedLimit);
+
       if (local.length > 0) {
         this.searchCache.set(key, local, 15 * 60 * 1000);
         logger.info(
@@ -107,12 +129,10 @@ export class NutritionDataService {
         );
         return local;
       }
-      staleLocal = await this.persistence.searchLocalStale(query, boundedLimit);
     }
 
     const collected: CanonicalFood[] = [];
     const errors: string[] = [];
-    const queries = expandNutritionProviderQueries(query);
 
     const offSearchAvailable = Boolean(this.providers.openFoodFacts.search);
     const cnfAvailable = Boolean(this.providers.cnf);

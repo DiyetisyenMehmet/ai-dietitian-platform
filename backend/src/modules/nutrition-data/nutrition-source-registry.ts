@@ -52,8 +52,8 @@ export const NUTRITION_SOURCE_REGISTRY: readonly NutritionSourceRegistryEntry[] 
     integrationMode: "BULK_IMPORT",
     attribution: "ANSES-CIQUAL",
     licence: "Licence Ouverte / Open Licence 2.0 (Etalab)",
-    sourceUrl: "https://ciqual.anses.fr/",
-    active: false,
+    sourceUrl: "https://zenodo.org/records/17550133",
+    active: true,
   },
   {
     id: "COFID",
@@ -64,7 +64,7 @@ export const NUTRITION_SOURCE_REGISTRY: readonly NutritionSourceRegistryEntry[] 
     attribution: "UK Composition of Foods Integrated Dataset (CoFID), 2021",
     licence: "Open Government Licence v3.0",
     sourceUrl: "https://www.gov.uk/government/publications/composition-of-foods-integrated-dataset-cofid",
-    active: false,
+    active: true,
   },
   {
     id: "OPEN_FOOD_FACTS",

@@ -24,6 +24,7 @@ jobs:
           bash -n scripts/bootstrap-staging-sms-defense-gcp.sh
           bash -n scripts/configure-staging-sms-defense.sh
           bash -n scripts/configure-staging-auth.sh
+          python3 -m py_compile scripts/nutrition-reference-sync.py
 
       - name: Assert staging isolation contract
         shell: bash
@@ -41,6 +42,7 @@ jobs:
           android_host=android/app/src/main/java/com/diewish/app/MainActivity.java
           next_config=frontend/next.config.ts
           frontend_build=.github/cloudbuild/frontend-staging.yaml
+          nutrition_sync=.github/workflows/staging-nutrition-reference-sync.yml
 
           grep -q 'BACKEND_SERVICE: diewish-backend-staging' "$workflow"
           grep -q 'FRONTEND_SERVICE: diewish-frontend-staging' "$workflow"
@@ -48,6 +50,18 @@ jobs:
           grep -q 'DATABASE_SECRET_NAME: diewish-staging-database-url' "$workflow"
           grep -q 'DIRECT_DATABASE_SECRET_NAME: diewish-staging-direct-database-url' "$workflow"
           grep -q 'Diewish Staging Neon DATABASE_URL' "$script"
+
+          # Nutrition reference sync is staging-only and may never point at
+          # production resources or a production database secret.
+          grep -q 'PROJECT_ID: project-a2e260c1-839d-4f1d-b90' "$nutrition_sync"
+          grep -q 'DIRECT_DATABASE_SECRET_NAME: diewish-staging-direct-database-url' "$nutrition_sync"
+          grep -q 'diewish-staging-deployer@' "$nutrition_sync"
+          grep -q 'nutrition-reference-sync.py' "$nutrition_sync"
+          grep -q 'nutrition:sync-reference' "$nutrition_sync"
+          if grep -Eq 'wild-dawn-63542383|diewish-(backend|frontend)-prod|production-database|prod-database' "$nutrition_sync"; then
+            echo 'Production resource reference detected in nutrition reference sync.' >&2
+            exit 1
+          fi
 
           # WIF trust is pinned to immutable GitHub IDs and the exact staging ref.
           grep -q 'GITHUB_REPOSITORY_ID="1295514788"' "$script"

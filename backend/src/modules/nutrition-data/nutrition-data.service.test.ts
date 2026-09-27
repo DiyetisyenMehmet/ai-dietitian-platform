@@ -460,3 +460,42 @@ test("third-party package-label consensus is promoted into the shared Diewish nu
   assert.equal(persisted[0]?.externalId, `package-consensus:${barcode}`);
   assert.equal(persisted[0]?.provenance.sourceReference, "DIEWISH_PACKAGE_LABEL_CONSENSUS");
 });
+
+
+test("Diewish local cache searches deterministic provider aliases before external sources", async () => {
+  const calls: string[] = [];
+  const cached = {
+    ...food("COFID", ""),
+    externalId: "cofid-walnut",
+    name: "Walnuts, dried",
+    displayNameTr: "Walnuts, dried",
+  };
+  const persistence = {
+    async searchLocal(query: string) {
+      calls.push(`fresh:${query}`);
+      return query === "walnuts" ? [cached] : [];
+    },
+    async searchLocalStale(query: string) {
+      calls.push(`stale:${query}`);
+      return [];
+    },
+  } as unknown as NutritionDataRepository;
+  let providerCalls = 0;
+  const service = new NutritionDataService({
+    usda: {
+      isConfigured() { return true; },
+      async search() { providerCalls += 1; return []; },
+      async searchBrandedBarcode() { return null; },
+    },
+    openFoodFacts: {
+      async search() { providerCalls += 1; return []; },
+      async getByBarcode() { return null; },
+    },
+  }, persistence);
+
+  const result = await service.search("ceviz", 5);
+  assert.equal(result[0]?.provider, "COFID");
+  assert.equal(result[0]?.externalId, "cofid-walnut");
+  assert.equal(providerCalls, 0);
+  assert.ok(calls.includes("fresh:walnuts"));
+});

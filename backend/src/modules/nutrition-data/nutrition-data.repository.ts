@@ -41,6 +41,8 @@ interface UnifiedScanRow {
   scanned_at: Date;
 }
 
+export type ReferenceNutritionProvider = Extract<CanonicalFood["provider"], "CIQUAL" | "COFID">;
+
 export interface PhotoScanHistoryInput {
   dishName: string;
   estimatedPortion: string;
@@ -308,6 +310,118 @@ export const nutritionDataRepository = {
           confidence = GREATEST(nutrition_food_aliases.confidence, EXCLUDED.confidence)
       `;
     }
+  },
+
+  /**
+   * Replaces a bulk reference-provider snapshot without issuing thousands of
+   * per-food alias writes. CIQUAL/CoFID names remain searchable directly from
+   * nutrition_foods, while learned Turkish aliases stay in their own table.
+   */
+  async syncReferenceFoods(
+    provider: ReferenceNutritionProvider,
+    foods: readonly CanonicalFood[],
+    expiresAt: Date,
+  ): Promise<number> {
+    if (foods.length < 1_000) {
+      throw new Error(\`Refusing suspiciously small \${provider} reference snapshot: \${foods.length}\`);
+    }
+    if (foods.some((food) => food.provider !== provider)) {
+      throw new Error(\`Reference snapshot contains a provider other than \${provider}\`);
+    }
+
+    const validatedAt = new Date();
+    const marker = validatedAt.toISOString();
+    const chunkSize = 250;
+
+    for (let offset = 0; offset < foods.length; offset += chunkSize) {
+      const records = foods.slice(offset, offset + chunkSize).map((food) => {
+        const enriched: CanonicalFood = {
+          ...food,
+          provenance: {
+            ...food.provenance,
+            lastValidatedAt: marker,
+            stale: false,
+          },
+        };
+        const payload = JSON.stringify(enriched);
+        return {
+          provider: food.provider,
+          external_id: food.externalId,
+          barcode: food.barcode,
+          name: food.name,
+          display_name_tr: food.displayNameTr,
+          brand: food.brand,
+          payload: enriched,
+          retrieved_at: food.provenance.retrievedAt,
+          expires_at: expiresAt.toISOString(),
+          last_validated_at: marker,
+          payload_hash: payloadHash(payload),
+          updated_at: marker,
+        };
+      });
+
+      const serialized = JSON.stringify(records);
+      await prisma.$executeRaw\`
+        INSERT INTO nutrition_foods
+          (provider, external_id, barcode, name, display_name_tr, brand, payload, retrieved_at, expires_at, last_validated_at, payload_hash, updated_at)
+        SELECT
+          x.provider,
+          x.external_id,
+          x.barcode,
+          x.name,
+          x.display_name_tr,
+          x.brand,
+          x.payload,
+          x.retrieved_at::timestamptz,
+          x.expires_at::timestamptz,
+          x.last_validated_at::timestamptz,
+          x.payload_hash,
+          x.updated_at::timestamptz
+        FROM jsonb_to_recordset(\${serialized}::jsonb) AS x(
+          provider text,
+          external_id text,
+          barcode text,
+          name text,
+          display_name_tr text,
+          brand text,
+          payload jsonb,
+          retrieved_at text,
+          expires_at text,
+          last_validated_at text,
+          payload_hash text,
+          updated_at text
+        )
+        ON CONFLICT (provider, external_id) DO UPDATE SET
+          barcode = EXCLUDED.barcode,
+          name = EXCLUDED.name,
+          display_name_tr = EXCLUDED.display_name_tr,
+          brand = EXCLUDED.brand,
+          payload = EXCLUDED.payload,
+          retrieved_at = EXCLUDED.retrieved_at,
+          expires_at = EXCLUDED.expires_at,
+          last_validated_at = EXCLUDED.last_validated_at,
+          payload_hash = EXCLUDED.payload_hash,
+          updated_at = EXCLUDED.updated_at
+      \`;
+    }
+
+    await prisma.$executeRaw\`
+      DELETE FROM nutrition_foods
+      WHERE provider = \${provider}
+        AND updated_at < \${validatedAt}
+    \`;
+    await prisma.$executeRaw\`
+      DELETE FROM nutrition_food_aliases a
+      WHERE a.provider = \${provider}
+        AND NOT EXISTS (
+          SELECT 1
+          FROM nutrition_foods f
+          WHERE f.provider = a.provider
+            AND f.external_id = a.external_id
+        )
+    \`;
+
+    return foods.length;
   },
 
   async recordBarcodeScan(userId: string, barcode: string, food: CanonicalFood | null): Promise<void> {
