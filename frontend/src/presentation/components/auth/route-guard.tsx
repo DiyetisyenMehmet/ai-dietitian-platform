@@ -118,7 +118,7 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
   let redirectTo: string | null = null;
   if (!onMarketing && status !== "loading" && !consentLoading) {
     if (!authed && !onAuthRoute) {
-      redirectTo = "/login";
+      redirectTo = onAdmin ? "/admin/login" : "/login";
     } else if (!onAdmin && authed && !onboardingDone) {
       // First run: consent must precede any health-data onboarding.
       if (!consentGranted && !onConsent) {

@@ -3,7 +3,7 @@
 import * as React from "react";
 import { Loader2, ShieldX } from "lucide-react";
 
-import { useAuth } from "@/application/auth/auth-store";
+import { authStore, useAuth } from "@/application/auth/auth-store";
 import { authClient } from "@/infrastructure/auth/auth-client";
 import {
   adminClient,
@@ -43,6 +43,16 @@ export function AdminAccessBoundary({
   const [state, setState] = React.useState<State>({ status: "checking" });
   const rejectingSession = React.useRef(false);
 
+  // A restored browser document must revalidate the cookie, never display a
+  // cached authorized shell after logout in a later history entry.
+  React.useEffect(() => {
+    const revalidateRestoredPage = (event: PageTransitionEvent) => {
+      if (event.persisted) window.location.reload();
+    };
+    window.addEventListener("pageshow", revalidateRestoredPage);
+    return () => window.removeEventListener("pageshow", revalidateRestoredPage);
+  }, []);
+
   const returnToAdminLogin = React.useCallback(async () => {
     if (rejectingSession.current) return;
     rejectingSession.current = true;
@@ -51,6 +61,7 @@ export function AdminAccessBoundary({
     } catch {
       // The in-memory session must still be cleared so the login form can recover.
     } finally {
+      authStore.clear();
       window.location.replace("/admin/login");
     }
   }, []);
@@ -96,7 +107,7 @@ export function AdminAccessBoundary({
     };
   }, [returnToAdminLogin, status, user]);
 
-  if (state.status === "allowed") {
+  if (state.status === "allowed" && status === "authenticated" && user?.role === "ADMIN") {
     const canOpenAccess =
       state.session.permissions.includes("admin.staff.read") &&
       state.session.permissions.includes("admin.roles.read");

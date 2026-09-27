@@ -80,12 +80,12 @@ test("authorized admin sees shell and backend environment identity", async ({ pa
   await expect(page.getByText("Diewish Management Center", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Yönetim merkezi" })).toBeVisible();
   await expect(page.getByTestId("admin-environment-banner")).toHaveText("TEST");
-  await expect(page.getByText("Access & Security", { exact: true })).toBeVisible();
+  await expect(page.getByText("Yetkililer & Roller", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Hesap ve güvenlik" })).toBeVisible();
   await expect(page.getByText("E-posta değiştir", { exact: true })).toBeVisible();
   await expect(page.getByText("Şifre değiştir", { exact: true })).toBeVisible();
 
-  await page.getByRole("link", { name: "Access & Security" }).click();
+  await page.getByRole("link", { name: "Yetkililer & Roller" }).click();
   await expect(page).toHaveURL(/\/admin\/access$/);
   await expect(page.getByRole("heading", { name: "Yetkili çalışanlar" })).toBeVisible();
   await expect(page.getByText("Administrators", { exact: true })).toBeVisible();
@@ -97,6 +97,21 @@ test("authorized admin sees shell and backend environment identity", async ({ pa
   await expect(page).toHaveURL(/\/admin\/audit$/);
   await expect(page.getByRole("heading", { name: "İşlem geçmişi" })).toBeVisible();
   await expect(page.getByText("Filtreler", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: /^Yönetici profili:/ }).click();
+  await expect(page.getByRole("dialog").getByText(credentials.email, { exact: true })).toBeVisible();
+  const logoutResponse = page.waitForResponse((response) =>
+    response.url().endsWith("/api/auth/logout") && response.request().method() === "POST",
+  );
+  await page.getByRole("button", { name: "Çıkış Yap", exact: true }).click();
+  expect((await logoutResponse).status()).toBe(200);
+  await expect(page).toHaveURL(/\/admin\/login$/);
+  const refresh = await page.request.post(`${API_BASE_URL}/auth/refresh-token`, { data: {} });
+  expect(refresh.status()).toBe(401);
+  await page.goBack();
+  await expect(page).toHaveURL(/\/admin\/login$/);
+  await page.goto(`${WEB_BASE_URL}/admin/access`);
+  await expect(page).toHaveURL(/\/admin\/login$/);
 });
 
 test("auth loading never flashes admin content", async ({ page }) => {
@@ -122,7 +137,7 @@ test("auth loading never flashes admin content", async ({ page }) => {
   await expect(page.getByText("Diewish Management Center", { exact: true })).toHaveCount(0);
 
   release();
-  await expect(page).toHaveURL(/\/login$/, { timeout: 10_000 });
+  await expect(page).toHaveURL(/\/admin\/login$/, { timeout: 10_000 });
 });
 
 

@@ -302,6 +302,7 @@ jobs:
           e2e/history-ui.spec.js
           e2e/semantic-icon-browser.spec.js
           e2e/admin-foundation.spec.js
+          e2e/admin-shell.spec.js
           --workers=1 --reporter=line
       - name: Print service logs on failure
         if: failure()
