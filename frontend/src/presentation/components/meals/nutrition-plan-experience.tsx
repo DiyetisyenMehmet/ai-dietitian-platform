@@ -1,6 +1,8 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
+import { History } from "lucide-react";
 
 import {
   nutritionPlanStore,
@@ -18,6 +20,7 @@ import {
 } from "@/presentation/components/meals/nutrition-plan-reminders";
 import { NutritionPlanShareButton } from "@/presentation/components/meals/nutrition-plan-share-button";
 import { NutritionPlanView } from "@/presentation/components/meals/nutrition-plan-view";
+import { Button } from "@/presentation/components/ui/button";
 import { Card, CardContent } from "@/presentation/components/ui/card";
 
 function startDate(plan: NutritionPlanRecord): Date {
@@ -242,6 +245,13 @@ export function NutritionPlanExperience() {
   return (
     <div className="space-y-5">
       <WeightCheckInNotice />
+      <div className="flex justify-end">
+        <Button asChild variant="outline" className="rounded-xl">
+          <Link href="/meals/plan/history">
+            <History aria-hidden="true" /> Plan Geçmişi
+          </Link>
+        </Button>
+      </div>
       {!activePlan && <PantryPlanningCard value={pantryDraft} />}
       <NutritionPlanView />
       {activePlan && hungerDayNumber !== null && (
