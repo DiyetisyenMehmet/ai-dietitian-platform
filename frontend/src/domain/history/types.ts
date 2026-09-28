@@ -38,6 +38,30 @@ export interface DailyHistoryResponse {
         proteinG: number | null;
         carbsG: number | null;
         fatG: number | null;
+        micronutrients?: Partial<Record<
+          | "calcium"
+          | "iron"
+          | "magnesium"
+          | "phosphorus"
+          | "potassium"
+          | "zinc"
+          | "copper"
+          | "manganese"
+          | "selenium"
+          | "iodine"
+          | "vitaminA"
+          | "vitaminC"
+          | "vitaminD"
+          | "vitaminE"
+          | "vitaminK"
+          | "thiamin"
+          | "riboflavin"
+          | "niacin"
+          | "vitaminB6"
+          | "folate"
+          | "vitaminB12",
+          number
+        >> | null;
       }>;
       totals: {
         calories: ObservedNumber;
@@ -144,6 +168,7 @@ export interface DailyHistoryResponse {
       mealTypesRecorded: string[];
       nutritionBearingEntries: number;
       entriesWithUnknownCoreNutrition: number;
+      micronutrientBearingEntries?: number;
     };
     water: { status: HistoryCategoryStatus };
     activity: { status: HistoryCategoryStatus };

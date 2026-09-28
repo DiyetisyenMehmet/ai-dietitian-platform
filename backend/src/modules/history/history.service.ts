@@ -2,6 +2,10 @@ import type { Activity, MealLog, WaterLog, WeightLog } from "@prisma/client";
 
 import { ApiError } from "../../utils/api-error";
 import { activityRepository } from "../activity/activity.repository";
+import {
+  normalizeMicronutrientSnapshot,
+  toMicronutrientSnapshot,
+} from "../nutrition-data/micronutrients";
 import { sleepRepository, type SleepLogRecord } from "../sleep/sleep.repository";
 import { trackingRepository } from "../tracking/tracking.repository";
 import { historyRepository } from "./history.repository";
@@ -154,6 +158,9 @@ export function normalizeNutrition(source: SourceResult<MealLog[]>): DailyNutrit
           proteinG: log.proteinG,
           carbsG: log.carbsG,
           fatG: log.fatG,
+          micronutrients: toMicronutrientSnapshot(
+            normalizeMicronutrientSnapshot(log.micronutrients),
+          ),
         })),
         totals: {
           calories: mealMetric(groupLogs, "calories"),
@@ -437,6 +444,9 @@ function buildCompleteness(
           log.proteinG === null ||
           log.carbsG === null ||
           log.fatG === null,
+      ).length,
+      micronutrientBearingEntries: nutritionRows.filter(
+        (log) => normalizeMicronutrientSnapshot(log.micronutrients) !== null,
       ).length,
     },
     water: { status: water.status },

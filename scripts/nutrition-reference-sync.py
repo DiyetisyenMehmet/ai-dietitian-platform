@@ -42,6 +42,30 @@ NUTRIENT_KEYS = (
     "saltG",
 )
 
+MICRONUTRIENTS: dict[str, tuple[str, tuple[str, ...]]] = {
+    "calcium": ("mg", ("calcium",)),
+    "iron": ("mg", ("iron",)),
+    "magnesium": ("mg", ("magnesium",)),
+    "phosphorus": ("mg", ("phosphorus", "phosphore")),
+    "potassium": ("mg", ("potassium",)),
+    "zinc": ("mg", ("zinc",)),
+    "copper": ("mg", ("copper",)),
+    "manganese": ("mg", ("manganese",)),
+    "selenium": ("ug", ("selenium",)),
+    "iodine": ("ug", ("iodine",)),
+    "vitaminA": ("ug", ("vitamin a", "retinol activity", "retinol equivalent")),
+    "vitaminC": ("mg", ("vitamin c", "ascorbic acid")),
+    "vitaminD": ("ug", ("vitamin d",)),
+    "vitaminE": ("mg", ("vitamin e", "alpha tocopherol")),
+    "vitaminK": ("ug", ("vitamin k", "phylloquinone")),
+    "thiamin": ("mg", ("thiamin", "vitamin b1")),
+    "riboflavin": ("mg", ("riboflavin", "vitamin b2")),
+    "niacin": ("mg", ("niacin", "vitamin b3", "vitamin pp")),
+    "vitaminB6": ("mg", ("vitamin b6",)),
+    "folate": ("ug", ("folate", "folic acid", "vitamin b9")),
+    "vitaminB12": ("ug", ("vitamin b12",)),
+}
+
 
 def http_bytes(url: str, timeout: int = 60) -> bytes:
     request = urllib.request.Request(
@@ -336,6 +360,40 @@ def build_column_map(headers: list[str]) -> dict[str, int | None]:
     }
 
 
+def micronutrient_columns(headers: list[str]) -> dict[str, int | None]:
+    normalized = [normalize_text(header) for header in headers]
+    result: dict[str, int | None] = {}
+    for key, (_, aliases) in MICRONUTRIENTS.items():
+        result[key] = next(
+            (
+                index
+                for index, header in enumerate(normalized)
+                if any(alias in header for alias in aliases)
+            ),
+            None,
+        )
+    return result
+
+
+def header_unit(header: str) -> str | None:
+    raw = header.casefold().replace("μ", "µ")
+    if "µg" in raw or "mcg" in raw or "microgram" in raw or re.search(r"(^|[^a-z])ug([^a-z]|$)", raw):
+        return "ug"
+    if "mg" in raw or "milligram" in raw:
+        return "mg"
+    if "gram" in raw or re.search(r"(^|[^a-z])g(?:/|\s|\)|$)", raw):
+        return "g"
+    return None
+
+
+def convert_unit(value: float | None, source: str | None, target: str) -> float | None:
+    if value is None or source is None:
+        return None
+    micrograms = value * 1_000_000 if source == "g" else value * 1_000 if source == "mg" else value
+    converted = micrograms / 1_000 if target == "mg" else micrograms
+    return round(converted, 6)
+
+
 def stable_external_id(provider: str, code: str, name: str) -> str:
     cleaned = code.strip()
     if cleaned:
@@ -354,6 +412,7 @@ def normalize_dataset(
 ) -> list[dict[str, Any]]:
     headers, rows, sheet = choose_table(data)
     columns = build_column_map(headers)
+    micro_columns = micronutrient_columns(headers)
     if columns["name"] is None or columns["energyKcal"] is None:
         raise RuntimeError(
             f"{provider}: required name/energy columns were not detected; sheet={sheet}; headers={headers[:20]}"
@@ -372,9 +431,18 @@ def normalize_dataset(
         if external_id in seen:
             continue
 
-        nutrients: dict[str, float | None] = {}
+        nutrients: dict[str, Any] = {}
         for key in NUTRIENT_KEYS:
             nutrients[key] = parse_number(get(row, columns[key]))
+
+        micronutrients: dict[str, float | None] = {}
+        for key, (target_unit, _) in MICRONUTRIENTS.items():
+            column = micro_columns[key]
+            raw = parse_number(get(row, column))
+            source_unit = header_unit(headers[column]) if column is not None else None
+            micronutrients[key] = convert_unit(raw, source_unit, target_unit)
+        if any(value is not None for value in micronutrients.values()):
+            nutrients["micronutrients"] = micronutrients
 
         core_count = sum(
             nutrients[key] is not None

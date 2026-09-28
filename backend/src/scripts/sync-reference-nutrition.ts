@@ -6,10 +6,15 @@ import {
   nutritionDataRepository,
   type ReferenceNutritionProvider,
 } from "../modules/nutrition-data/nutrition-data.repository";
-import type { CanonicalFood, NutrientValues } from "../modules/nutrition-data/nutrition-data.types";
+import { MICRONUTRIENT_KEYS } from "../modules/nutrition-data/micronutrients";
+import type {
+  CanonicalFood,
+  CoreNutrientKey,
+  NutrientValues,
+} from "../modules/nutrition-data/nutrition-data.types";
 
 const REFERENCE_PROVIDERS = new Set<ReferenceNutritionProvider>(["CIQUAL", "COFID"]);
-const REQUIRED_NUTRIENTS: readonly (keyof NutrientValues)[] = [
+const REQUIRED_NUTRIENTS: readonly CoreNutrientKey[] = [
   "energyKcal",
   "proteinG",
   "carbohydratesG",
@@ -64,6 +69,17 @@ export function parseReferenceFoodLine(line: string): CanonicalFood {
   }
   if (REQUIRED_NUTRIENTS.filter((key) => nutrients[key] !== null).length < 3) {
     throw new Error(`${provider}:${parsed.externalId} has insufficient core nutrition.`);
+  }
+  if (nutrients.micronutrients !== undefined && nutrients.micronutrients !== null) {
+    if (!isRecord(nutrients.micronutrients)) {
+      throw new Error(`${provider}:${parsed.externalId} has invalid micronutrients.`);
+    }
+    for (const key of MICRONUTRIENT_KEYS) {
+      const value = nutrients.micronutrients[key];
+      if (value !== undefined && !isNullableFiniteNumber(value)) {
+        throw new Error(`${provider}:${parsed.externalId} has invalid micronutrient ${key}.`);
+      }
+    }
   }
 
   if (!isRecord(parsed.provenance)) {

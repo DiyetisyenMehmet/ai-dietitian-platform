@@ -67,6 +67,8 @@ jobs:
           cache: npm
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
+      - name: Test reference micronutrient normalization
+        run: python3 ../scripts/nutrition-reference-sync.test.py
       - name: Validate Prisma schema
         run: npx prisma validate
       - run: npx prisma generate

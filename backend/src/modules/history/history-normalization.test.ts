@@ -156,6 +156,43 @@ test("partial nutrition preserves known subtotal without claiming a complete tot
   assert.equal(nutrition.status, "PARTIAL");
 });
 
+test("daily history exposes meal micronutrient snapshots without inventing missing values", () => {
+  const nutrition = normalizeNutrition(
+    ok([
+      meal("micro", {
+        micronutrients: { calcium: 200, vitaminD: 0 },
+      }),
+      meal("legacy", {
+        name: "Eski kayıt",
+        micronutrients: null,
+      }),
+    ]),
+  );
+  assert.equal(nutrition.meals[0]?.items[0]?.micronutrients?.calcium, 200);
+  assert.equal(nutrition.meals[0]?.items[0]?.micronutrients?.vitaminD, 0);
+  assert.equal(nutrition.meals[0]?.items[0]?.micronutrients?.iron, undefined);
+  assert.equal(nutrition.meals[0]?.items[1]?.micronutrients, null);
+
+  const snapshot = emptySnapshot();
+  snapshot.meals = ok([
+    meal("micro", { micronutrients: { calcium: 200 } }),
+    meal("legacy", { micronutrients: null }),
+  ]);
+  const history = buildDailyHistory(
+    {
+      date: "2026-09-10",
+      timezone: "Europe/Istanbul",
+      fromUtc: new Date("2026-09-09T21:00:00.000Z"),
+      toUtcExclusive: new Date("2026-09-10T21:00:00.000Z"),
+      isToday: false,
+      generatedAt: BASE,
+    },
+    snapshot,
+  );
+  assert.equal(history.completeness.nutrition.micronutrientBearingEntries, 1);
+  assert.equal(history.completeness.nutrition.nutritionBearingEntries, 2);
+});
+
 test("real recorded numeric zero stays KNOWN_ZERO", () => {
   const nutrition = normalizeNutrition(
     ok([meal("zero", { calories: 0, proteinG: 0, carbsG: 0, fatG: 0 })]),

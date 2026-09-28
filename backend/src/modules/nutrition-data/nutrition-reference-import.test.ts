@@ -24,6 +24,12 @@ function row(provider: "CIQUAL" | "COFID" = "CIQUAL") {
       fiberG: 6.7,
       sodiumMg: 2,
       saltG: null,
+      micronutrients: {
+        calcium: 98,
+        iron: 2.9,
+        vitaminC: 1.3,
+        vitaminD: null,
+      },
     },
     ingredients: [],
     allergens: [],
@@ -49,6 +55,8 @@ test("reference importer accepts a complete CIQUAL row", () => {
   const food = parseReferenceFoodLine(JSON.stringify(row()));
   assert.equal(food.provider, "CIQUAL");
   assert.equal(food.nutrientsPer100g.energyKcal, 654);
+  assert.equal(food.nutrientsPer100g.micronutrients?.calcium, 98);
+  assert.equal(food.nutrientsPer100g.micronutrients?.vitaminD, null);
 });
 
 test("reference importer accepts CoFID rows", () => {
@@ -76,4 +84,14 @@ test("reference importer rejects sparse nutrition rows", () => {
     },
   };
   assert.throws(() => parseReferenceFoodLine(JSON.stringify(sparse)), /insufficient/);
+});
+
+
+test("reference importer rejects invalid micronutrient values instead of coercing them", () => {
+  const invalid = row();
+  invalid.nutrientsPer100g.micronutrients = {
+    ...invalid.nutrientsPer100g.micronutrients,
+    calcium: -1,
+  };
+  assert.throws(() => parseReferenceFoodLine(JSON.stringify(invalid)), /invalid micronutrient calcium/);
 });

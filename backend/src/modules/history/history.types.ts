@@ -1,5 +1,7 @@
 import type { ActivityType, MealType } from "@prisma/client";
 
+import type { MicronutrientSnapshot } from "../nutrition-data/micronutrients";
+
 export type ObservedNumberState =
   | "NO_RECORD"
   | "UNKNOWN"
@@ -24,6 +26,7 @@ export interface DailyMealItem {
   proteinG: number | null;
   carbsG: number | null;
   fatG: number | null;
+  micronutrients: MicronutrientSnapshot | null;
 }
 
 export interface DailyMealGroup {
@@ -154,6 +157,7 @@ export interface DailyCompleteness {
     mealTypesRecorded: MealType[];
     nutritionBearingEntries: number;
     entriesWithUnknownCoreNutrition: number;
+    micronutrientBearingEntries: number;
   };
   water: { status: HistoryCategoryStatus };
   activity: { status: HistoryCategoryStatus };
