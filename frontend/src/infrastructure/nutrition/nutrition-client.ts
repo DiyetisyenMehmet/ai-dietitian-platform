@@ -1,5 +1,24 @@
 import { apiRequest } from "@/infrastructure/api/http-client";
 
+export const MICRONUTRIENT_KEYS = [
+  "calcium", "iron", "magnesium", "phosphorus", "potassium", "zinc", "copper",
+  "manganese", "selenium", "iodine", "vitaminA", "vitaminC", "vitaminD", "vitaminE",
+  "vitaminK", "thiamin", "riboflavin", "niacin", "vitaminB6", "folate", "vitaminB12",
+] as const;
+
+export type MicronutrientKeyDto = (typeof MICRONUTRIENT_KEYS)[number];
+export type MicronutrientValuesDto = Partial<Record<MicronutrientKeyDto, number | null>>;
+export type CoreNutrientKeyDto =
+  | "energyKcal"
+  | "proteinG"
+  | "carbohydratesG"
+  | "fatG"
+  | "saturatedFatG"
+  | "sugarsG"
+  | "fiberG"
+  | "sodiumMg"
+  | "saltG";
+
 export interface NutrientValuesDto {
   energyKcal: number | null;
   proteinG: number | null;
@@ -10,6 +29,7 @@ export interface NutrientValuesDto {
   fiberG: number | null;
   sodiumMg: number | null;
   saltG: number | null;
+  micronutrients?: MicronutrientValuesDto | null;
 }
 
 export type MealTypeDto = "BREAKFAST" | "LUNCH" | "DINNER" | "SNACK";
@@ -197,7 +217,7 @@ export interface ComparisonDto {
     servingGrams: number;
     targetCalories: number;
     nutrients: NutrientValuesDto;
-    differenceFromSource: Partial<Record<keyof NutrientValuesDto, number>>;
+    differenceFromSource: Partial<Record<CoreNutrientKeyDto, number>>;
     dietaryCompatibility: "COMPATIBLE" | "INCOMPATIBLE" | "UNKNOWN";
     allergenDataComplete: boolean;
   }>;
@@ -327,6 +347,7 @@ export const nutritionClient = {
         fatG: n.fatG ?? undefined,
         sodiumMg: n.sodiumMg ?? undefined,
         sugarG: n.sugarsG ?? undefined,
+        micronutrients: n.micronutrients ?? undefined,
       }),
     });
   },

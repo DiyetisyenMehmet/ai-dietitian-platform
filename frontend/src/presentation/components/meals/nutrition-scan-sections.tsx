@@ -14,7 +14,13 @@ import {
   Zap,
 } from "lucide-react";
 
+import {
+  availableMicronutrients,
+  formatMicronutrientAmount,
+  micronutrientAriaText,
+} from "@/application/meals/micronutrients";
 import type {
+  CoreNutrientKeyDto,
   NutrientValuesDto,
   NutritionAttentionFlagDto,
   NutritionProvenanceDto,
@@ -61,7 +67,7 @@ function SaltShakerIcon(props: React.SVGProps<SVGSVGElement>) {
 }
 
 const NUTRIENTS: readonly [
-  keyof NutrientValuesDto,
+  CoreNutrientKeyDto,
   string,
   string,
   NutrientIcon,
@@ -84,6 +90,7 @@ export function NutritionFactsGrid({
   portion: NutrientValuesDto;
   portionLabel: string;
 }) {
+  const micronutrients = availableMicronutrients(portion.micronutrients);
   return (
     <div className="space-y-3">
       <div className="relative overflow-hidden rounded-2xl border border-primary/10 bg-primary/5 p-4">
@@ -124,6 +131,36 @@ export function NutritionFactsGrid({
           </div>
         ))}
       </div>
+
+      {micronutrients.length > 0 && (
+        <details className="group rounded-2xl border bg-card shadow-sm">
+          <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-bold text-foreground">
+            <span>Vitamin ve Mineraller</span>
+            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+              {micronutrients.length}
+            </span>
+          </summary>
+          <div className="border-t px-4 py-3">
+            <p className="mb-3 text-xs text-muted-foreground">
+              Yalnız seçilen porsiyon için kaynağın bildirdiği mevcut değerler gösterilir.
+            </p>
+            <dl className="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
+              {micronutrients.map((item) => (
+                <div
+                  key={item.key}
+                  className="flex min-w-0 items-center justify-between gap-3 border-b py-2"
+                  aria-label={micronutrientAriaText(item.label, item.value, item.unit)}
+                >
+                  <dt className="min-w-0 break-words text-sm text-muted-foreground">{item.label}</dt>
+                  <dd className="shrink-0 tabular-nums text-sm font-semibold text-foreground">
+                    {formatMicronutrientAmount(item.value, item.unit)}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        </details>
+      )}
     </div>
   );
 }

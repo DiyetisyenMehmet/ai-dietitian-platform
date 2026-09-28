@@ -1,5 +1,9 @@
 import { apiRequest } from "@/infrastructure/api/http-client";
 import { TRACKING_ENDPOINTS } from "@/infrastructure/auth/endpoints";
+import type {
+  MicronutrientKeyDto,
+  MicronutrientValuesDto,
+} from "@/infrastructure/nutrition/nutrition-client";
 
 /** Backend meal-type enum. */
 export type MealLogType = "BREAKFAST" | "LUNCH" | "DINNER" | "SNACK";
@@ -16,6 +20,7 @@ export interface MealLog {
   fatG: number | null;
   sodiumMg: number | null;
   sugarG: number | null;
+  micronutrients: MicronutrientValuesDto | null;
   loggedAt: string;
   createdAt: string;
 }
@@ -30,6 +35,7 @@ export interface LogMealInput {
   fatG?: number;
   sodiumMg?: number;
   sugarG?: number;
+  micronutrients?: MicronutrientValuesDto;
   loggedAt?: string;
 }
 
@@ -42,6 +48,28 @@ export interface UpdateMealInput {
   fatG?: number;
   sodiumMg?: number;
   sugarG?: number;
+  micronutrients?: MicronutrientValuesDto;
+}
+
+export interface DailyMicronutrientSummaryDto {
+  date: string;
+  timezone: string;
+  mealCount: number;
+  mealsWithMicronutrients: number;
+  coverage: "NONE" | "PARTIAL" | "COMPLETE";
+  note: string;
+  reference: {
+    version: string;
+    source: string;
+  };
+  nutrients: Array<{
+    key: MicronutrientKeyDto;
+    label: string;
+    unit: "mg" | "µg";
+    value: number;
+    reference: number;
+    referencePercent: number;
+  }>;
 }
 
 export const mealsClient = {
@@ -50,6 +78,15 @@ export const mealsClient = {
     const query = since ? `?since=${encodeURIComponent(since.toISOString())}` : "";
     return apiRequest<{ logs: MealLog[] }>({
       path: `${TRACKING_ENDPOINTS.meals}${query}`,
+      method: "GET",
+      auth: true,
+    });
+  },
+
+  getDailyMicronutrients(date: string, timezone: string) {
+    const query = new URLSearchParams({ date, timezone });
+    return apiRequest<{ summary: DailyMicronutrientSummaryDto }>({
+      path: `${TRACKING_ENDPOINTS.meals}/micronutrients/day?${query.toString()}`,
       method: "GET",
       auth: true,
     });

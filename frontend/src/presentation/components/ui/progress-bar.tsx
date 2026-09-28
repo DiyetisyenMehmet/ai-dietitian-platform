@@ -10,10 +10,18 @@ interface ProgressBarProps {
   className?: string;
   /** Track fill color class (defaults to primary). */
   indicatorClassName?: string;
+  ariaLabel?: string;
+  ariaValueText?: string;
 }
 
 /** Slim, animated horizontal progress bar. */
-export function ProgressBar({ value, className, indicatorClassName }: ProgressBarProps) {
+export function ProgressBar({
+  value,
+  className,
+  indicatorClassName,
+  ariaLabel,
+  ariaValueText,
+}: ProgressBarProps) {
   const [animatedValue, setAnimatedValue] = React.useState(0);
   const clamped = Math.min(100, Math.max(0, value));
 
@@ -29,6 +37,8 @@ export function ProgressBar({ value, className, indicatorClassName }: ProgressBa
       aria-valuenow={Math.round(clamped)}
       aria-valuemin={0}
       aria-valuemax={100}
+      aria-label={ariaLabel}
+      aria-valuetext={ariaValueText}
     >
       <div
         className={cn(

@@ -1,17 +1,8 @@
 import { apiRequest } from "@/infrastructure/api/http-client";
-import type { NormalizedNutritionScanDto } from "@/infrastructure/nutrition/nutrition-client";
-
-export interface NutrientValuesDto {
-  energyKcal: number | null;
-  proteinG: number | null;
-  carbohydratesG: number | null;
-  fatG: number | null;
-  saturatedFatG: number | null;
-  sugarsG: number | null;
-  fiberG: number | null;
-  sodiumMg: number | null;
-  saltG: number | null;
-}
+import type {
+  NormalizedNutritionScanDto,
+  NutrientValuesDto,
+} from "@/infrastructure/nutrition/nutrition-client";
 
 export interface FoodScanIngredientDto {
   name: string;
@@ -104,6 +95,7 @@ export const foodScanClient = {
         fatG: analysis.totals.fatG ?? undefined,
         sodiumMg: analysis.totals.sodiumMg ?? undefined,
         sugarG: analysis.totals.sugarsG ?? undefined,
+        micronutrients: analysis.totals.micronutrients ?? undefined,
       }),
     });
   },

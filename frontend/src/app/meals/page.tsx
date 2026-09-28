@@ -9,6 +9,7 @@ import { useMeals, computeTotals } from "@/application/meals/meals-store";
 import type { NutritionPlanDuration } from "@/infrastructure/nutrition/nutrition-plan-client";
 import { AppShell } from "@/presentation/components/layout/app-shell";
 import { Button } from "@/presentation/components/ui/button";
+import { MicronutrientSummary } from "@/presentation/components/meals/micronutrient-summary";
 import { NutritionSummary } from "@/presentation/components/meals/nutrition-summary";
 import { MealCard } from "@/presentation/components/meals/meal-card";
 
@@ -49,6 +50,7 @@ export default function MealsPage() {
     >
       <div className="animate-fade-in space-y-6">
         <NutritionSummary totals={totals} />
+        <MicronutrientSummary refreshKey={totalFoods} />
 
         <Link
           href="/meals/plan"
