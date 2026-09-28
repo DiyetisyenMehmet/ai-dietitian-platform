@@ -98,10 +98,9 @@ const CNF_MICRONUTRIENTS: Readonly<Record<number, MicronutrientKey>> = {
   312: "copper",
   315: "manganese",
   317: "selenium",
-  321: "iodine",
   320: "vitaminA",
   401: "vitaminC",
-  324: "vitaminD",
+  328: "vitaminD",
   323: "vitaminE",
   430: "vitaminK",
   404: "thiamin",
@@ -111,6 +110,13 @@ const CNF_MICRONUTRIENTS: Readonly<Record<number, MicronutrientKey>> = {
   417: "folate",
   418: "vitaminB12",
 };
+
+function micronutrientKey(row: CnfNutrientRow): MicronutrientKey | null {
+  const mapped = CNF_MICRONUTRIENTS[Number(row.nutrient_name_id)];
+  if (mapped) return mapped;
+  const name = (row.nutrient_web_name ?? "").trim().toLocaleLowerCase("en-US");
+  return /^iodine(?:\b|,)/.test(name) ? "iodine" : null;
+}
 
 function sourceConfidence(rows: CnfNutrientRow[]): number {
   const sourceIds = rows
@@ -222,7 +228,7 @@ export class CanadianNutrientFileProvider implements NutritionProvider {
       const key = nutrientKey(nutrient);
       if (key) nutrients[key] = value;
 
-      const microKey = CNF_MICRONUTRIENTS[Number(nutrient.nutrient_name_id)];
+      const microKey = micronutrientKey(nutrient);
       if (microKey) {
         micronutrients[microKey] = value;
         hasMicronutrients = true;

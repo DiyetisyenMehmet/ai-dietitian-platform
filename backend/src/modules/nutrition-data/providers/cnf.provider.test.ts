@@ -32,6 +32,8 @@ test("CNF provider resolves a food and maps core per-100g nutrients", async () =
         { food_code: 101, nutrient_name_id: 301, nutrient_web_name: "Calcium, Ca", nutrient_value: 98, nutrient_source_id: 3 },
         { food_code: 101, nutrient_name_id: 317, nutrient_web_name: "Selenium, Se", nutrient_value: 4.9, nutrient_source_id: 3 },
         { food_code: 101, nutrient_name_id: 401, nutrient_web_name: "Vitamin C", nutrient_value: 1.3, nutrient_source_id: 3 },
+        { food_code: 101, nutrient_name_id: 328, nutrient_web_name: "Vitamin D (D2+D3)", nutrient_value: 3.2, nutrient_source_id: 3 },
+        { food_code: 101, nutrient_name_id: 321, nutrient_web_name: "Beta carotene", nutrient_value: 900, nutrient_source_id: 3 },
       ]);
     }
     return jsonResponse([]);
@@ -50,7 +52,8 @@ test("CNF provider resolves a food and maps core per-100g nutrients", async () =
   assert.equal(foods[0]?.nutrientsPer100g.micronutrients?.calcium, 98);
   assert.equal(foods[0]?.nutrientsPer100g.micronutrients?.selenium, 4.9);
   assert.equal(foods[0]?.nutrientsPer100g.micronutrients?.vitaminC, 1.3);
-  assert.equal(foods[0]?.nutrientsPer100g.micronutrients?.vitaminD, null);
+  assert.equal(foods[0]?.nutrientsPer100g.micronutrients?.vitaminD, 3.2);
+  assert.equal(foods[0]?.nutrientsPer100g.micronutrients?.iodine, null);
   assert.equal(foods[0]?.provenance.dataBasis, "PER_100_G");
   assert.ok(requests.some((url) => url.includes("nutrientamount")));
 });
