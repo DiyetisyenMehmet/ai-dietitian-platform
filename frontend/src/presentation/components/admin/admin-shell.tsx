@@ -85,14 +85,9 @@ export function AdminShell({
               />
             </ModalContent>
           </Modal>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-bold tracking-tight text-foreground lg:text-base">
-              Diewish
-            </p>
-            <p className="truncate text-[10px] font-medium text-muted-foreground sm:text-[11px]">
-              Management Center
-            </p>
-          </div>
+          <p className="min-w-0 flex-1 truncate text-sm font-bold tracking-tight text-foreground lg:text-base">
+            Diewish <span className="font-medium text-muted-foreground">Management Center</span>
+          </p>
           <span
             data-testid="admin-environment-banner"
             className="shrink-0 whitespace-nowrap rounded-full border border-amber-500/25 bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold tracking-wider text-amber-800 dark:text-amber-200 sm:px-3 sm:text-xs"
