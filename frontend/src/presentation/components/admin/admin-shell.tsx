@@ -20,14 +20,17 @@ import type { AdminSession } from "@/infrastructure/admin/admin-client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/presentation/components/ui/card";
 import { AdminAccessManagement } from "./admin-access-management";
 import { AdminAccountSecurity } from "./admin-account-security";
+import { AdminUsers } from "./admin-users";
 import { AdminAuditViewer } from "./admin-audit-viewer";
 
 export function AdminShell({
   session,
   view = "overview",
+  userId,
 }: {
   session: AdminSession;
-  view?: "overview" | "access" | "audit";
+  view?: "overview" | "access" | "audit" | "users";
+  userId?: string;
 }) {
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const pathname = usePathname();
@@ -110,7 +113,9 @@ export function AdminShell({
           className="min-w-0 scroll-mt-[calc(var(--admin-header-height)+1rem)] px-4 py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] focus:outline-none sm:px-6 lg:p-8"
         >
           <div className="mx-auto max-w-6xl space-y-6">
-            {view === "access" ? (
+            {view === "users" ? (
+              <AdminUsers userId={userId} />
+            ) : view === "access" ? (
               <AdminAccessManagement
                 currentAdminId={session.admin.id}
                 canManageStaff={canManageStaff}

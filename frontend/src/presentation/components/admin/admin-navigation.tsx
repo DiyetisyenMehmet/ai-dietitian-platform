@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { LayoutDashboard, ScrollText, UsersRound } from "lucide-react";
+import { LayoutDashboard, ScrollText, UsersRound, Users } from "lucide-react";
 
 const navigation = [
   { group: "Genel", label: "Genel Bakış", href: "/admin", view: "overview", icon: LayoutDashboard, permissions: [] },
+  { group: "Genel", label: "Kullanıcılar", href: "/admin/users", view: "users", icon: Users, permissions: ["users.read"] },
   { group: "Güvenlik", label: "Yetkililer & Roller", href: "/admin/access", view: "access", icon: UsersRound, permissions: ["admin.staff.read", "admin.roles.read"] },
   { group: "Güvenlik", label: "İşlem Geçmişi", href: "/admin/audit", view: "audit", icon: ScrollText, permissions: ["audit.read"] },
 ] as const;
@@ -15,7 +16,7 @@ export function AdminNavigation({
   onNavigate,
 }: {
   permissions: string[];
-  view: "overview" | "access" | "audit";
+  view: "overview" | "access" | "audit" | "users";
   onNavigate?: () => void;
 }) {
   const visible = navigation.filter((item) =>

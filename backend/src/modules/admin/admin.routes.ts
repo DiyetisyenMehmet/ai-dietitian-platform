@@ -34,6 +34,9 @@ import { requireAdminPermission } from "./admin.middleware";
 import { ADMIN_PERMISSIONS } from "./admin.permissions";
 import { adminRateLimiter } from "./admin.rate-limit";
 
+import { adminUsersController } from "./admin-users.controller";
+import { adminUsersQuerySchema, adminUserParamsSchema } from "./admin-users.schemas";
+
 export const adminRouter = Router();
 
 adminRouter.use(adminRateLimiter);
@@ -139,3 +142,6 @@ adminRouter.get(
 
 adminRouter.get("/session", requireAdminPermission(ADMIN_PERMISSIONS.ACCESS), adminController.session);
 adminRouter.get("/environment", requireAdminPermission(ADMIN_PERMISSIONS.ACCESS), adminController.environment);
+
+adminRouter.get("/users", requireAdminPermission(ADMIN_PERMISSIONS.USERS_READ), validate({ query: adminUsersQuerySchema }), adminUsersController.list);
+adminRouter.get("/users/:id", requireAdminPermission(ADMIN_PERMISSIONS.USERS_READ), validate({ params: adminUserParamsSchema }), adminUsersController.detail);

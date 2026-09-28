@@ -127,7 +127,41 @@ function auditQuery(filters: AdminAuditFilters): string {
   return query ? `?${query}` : "";
 }
 
+export interface AdminUserSummary {
+  id: string;
+  email: string;
+  fullName: string | null;
+  role: string;
+  isActive: boolean;
+  createdAt: string;
+  lastLoginAt: string | null;
+  emailVerifiedAt: string | null;
+  onboardingCompleted: boolean;
+  subscriptionTier: "FREE" | "PREMIUM" | "PREMIUM_PLUS" | null;
+}
+export interface AdminUsersResult {
+  users: AdminUserSummary[];
+  pagination: { page: number; pageSize: number; total: number; totalPages: number };
+}
 export const adminClient = {
+  listUsers(query: {
+    search: string;
+    status: string;
+    page: number;
+    limit: number;
+  }): Promise<AdminUsersResult> {
+    const params = new URLSearchParams(
+      Object.entries(query).map(([key, value]) => [key, String(value)]),
+    );
+    return apiRequest({ path: `/admin/users?${params}`, method: "GET", auth: true });
+  },
+  getUser(id: string): Promise<{ user: AdminUserSummary }> {
+    return apiRequest({
+      path: `/admin/users/${encodeURIComponent(id)}`,
+      method: "GET",
+      auth: true,
+    });
+  },
   loginWithEmail(email: string, password: string): Promise<AuthSession> {
     return apiRequest<AuthSession>({
       path: "/admin/auth/login",
@@ -275,7 +309,11 @@ export const adminClient = {
     });
   },
 
-  revokeStaffSession(id: string, sessionId: string, reason: string): Promise<{ id: string; revoked: boolean }> {
+  revokeStaffSession(
+    id: string,
+    sessionId: string,
+    reason: string,
+  ): Promise<{ id: string; revoked: boolean }> {
     return apiRequest({
       path: `/admin/access/staff/${encodeURIComponent(id)}/sessions/${encodeURIComponent(sessionId)}`,
       method: "DELETE",
