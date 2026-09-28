@@ -1,6 +1,9 @@
 import Image from "next/image";
 import Link from "next/link";
 
+import { BloodTestCard } from "@/presentation/components/dashboard/blood-test-card";
+import type { BloodTestCardLocale } from "@/presentation/components/dashboard/blood-test-card-contract";
+
 const FEATURES = [
   {
     title: "Besin ve Barkod Tarayıcı",
@@ -62,27 +65,16 @@ function Chevron() {
   );
 }
 
-function ReferenceChevronOverlay({ tone }: { tone: Feature["tone"] }) {
-  const patch =
-    tone === "blood"
-      ? {
-          src: "/images/dashboard/references/blood-chevron-clean.png",
-          left: 1495,
-          top: 175,
-          width: 90,
-          height: 115,
-          sourceWidth: 1603,
-          sourceHeight: 460,
-        }
-      : {
-          src: "/images/dashboard/references/food-chevron-clean.png",
-          left: 1495,
-          top: 145,
-          width: 95,
-          height: 115,
-          sourceWidth: 1603,
-          sourceHeight: 400,
-        };
+function FoodReferenceChevronOverlay() {
+  const patch = {
+    src: "/images/dashboard/references/food-chevron-clean.png",
+    left: 1495,
+    top: 145,
+    width: 95,
+    height: 115,
+    sourceWidth: 1603,
+    sourceHeight: 400,
+  } as const;
 
   return (
     <>
@@ -229,7 +221,7 @@ function LightFeatureCard({ feature }: { feature: Feature }) {
           className="pointer-events-none select-none object-fill"
           aria-hidden="true"
         />
-        <ReferenceChevronOverlay tone={feature.tone} />
+        <FoodReferenceChevronOverlay />
         <span className="sr-only">{feature.title}. {feature.description}</span>
       </Link>
     );
@@ -319,24 +311,44 @@ function DarkFeatureCard({ feature }: { feature: Feature }) {
 }
 
 /**
- * Light mode remains the approved final implementation and is not changed here.
- * Dark mode preserves the approved reference artwork while matching the
- * light-mode geometry. Progress uses the exact same live ProgressIcon component
- * as light mode; all three dark cards share the same live Chevron component.
+ * Blood Test uses one approved text-free base visual plus live SVG text in both
+ * themes. Food and Progress intentionally keep their existing implementations.
  */
-export function DashboardFeatureLinks() {
+export function DashboardFeatureLinks({
+  bloodTestLocale = "tr",
+}: {
+  bloodTestLocale?: BloodTestCardLocale;
+} = {}) {
   return (
     <section id="diewish-tools" className="w-full" aria-label="Diewish araçları">
       <div className="space-y-[clamp(0.45rem,1.8vw,0.8rem)] dark:hidden">
-        {FEATURES.map((feature) => (
-          <LightFeatureCard key={`light-${feature.href}`} feature={feature} />
-        ))}
+        {FEATURES.map((feature) =>
+          feature.tone === "blood" ? (
+            <BloodTestCard
+              key={`light-${feature.href}`}
+              href={feature.href}
+              locale={bloodTestLocale}
+              theme="light"
+            />
+          ) : (
+            <LightFeatureCard key={`light-${feature.href}`} feature={feature} />
+          ),
+        )}
       </div>
 
       <div className="hidden space-y-[clamp(0.45rem,1.8vw,0.8rem)] dark:block">
-        {FEATURES.map((feature) => (
-          <DarkFeatureCard key={`dark-${feature.href}`} feature={feature} />
-        ))}
+        {FEATURES.map((feature) =>
+          feature.tone === "blood" ? (
+            <BloodTestCard
+              key={`dark-${feature.href}`}
+              href={feature.href}
+              locale={bloodTestLocale}
+              theme="dark"
+            />
+          ) : (
+            <DarkFeatureCard key={`dark-${feature.href}`} feature={feature} />
+          ),
+        )}
       </div>
     </section>
   );

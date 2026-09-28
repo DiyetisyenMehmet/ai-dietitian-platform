@@ -110,6 +110,8 @@ jobs:
         run: node --test tests/identity.test.cjs
       - name: Test notification lifecycle and web push guards
         run: node --test tests/notification-lifecycle.test.cjs tests/web-push-service-worker.test.cjs
+      - name: Test Blood Test card coordinate contract
+        run: node --test tests/dashboard-blood-test-card.test.cjs
       - name: Validate staging History runtime spec syntax
         run: node --check e2e/staging-history-runtime.spec.js
       - name: Lint frontend
@@ -307,10 +309,19 @@ jobs:
           e2e/history-final-recovery.spec.ts
           e2e/history-ui.spec.js
           e2e/semantic-icon-browser.spec.js
+          e2e/dashboard-blood-test-card.spec.ts
           e2e/admin-foundation.spec.js
           e2e/admin-shell.spec.js
           e2e/admin-users.spec.js
           --workers=1 --reporter=line
+      - name: Upload Blood Test card browser screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blood-test-card-browser-${{ github.run_number }}
+          path: frontend/test-results/blood-test-card/
+          if-no-files-found: warn
+          retention-days: 7
       - name: Print service logs on failure
         if: failure()
         run: |
