@@ -24,6 +24,7 @@ function meal(id: string, overrides: Partial<MealLog> = {}): MealLog {
     fatG: 14,
     sodiumMg: null,
     sugarG: null,
+    micronutrients: null,
     loggedAt: BASE,
     createdAt: BASE,
     ...overrides,

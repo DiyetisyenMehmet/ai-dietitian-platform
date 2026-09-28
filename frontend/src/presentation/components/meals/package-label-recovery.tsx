@@ -5,10 +5,16 @@ import { Camera, CheckCircle2, ScanText } from "lucide-react";
 import { toast } from "sonner";
 
 import { ApiError } from "@/infrastructure/api/http-client";
-import { nutritionClient, type CanonicalFoodDto, type NormalizedNutritionScanDto, type NutrientValuesDto, type PackageLabelDraftDto } from "@/infrastructure/nutrition/nutrition-client";
+import {
+  nutritionClient,
+  type CanonicalFoodDto,
+  type CoreNutrientKeyDto,
+  type NormalizedNutritionScanDto,
+  type PackageLabelDraftDto,
+} from "@/infrastructure/nutrition/nutrition-client";
 import { Button } from "@/presentation/components/ui/button";
 
-const NUTRIENTS: readonly [keyof NutrientValuesDto, string, string][] = [
+const NUTRIENTS: readonly [CoreNutrientKeyDto, string, string][] = [
   ["energyKcal", "Enerji", "kcal"], ["proteinG", "Protein", "g"], ["carbohydratesG", "Karbonhidrat", "g"], ["fatG", "Yağ", "g"], ["saturatedFatG", "Doymuş yağ", "g"], ["sugarsG", "Şeker", "g"], ["fiberG", "Lif", "g"], ["saltG", "Tuz", "g"], ["sodiumMg", "Sodyum", "mg"],
 ];
 
@@ -34,7 +40,7 @@ export function PackageLabelRecovery({ barcode, onConfirmed }: { barcode: string
     finally { setExtracting(false); }
   }, [barcode]);
 
-  const updateNutrient = (key: keyof NutrientValuesDto, value: string) => setDraft((current) => current ? { ...current, nutrients: { ...current.nutrients, [key]: nullableNumber(value) } } : current);
+  const updateNutrient = (key: CoreNutrientKeyDto, value: string) => setDraft((current) => current ? { ...current, nutrients: { ...current.nutrients, [key]: nullableNumber(value) } } : current);
 
   const confirm = React.useCallback(async () => {
     if (!draft || confirming) return;
