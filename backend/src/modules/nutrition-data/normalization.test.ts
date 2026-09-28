@@ -24,6 +24,24 @@ test("normalizes USDA nutrients without changing provider numbers", () => {
   assert.equal(food.provenance.provider, "USDA");
 });
 
+test("normalizes USDA micronutrients only from named provider facts with explicit units", () => {
+  const food = normalizeUsdaFood({
+    fdcId: 321,
+    description: "Spinach, cooked",
+    foodNutrients: [
+      { nutrientId: 1008, value: 23 },
+      { nutrientName: "Calcium, Ca", unitName: "MG", value: 136 },
+      { nutrientName: "Vitamin C, total ascorbic acid", unitName: "MG", value: 9.8 },
+      { nutrientName: "Vitamin D (D2 + D3)", unitName: "UG", value: 0 },
+    ],
+  });
+  assert.ok(food);
+  assert.equal(food.nutrientsPer100g.micronutrients?.calcium, 136);
+  assert.equal(food.nutrientsPer100g.micronutrients?.vitaminC, 9.8);
+  assert.equal(food.nutrientsPer100g.micronutrients?.vitaminD, 0);
+  assert.equal(food.nutrientsPer100g.micronutrients?.iron, null);
+});
+
 test("normalizes Open Food Facts package metadata and sodium units", () => {
   const food = normalizeOpenFoodFactsProduct({
     status: 1,
@@ -43,12 +61,18 @@ test("normalizes Open Food Facts package metadata and sodium units", () => {
         carbohydrates_100g: 30,
         fat_100g: 7,
         sodium_100g: 0.4,
+        calcium_100g: 0.12,
+        calcium_unit: "g",
+        "vitamin-d_100g": 0.005,
+        "vitamin-d_unit": "mg",
       },
     },
   });
   assert.ok(food);
   assert.equal(food.nutrientsPer100g.energyKcal, 220);
   assert.equal(food.nutrientsPer100g.sodiumMg, 400);
+  assert.equal(food.nutrientsPer100g.micronutrients?.calcium, 120);
+  assert.equal(food.nutrientsPer100g.micronutrients?.vitaminD, 5);
   assert.deepEqual(food.allergens, ["milk"]);
   assert.equal(food.vegetarian, true);
   assert.equal(food.provenance.provider, "OPEN_FOOD_FACTS");

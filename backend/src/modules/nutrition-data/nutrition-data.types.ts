@@ -1,17 +1,23 @@
+import type { MicronutrientValues } from "./micronutrients";
+
 export type NutritionProviderId = "USDA" | "CNF" | "CIQUAL" | "COFID" | "OPEN_FOOD_FACTS" | "DIEWISH";
 
 export type NutritionDataBasis = "PER_100_G" | "PER_SERVING";
 
-export type NutrientKey =
-  | "energyKcal"
-  | "proteinG"
-  | "carbohydratesG"
-  | "fatG"
-  | "saturatedFatG"
-  | "sugarsG"
-  | "fiberG"
-  | "sodiumMg"
-  | "saltG";
+export const CORE_NUTRIENT_KEYS = [
+  "energyKcal",
+  "proteinG",
+  "carbohydratesG",
+  "fatG",
+  "saturatedFatG",
+  "sugarsG",
+  "fiberG",
+  "sodiumMg",
+  "saltG",
+] as const;
+
+export type CoreNutrientKey = (typeof CORE_NUTRIENT_KEYS)[number];
+export type NutrientKey = CoreNutrientKey;
 
 export interface NutrientValues {
   energyKcal: number | null;
@@ -23,6 +29,7 @@ export interface NutrientValues {
   fiberG: number | null;
   sodiumMg: number | null;
   saltG: number | null;
+  micronutrients?: MicronutrientValues | null;
 }
 
 export interface NutritionProvenance {

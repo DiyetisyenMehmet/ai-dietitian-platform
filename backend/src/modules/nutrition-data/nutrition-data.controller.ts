@@ -3,24 +3,13 @@ import type { Request, Response } from "express";
 import { ApiError } from "../../utils/api-error";
 import { sendSuccess } from "../../utils/api-response";
 import { asyncHandler } from "../../utils/async-handler";
+import { MICRONUTRIENT_KEYS, emptyMicronutrients } from "./micronutrients";
 import { nutritionDataService } from "./nutrition-data.service";
 import { nutritionPersonalizationService } from "./nutrition-personalization.service";
 import { toBarcodeScanResult, toNutritionLabelScanResult } from "./nutrition-scan-result";
-import type { NutrientValues } from "./nutrition-data.types";
+import { CORE_NUTRIENT_KEYS, type NutrientValues } from "./nutrition-data.types";
 import { analyzePackageLabelImage } from "./package-label.provider";
 import { buildUserConfirmedPackageLabelFood, normalizePackageLabelDraft } from "./package-label";
-
-const NUTRIENT_KEYS = [
-  "energyKcal",
-  "proteinG",
-  "carbohydratesG",
-  "fatG",
-  "saturatedFatG",
-  "sugarsG",
-  "fiberG",
-  "sodiumMg",
-  "saltG",
-] as const satisfies readonly (keyof NutrientValues)[];
 
 function requireUserId(req: Request): string {
   if (!req.user) throw ApiError.unauthorized("Authentication required.");
@@ -37,15 +26,35 @@ function parseNutrients(value: unknown): NutrientValues {
     throw ApiError.badRequest("nutrients geçerli bir nesne olmalıdır.");
   }
   const record = value as Record<string, unknown>;
-  const result: Partial<Record<keyof NutrientValues, number | null>> = {};
-  for (const key of NUTRIENT_KEYS) {
+  const result = Object.fromEntries(CORE_NUTRIENT_KEYS.map((key) => [key, null])) as unknown as NutrientValues;
+  for (const key of CORE_NUTRIENT_KEYS) {
     const nutrient = record[key];
-    if (nutrient !== null && (typeof nutrient !== "number" || !Number.isFinite(nutrient))) {
-      throw ApiError.badRequest(`${key} number veya null olmalıdır.`);
+    if (nutrient !== null && (typeof nutrient !== "number" || !Number.isFinite(nutrient) || nutrient < 0)) {
+      throw ApiError.badRequest(`${key} geçerli bir number veya null olmalıdır.`);
     }
     result[key] = nutrient as number | null;
   }
-  return result as NutrientValues;
+
+  const rawMicronutrients = record.micronutrients;
+  if (rawMicronutrients !== undefined && rawMicronutrients !== null) {
+    if (typeof rawMicronutrients !== "object" || Array.isArray(rawMicronutrients)) {
+      throw ApiError.badRequest("micronutrients geçerli bir nesne olmalıdır.");
+    }
+    const micronutrientRecord = rawMicronutrients as Record<string, unknown>;
+    const micronutrients = emptyMicronutrients();
+    let hasAny = false;
+    for (const key of MICRONUTRIENT_KEYS) {
+      const raw = micronutrientRecord[key];
+      if (raw === undefined || raw === null) continue;
+      if (typeof raw !== "number" || !Number.isFinite(raw) || raw < 0 || raw > 1_000_000) {
+        throw ApiError.badRequest(`micronutrients.${key} geçersiz.`);
+      }
+      micronutrients[key] = raw;
+      hasAny = true;
+    }
+    if (hasAny) result.micronutrients = micronutrients;
+  }
+  return result;
 }
 
 export const nutritionDataController = {

@@ -1,7 +1,7 @@
 import { ApiError } from "../../utils/api-error";
 import { calculatePortion } from "./nutrition-calculator";
 import { normalizeBarcode } from "./barcode";
-import { EMPTY_NUTRIENTS, type CanonicalFood, type NutrientValues } from "./nutrition-data.types";
+import { CORE_NUTRIENT_KEYS, EMPTY_NUTRIENTS, type CanonicalFood, type NutrientValues } from "./nutrition-data.types";
 
 export type PackageLabelBasis = "PER_100_G" | "PER_SERVING";
 
@@ -108,8 +108,8 @@ function hasUsefulCore(nutrients: NutrientValues): boolean {
 
 function scaledTo100g(nutrients: NutrientValues, servingGrams: number): NutrientValues {
   const factor = 100 / servingGrams;
-  const result = { ...EMPTY_NUTRIENTS };
-  for (const key of Object.keys(result) as (keyof NutrientValues)[]) {
+  const result: NutrientValues = { ...EMPTY_NUTRIENTS };
+  for (const key of CORE_NUTRIENT_KEYS) {
     const value = nutrients[key];
     result[key] = value === null ? null : Math.round(value * factor * 100) / 100;
   }

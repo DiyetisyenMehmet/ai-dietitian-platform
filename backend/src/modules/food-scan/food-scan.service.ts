@@ -3,10 +3,11 @@ import sharp from "sharp";
 import { logger } from "../../lib/logger";
 import { ApiError } from "../../utils/api-error";
 import { calculatePortion } from "../nutrition-data/nutrition-calculator";
+import { sumMicronutrients } from "../nutrition-data/micronutrients";
 import { nutritionDataService } from "../nutrition-data/nutrition-data.service";
 import { selectBestNutritionMatch, type NutritionMatch } from "../nutrition-data/nutrition-match";
 import { expandNutritionProviderQueries } from "../nutrition-data/nutrition-query-aliases";
-import { EMPTY_NUTRIENTS, type CanonicalFood, type NutrientValues } from "../nutrition-data/nutrition-data.types";
+import { CORE_NUTRIENT_KEYS, EMPTY_NUTRIENTS, type CanonicalFood, type NutrientValues } from "../nutrition-data/nutrition-data.types";
 import { FOOD_IMAGE_MIN_CONFIDENCE, FOOD_IMAGE_REJECTION_MESSAGE } from "./constants";
 import { buildFoodScanDisclaimer } from "./food-scan-disclaimer";
 import { analyzeFoodImageWithProvider } from "./food-vision.provider";
@@ -184,19 +185,23 @@ async function resolveIngredient(
 }
 
 function deterministicTotals(ingredients: readonly ResolvedFoodScanIngredient[]): NutrientValues {
-  const keys = Object.keys(EMPTY_NUTRIENTS) as (keyof NutrientValues)[];
   const total = cloneEmptyNutrients();
   let hasNutrition = false;
   for (const item of ingredients) {
     if (!item.included || !item.nutrients) continue;
     hasNutrition = true;
-    for (const key of keys) {
+    for (const key of CORE_NUTRIENT_KEYS) {
       const value = item.nutrients[key];
       if (value === null) continue;
       total[key] = Math.round(((total[key] ?? 0) + value) * 100) / 100;
     }
   }
-  return hasNutrition ? total : cloneEmptyNutrients();
+  if (!hasNutrition) return cloneEmptyNutrients();
+  const micronutrients = sumMicronutrients(
+    ingredients.filter((item) => item.included).map((item) => item.nutrients?.micronutrients),
+  );
+  if (micronutrients) total.micronutrients = micronutrients;
+  return total;
 }
 
 async function fallbackDishIngredient(

@@ -1,22 +1,14 @@
-import type {
-  CanonicalFood,
-  ComparisonCandidate,
-  NutrientValues,
-  PortionNutrition,
+import { scaleMicronutrients, sumMicronutrients } from "./micronutrients";
+import {
+  CORE_NUTRIENT_KEYS,
+  type CanonicalFood,
+  type ComparisonCandidate,
+  type CoreNutrientKey,
+  type NutrientValues,
+  type PortionNutrition,
 } from "./nutrition-data.types";
 
 const MAX_SERVING_GRAMS = 5_000;
-const NUTRIENT_KEYS = [
-  "energyKcal",
-  "proteinG",
-  "carbohydratesG",
-  "fatG",
-  "saturatedFatG",
-  "sugarsG",
-  "fiberG",
-  "sodiumMg",
-  "saltG",
-] as const satisfies readonly (keyof NutrientValues)[];
 
 function round(value: number): number {
   return Math.round(value * 100) / 100;
@@ -39,27 +31,33 @@ export function calculatePortion(
   assertServingGrams(grams);
   const factor = grams / 100;
   const nutrients = Object.fromEntries(
-    NUTRIENT_KEYS.map((key) => [key, scaleValue(nutrientsPer100g[key], factor)]),
+    CORE_NUTRIENT_KEYS.map((key) => [key, scaleValue(nutrientsPer100g[key], factor)]),
   ) as unknown as NutrientValues;
+  const micronutrients = scaleMicronutrients(nutrientsPer100g.micronutrients, factor);
+  if (micronutrients) nutrients.micronutrients = micronutrients;
   return { grams: round(grams), nutrients };
 }
 
 export function sumPortions(
   portions: readonly { nutrientsPer100g: NutrientValues; grams: number }[],
 ): NutrientValues {
-  const totals: Record<keyof NutrientValues, number | null> = Object.fromEntries(
-    NUTRIENT_KEYS.map((key) => [key, null]),
-  ) as Record<keyof NutrientValues, number | null>;
-
+  const totals: Record<CoreNutrientKey, number | null> = Object.fromEntries(
+    CORE_NUTRIENT_KEYS.map((key) => [key, null]),
+  ) as Record<CoreNutrientKey, number | null>;
+  const micronutrientParts = [];
   for (const portion of portions) {
     const calculated = calculatePortion(portion.nutrientsPer100g, portion.grams).nutrients;
-    for (const key of NUTRIENT_KEYS) {
+    for (const key of CORE_NUTRIENT_KEYS) {
       const value = calculated[key];
       if (value === null) continue;
       totals[key] = round((totals[key] ?? 0) + value);
     }
+    micronutrientParts.push(calculated.micronutrients);
   }
-  return totals;
+  const result: NutrientValues = totals;
+  const micronutrients = sumMicronutrients(micronutrientParts);
+  if (micronutrients) result.micronutrients = micronutrients;
+  return result;
 }
 
 export function compareByCalories(food: CanonicalFood, targetCalories: number): ComparisonCandidate {

@@ -1,8 +1,10 @@
 import { env } from "../../../config/env";
+import { emptyMicronutrients, type MicronutrientKey } from "../micronutrients";
 import { normalizeTurkishSearch } from "../nutrition-query-aliases";
 import {
   EMPTY_NUTRIENTS,
   type CanonicalFood,
+  type CoreNutrientKey,
   type NutrientValues,
   type NutritionProvider,
 } from "../nutrition-data.types";
@@ -71,7 +73,7 @@ function lexicalScore(query: string, candidate: string): number {
   return Math.min(1, coverage * 0.75 + phraseBonus);
 }
 
-function nutrientKey(row: CnfNutrientRow): keyof NutrientValues | null {
+function nutrientKey(row: CnfNutrientRow): CoreNutrientKey | null {
   const id = Number(row.nutrient_name_id);
   const name = (row.nutrient_web_name ?? "").trim().toLocaleLowerCase("en-US");
 
@@ -85,6 +87,30 @@ function nutrientKey(row: CnfNutrientRow): keyof NutrientValues | null {
   if (id === 307 || /^sodium/.test(name)) return "sodiumMg";
   return null;
 }
+
+const CNF_MICRONUTRIENTS: Readonly<Record<number, MicronutrientKey>> = {
+  301: "calcium",
+  303: "iron",
+  304: "magnesium",
+  305: "phosphorus",
+  306: "potassium",
+  309: "zinc",
+  312: "copper",
+  315: "manganese",
+  317: "selenium",
+  321: "iodine",
+  320: "vitaminA",
+  401: "vitaminC",
+  324: "vitaminD",
+  323: "vitaminE",
+  430: "vitaminK",
+  404: "thiamin",
+  405: "riboflavin",
+  406: "niacin",
+  415: "vitaminB6",
+  417: "folate",
+  418: "vitaminB12",
+};
 
 function sourceConfidence(rows: CnfNutrientRow[]): number {
   const sourceIds = rows
@@ -187,13 +213,22 @@ export class CanadianNutrientFileProvider implements NutritionProvider {
 
     const nutrientRows = await this.nutrientRows(externalId);
     const nutrients: NutrientValues = { ...EMPTY_NUTRIENTS };
+    const micronutrients = emptyMicronutrients();
+    let hasMicronutrients = false;
     for (const nutrient of nutrientRows) {
-      const key = nutrientKey(nutrient);
-      if (!key) continue;
       const value = finiteNumber(nutrient.nutrient_value);
       if (value === null) continue;
-      nutrients[key] = value;
+
+      const key = nutrientKey(nutrient);
+      if (key) nutrients[key] = value;
+
+      const microKey = CNF_MICRONUTRIENTS[Number(nutrient.nutrient_name_id)];
+      if (microKey) {
+        micronutrients[microKey] = value;
+        hasMicronutrients = true;
+      }
     }
+    if (hasMicronutrients) nutrients.micronutrients = micronutrients;
 
     if (
       nutrients.energyKcal === null &&

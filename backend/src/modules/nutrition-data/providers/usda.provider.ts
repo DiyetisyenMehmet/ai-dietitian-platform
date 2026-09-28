@@ -1,11 +1,13 @@
 import { env } from "../../../config/env";
+import { emptyMicronutrients, normalizeMicronutrientAmount, type MicronutrientKey } from "../micronutrients";
 import type {
   CanonicalFood,
+  CoreNutrientKey,
   NutrientValues,
   NutritionProvider,
 } from "../nutrition-data.types";
 
-const USDA_NUTRIENTS: Record<number, keyof NutrientValues> = {
+const USDA_NUTRIENTS: Record<number, CoreNutrientKey> = {
   1008: "energyKcal",
   1003: "proteinG",
   1005: "carbohydratesG",
@@ -39,21 +41,56 @@ function emptyNutrients(): NutrientValues {
   };
 }
 
+function normalizedNutrientName(value: string): string {
+  return value.toLocaleLowerCase("en-US").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function micronutrientKey(name: string): MicronutrientKey | null {
+  const value = normalizedNutrientName(name);
+  const keys: Record<string, MicronutrientKey> = {
+    "calcium ca": "calcium", "iron fe": "iron", "magnesium mg": "magnesium",
+    "phosphorus p": "phosphorus", "potassium k": "potassium", "zinc zn": "zinc",
+    "copper cu": "copper", "manganese mn": "manganese", "selenium se": "selenium",
+    "iodine i": "iodine", "vitamin a rae": "vitaminA",
+    "vitamin c total ascorbic acid": "vitaminC", "vitamin d d2 d3": "vitaminD",
+    "vitamin e alpha tocopherol": "vitaminE", "vitamin k phylloquinone": "vitaminK",
+    "thiamin": "thiamin", "riboflavin": "riboflavin", "niacin": "niacin",
+    "vitamin b 6": "vitaminB6", "vitamin b6": "vitaminB6", "folate total": "folate",
+    "vitamin b 12": "vitaminB12", "vitamin b12": "vitaminB12",
+  };
+  return keys[value] ?? null;
+}
+
 function nutrientValues(food: Record<string, unknown>): NutrientValues {
   const values = emptyNutrients();
+  const micronutrients = emptyMicronutrients();
+  let hasMicronutrients = false;
   const nutrients = Array.isArray(food.foodNutrients) ? food.foodNutrients : [];
   for (const raw of nutrients) {
     const item = record(raw);
     const nested = record(item.nutrient);
     const id = num(item.nutrientId) ?? num(nested.id);
-    const key = id === null ? undefined : USDA_NUTRIENTS[id];
-    if (!key) continue;
+    const coreKey = id === null ? undefined : USDA_NUTRIENTS[id];
     const value = num(item.value) ?? num(item.amount);
-    if (value !== null) values[key] = value;
+    if (coreKey && value !== null) values[coreKey] = value;
+
+    const name = text(item.nutrientName) ?? text(nested.name);
+    const microKey = name ? micronutrientKey(name) : null;
+    if (!microKey || value === null) continue;
+    const normalized = normalizeMicronutrientAmount(
+      microKey,
+      value,
+      text(item.unitName) ?? text(nested.unitName),
+    );
+    if (normalized !== null) {
+      micronutrients[microKey] = normalized;
+      hasMicronutrients = true;
+    }
   }
   if (values.sodiumMg !== null && values.saltG === null) {
     values.saltG = Math.round(values.sodiumMg * 0.0025 * 1000) / 1000;
   }
+  if (hasMicronutrients) values.micronutrients = micronutrients;
   return values;
 }
 

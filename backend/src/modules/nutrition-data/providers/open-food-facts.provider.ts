@@ -1,5 +1,6 @@
 import { env } from "../../../config/env";
 import { normalizeBarcode } from "../barcode";
+import { emptyMicronutrients, normalizeMicronutrientAmount, type MicronutrientKey } from "../micronutrients";
 import type { CanonicalFood, NutrientValues, NutritionProvider } from "../nutrition-data.types";
 
 function record(value: unknown): Record<string, unknown> {
@@ -25,9 +26,50 @@ function labelFlag(all: readonly string[], tag: string): boolean | null {
 function nutrient(n: Record<string, unknown>, key: string, basis: "100g" | "serving"): number | null {
   return num(n[`${key}_${basis}`]);
 }
+const OFF_MICRONUTRIENTS: readonly [MicronutrientKey, readonly string[]][] = [
+  ["calcium", ["calcium"]],
+  ["iron", ["iron"]],
+  ["magnesium", ["magnesium"]],
+  ["phosphorus", ["phosphorus"]],
+  ["potassium", ["potassium"]],
+  ["zinc", ["zinc"]],
+  ["copper", ["copper"]],
+  ["manganese", ["manganese"]],
+  ["selenium", ["selenium"]],
+  ["iodine", ["iodine"]],
+  ["vitaminA", ["vitamin-a"]],
+  ["vitaminC", ["vitamin-c"]],
+  ["vitaminD", ["vitamin-d"]],
+  ["vitaminE", ["vitamin-e"]],
+  ["vitaminK", ["vitamin-k"]],
+  ["thiamin", ["vitamin-b1", "thiamin"]],
+  ["riboflavin", ["vitamin-b2", "riboflavin"]],
+  ["niacin", ["vitamin-b3", "vitamin-pp", "niacin"]],
+  ["vitaminB6", ["vitamin-b6"]],
+  ["folate", ["vitamin-b9", "folates", "folate"]],
+  ["vitaminB12", ["vitamin-b12"]],
+];
+
+function offMicronutrients(n: Record<string, unknown>, basis: "100g" | "serving") {
+  const values = emptyMicronutrients();
+  let hasAny = false;
+  for (const [canonicalKey, aliases] of OFF_MICRONUTRIENTS) {
+    for (const alias of aliases) {
+      const raw = nutrient(n, alias, basis);
+      if (raw === null) continue;
+      const normalized = normalizeMicronutrientAmount(canonicalKey, raw, text(n[`${alias}_unit`]));
+      if (normalized === null) continue;
+      values[canonicalKey] = normalized;
+      hasAny = true;
+      break;
+    }
+  }
+  return hasAny ? values : null;
+}
+
 function nutrientValues(n: Record<string, unknown>, basis: "100g" | "serving"): NutrientValues {
   const sodiumG = nutrient(n, "sodium", basis);
-  return {
+  const values: NutrientValues = {
     energyKcal: nutrient(n, "energy-kcal", basis),
     proteinG: nutrient(n, "proteins", basis),
     carbohydratesG: nutrient(n, "carbohydrates", basis),
@@ -38,6 +80,9 @@ function nutrientValues(n: Record<string, unknown>, basis: "100g" | "serving"): 
     sodiumMg: sodiumG === null ? null : Math.round(sodiumG * 1000 * 100) / 100,
     saltG: nutrient(n, "salt", basis),
   };
+  const micronutrients = offMicronutrients(n, basis);
+  if (micronutrients) values.micronutrients = micronutrients;
+  return values;
 }
 function hasNutrientValues(values: NutrientValues): boolean {
   return Object.values(values).some((value) => value !== null);

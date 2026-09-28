@@ -3,7 +3,8 @@ import { ApiError } from "../../utils/api-error";
 import { derivePer100gAttentionFlags, derivePortionAttentionFlags } from "./nutrition-attention";
 import { calculatePortion, compareByCalories } from "./nutrition-calculator";
 import { nutritionDataService } from "./nutrition-data.service";
-import type { CanonicalFood, NutrientValues } from "./nutrition-data.types";
+import { MICRONUTRIENT_KEYS } from "./micronutrients";
+import { CORE_NUTRIENT_KEYS, type CanonicalFood, type CoreNutrientKey, type NutrientValues } from "./nutrition-data.types";
 import { deriveNutritionPersonalization } from "./personalization";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -61,7 +62,7 @@ function nutrientDifference(
   source: NutrientValues,
   alternative: NutrientValues,
 ): Partial<Record<keyof NutrientValues, number>> {
-  const keys: (keyof NutrientValues)[] = [
+  const keys: CoreNutrientKey[] = [
     "energyKcal",
     "proteinG",
     "carbohydratesG",
@@ -69,7 +70,7 @@ function nutrientDifference(
     "fiberG",
     "sugarsG",
   ];
-  const result: Partial<Record<keyof NutrientValues, number>> = {};
+  const result: Partial<Record<CoreNutrientKey, number>> = {};
   for (const key of keys) {
     const sourceValue = source[key];
     const alternativeValue = alternative[key];
@@ -161,11 +162,18 @@ async function personalizeLocal(userId: string, nutrients: NutrientValues, food?
 }
 
 function validateNutrients(input: NutrientValues): NutrientValues {
-  const keys = Object.keys(input) as (keyof NutrientValues)[];
-  for (const key of keys) {
+  for (const key of CORE_NUTRIENT_KEYS) {
     const value = input[key];
     if (value !== null && (!Number.isFinite(value) || value < 0 || value > 100_000)) {
       throw ApiError.badRequest(`Geçersiz nutrient değeri: ${key}`);
+    }
+  }
+  if (input.micronutrients) {
+    for (const key of MICRONUTRIENT_KEYS) {
+      const value = input.micronutrients[key];
+      if (value !== null && (!Number.isFinite(value) || value < 0 || value > 1_000_000)) {
+        throw ApiError.badRequest(`Geçersiz micronutrient değeri: ${key}`);
+      }
     }
   }
   return input;

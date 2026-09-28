@@ -71,6 +71,22 @@ test("preserves missing nutrients instead of inventing values", () => {
   assert.equal(result.nutrients.fiberG, null);
 });
 
+test("scales micronutrients with the existing selected-serving math", () => {
+  const result = calculatePortion({
+    ...base,
+    micronutrients: {
+      calcium: 200, iron: null, magnesium: null, phosphorus: null, potassium: null,
+      zinc: null, copper: null, manganese: null, selenium: null, iodine: null,
+      vitaminA: null, vitaminC: null, vitaminD: 10, vitaminE: null, vitaminK: null,
+      thiamin: null, riboflavin: null, niacin: null, vitaminB6: null, folate: null,
+      vitaminB12: null,
+    },
+  }, 25);
+  assert.equal(result.nutrients.micronutrients?.calcium, 50);
+  assert.equal(result.nutrients.micronutrients?.vitaminD, 2.5);
+  assert.equal(result.nutrients.micronutrients?.iron, null);
+});
+
 test("rejects zero, non-finite and extreme servings", () => {
   assert.throws(() => calculatePortion(base, 0), RangeError);
   assert.throws(() => calculatePortion(base, Number.NaN), RangeError);
