@@ -6,6 +6,7 @@ import { asyncHandler } from "../../utils/async-handler";
 import { trackingService } from "./tracking.service";
 import type {
   CreateMealLogInput,
+  MealMicronutrientDayQuery,
   CreateWaterLogInput,
   CreateWeightLogInput,
   ScheduleWaterReminderInput,
@@ -59,6 +60,16 @@ export const trackingController = {
     const userId = requireUserId(req);
     const logs = await trackingService.listMeals(userId, parseSince(req));
     sendSuccess(res, { logs });
+  }),
+
+  dailyMicronutrients: asyncHandler(async (req: Request, res: Response) => {
+    const query = req.query as unknown as MealMicronutrientDayQuery;
+    const summary = await trackingService.getDailyMicronutrients(
+      requireUserId(req),
+      query.date,
+      query.timezone,
+    );
+    sendSuccess(res, { summary });
   }),
 
   updateMeal: asyncHandler(async (req: Request, res: Response) => {

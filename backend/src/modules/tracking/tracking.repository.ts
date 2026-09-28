@@ -1,4 +1,4 @@
-import type { MealLog, WaterLog, WeightLog } from "@prisma/client";
+import { Prisma, type MealLog, type WaterLog, type WeightLog } from "@prisma/client";
 
 import { prisma } from "../../lib/prisma";
 import {
@@ -143,9 +143,18 @@ export const trackingRepository = {
     fatG?: number;
     sodiumMg?: number;
     sugarG?: number;
+    micronutrients?: Record<string, number>;
     loggedAt?: Date;
   }): Promise<MealLog> {
-    return prisma.mealLog.create({ data });
+    const { micronutrients, ...core } = data;
+    return prisma.mealLog.create({
+      data: {
+        ...core,
+        ...(micronutrients
+          ? { micronutrients: micronutrients as Prisma.InputJsonValue }
+          : {}),
+      },
+    });
   },
 
   listMealLogs(userId: string, since?: Date): Promise<MealLog[]> {
@@ -173,10 +182,21 @@ export const trackingRepository = {
       fatG?: number;
       sodiumMg?: number;
       sugarG?: number;
+      micronutrients?: Record<string, number>;
+      clearMicronutrients?: boolean;
     },
   ): Promise<MealLog | null> {
     return prisma.$transaction(async (tx) => {
-      const updated = await tx.mealLog.updateMany({ where: { id, userId }, data });
+      const { micronutrients, clearMicronutrients, ...core } = data;
+      const updateData: Prisma.MealLogUpdateManyMutationInput = {
+        ...core,
+        ...(micronutrients
+          ? { micronutrients: micronutrients as Prisma.InputJsonValue }
+          : clearMicronutrients
+            ? { micronutrients: Prisma.DbNull }
+            : {}),
+      };
+      const updated = await tx.mealLog.updateMany({ where: { id, userId }, data: updateData });
       if (updated.count === 0) return null;
       return tx.mealLog.findFirst({ where: { id, userId } });
     });

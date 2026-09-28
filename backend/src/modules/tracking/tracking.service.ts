@@ -4,6 +4,16 @@ import { logger } from "../../lib/logger";
 import { ApiError } from "../../utils/api-error";
 import { nutritionAdaptationService } from "../ai-coach/nutrition-adaptation.service";
 import { getAIAdapter } from "../blood-test-analysis/ai-adapter/ai-adapter.factory";
+import { resolveHistoryDayRange } from "../history/history-time";
+import {
+  MICRONUTRIENT_DEFINITIONS,
+  MICRONUTRIENT_KEYS,
+  MICRONUTRIENT_REFERENCE_SOURCE,
+  MICRONUTRIENT_REFERENCE_VERSION,
+  normalizeMicronutrientSnapshot,
+  sumMicronutrients,
+  toMicronutrientSnapshot,
+} from "../nutrition-data/micronutrients";
 import { notificationService } from "../notifications/notification.service";
 import { trackingRepository } from "./tracking.repository";
 import type {
@@ -21,6 +31,29 @@ import {
 
 export const WEIGHT_CHECK_IN_REQUIRED_CODE = "WEIGHT_CHECK_IN_REQUIRED";
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+export type MicronutrientCoverage = "NONE" | "PARTIAL" | "COMPLETE";
+
+export interface DailyMicronutrientSummary {
+  date: string;
+  timezone: string;
+  mealCount: number;
+  mealsWithMicronutrients: number;
+  coverage: MicronutrientCoverage;
+  note: string;
+  reference: {
+    version: string;
+    source: string;
+  };
+  nutrients: Array<{
+    key: (typeof MICRONUTRIENT_KEYS)[number];
+    label: string;
+    unit: "mg" | "µg";
+    value: number;
+    reference: number;
+    referencePercent: number;
+  }>;
+}
 
 export interface WaterRecommendation {
   text: string;
@@ -97,6 +130,9 @@ export const trackingService = {
   },
 
   logMeal(userId: string, input: CreateMealLogInput): Promise<MealLog> {
+    const micronutrients = toMicronutrientSnapshot(
+      normalizeMicronutrientSnapshot(input.micronutrients),
+    );
     return trackingRepository.createMealLog({
       userId,
       mealType: input.mealType,
@@ -107,6 +143,7 @@ export const trackingService = {
       fatG: input.fatG,
       sodiumMg: input.sodiumMg,
       sugarG: input.sugarG,
+      ...(micronutrients ? { micronutrients } : {}),
       loggedAt: toDate(input.loggedAt),
     });
   },
@@ -115,8 +152,87 @@ export const trackingService = {
     return trackingRepository.listMealLogs(userId, since);
   },
 
+  async getDailyMicronutrients(
+    userId: string,
+    date: string,
+    timezone: string,
+  ): Promise<DailyMicronutrientSummary> {
+    const range = resolveHistoryDayRange(date, timezone);
+    const logs = await trackingRepository.listMealLogsRange(userId, range.fromUtc, range.toUtcExclusive);
+    const nutritionLogs = logs.filter(
+      (log) =>
+        log.name !== null ||
+        log.calories !== null ||
+        log.proteinG !== null ||
+        log.carbsG !== null ||
+        log.fatG !== null ||
+        log.sodiumMg !== null ||
+        log.sugarG !== null ||
+        normalizeMicronutrientSnapshot(log.micronutrients) !== null,
+    );
+    const snapshots = nutritionLogs
+      .map((log) => normalizeMicronutrientSnapshot(log.micronutrients))
+      .filter((value) => value !== null);
+    const totals = sumMicronutrients(snapshots);
+    const mealsWithMicronutrients = snapshots.length;
+    const coverage: MicronutrientCoverage =
+      nutritionLogs.length === 0 || mealsWithMicronutrients === 0
+        ? "NONE"
+        : mealsWithMicronutrients === nutritionLogs.length
+          ? "COMPLETE"
+          : "PARTIAL";
+
+    return {
+      date: range.date,
+      timezone: range.timezone,
+      mealCount: nutritionLogs.length,
+      mealsWithMicronutrients,
+      coverage,
+      note:
+        coverage === "NONE"
+          ? "Kaydettiğin öğünlerde vitamin ve mineral verisi henüz bulunmuyor."
+          : coverage === "PARTIAL"
+            ? `${nutritionLogs.length} öğünün ${mealsWithMicronutrients} tanesindeki besin verilerine göre.`
+            : "Kayıtlı ve besin değeri bulunan öğünlere göre.",
+      reference: {
+        version: MICRONUTRIENT_REFERENCE_VERSION,
+        source: MICRONUTRIENT_REFERENCE_SOURCE,
+      },
+      nutrients: totals
+        ? MICRONUTRIENT_KEYS.flatMap((key) => {
+            const value = totals[key];
+            if (value === null) return [];
+            const definition = MICRONUTRIENT_DEFINITIONS[key];
+            return [{
+              key,
+              label: definition.labelTr,
+              unit: definition.unit,
+              value,
+              reference: definition.adultReference,
+              referencePercent: Math.round((value / definition.adultReference) * 1000) / 10,
+            }];
+          })
+        : [],
+    };
+  },
+
   async updateMeal(userId: string, id: string, input: UpdateMealLogInput): Promise<MealLog> {
-    const updated = await trackingRepository.updateMealLogForUser(id, userId, input);
+    const micronutrients = toMicronutrientSnapshot(
+      normalizeMicronutrientSnapshot(input.micronutrients),
+    );
+    const nutritionChanged = [
+      input.calories,
+      input.proteinG,
+      input.carbsG,
+      input.fatG,
+      input.sodiumMg,
+      input.sugarG,
+    ].some((value) => value !== undefined);
+    const updated = await trackingRepository.updateMealLogForUser(id, userId, {
+      ...input,
+      ...(micronutrients ? { micronutrients } : {}),
+      ...(nutritionChanged && !micronutrients ? { clearMicronutrients: true } : {}),
+    });
     if (!updated) {
       throw ApiError.notFound("Meal log not found.");
     }

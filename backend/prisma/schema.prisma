@@ -585,9 +585,10 @@ model MealLog {
   proteinG  Float?
   carbsG    Float?
   fatG      Float?
-  sodiumMg  Float?
-  sugarG    Float?
-  loggedAt  DateTime @default(now())
+  sodiumMg      Float?
+  sugarG        Float?
+  micronutrients Json?
+  loggedAt      DateTime @default(now())
   createdAt DateTime @default(now())
 
   @@index([userId, loggedAt])

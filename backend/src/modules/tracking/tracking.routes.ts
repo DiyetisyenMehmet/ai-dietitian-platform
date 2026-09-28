@@ -9,6 +9,7 @@ import {
   createWaterLogSchema,
   createWeightLogSchema,
   mealLogIdParamsSchema,
+  mealMicronutrientDayQuerySchema,
   scheduleWaterReminderSchema,
   updateMealLogSchema,
   updateWaterGoalSchema,
@@ -68,6 +69,12 @@ trackingRouter.post(
   trackingController.createMeal,
 );
 trackingRouter.get("/meals", authenticate, trackingController.listMeals);
+trackingRouter.get(
+  "/meals/micronutrients/day",
+  authenticate,
+  validate({ query: mealMicronutrientDayQuerySchema }),
+  trackingController.dailyMicronutrients,
+);
 trackingRouter.patch(
   "/meals/:id",
   authenticate,
