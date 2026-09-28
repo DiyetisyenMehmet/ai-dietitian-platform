@@ -228,6 +228,13 @@ export const trackingRepository = {
     return prisma.waterLog.deleteMany({ where: { id, userId } });
   },
 
+  getMicronutrientReferenceProfile(userId: string): Promise<{ dateOfBirth: Date } | null> {
+    return prisma.userProfile.findUnique({
+      where: { userId },
+      select: { dateOfBirth: true },
+    });
+  },
+
   getWaterProfile(userId: string): Promise<{
     dailyWaterGoalMl: number;
     currentWeightKg: number;

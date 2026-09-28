@@ -136,3 +136,57 @@ export function adultReferenceMicronutrients(): MicronutrientValues {
     MICRONUTRIENT_KEYS.map((key) => [key, MICRONUTRIENT_DEFINITIONS[key].adultReference]),
   ) as MicronutrientValues;
 }
+
+export type MicronutrientReferenceReason = "PROFILE_REQUIRED" | "UNDER_18";
+
+export interface MicronutrientReferenceResolution {
+  available: boolean;
+  population: "ADULTS";
+  version: string;
+  source: string;
+  reason: MicronutrientReferenceReason | null;
+  values: MicronutrientValues | null;
+}
+
+function ageYearsOnDate(dateOfBirth: Date, asOf: Date): number {
+  let age = asOf.getUTCFullYear() - dateOfBirth.getUTCFullYear();
+  const beforeBirthday =
+    asOf.getUTCMonth() < dateOfBirth.getUTCMonth() ||
+    (asOf.getUTCMonth() === dateOfBirth.getUTCMonth() &&
+      asOf.getUTCDate() < dateOfBirth.getUTCDate());
+  if (beforeBirthday) age -= 1;
+  return age;
+}
+
+export function resolveMicronutrientReference(
+  dateOfBirth: Date | null | undefined,
+  asOf = new Date(),
+): MicronutrientReferenceResolution {
+  const base = {
+    population: "ADULTS" as const,
+    version: MICRONUTRIENT_REFERENCE_VERSION,
+    source: MICRONUTRIENT_REFERENCE_SOURCE,
+  };
+  if (!dateOfBirth || Number.isNaN(dateOfBirth.getTime())) {
+    return {
+      ...base,
+      available: false,
+      reason: "PROFILE_REQUIRED",
+      values: null,
+    };
+  }
+  if (ageYearsOnDate(dateOfBirth, asOf) < 18) {
+    return {
+      ...base,
+      available: false,
+      reason: "UNDER_18",
+      values: null,
+    };
+  }
+  return {
+    ...base,
+    available: true,
+    reason: null,
+    values: adultReferenceMicronutrients(),
+  };
+}

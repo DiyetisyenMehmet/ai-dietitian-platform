@@ -8,6 +8,7 @@ import {
   adultReferenceMicronutrients,
   normalizeMicronutrientAmount,
   normalizeMicronutrientSnapshot,
+  resolveMicronutrientReference,
 } from "./micronutrients";
 
 test("converts provider units centrally into canonical units", () => {
@@ -36,4 +37,28 @@ test("uses versioned EU adult nutrient reference values without upper-limit sema
   assert.equal(reference.vitaminB12, 2.5);
   assert.equal(MICRONUTRIENT_DEFINITIONS.potassium.unit, "mg");
   assert.equal(MICRONUTRIENT_DEFINITIONS.selenium.unit, "µg");
+});
+
+test("adult references require a known adult profile age", () => {
+  const asOf = new Date("2026-09-28T12:00:00.000Z");
+  const adult = resolveMicronutrientReference(
+    new Date("1990-05-20T00:00:00.000Z"),
+    asOf,
+  );
+  assert.equal(adult.available, true);
+  assert.equal(adult.reason, null);
+  assert.equal(adult.values?.calcium, 800);
+
+  const under18 = resolveMicronutrientReference(
+    new Date("2010-10-01T00:00:00.000Z"),
+    asOf,
+  );
+  assert.equal(under18.available, false);
+  assert.equal(under18.reason, "UNDER_18");
+  assert.equal(under18.values, null);
+
+  const missing = resolveMicronutrientReference(null, asOf);
+  assert.equal(missing.available, false);
+  assert.equal(missing.reason, "PROFILE_REQUIRED");
+  assert.equal(missing.values, null);
 });

@@ -8,9 +8,8 @@ import { resolveHistoryDayRange } from "../history/history-time";
 import {
   MICRONUTRIENT_DEFINITIONS,
   MICRONUTRIENT_KEYS,
-  MICRONUTRIENT_REFERENCE_SOURCE,
-  MICRONUTRIENT_REFERENCE_VERSION,
   normalizeMicronutrientSnapshot,
+  resolveMicronutrientReference,
   sumMicronutrients,
   toMicronutrientSnapshot,
 } from "../nutrition-data/micronutrients";
@@ -42,16 +41,19 @@ export interface DailyMicronutrientSummary {
   coverage: MicronutrientCoverage;
   note: string;
   reference: {
+    available: boolean;
+    population: "ADULTS";
     version: string;
     source: string;
+    reason: "PROFILE_REQUIRED" | "UNDER_18" | null;
   };
   nutrients: Array<{
     key: (typeof MICRONUTRIENT_KEYS)[number];
     label: string;
     unit: "mg" | "µg";
     value: number;
-    reference: number;
-    referencePercent: number;
+    reference: number | null;
+    referencePercent: number | null;
   }>;
 }
 
@@ -158,7 +160,14 @@ export const trackingService = {
     timezone: string,
   ): Promise<DailyMicronutrientSummary> {
     const range = resolveHistoryDayRange(date, timezone);
-    const logs = await trackingRepository.listMealLogsRange(userId, range.fromUtc, range.toUtcExclusive);
+    const [logs, profile] = await Promise.all([
+      trackingRepository.listMealLogsRange(userId, range.fromUtc, range.toUtcExclusive),
+      trackingRepository.getMicronutrientReferenceProfile(userId),
+    ]);
+    const reference = resolveMicronutrientReference(
+      profile?.dateOfBirth,
+      new Date(`${range.date}T12:00:00.000Z`),
+    );
     const nutritionLogs = logs.filter(
       (log) =>
         log.name !== null ||
@@ -195,21 +204,28 @@ export const trackingService = {
             ? `${nutritionLogs.length} öğünün ${mealsWithMicronutrients} tanesindeki besin verilerine göre.`
             : "Kayıtlı ve besin değeri bulunan öğünlere göre.",
       reference: {
-        version: MICRONUTRIENT_REFERENCE_VERSION,
-        source: MICRONUTRIENT_REFERENCE_SOURCE,
+        available: reference.available,
+        population: reference.population,
+        version: reference.version,
+        source: reference.source,
+        reason: reference.reason,
       },
       nutrients: totals
         ? MICRONUTRIENT_KEYS.flatMap((key) => {
             const value = totals[key];
             if (value === null) return [];
             const definition = MICRONUTRIENT_DEFINITIONS[key];
+            const referenceValue = reference.values?.[key] ?? null;
             return [{
               key,
               label: definition.labelTr,
               unit: definition.unit,
               value,
-              reference: definition.adultReference,
-              referencePercent: Math.round((value / definition.adultReference) * 1000) / 10,
+              reference: referenceValue,
+              referencePercent:
+                referenceValue === null
+                  ? null
+                  : Math.round((value / referenceValue) * 1000) / 10,
             }];
           })
         : [],

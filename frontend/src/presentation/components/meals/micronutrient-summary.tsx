@@ -24,11 +24,14 @@ function NutrientRows({
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       {items.map((item) => {
+        const hasReference =
+          typeof item.reference === "number" &&
+          typeof item.referencePercent === "number";
         const aria = micronutrientAriaText(
           item.label,
           item.value,
           item.unit,
-          item.referencePercent,
+          hasReference ? item.referencePercent : undefined,
         );
         return (
           <div key={item.key} className="min-w-0 rounded-xl border bg-background/70 p-3">
@@ -36,21 +39,29 @@ function NutrientRows({
               <span className="min-w-0 break-words text-sm font-semibold text-foreground">
                 {item.label}
               </span>
-              <span className="shrink-0 text-xs font-semibold tabular-nums text-primary">
-                {formatReferencePercent(item.referencePercent)}
-              </span>
+              {hasReference && (
+                <span className="shrink-0 text-xs font-semibold tabular-nums text-primary">
+                  {formatReferencePercent(item.referencePercent!)}
+                </span>
+              )}
             </div>
             <div className="mb-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-muted-foreground">
               <span className="tabular-nums">{formatMicronutrientAmount(item.value, item.unit)}</span>
-              <span className="tabular-nums">
-                Günlük referans {formatMicronutrientAmount(item.reference, item.unit)}
-              </span>
+              {hasReference ? (
+                <span className="tabular-nums">
+                  Günlük referans {formatMicronutrientAmount(item.reference!, item.unit)}
+                </span>
+              ) : (
+                <span>Günlük referans gösterilmiyor</span>
+              )}
             </div>
-            <ProgressBar
-              value={visualProgressPercent(item.referencePercent)}
-              ariaLabel={aria}
-              ariaValueText={`${formatReferencePercent(item.referencePercent)} günlük referans`}
-            />
+            {hasReference && (
+              <ProgressBar
+                value={visualProgressPercent(item.referencePercent!)}
+                ariaLabel={aria}
+                ariaValueText={`${formatReferencePercent(item.referencePercent!)} günlük referans`}
+              />
+            )}
           </div>
         );
       })}

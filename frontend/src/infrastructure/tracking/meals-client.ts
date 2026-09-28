@@ -59,16 +59,19 @@ export interface DailyMicronutrientSummaryDto {
   coverage: "NONE" | "PARTIAL" | "COMPLETE";
   note: string;
   reference: {
+    available: boolean;
+    population: "ADULTS";
     version: string;
     source: string;
+    reason: "PROFILE_REQUIRED" | "UNDER_18" | null;
   };
   nutrients: Array<{
     key: MicronutrientKeyDto;
     label: string;
     unit: "mg" | "µg";
     value: number;
-    reference: number;
-    referencePercent: number;
+    reference: number | null;
+    referencePercent: number | null;
   }>;
 }
 
