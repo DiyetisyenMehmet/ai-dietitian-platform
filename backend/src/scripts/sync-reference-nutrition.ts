@@ -10,7 +10,6 @@ import { MICRONUTRIENT_KEYS } from "../modules/nutrition-data/micronutrients";
 import type {
   CanonicalFood,
   CoreNutrientKey,
-  NutrientValues,
 } from "../modules/nutrition-data/nutrition-data.types";
 
 const REFERENCE_PROVIDERS = new Set<ReferenceNutritionProvider>(["CIQUAL", "COFID"]);
