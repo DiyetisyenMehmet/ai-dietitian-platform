@@ -356,6 +356,48 @@ test("register -> consent -> onboarding -> scanner -> same-day weigh-in preserve
   await expect(page.getByText("Vitamin D", { exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 
+  await page.route("**/api/ai-coach/weekly-review", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(success({
+        premium: false,
+        review: {
+          weekNumber: 40,
+          year: 2026,
+          score: 72,
+          weightTrend: "STABLE",
+          topRecommendations: [
+            "Öğün kayıt düzenini koru.",
+            "Su kayıtlarını gün içine yay.",
+          ],
+          premiumLocked: true,
+        },
+      })),
+    });
+  });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${WEB_BASE_URL}/insights`);
+  await expect(page.getByRole("heading", { name: "Haftalık Koç Özeti" })).toBeVisible();
+  await expect(page.getByText(/Haftalık kayıt puanın 72\/100/)).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Aylık Koç Özeti" })).toBeVisible();
+  await expect(page.getByText("Aylık koç özeti Premium erişim kapsamında sunulur.")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Haftalık Değerlendirme" })).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+  await page.getByRole("button", { name: "Koyu temaya geç" }).evaluate((element) => element.click());
+  await expect(page.locator("html")).toHaveClass(/dark/);
+  await page.setViewportSize({ width: 412, height: 915 });
+  await expect(page.getByRole("heading", { name: "Haftalık Koç Özeti" })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await expect(page.getByRole("heading", { name: "Aylık Koç Özeti" })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.getByRole("button", { name: "Açık temaya geç" }).evaluate((element) => element.click());
+  await expect(page.locator("html")).not.toHaveClass(/dark/);
+
   await page.goto(`${WEB_BASE_URL}/meals/scan`);
   await page.route("**/api/food-scan/analyze", async (route) => {
     await route.fulfill({

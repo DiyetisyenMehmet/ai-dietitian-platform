@@ -3,128 +3,121 @@
 import * as React from "react";
 
 import type { AiInsight } from "@/domain/health/types";
+import { coachReviewsClient } from "@/infrastructure/ai-coach/coach-reviews-client";
+import { useSubscription } from "@/application/payments/subscription-store";
+import {
+  monthlyReviewLockedInsight,
+  monthlyReviewToInsight,
+  monthlyReviewUnavailableInsight,
+  weeklyReviewToInsight,
+  weeklyReviewUnavailableInsight,
+} from "./review-insights";
 import { useHealthProfile } from "./health-profile-store";
 import { useWeightEntries } from "./weight-store";
 import { useProgressStats } from "./progress-analytics";
 import { useDailyTracking } from "./daily-tracking-store";
-import { useHealthScore } from "./health-score";
 import { useBloodTests } from "./blood-test-store";
-import { useSubscription } from "@/application/payments/subscription-store";
 
 /**
  * Surfaces the Sprint 19 "AI intelligence" as user-facing insight cards:
  * weekly review, monthly review (premium), risk alerts, nutrition adaptations,
  * a smart follow-up question and a memory summary.
  *
- * Derived locally from the shared session stores (placeholder data layer,
- * backend-ready) so it stays consistent with the rest of the app. All copy is
- * Turkish, coaching-toned and explicitly framed as guidance — never medical
- * diagnosis.
+ * Weekly/monthly review cards reuse the persisted backend review contracts.
+ * The remaining coaching cards continue to use their existing client-side
+ * session signals. All copy is Turkish, coaching-toned and explicitly framed
+ * as guidance — never medical diagnosis.
  */
 export function useAiInsights(): AiInsight[] {
   const profile = useHealthProfile();
   const entries = useWeightEntries();
   const stats = useProgressStats(entries, profile.targetWeightKg);
   const tracking = useDailyTracking();
-  const score = useHealthScore();
   const bloodTests = useBloodTests();
-  const { subscription } = useSubscription();
-
+  const { subscription, loading: subscriptionLoading } = useSubscription();
   const isPremium = subscription.tier !== "FREE";
+
+  const [weeklyReviewInsight, setWeeklyReviewInsight] = React.useState<AiInsight | null>(null);
+  const [monthlyReviewInsight, setMonthlyReviewInsight] = React.useState<AiInsight | null>(null);
+  const [weeklyReviewLoading, setWeeklyReviewLoading] = React.useState(true);
+  const [monthlyReviewLoading, setMonthlyReviewLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    let active = true;
+    setWeeklyReviewLoading(true);
+    void coachReviewsClient
+      .getWeeklyReview()
+      .then(({ review }) => {
+        if (active) setWeeklyReviewInsight(weeklyReviewToInsight(review));
+      })
+      .catch(() => {
+        if (active) setWeeklyReviewInsight(weeklyReviewUnavailableInsight());
+      })
+      .finally(() => {
+        if (active) setWeeklyReviewLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  React.useEffect(() => {
+    if (subscriptionLoading) return;
+
+    if (!isPremium) {
+      setMonthlyReviewInsight(monthlyReviewLockedInsight());
+      setMonthlyReviewLoading(false);
+      return;
+    }
+
+    let active = true;
+    setMonthlyReviewLoading(true);
+    void coachReviewsClient
+      .getMonthlyReview()
+      .then(({ review }) => {
+        if (active) setMonthlyReviewInsight(monthlyReviewToInsight(review));
+      })
+      .catch(() => {
+        if (active) setMonthlyReviewInsight(monthlyReviewUnavailableInsight());
+      })
+      .finally(() => {
+        if (active) setMonthlyReviewLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [isPremium, subscriptionLoading]);
 
   return React.useMemo(() => {
     const insights: AiInsight[] = [];
 
-    // Number of days of tracked data, measured from the earliest weight entry
-    // (entries are sorted oldest→newest) to today. Weekly/monthly reviews are
-    // only meaningful once enough real data has accumulated.
-    const dataSpanDays =
-      entries.length > 0
-        ? Math.floor(
-            (Date.now() - new Date(entries[0].date).getTime()) / 86_400_000,
-          )
-        : 0;
+    insights.push(
+      weeklyReviewLoading
+        ? {
+            id: "weekly-review-loading",
+            kind: "weekly-review",
+            title: "Haftalık Koç Özeti",
+            summary: "Haftalık koç özeti hazırlanıyor.",
+            details: [],
+            severity: "info",
+            icon: "calendar",
+          }
+        : weeklyReviewInsight ?? weeklyReviewUnavailableInsight(),
+    );
 
-    // 1) Weekly review — only when at least 7 days of data exist. Otherwise an
-    // informative empty state (no fabricated analysis / numbers / advice).
-    if (dataSpanDays >= 7) {
-      const weeklyLine =
-        stats.weeklyChangeKg == null
-          ? "Bu hafta yeterli kilo kaydın yok; düzenli tartılırsan haftalık özetin daha isabetli olur."
-          : stats.weeklyChangeKg < 0
-            ? `Bu hafta ${Math.abs(stats.weeklyChangeKg).toLocaleString("tr-TR")} kg verdin — istikrarlı gidiyorsun.`
-            : stats.weeklyChangeKg > 0
-              ? `Bu hafta ${stats.weeklyChangeKg.toLocaleString("tr-TR")} kg aldın; birlikte nedenlerine bakabiliriz.`
-              : "Kilon bu hafta sabit kaldı; bu da bir denge işareti olabilir.";
-      insights.push({
-        id: "weekly-review",
-        kind: "weekly-review",
-        title: "Haftalık Değerlendirme",
-        summary: weeklyLine,
-        details: [
-          `Sağlık skorun şu an ${score.score}/100 (${score.band}).`,
-          tracking.chattedToday
-            ? "Bu hafta koçunla düzenli konuştun; bu takibi güçlü tutuyor."
-            : "Koçunla daha sık konuşman, önerileri sana göre inceltmemi sağlar.",
-          "Bu bir özet rehberliktir, tıbbi teşhis değildir.",
-        ],
-        severity: "info",
-        icon: "calendar",
-        actionLabel: "İlerlemeyi gör",
-        actionHref: "/progress",
-      });
-    } else {
-      insights.push({
-        id: "weekly-review",
-        kind: "weekly-review",
-        title: "Haftalık Değerlendirme",
-        summary:
-          "Haftalık değerlendirmenin oluşturulabilmesi için biraz daha veri toplamamız gerekiyor.",
-        details: [],
-        severity: "info",
-        icon: "calendar",
-      });
-    }
-
-    // 2) Monthly review — only when at least 30 days of data exist (premium
-    // otherwise). Otherwise an informative empty state (no fabricated content).
-    if (dataSpanDays >= 30) {
-      const monthlyLine =
-        stats.monthlyChangeKg == null
-          ? "Aylık trendini çıkarmak için biraz daha veri topluyoruz."
-          : `Son 30 günde toplam ${stats.monthlyChangeKg < 0 ? "" : "+"}${stats.monthlyChangeKg.toLocaleString("tr-TR")} kg değişim var.`;
-      insights.push({
-        id: "monthly-review",
-        kind: "monthly-review",
-        title: "Aylık Derin Analiz",
-        summary: isPremium
-          ? monthlyLine
-          : "Aylık derin analiz, öğün-kilo-tahlil ilişkilerini bir arada yorumlar.",
-        details: isPremium
-          ? [
-              stats.interpretation,
-              stats.estimatedTargetLabel
-                ? `Bu tempoyla tahmini hedef tarihi: ${stats.estimatedTargetLabel}.`
-                : "Tempo netleştikçe hedef tarihi tahminini paylaşacağım.",
-            ]
-          : ["Premium ile aylık kapsamlı değerlendirmenin kilidini açabilirsin."],
-        severity: "info",
-        icon: "trending-up",
-        premium: !isPremium,
-        actionLabel: isPremium ? "Detaylı analiz" : "Premium'a geç",
-        actionHref: isPremium ? "/progress" : "/profile/subscription",
-      });
-    } else {
-      insights.push({
-        id: "monthly-review",
-        kind: "monthly-review",
-        title: "Aylık Derin Analiz",
-        summary: "Aylık değerlendirme için yeterli veriniz henüz oluşmadı.",
-        details: [],
-        severity: "info",
-        icon: "trending-up",
-      });
-    }
+    insights.push(
+      monthlyReviewLoading
+        ? {
+            id: "monthly-review-loading",
+            kind: "monthly-review",
+            title: "Aylık Koç Özeti",
+            summary: "Aylık koç özeti hazırlanıyor.",
+            details: [],
+            severity: "info",
+            icon: "trending-up",
+          }
+        : monthlyReviewInsight ?? monthlyReviewUnavailableInsight(),
+    );
 
     // 3) Risk alerts — from water intake, weigh-in gaps and blood tests.
     const waterRatio = tracking.waterGoalMl > 0 ? tracking.waterMl / tracking.waterGoalMl : 1;
@@ -221,7 +214,16 @@ export function useAiInsights(): AiInsight[] {
     });
 
     return insights;
-  }, [profile, entries, stats, tracking, score, bloodTests, isPremium]);
+  }, [
+    profile,
+    stats,
+    tracking,
+    bloodTests,
+    weeklyReviewInsight,
+    weeklyReviewLoading,
+    monthlyReviewInsight,
+    monthlyReviewLoading,
+  ]);
 }
 
 function dietaryLabel(pref: string): string {

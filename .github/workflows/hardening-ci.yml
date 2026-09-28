@@ -126,6 +126,8 @@ jobs:
         run: npx playwright test e2e/semantic-icon-contract.spec.ts --workers=1 --reporter=line
       - name: Test micronutrient contracts
         run: npx playwright test e2e/micronutrient-contract.spec.ts --workers=1 --reporter=line
+      - name: Test reports reconciliation contracts
+        run: npx playwright test e2e/reports-reconciliation.spec.ts --workers=1 --reporter=line
       - run: npm run type-check
       - run: npm run build
         env:
