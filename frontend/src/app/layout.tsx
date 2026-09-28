@@ -21,8 +21,8 @@ export const metadata: Metadata = {
   description: APP_CONFIG.description,
   applicationName: APP_CONFIG.name,
   keywords: [
-    "yapay zekâ beslenme",
-    "diyetisyen asistanı",
+    "kişisel beslenme",
+    "Diewish Koç",
     "kişiselleştirilmiş beslenme planı",
     "kan tahlili analizi",
     "sağlıklı yaşam",

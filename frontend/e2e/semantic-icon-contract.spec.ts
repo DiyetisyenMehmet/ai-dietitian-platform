@@ -57,6 +57,15 @@ test("semantic icon usage map is explicit while bottom navigation stays unchange
   expect(navigation).not.toContain("diewish-coach-avatar");
 });
 
+test("root metadata keeps product language free of generic AI marketing terms", () => {
+  const layout = source("src/app/layout.tsx");
+
+  expect(layout).toContain('"kişisel beslenme"');
+  expect(layout).toContain('"Diewish Koç"');
+  expect(layout).not.toContain('"yapay zekâ beslenme"');
+  expect(layout).not.toContain('"diyetisyen asistanı"');
+});
+
 test("History business formatter remains separate from icon presentation", () => {
   const formatter = source("src/application/history/history-share-text.ts");
   const share = source("src/presentation/components/history/history-share-dom.tsx");
