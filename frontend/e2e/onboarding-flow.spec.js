@@ -31,6 +31,18 @@ const nutrients25 = {
   saltG: 0.19,
 };
 
+const micronutrients100 = {
+  calcium: 240,
+  iron: 6,
+  vitaminD: 10,
+};
+
+const micronutrients25 = {
+  calcium: 60,
+  iron: 1.5,
+  vitaminD: 2.5,
+};
+
 test("register -> consent -> onboarding -> scanner -> same-day weigh-in preserves baseline", async ({
   page,
   request,
@@ -123,7 +135,7 @@ test("register -> consent -> onboarding -> scanner -> same-day weigh-in preserve
     imageUrl: null,
     quantity: "50 g",
     serving: { amount: 25, unit: "g", gramWeight: 25, description: "1 bar / 25 g" },
-    nutrientsPer100g: nutrients100,
+    nutrientsPer100g: { ...nutrients100, micronutrients: micronutrients100 },
     ingredients: ["yulaf", "kakao"],
     allergens: ["milk"],
     additives: ["e322"],
@@ -147,7 +159,11 @@ test("register -> consent -> onboarding -> scanner -> same-day weigh-in preserve
           scanType: "BARCODE",
           identity: { name: food.displayNameTr, brand: food.brand, barcode: food.barcode, imageUrl: null },
           serving: { description: "1 bar / 25 g", grams: 25, confidence: 1 },
-          nutrients: { per100g: nutrients100, perServing: nutrients25, estimated: false },
+          nutrients: {
+            per100g: { ...nutrients100, micronutrients: micronutrients100 },
+            perServing: { ...nutrients25, micronutrients: micronutrients25 },
+            estimated: false,
+          },
           ingredients: [],
           provenance: { nutrition: [provenance], recognition: "BARCODE_EXACT" },
           product: {
@@ -172,12 +188,20 @@ test("register -> consent -> onboarding -> scanner -> same-day weigh-in preserve
     personalizationRequests.push(body);
     const grams = Number(body.grams);
     const factor = grams / 100;
-    const scaled = Object.fromEntries(
-      Object.entries(nutrients100).map(([key, value]) => [
-        key,
-        value === null ? null : Math.round(value * factor * 100) / 100,
-      ]),
-    );
+    const scaled = {
+      ...Object.fromEntries(
+        Object.entries(nutrients100).map(([key, value]) => [
+          key,
+          value === null ? null : Math.round(value * factor * 100) / 100,
+        ]),
+      ),
+      micronutrients: Object.fromEntries(
+        Object.entries(micronutrients100).map(([key, value]) => [
+          key,
+          Math.round(value * factor * 100) / 100,
+        ]),
+      ),
+    };
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -217,6 +241,10 @@ test("register -> consent -> onboarding -> scanner -> same-day weigh-in preserve
   await expect(page.getByText("Test Protein Bar", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Seçilen porsiyon gramı")).toHaveValue("25");
   await expect(page.getByText("130 kcal", { exact: true }).first()).toBeVisible();
+  await page.getByText("Vitamin ve Mineraller", { exact: true }).click();
+  await expect(page.getByText("60 mg", { exact: true })).toBeVisible();
+  await expect(page.getByText("2,5 µg", { exact: true })).toBeVisible();
+  await expect(page.getByText("Veri yok", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Kaynak değer: 100 g", { exact: true })).toBeVisible();
   await expect(page.getByText(/Kaynak veri 100 g bazındadır/)).toBeVisible();
   await expect(page.getByText("100 g için şeker miktarı yüksek.")).toBeVisible();
@@ -229,6 +257,8 @@ test("register -> consent -> onboarding -> scanner -> same-day weigh-in preserve
   await page.getByRole("button", { name: "Porsiyonu değiştir ve besin değerlerini güncelle" }).click();
   await expect(page.getByLabel("Seçilen porsiyon gramı")).toHaveValue("50");
   await expect(page.getByText("260 kcal", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("120 mg", { exact: true })).toBeVisible();
+  await expect(page.getByText("5 µg", { exact: true })).toBeVisible();
   expect(personalizationRequests.at(-1)).toMatchObject({ barcode: "4006381333931", grams: 50 });
 
   let comparisonPayload = null;
@@ -266,6 +296,11 @@ test("register -> consent -> onboarding -> scanner -> same-day weigh-in preserve
     proteinG: 10,
     carbsG: 27.5,
     fatG: 12.5,
+    micronutrients: {
+      calcium: 120,
+      iron: 3,
+      vitaminD: 5,
+    },
   });
 
   const coachLink = page.getByRole("link", { name: /Diewish Koç/ });
@@ -284,6 +319,44 @@ test("register -> consent -> onboarding -> scanner -> same-day weigh-in preserve
   await page.getByRole("button", { name: "Açık temaya geç" }).evaluate((element) => element.click());
   await expect(page.locator("html")).not.toHaveClass(/dark/);
 
+  await page.route("**/api/tracking/meals/micronutrients/day?*", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(success({
+        summary: {
+          date: "2026-09-28",
+          timezone: "Europe/Istanbul",
+          mealCount: 2,
+          mealsWithMicronutrients: 1,
+          coverage: "PARTIAL",
+          note: "2 öğünün 1 tanesindeki besin verilerine göre.",
+          reference: {
+            available: true,
+            population: "ADULTS",
+            version: "EU_1169_2011_ANNEX_XIII_ADULT_NRV",
+            source: "Regulation (EU) No 1169/2011, Annex XIII, Part A — adult nutrient reference values",
+            reason: null,
+          },
+          nutrients: [
+            { key: "calcium", label: "Kalsiyum", unit: "mg", value: 1200, reference: 800, referencePercent: 150 },
+            { key: "vitaminD", label: "Vitamin D", unit: "µg", value: 5, reference: 5, referencePercent: 100 },
+          ],
+        },
+      })),
+    });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${WEB_BASE_URL}/meals`);
+  await expect(page.getByText("Vitamin ve Mineral Özeti", { exact: true })).toBeVisible();
+  await expect(page.getByText("Kalsiyum", { exact: true })).toBeVisible();
+  await expect(page.getByText("%150", { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.setViewportSize({ width: 412, height: 915 });
+  await expect(page.getByText("Vitamin D", { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+  await page.goto(`${WEB_BASE_URL}/meals/scan`);
   await page.route("**/api/food-scan/analyze", async (route) => {
     await route.fulfill({
       status: 200,
