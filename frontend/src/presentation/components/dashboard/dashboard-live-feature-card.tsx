@@ -4,9 +4,11 @@ import Image from "next/image";
 import Link from "next/link";
 
 import {
+  DASHBOARD_FEATURE_CARD_FRAME_ASPECT,
   DASHBOARD_LIVE_FEATURE_CARD_ASPECT,
   DASHBOARD_LIVE_FEATURE_CARD_BASE,
   DASHBOARD_LIVE_FEATURE_CARD_COPY,
+  DASHBOARD_LIVE_FEATURE_CARD_CROP,
   DASHBOARD_LIVE_FEATURE_CARD_LAYOUT,
   DASHBOARD_LIVE_FEATURE_CARD_VIEWBOX,
   type DashboardLiveFeatureCardKind,
@@ -17,6 +19,17 @@ interface DashboardLiveFeatureCardProps {
   kind: DashboardLiveFeatureCardKind;
   href: string;
   locale?: DashboardLiveFeatureCardLocale;
+}
+
+function featureStageStyle(kind: DashboardLiveFeatureCardKind): CSSProperties {
+  const crop = DASHBOARD_LIVE_FEATURE_CARD_CROP[kind];
+  return {
+    position: "absolute",
+    left: `${-(crop.left / crop.width) * 100}%`,
+    top: `${-(crop.top / crop.height) * 100}%`,
+    width: `${(DASHBOARD_LIVE_FEATURE_CARD_VIEWBOX.width / crop.width) * 100}%`,
+    aspectRatio: DASHBOARD_LIVE_FEATURE_CARD_ASPECT,
+  };
 }
 
 function designTextStyle({
@@ -76,13 +89,11 @@ function HtmlText({
 }
 
 /**
- * Approved HTML card for Food/Barcode and Progress.
+ * Food/Barcode and Progress share one visible 21:5 frame.
  *
- * The navigation link is an absolute artwork layer. Selectable HTML text is a
- * sibling above that link, not a descendant of <a>. This is deliberate:
- * Android/Chrome long-press on text inside an anchor opens link actions instead
- * of native text selection. Keeping the text outside the anchor restores the
- * Copy/Select interaction while preserving the card's locked geometry.
+ * The original 1536 x 512 artwork is never stretched. A uniformly scaled inner
+ * stage removes only the surplus source-canvas gutters. Selectable text stays a
+ * sibling of the navigation link, preserving Android/Chrome text selection.
  */
 export function DashboardLiveFeatureCard({
   kind,
@@ -95,76 +106,83 @@ export function DashboardLiveFeatureCard({
 
   return (
     <div
-      className="relative block w-full overflow-hidden [container-type:inline-size]"
-      style={{ aspectRatio: DASHBOARD_LIVE_FEATURE_CARD_ASPECT }}
+      className="relative block w-full overflow-hidden rounded-[clamp(0.9rem,3.6cqw,1.35rem)] border border-border/70 bg-card shadow-sm"
+      style={{ aspectRatio: DASHBOARD_FEATURE_CARD_FRAME_ASPECT }}
       data-dashboard-live-feature-card
       data-kind={kind}
       data-locale={locale}
       data-theme-geometry="locked"
+      data-frame-aspect="21:5"
       data-text-layer="html"
     >
-      <Link
-        href={href}
-        className="absolute inset-0 z-10 block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-        aria-label={accessibleName}
-        data-dashboard-live-feature-link
+      <div
+        className="absolute [container-type:inline-size]"
+        style={featureStageStyle(kind)}
+        data-dashboard-live-feature-stage
       >
-        <Image
-          src={DASHBOARD_LIVE_FEATURE_CARD_BASE[kind].light}
-          alt=""
-          fill
-          unoptimized
-          draggable={false}
-          sizes="(max-width: 768px) 100vw, 672px"
-          className="pointer-events-none select-none object-fill dark:hidden"
-          aria-hidden="true"
-          data-dashboard-live-feature-base
-          data-theme="light"
-        />
+        <Link
+          href={href}
+          className="absolute inset-0 z-10 block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+          aria-label={accessibleName}
+          data-dashboard-live-feature-link
+        >
+          <Image
+            src={DASHBOARD_LIVE_FEATURE_CARD_BASE[kind].light}
+            alt=""
+            fill
+            unoptimized
+            draggable={false}
+            sizes="(max-width: 768px) 110vw, 740px"
+            className="pointer-events-none select-none object-fill dark:hidden"
+            aria-hidden="true"
+            data-dashboard-live-feature-base
+            data-theme="light"
+          />
 
-        <Image
-          src={DASHBOARD_LIVE_FEATURE_CARD_BASE[kind].dark}
-          alt=""
-          fill
-          unoptimized
-          draggable={false}
-          sizes="(max-width: 768px) 100vw, 672px"
-          className="pointer-events-none hidden select-none object-fill dark:block"
-          aria-hidden="true"
-          data-dashboard-live-feature-base
-          data-theme="dark"
-        />
-      </Link>
+          <Image
+            src={DASHBOARD_LIVE_FEATURE_CARD_BASE[kind].dark}
+            alt=""
+            fill
+            unoptimized
+            draggable={false}
+            sizes="(max-width: 768px) 110vw, 740px"
+            className="pointer-events-none hidden select-none object-fill dark:block"
+            aria-hidden="true"
+            data-dashboard-live-feature-base
+            data-theme="dark"
+          />
+        </Link>
 
-      <HtmlText
-        x={layout.x}
-        y={layout.titleY}
-        fontSize={layout.titleFontSize[locale]}
-        fontWeight={layout.titleWeight}
-        className="text-[#111b3b] tracking-[-0.01em] dark:text-[#f7fbfa]"
-      >
-        {copy.title}
-      </HtmlText>
+        <HtmlText
+          x={layout.x}
+          y={layout.titleY}
+          fontSize={layout.titleFontSize[locale]}
+          fontWeight={layout.titleWeight}
+          className="text-[#111b3b] tracking-[-0.01em] dark:text-[#f7fbfa]"
+        >
+          {copy.title}
+        </HtmlText>
 
-      <HtmlText
-        x={layout.x}
-        y={layout.descriptionFirstY}
-        fontSize={layout.descriptionFontSize}
-        fontWeight={layout.descriptionWeight}
-        className="text-[#667895] dark:text-[#b8cedf]"
-      >
-        {copy.description[0]}
-      </HtmlText>
+        <HtmlText
+          x={layout.x}
+          y={layout.descriptionFirstY}
+          fontSize={layout.descriptionFontSize}
+          fontWeight={layout.descriptionWeight}
+          className="text-[#667895] dark:text-[#b8cedf]"
+        >
+          {copy.description[0]}
+        </HtmlText>
 
-      <HtmlText
-        x={layout.x}
-        y={layout.descriptionSecondY}
-        fontSize={layout.descriptionFontSize}
-        fontWeight={layout.descriptionWeight}
-        className="text-[#667895] dark:text-[#b8cedf]"
-      >
-        {copy.description[1]}
-      </HtmlText>
+        <HtmlText
+          x={layout.x}
+          y={layout.descriptionSecondY}
+          fontSize={layout.descriptionFontSize}
+          fontWeight={layout.descriptionWeight}
+          className="text-[#667895] dark:text-[#b8cedf]"
+        >
+          {copy.description[1]}
+        </HtmlText>
+      </div>
     </div>
   );
 }

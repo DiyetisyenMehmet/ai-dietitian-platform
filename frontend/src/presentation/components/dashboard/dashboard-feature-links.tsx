@@ -2,24 +2,15 @@ import { BloodTestCard } from "@/presentation/components/dashboard/blood-test-ca
 import type { BloodTestCardLocale } from "@/presentation/components/dashboard/blood-test-card-contract";
 import { DashboardLiveFeatureCard } from "@/presentation/components/dashboard/dashboard-live-feature-card";
 import {
-  DASHBOARD_LIVE_FEATURE_CARD_ASPECT,
+  DASHBOARD_FEATURE_CARD_FRAME_ASPECT,
   type DashboardLiveFeatureCardKind,
   type DashboardLiveFeatureCardLocale,
 } from "@/presentation/components/dashboard/dashboard-live-feature-card-contract";
 
 const FEATURES = [
-  {
-    kind: "food",
-    href: "/meals/scan",
-  },
-  {
-    kind: "blood",
-    href: "/profile/blood-tests",
-  },
-  {
-    kind: "progress",
-    href: "/progress",
-  },
+  { kind: "food", href: "/meals/scan" },
+  { kind: "blood", href: "/profile/blood-tests" },
+  { kind: "progress", href: "/progress" },
 ] as const;
 
 function isLiveFeatureKind(
@@ -38,27 +29,20 @@ function BloodTestThemeSlot({
   return (
     <div
       className="relative w-full overflow-hidden"
-      style={{ aspectRatio: DASHBOARD_LIVE_FEATURE_CARD_ASPECT }}
+      style={{ aspectRatio: DASHBOARD_FEATURE_CARD_FRAME_ASPECT }}
       data-blood-test-theme-slot
+      data-frame-aspect="21:5"
     >
-      <div className="absolute inset-0 flex items-center dark:hidden">
+      <div className="absolute inset-0 dark:hidden">
         <BloodTestCard href={href} locale={locale} theme="light" />
       </div>
-      <div className="absolute inset-0 hidden items-center dark:flex">
+      <div className="absolute inset-0 hidden dark:block">
         <BloodTestCard href={href} locale={locale} theme="dark" />
       </div>
     </div>
   );
 }
 
-/**
- * One permanent dashboard stack is used for both themes.
- *
- * Food/Barcode and Progress use the approved HTML-card behavior: both theme
- * visuals stay mounted in one immutable 1536 x 512 geometry and only
- * visibility/colors change. Blood Test keeps its already-approved fixed SVG
- * contract inside one geometry-locked slot.
- */
 export function DashboardFeatureLinks({
   bloodTestLocale = "tr",
   featureLocale,
@@ -71,7 +55,7 @@ export function DashboardFeatureLinks({
 
   return (
     <section id="diewish-tools" className="w-full" aria-label="Diewish araçları">
-      <div className="space-y-[clamp(0.45rem,1.8vw,0.8rem)]">
+      <div className="space-y-[clamp(0.65rem,2.2vw,0.95rem)]">
         {FEATURES.map((feature) =>
           feature.kind === "blood" ? (
             <BloodTestThemeSlot

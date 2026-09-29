@@ -39,7 +39,8 @@ function cardMarkup(kind: DashboardLiveFeatureCardKind, locale: DashboardLiveFea
     *{box-sizing:border-box}
     html,body{margin:0}
     .fixture{width:358px;margin:16px}
-    [data-dashboard-live-feature-card]{position:relative;display:block;width:100%;aspect-ratio:3/1;container-type:inline-size}
+    [data-dashboard-live-feature-card]{position:relative;display:block;width:100%;aspect-ratio:21/5;overflow:hidden}
+    [data-dashboard-live-feature-stage]{position:absolute;container-type:inline-size}
     [data-dashboard-live-feature-link]{position:absolute;inset:0;display:block}
     [data-dashboard-live-feature-base]{position:absolute;inset:0;width:100%;height:100%;object-fit:fill}
     [data-dashboard-live-feature-base][data-theme="dark"]{display:none}
@@ -48,14 +49,19 @@ function cardMarkup(kind: DashboardLiveFeatureCardKind, locale: DashboardLiveFea
 
 for (const kind of KINDS) {
   for (const locale of LOCALES) {
-    test(`${kind} ${locale} text is selectable and not inside anchor`, async ({ page }) => {
+    test(`${kind} ${locale} frame is uniform and text is selectable outside anchor`, async ({ page }) => {
       await page.setViewportSize({ width: 390, height: 844 });
       await page.setContent(cardMarkup(kind, locale), { waitUntil: "load" });
 
       const card = page.locator("[data-dashboard-live-feature-card]");
       const texts = card.locator("[data-dashboard-live-feature-text]");
+      await expect(card).toHaveAttribute("data-frame-aspect", "21:5");
       await expect(card.locator("[data-dashboard-live-feature-link]")).toHaveCount(1);
       await expect(texts).toHaveCount(3);
+
+      const box = await card.boundingBox();
+      expect(box).not.toBeNull();
+      expect(box!.height).toBeCloseTo(box!.width / 4.2, 1);
 
       const state = await texts.evaluateAll((nodes) =>
         nodes.map((node) => ({

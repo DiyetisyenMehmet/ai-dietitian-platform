@@ -33,7 +33,8 @@ function cardMarkup(locale: BloodTestCardLocale, theme: BloodTestCardTheme) {
     *{box-sizing:border-box}
     html,body{margin:0}
     .fixture{width:358px;margin:16px}
-    [data-blood-test-card]{position:relative;display:block;width:100%;aspect-ratio:1438/413;container-type:inline-size}
+    [data-blood-test-card]{position:relative;display:block;width:100%;aspect-ratio:21/5;overflow:hidden}
+    [data-blood-test-stage]{position:absolute;container-type:inline-size}
     [data-blood-test-link]{position:absolute;inset:0;display:block}
     [data-blood-test-base-visual]{position:absolute;inset:0;width:100%;height:100%;object-fit:fill}
   </style></head><body><main class="fixture">${markup}</main></body></html>`;
@@ -41,14 +42,19 @@ function cardMarkup(locale: BloodTestCardLocale, theme: BloodTestCardTheme) {
 
 for (const theme of THEMES) {
   for (const locale of LOCALES) {
-    test(`${theme} ${locale} blood text is selectable and not inside anchor`, async ({ page }) => {
+    test(`${theme} ${locale} blood frame is uniform and text is selectable outside anchor`, async ({ page }) => {
       await page.setViewportSize({ width: 390, height: 844 });
       await page.setContent(cardMarkup(locale, theme), { waitUntil: "load" });
 
       const card = page.locator("[data-blood-test-card]");
       const texts = card.locator("[data-blood-test-live-text]");
+      await expect(card).toHaveAttribute("data-frame-aspect", "21:5");
       await expect(card.locator("[data-blood-test-link]")).toHaveCount(1);
       await expect(texts).toHaveCount(15);
+
+      const box = await card.boundingBox();
+      expect(box).not.toBeNull();
+      expect(box!.height).toBeCloseTo(box!.width / 4.2, 1);
 
       const state = await texts.evaluateAll((nodes) =>
         nodes.map((node) => ({

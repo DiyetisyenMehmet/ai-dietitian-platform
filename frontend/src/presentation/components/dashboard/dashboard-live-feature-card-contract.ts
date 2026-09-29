@@ -10,6 +10,8 @@ export const DASHBOARD_LIVE_FEATURE_CARD_VIEWBOX = {
 export const DASHBOARD_LIVE_FEATURE_CARD_ASPECT =
   `${DASHBOARD_LIVE_FEATURE_CARD_VIEWBOX.width} / ${DASHBOARD_LIVE_FEATURE_CARD_VIEWBOX.height}`;
 
+export const DASHBOARD_FEATURE_CARD_FRAME_ASPECT = "21 / 5";
+
 export const DASHBOARD_LIVE_FEATURE_CARD_BASE = {
   food: {
     light: "/images/dashboard/food-card-base-light.png",
@@ -19,6 +21,16 @@ export const DASHBOARD_LIVE_FEATURE_CARD_BASE = {
     light: "/images/dashboard/progress-card-base-light.png",
     dark: "/images/dashboard/progress-card-base-dark.png",
   },
+} as const;
+
+/**
+ * Crop only the surplus source-canvas gutters. The crop ratios stay aligned
+ * with the shared 21:5 visible frame, so artwork is scaled uniformly rather
+ * than stretched horizontally or vertically.
+ */
+export const DASHBOARD_LIVE_FEATURE_CARD_CROP = {
+  food: { left: 60, top: 88, width: 1416, height: 337 },
+  progress: { left: 55, top: 86, width: 1426, height: 340 },
 } as const;
 
 export const DASHBOARD_LIVE_FEATURE_CARD_COPY = {
@@ -44,10 +56,6 @@ export const DASHBOARD_LIVE_FEATURE_CARD_COPY = {
   },
 } as const;
 
-/**
- * One coordinate contract is shared by light and dark. Theme changes only swap
- * the approved text-free base visual and text colors; geometry never changes.
- */
 export const DASHBOARD_LIVE_FEATURE_CARD_LAYOUT = {
   food: {
     x: 310,
