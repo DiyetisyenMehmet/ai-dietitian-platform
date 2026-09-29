@@ -25,7 +25,7 @@ const securityHeaders = [
 const apiProxyTarget = process.env.DIEWISH_API_PROXY_TARGET?.trim().replace(/\/+$/, "");
 
 const nextConfig: NextConfig = {
-  reactStrictMode: true,
+  reactStrictMode: true,\n  // Temporary dashboard deployment marker. Rebuilt on every frontend build.\n  env: {\n    NEXT_PUBLIC_DIEWISH_BUILD_STAMP: diewishBuildStamp,\n  },
   // Standalone output produces a minimal, self-contained server bundle for Docker.
   output: "standalone",
   // Never leak the framework via the X-Powered-By header.

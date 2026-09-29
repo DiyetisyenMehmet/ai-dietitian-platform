@@ -32,27 +32,24 @@ function featureStageStyle(kind: DashboardLiveFeatureCardKind): CSSProperties {
   };
 }
 
-function visibleTextStyle({
-  kind,
+function designTextStyle({
   x,
   y,
   fontSize,
   fontWeight,
 }: {
-  kind: DashboardLiveFeatureCardKind;
   x: number;
   y: number;
   fontSize: number;
   fontWeight: number;
 }): CSSProperties {
-  const crop = DASHBOARD_LIVE_FEATURE_CARD_CROP[kind];
   return {
     position: "absolute",
-    left: `${((x - crop.left) / crop.width) * 100}%`,
-    top: `${((y - crop.top) / crop.height) * 100}%`,
+    left: `${(x / DASHBOARD_LIVE_FEATURE_CARD_VIEWBOX.width) * 100}%`,
+    top: `${(y / DASHBOARD_LIVE_FEATURE_CARD_VIEWBOX.height) * 100}%`,
     transform: "translateY(-50%)",
     fontFamily: "var(--font-sans), Inter, sans-serif",
-    fontSize: `${(fontSize / crop.width) * 100}cqw`,
+    fontSize: `${(fontSize / DASHBOARD_LIVE_FEATURE_CARD_VIEWBOX.width) * 100}cqw`,
     fontWeight,
     lineHeight: 1,
     whiteSpace: "nowrap",
@@ -64,7 +61,6 @@ function visibleTextStyle({
 }
 
 function HtmlText({
-  kind,
   x,
   y,
   children,
@@ -72,7 +68,6 @@ function HtmlText({
   fontWeight,
   className,
 }: {
-  kind: DashboardLiveFeatureCardKind;
   x: number;
   y: number;
   children: string;
@@ -82,12 +77,11 @@ function HtmlText({
 }) {
   return (
     <span
-      className={`z-30 cursor-text select-text ${className}`}
-      style={visibleTextStyle({ kind, x, y, fontSize, fontWeight })}
+      className={`z-20 cursor-text select-text ${className}`}
+      style={designTextStyle({ x, y, fontSize, fontWeight })}
       aria-hidden="true"
       data-dashboard-live-feature-text
       data-selectable-text="true"
-      data-text-space="visible-frame"
     >
       {children}
     </span>
@@ -97,10 +91,9 @@ function HtmlText({
 /**
  * Food/Barcode and Progress share one visible 21:5 frame.
  *
- * Artwork remains on the uniformly scaled/cropped stage. Selectable HTML text
- * is intentionally rendered OUTSIDE that stage and directly in the visible
- * card frame. This removes the oversized artwork/link layer from the text's
- * touch-selection path while keeping the exact same visual coordinates.
+ * The original 1536 x 512 artwork is never stretched. A uniformly scaled inner
+ * stage removes only the surplus source-canvas gutters. Selectable text stays a
+ * sibling of the navigation link, preserving Android/Chrome text selection.
  */
 export function DashboardLiveFeatureCard({
   kind,
@@ -113,23 +106,23 @@ export function DashboardLiveFeatureCard({
 
   return (
     <div
-      className="relative block w-full overflow-hidden rounded-[clamp(0.9rem,3.6cqw,1.35rem)] border border-border/70 bg-card shadow-sm [container-type:inline-size]"
+      className="relative block w-full overflow-hidden rounded-[clamp(0.9rem,3.6cqw,1.35rem)] border border-border/70 bg-card shadow-sm"
       style={{ aspectRatio: DASHBOARD_FEATURE_CARD_FRAME_ASPECT }}
       data-dashboard-live-feature-card
       data-kind={kind}
       data-locale={locale}
       data-theme-geometry="locked"
       data-frame-aspect="21:5"
-      data-text-layer="html-visible-frame"
+      data-text-layer="html"
     >
       <div
-        className="absolute z-0"
+        className="absolute [container-type:inline-size]"
         style={featureStageStyle(kind)}
         data-dashboard-live-feature-stage
       >
         <Link
           href={href}
-          className="absolute inset-0 z-0 block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+          className="absolute inset-0 z-10 block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
           aria-label={accessibleName}
           data-dashboard-live-feature-link
         >
@@ -159,40 +152,37 @@ export function DashboardLiveFeatureCard({
             data-theme="dark"
           />
         </Link>
+
+        <HtmlText
+          x={layout.x}
+          y={layout.titleY}
+          fontSize={layout.titleFontSize[locale]}
+          fontWeight={layout.titleWeight}
+          className="text-[#111b3b] tracking-[-0.01em] dark:text-[#f7fbfa]"
+        >
+          {copy.title}
+        </HtmlText>
+
+        <HtmlText
+          x={layout.x}
+          y={layout.descriptionFirstY}
+          fontSize={layout.descriptionFontSize}
+          fontWeight={layout.descriptionWeight}
+          className="text-[#667895] dark:text-[#b8cedf]"
+        >
+          {copy.description[0]}
+        </HtmlText>
+
+        <HtmlText
+          x={layout.x}
+          y={layout.descriptionSecondY}
+          fontSize={layout.descriptionFontSize}
+          fontWeight={layout.descriptionWeight}
+          className="text-[#667895] dark:text-[#b8cedf]"
+        >
+          {copy.description[1]}
+        </HtmlText>
       </div>
-
-      <HtmlText
-        kind={kind}
-        x={layout.x}
-        y={layout.titleY}
-        fontSize={layout.titleFontSize[locale]}
-        fontWeight={layout.titleWeight}
-        className="text-[#111b3b] tracking-[-0.01em] dark:text-[#f7fbfa]"
-      >
-        {copy.title}
-      </HtmlText>
-
-      <HtmlText
-        kind={kind}
-        x={layout.x}
-        y={layout.descriptionFirstY}
-        fontSize={layout.descriptionFontSize}
-        fontWeight={layout.descriptionWeight}
-        className="text-[#667895] dark:text-[#b8cedf]"
-      >
-        {copy.description[0]}
-      </HtmlText>
-
-      <HtmlText
-        kind={kind}
-        x={layout.x}
-        y={layout.descriptionSecondY}
-        fontSize={layout.descriptionFontSize}
-        fontWeight={layout.descriptionWeight}
-        className="text-[#667895] dark:text-[#b8cedf]"
-      >
-        {copy.description[1]}
-      </HtmlText>
     </div>
   );
 }

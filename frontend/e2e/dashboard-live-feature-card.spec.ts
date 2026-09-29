@@ -39,9 +39,9 @@ function cardMarkup(kind: DashboardLiveFeatureCardKind, locale: DashboardLiveFea
     *{box-sizing:border-box}
     html,body{margin:0}
     .fixture{width:358px;margin:16px}
-    [data-dashboard-live-feature-card]{position:relative;display:block;width:100%;aspect-ratio:21/5;overflow:hidden}
-    [data-dashboard-live-feature-stage]{position:absolute;container-type:inline-size}
-    [data-dashboard-live-feature-link]{position:absolute;inset:0;display:block}
+    [data-dashboard-live-feature-card]{position:relative;display:block;width:100%;aspect-ratio:21/5;overflow:hidden;container-type:inline-size}
+    [data-dashboard-live-feature-stage]{position:absolute;z-index:0}
+    [data-dashboard-live-feature-link]{position:absolute;inset:0;display:block;z-index:0}
     [data-dashboard-live-feature-base]{position:absolute;inset:0;width:100%;height:100%;object-fit:fill}
     [data-dashboard-live-feature-base][data-theme="dark"]{display:none}
   </style></head><body><main class="fixture">${markup}</main></body></html>`;
@@ -49,31 +49,37 @@ function cardMarkup(kind: DashboardLiveFeatureCardKind, locale: DashboardLiveFea
 
 for (const kind of KINDS) {
   for (const locale of LOCALES) {
-    test(`${kind} ${locale} frame is uniform and text is selectable outside anchor`, async ({ page }) => {
+    test(`${kind} ${locale} selectable text lives in visible frame above artwork link`, async ({ page }) => {
       await page.setViewportSize({ width: 390, height: 844 });
       await page.setContent(cardMarkup(kind, locale), { waitUntil: "load" });
 
       const card = page.locator("[data-dashboard-live-feature-card]");
+      const stage = card.locator("[data-dashboard-live-feature-stage]");
       const texts = card.locator("[data-dashboard-live-feature-text]");
-      await expect(card).toHaveAttribute("data-frame-aspect", "21:5");
+
+      await expect(card).toHaveAttribute("data-text-layer", "html-visible-frame");
+      await expect(stage).toHaveCount(1);
       await expect(card.locator("[data-dashboard-live-feature-link]")).toHaveCount(1);
       await expect(texts).toHaveCount(3);
-
-      const box = await card.boundingBox();
-      expect(box).not.toBeNull();
-      expect(box!.height).toBeCloseTo(box!.width / 4.2, 1);
 
       const state = await texts.evaluateAll((nodes) =>
         nodes.map((node) => ({
           inAnchor: Boolean(node.closest("a")),
+          inStage: Boolean(node.closest("[data-dashboard-live-feature-stage]")),
+          parentIsCard: node.parentElement?.hasAttribute("data-dashboard-live-feature-card") ?? false,
           userSelect: getComputedStyle(node).userSelect,
           pointerEvents: getComputedStyle(node).pointerEvents,
+          zIndex: getComputedStyle(node).zIndex,
         })),
       );
+
       for (const item of state) {
         expect(item.inAnchor).toBe(false);
+        expect(item.inStage).toBe(false);
+        expect(item.parentIsCard).toBe(true);
         expect(item.userSelect).toBe("text");
         expect(item.pointerEvents).not.toBe("none");
+        expect(Number(item.zIndex)).toBeGreaterThan(0);
       }
 
       const selected = await texts.first().evaluate((node) => {

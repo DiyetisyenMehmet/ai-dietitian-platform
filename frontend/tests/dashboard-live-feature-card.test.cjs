@@ -32,7 +32,7 @@ test('food and progress use one 21:5 visible frame without artwork stretch', () 
   }
 });
 
-test('food and progress visible text stays outside navigation anchor', () => {
+test('food and progress selectable text is rendered directly in the visible frame', () => {
   const source = fs.readFileSync(
     path.join(
       __dirname,
@@ -45,13 +45,27 @@ test('food and progress visible text stays outside navigation anchor', () => {
   assert.match(source, /data-dashboard-live-feature-stage/);
   assert.match(source, /data-dashboard-live-feature-link/);
   assert.match(source, /data-dashboard-live-feature-text/);
-  assert.match(source, /data-selectable-text="true"/);
+  assert.match(source, /data-text-space="visible-frame"/);
+  assert.match(source, /data-text-layer="html-visible-frame"/);
   assert.match(source, /userSelect: "text"/);
   assert.match(source, /WebkitUserSelect: "text"/);
   assert.match(source, /touchAction: "auto"/);
 
-  const linkClose = source.indexOf('</Link>');
-  const firstText = source.indexOf('<HtmlText');
-  assert.ok(linkClose >= 0 && firstText > linkClose);
+  const stageClose = source.indexOf('</div>\n\n      <HtmlText');
+  assert.ok(stageClose >= 0, 'HTML text should be a sibling after the artwork stage');
   assert.doesNotMatch(source, /<svg|<text|SvgText/);
+});
+
+test('dashboard header exposes a build-time deployment marker', () => {
+  const header = fs.readFileSync(
+    path.join(__dirname, '../src/presentation/components/dashboard/dashboard-home-header.tsx'),
+    'utf8',
+  );
+  const config = fs.readFileSync(path.join(__dirname, '../next.config.ts'), 'utf8');
+
+  assert.match(header, /data-dashboard-build-stamp/);
+  assert.match(header, /NEXT_PUBLIC_DIEWISH_BUILD_STAMP/);
+  assert.match(header, /Europe\/Istanbul/);
+  assert.match(config, /diewishBuildStamp = new Date\(\)\.toISOString\(\)/);
+  assert.match(config, /NEXT_PUBLIC_DIEWISH_BUILD_STAMP: diewishBuildStamp/);
 });
