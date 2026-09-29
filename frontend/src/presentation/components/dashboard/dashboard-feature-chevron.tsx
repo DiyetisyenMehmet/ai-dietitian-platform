@@ -1,5 +1,3 @@
-import { ChevronRight } from "lucide-react";
-
 /**
  * One chevron treatment for all three dashboard feature cards.
  * The opaque circle intentionally covers the chevron baked into legacy artwork,
@@ -12,7 +10,18 @@ export function DashboardFeatureChevron() {
       aria-hidden="true"
       data-dashboard-feature-chevron
     >
-      <ChevronRight className="size-[5cqw]" strokeWidth={3} />
+      <svg
+        viewBox="0 0 24 24"
+        className="size-[5cqw]"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={3}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d="m9 18 6-6-6-6" />
+      </svg>
     </span>
   );
 }
