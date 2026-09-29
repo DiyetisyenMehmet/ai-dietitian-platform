@@ -1,6 +1,5 @@
 import type { CSSProperties } from "react";
 
-import { ChevronRight } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -14,7 +13,6 @@ import {
   DASHBOARD_LIVE_FEATURE_CARD_VIEWBOX,
   type DashboardLiveFeatureCardKind,
   type DashboardLiveFeatureCardLocale,
-  type DashboardLiveFeatureCardTheme,
 } from "@/presentation/components/dashboard/dashboard-live-feature-card-contract";
 
 interface DashboardLiveFeatureCardProps {
@@ -23,11 +21,8 @@ interface DashboardLiveFeatureCardProps {
   locale?: DashboardLiveFeatureCardLocale;
 }
 
-function featureStageStyle(
-  kind: DashboardLiveFeatureCardKind,
-  theme: DashboardLiveFeatureCardTheme,
-): CSSProperties {
-  const crop = DASHBOARD_LIVE_FEATURE_CARD_CROP[kind][theme];
+function featureStageStyle(kind: DashboardLiveFeatureCardKind): CSSProperties {
+  const crop = DASHBOARD_LIVE_FEATURE_CARD_CROP[kind];
   return {
     position: "absolute",
     left: `${-(crop.left / crop.width) * 100}%`,
@@ -50,9 +45,7 @@ function visibleTextStyle({
   fontSize: number;
   fontWeight: number;
 }): CSSProperties {
-  // Text stays locked to the visible frame. Use the dark crop as the canonical
-  // coordinate projection because dark is the approved alignment reference.
-  const crop = DASHBOARD_LIVE_FEATURE_CARD_CROP[kind].dark;
+  const crop = DASHBOARD_LIVE_FEATURE_CARD_CROP[kind];
   return {
     position: "absolute",
     left: `${((x - crop.left) / crop.width) * 100}%`,
@@ -101,59 +94,13 @@ function HtmlText({
   );
 }
 
-function ThemeArtwork({
-  kind,
-  theme,
-}: {
-  kind: DashboardLiveFeatureCardKind;
-  theme: DashboardLiveFeatureCardTheme;
-}) {
-  return (
-    <div
-      className={
-        theme === "light"
-          ? "absolute z-0 dark:hidden"
-          : "absolute z-0 hidden dark:block"
-      }
-      style={featureStageStyle(kind, theme)}
-      aria-hidden="true"
-      data-dashboard-live-feature-stage
-      data-theme={theme}
-    >
-      <Image
-        src={DASHBOARD_LIVE_FEATURE_CARD_BASE[kind][theme]}
-        alt=""
-        fill
-        unoptimized
-        draggable={false}
-        sizes="(max-width: 768px) 110vw, 740px"
-        className="pointer-events-none select-none object-fill"
-        data-dashboard-live-feature-base
-        data-theme={theme}
-      />
-    </div>
-  );
-}
-
-function UnifiedChevron() {
-  return (
-    <span
-      className="pointer-events-none absolute right-[1%] top-1/2 z-20 flex size-[8cqw] -translate-y-1/2 items-center justify-center rounded-full border border-slate-200/70 bg-white/85 text-[#223552] shadow-sm backdrop-blur-[1px] dark:border-white/10 dark:bg-[#06283c]/80 dark:text-[#eaf8ff]"
-      aria-hidden="true"
-      data-dashboard-live-feature-chevron
-    >
-      <ChevronRight className="size-[5cqw]" strokeWidth={3} />
-    </span>
-  );
-}
-
 /**
- * Food/Barcode and Progress share one immutable 21:5 outer frame.
+ * Food/Barcode and Progress share one visible 21:5 frame.
  *
- * Light and dark artwork may have slightly different internal source placement,
- * so each theme gets its own crop transform while the frame and HTML text never
- * move. Progress light is shifted left to match the approved dark alignment.
- * A shared chevron overlay gives both themes the same size and position.
+ * Artwork remains on the uniformly scaled/cropped stage. Selectable HTML text
+ * is intentionally rendered OUTSIDE that stage and directly in the visible
+ * card frame. This removes the oversized artwork/link layer from the text's
+ * touch-selection path while keeping the exact same visual coordinates.
  */
 export function DashboardLiveFeatureCard({
   kind,
@@ -175,17 +122,44 @@ export function DashboardLiveFeatureCard({
       data-frame-aspect="21:5"
       data-text-layer="html-visible-frame"
     >
-      <ThemeArtwork kind={kind} theme="light" />
-      <ThemeArtwork kind={kind} theme="dark" />
+      <div
+        className="absolute z-0"
+        style={featureStageStyle(kind)}
+        data-dashboard-live-feature-stage
+      >
+        <Link
+          href={href}
+          className="absolute inset-0 z-0 block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+          aria-label={accessibleName}
+          data-dashboard-live-feature-link
+        >
+          <Image
+            src={DASHBOARD_LIVE_FEATURE_CARD_BASE[kind].light}
+            alt=""
+            fill
+            unoptimized
+            draggable={false}
+            sizes="(max-width: 768px) 110vw, 740px"
+            className="pointer-events-none select-none object-fill dark:hidden"
+            aria-hidden="true"
+            data-dashboard-live-feature-base
+            data-theme="light"
+          />
 
-      <Link
-        href={href}
-        className="absolute inset-0 z-10 block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-        aria-label={accessibleName}
-        data-dashboard-live-feature-link
-      />
-
-      <UnifiedChevron />
+          <Image
+            src={DASHBOARD_LIVE_FEATURE_CARD_BASE[kind].dark}
+            alt=""
+            fill
+            unoptimized
+            draggable={false}
+            sizes="(max-width: 768px) 110vw, 740px"
+            className="pointer-events-none hidden select-none object-fill dark:block"
+            aria-hidden="true"
+            data-dashboard-live-feature-base
+            data-theme="dark"
+          />
+        </Link>
+      </div>
 
       <HtmlText
         kind={kind}

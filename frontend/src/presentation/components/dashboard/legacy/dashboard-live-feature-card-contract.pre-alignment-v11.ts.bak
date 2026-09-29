@@ -24,21 +24,13 @@ export const DASHBOARD_LIVE_FEATURE_CARD_BASE = {
 } as const;
 
 /**
- * Theme-specific crop contracts align the artwork inside the SAME visible 21:5
- * frame. The outer card and all live HTML text coordinates never move.
- *
- * Progress light intentionally crops 20 source pixels farther from the left so
- * its icon/chart align with the approved dark artwork and the cards above.
+ * Crop only the surplus source-canvas gutters. The crop ratios stay aligned
+ * with the shared 21:5 visible frame, so artwork is scaled uniformly rather
+ * than stretched horizontally or vertically.
  */
 export const DASHBOARD_LIVE_FEATURE_CARD_CROP = {
-  food: {
-    light: { left: 60, top: 88, width: 1416, height: 337 },
-    dark: { left: 60, top: 88, width: 1416, height: 337 },
-  },
-  progress: {
-    light: { left: 75, top: 86, width: 1426, height: 340 },
-    dark: { left: 55, top: 86, width: 1426, height: 340 },
-  },
+  food: { left: 60, top: 88, width: 1416, height: 337 },
+  progress: { left: 55, top: 86, width: 1426, height: 340 },
 } as const;
 
 export const DASHBOARD_LIVE_FEATURE_CARD_COPY = {

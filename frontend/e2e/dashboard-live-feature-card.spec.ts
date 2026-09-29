@@ -41,56 +41,60 @@ function cardMarkup(kind: DashboardLiveFeatureCardKind, locale: DashboardLiveFea
     .fixture{width:358px;margin:16px}
     [data-dashboard-live-feature-card]{position:relative;display:block;width:100%;aspect-ratio:21/5;overflow:hidden;container-type:inline-size}
     [data-dashboard-live-feature-stage]{position:absolute;z-index:0}
-    [data-dashboard-live-feature-link]{position:absolute;inset:0;display:block;z-index:0}
+    [data-dashboard-live-feature-stage][data-theme="dark"]{display:none}
+    [data-dashboard-live-feature-link]{position:absolute;inset:0;display:block;z-index:10}
     [data-dashboard-live-feature-base]{position:absolute;inset:0;width:100%;height:100%;object-fit:fill}
-    [data-dashboard-live-feature-base][data-theme="dark"]{display:none}
   </style></head><body><main class="fixture">${markup}</main></body></html>`;
 }
 
 for (const kind of KINDS) {
   for (const locale of LOCALES) {
-    test(`${kind} ${locale} selectable text lives in visible frame above artwork link`, async ({ page }) => {
+    test(`${kind} ${locale} text and frame stay fixed while theme artwork can be aligned independently`, async ({ page }) => {
       await page.setViewportSize({ width: 390, height: 844 });
       await page.setContent(cardMarkup(kind, locale), { waitUntil: "load" });
 
       const card = page.locator("[data-dashboard-live-feature-card]");
-      const stage = card.locator("[data-dashboard-live-feature-stage]");
       const texts = card.locator("[data-dashboard-live-feature-text]");
+      const chevron = card.locator("[data-dashboard-live-feature-chevron]");
 
-      await expect(card).toHaveAttribute("data-text-layer", "html-visible-frame");
-      await expect(stage).toHaveCount(1);
-      await expect(card.locator("[data-dashboard-live-feature-link]")).toHaveCount(1);
+      await expect(card.locator('[data-dashboard-live-feature-stage][data-theme="light"]')).toHaveCount(1);
+      await expect(card.locator('[data-dashboard-live-feature-stage][data-theme="dark"]')).toHaveCount(1);
       await expect(texts).toHaveCount(3);
+      await expect(chevron).toHaveCount(1);
 
-      const state = await texts.evaluateAll((nodes) =>
-        nodes.map((node) => ({
-          inAnchor: Boolean(node.closest("a")),
-          inStage: Boolean(node.closest("[data-dashboard-live-feature-stage]")),
-          parentIsCard: node.parentElement?.hasAttribute("data-dashboard-live-feature-card") ?? false,
-          userSelect: getComputedStyle(node).userSelect,
-          pointerEvents: getComputedStyle(node).pointerEvents,
-          zIndex: getComputedStyle(node).zIndex,
-        })),
+      const before = await texts.evaluateAll((nodes) =>
+        nodes.map((node) => {
+          const box = node.getBoundingClientRect();
+          return { x: box.x, y: box.y, width: box.width, height: box.height };
+        }),
       );
+      const chevronBefore = await chevron.boundingBox();
 
-      for (const item of state) {
-        expect(item.inAnchor).toBe(false);
-        expect(item.inStage).toBe(false);
-        expect(item.parentIsCard).toBe(true);
-        expect(item.userSelect).toBe("text");
-        expect(item.pointerEvents).not.toBe("none");
-        expect(Number(item.zIndex)).toBeGreaterThan(0);
-      }
+      await page.evaluate(() => document.documentElement.classList.add("dark"));
+      await page.addStyleTag({ content: `
+        html.dark [data-dashboard-live-feature-stage][data-theme="light"]{display:none}
+        html.dark [data-dashboard-live-feature-stage][data-theme="dark"]{display:block}
+      ` });
 
-      const selected = await texts.first().evaluate((node) => {
-        const selection = window.getSelection();
-        const range = document.createRange();
-        range.selectNodeContents(node);
-        selection?.removeAllRanges();
-        selection?.addRange(range);
-        return selection?.toString() ?? "";
+      const after = await texts.evaluateAll((nodes) =>
+        nodes.map((node) => {
+          const box = node.getBoundingClientRect();
+          return { x: box.x, y: box.y, width: box.width, height: box.height };
+        }),
+      );
+      const chevronAfter = await chevron.boundingBox();
+
+      before.forEach((box, index) => {
+        expect(after[index].x).toBeCloseTo(box.x, 2);
+        expect(after[index].y).toBeCloseTo(box.y, 2);
+        expect(after[index].width).toBeCloseTo(box.width, 2);
+        expect(after[index].height).toBeCloseTo(box.height, 2);
       });
-      expect(selected.trim().length).toBeGreaterThan(0);
+
+      expect(chevronAfter!.x).toBeCloseTo(chevronBefore!.x, 2);
+      expect(chevronAfter!.y).toBeCloseTo(chevronBefore!.y, 2);
+      expect(chevronAfter!.width).toBeCloseTo(chevronBefore!.width, 2);
+      expect(chevronAfter!.height).toBeCloseTo(chevronBefore!.height, 2);
     });
   }
 }

@@ -19,20 +19,24 @@ function loadContract() {
   return exports;
 }
 
-test('food and progress use one 21:5 visible frame without artwork stretch', () => {
+test('food and progress keep one visible 21:5 frame with theme-specific artwork alignment', () => {
   const contract = loadContract();
   assert.equal(contract.DASHBOARD_FEATURE_CARD_FRAME_ASPECT, '21 / 5');
-  assert.equal(contract.DASHBOARD_LIVE_FEATURE_CARD_ASPECT, '1536 / 512');
 
   for (const kind of ['food', 'progress']) {
-    const crop = contract.DASHBOARD_LIVE_FEATURE_CARD_CROP[kind];
-    assert.ok(crop.left >= 0 && crop.top >= 0);
-    assert.ok(crop.width <= 1536 && crop.height <= 512);
-    assert.ok(Math.abs(crop.width / crop.height - 4.2) < 0.02);
+    for (const theme of ['light', 'dark']) {
+      const crop = contract.DASHBOARD_LIVE_FEATURE_CARD_CROP[kind][theme];
+      assert.ok(crop.left >= 0 && crop.top >= 0);
+      assert.ok(crop.width <= 1536 && crop.height <= 512);
+      assert.ok(Math.abs(crop.width / crop.height - 4.2) < 0.02);
+    }
   }
+
+  assert.equal(contract.DASHBOARD_LIVE_FEATURE_CARD_CROP.progress.light.left, 75);
+  assert.equal(contract.DASHBOARD_LIVE_FEATURE_CARD_CROP.progress.dark.left, 55);
 });
 
-test('food and progress selectable text is rendered directly in the visible frame', () => {
+test('food and progress share one fixed chevron overlay across themes', () => {
   const source = fs.readFileSync(
     path.join(
       __dirname,
@@ -41,31 +45,27 @@ test('food and progress selectable text is rendered directly in the visible fram
     'utf8',
   );
 
-  assert.match(source, /data-frame-aspect="21:5"/);
-  assert.match(source, /data-dashboard-live-feature-stage/);
-  assert.match(source, /data-dashboard-live-feature-link/);
-  assert.match(source, /data-dashboard-live-feature-text/);
+  assert.match(source, /data-dashboard-live-feature-chevron/);
+  assert.match(source, /right-\[1%\]/);
+  assert.match(source, /top-1\/2/);
+  assert.match(source, /size-\[8cqw\]/);
+  assert.match(source, /ThemeArtwork kind=\{kind\} theme="light"/);
+  assert.match(source, /ThemeArtwork kind=\{kind\} theme="dark"/);
+});
+
+test('selectable HTML text remains locked to the visible frame above artwork', () => {
+  const source = fs.readFileSync(
+    path.join(
+      __dirname,
+      '../src/presentation/components/dashboard/dashboard-live-feature-card.tsx',
+    ),
+    'utf8',
+  );
+
   assert.match(source, /data-text-space="visible-frame"/);
   assert.match(source, /data-text-layer="html-visible-frame"/);
   assert.match(source, /userSelect: "text"/);
   assert.match(source, /WebkitUserSelect: "text"/);
   assert.match(source, /touchAction: "auto"/);
-
-  const stageClose = source.indexOf('</div>\n\n      <HtmlText');
-  assert.ok(stageClose >= 0, 'HTML text should be a sibling after the artwork stage');
   assert.doesNotMatch(source, /<svg|<text|SvgText/);
-});
-
-test('dashboard header exposes a build-time deployment marker', () => {
-  const header = fs.readFileSync(
-    path.join(__dirname, '../src/presentation/components/dashboard/dashboard-home-header.tsx'),
-    'utf8',
-  );
-  const config = fs.readFileSync(path.join(__dirname, '../next.config.ts'), 'utf8');
-
-  assert.match(header, /data-dashboard-build-stamp/);
-  assert.match(header, /NEXT_PUBLIC_DIEWISH_BUILD_STAMP/);
-  assert.match(header, /Europe\/Istanbul/);
-  assert.match(config, /diewishBuildStamp = new Date\(\)\.toISOString\(\)/);
-  assert.match(config, /NEXT_PUBLIC_DIEWISH_BUILD_STAMP: diewishBuildStamp/);
 });
