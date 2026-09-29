@@ -86,16 +86,16 @@ export function DashboardHomeHeader({ userName }: DashboardHomeHeaderProps) {
   return (
     <section className="relative pt-1" aria-label="Ana sayfa özeti">
       <div className="min-w-0">
-        <p className="text-sm font-medium text-muted-foreground">
+        <p className="text-base font-medium text-muted-foreground">
           {now ? formatLongDate(now) : "\u00a0"}
         </p>
         <p
-          className="mt-1 text-[10px] font-semibold tracking-[0.02em] text-muted-foreground/70"
+          className="mt-1 text-[12px] font-semibold tracking-[0.02em] text-muted-foreground/70"
           data-dashboard-build-stamp={DASHBOARD_BUILD_STAMP ?? "unknown"}
         >
           Güncelleme: {buildStampLabel}
         </p>
-        <h1 className="mt-1.5 break-words text-2xl font-bold leading-tight tracking-tight sm:text-3xl">
+        <h1 className="mt-1.5 break-words text-[28px] font-bold leading-tight tracking-tight sm:text-[34px]">
           {now ? getGreeting(now) : "Merhaba"}, {displayName} <span aria-hidden="true">👋</span>
         </h1>
       </div>
