@@ -155,3 +155,18 @@ test('dark artwork edge masks target only the remaining bright edges', () => {
   assert.match(border, /border-\[#173f44\]/);
   assert.match(border, /inset_0_0_0_3px/);
 });
+
+
+test('feature-card descriptions are larger and sit lower without changing horizontal alignment', () => {
+  const contract = loadContract();
+
+  assert.equal(contract.DASHBOARD_LIVE_FEATURE_CARD_LAYOUT.food.x, 310);
+  assert.equal(contract.DASHBOARD_LIVE_FEATURE_CARD_LAYOUT.food.descriptionFontSize, 32);
+  assert.equal(contract.DASHBOARD_LIVE_FEATURE_CARD_LAYOUT.food.descriptionFirstY, 267);
+  assert.equal(contract.DASHBOARD_LIVE_FEATURE_CARD_LAYOUT.food.descriptionSecondY, 313);
+
+  assert.equal(contract.DASHBOARD_LIVE_FEATURE_CARD_LAYOUT.progress.x, 305);
+  assert.equal(contract.DASHBOARD_LIVE_FEATURE_CARD_LAYOUT.progress.descriptionFontSize, 33);
+  assert.equal(contract.DASHBOARD_LIVE_FEATURE_CARD_LAYOUT.progress.descriptionFirstY, 259);
+  assert.equal(contract.DASHBOARD_LIVE_FEATURE_CARD_LAYOUT.progress.descriptionSecondY, 303);
+});

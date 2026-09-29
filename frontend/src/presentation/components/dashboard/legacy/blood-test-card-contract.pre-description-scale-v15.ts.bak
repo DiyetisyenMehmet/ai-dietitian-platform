@@ -46,9 +46,9 @@ export const BLOOD_TEST_CARD_LAYOUT = {
   title: { x: 258, y: 158, fontSize: 45, fontWeight: 700 },
   description: {
     x: 258,
-    firstY: 214,
-    secondY: 250,
-    fontSize: 30,
+    firstY: 203,
+    secondY: 235,
+    fontSize: 26,
     fontWeight: 500,
   },
   panelTitle: { x: 818, y: 88, fontSize: 23, fontWeight: 700 },

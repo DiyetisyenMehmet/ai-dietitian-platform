@@ -49,3 +49,17 @@ test('blood-test uses the same outer-frame chevron and dark perimeter as other c
   const stageClose = source.indexOf('</div>\n\n      <DashboardFeatureChevron');
   assert.ok(stageClose >= 0, 'shared chevron should be outside the cropped blood stage');
 });
+
+
+test('blood-test description is larger and moved lower while keeping its x alignment', () => {
+  const file = path.join(
+    __dirname,
+    '../src/presentation/components/dashboard/blood-test-card-contract.ts',
+  );
+  const source = fs.readFileSync(file, 'utf8');
+
+  assert.match(source, /x: 258/);
+  assert.match(source, /firstY: 214/);
+  assert.match(source, /secondY: 250/);
+  assert.match(source, /fontSize: 30/);
+});
