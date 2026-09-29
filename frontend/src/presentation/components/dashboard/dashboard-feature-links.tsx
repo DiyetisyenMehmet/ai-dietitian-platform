@@ -1,7 +1,11 @@
 import { BloodTestCard } from "@/presentation/components/dashboard/blood-test-card";
 import type { BloodTestCardLocale } from "@/presentation/components/dashboard/blood-test-card-contract";
 import { DashboardLiveFeatureCard } from "@/presentation/components/dashboard/dashboard-live-feature-card";
-import {\n  DASHBOARD_LIVE_FEATURE_CARD_ASPECT,\n  type DashboardLiveFeatureCardKind,\n  type DashboardLiveFeatureCardLocale,\n} from "@/presentation/components/dashboard/dashboard-live-feature-card-contract";
+import {
+  DASHBOARD_LIVE_FEATURE_CARD_ASPECT,
+  type DashboardLiveFeatureCardKind,
+  type DashboardLiveFeatureCardLocale,
+} from "@/presentation/components/dashboard/dashboard-live-feature-card-contract";
 
 const FEATURES = [
   {
