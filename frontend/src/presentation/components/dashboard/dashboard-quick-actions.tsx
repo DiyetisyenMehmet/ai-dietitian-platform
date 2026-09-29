@@ -288,28 +288,28 @@ export function DashboardQuickActions() {
 
   return (
     <section className="space-y-3" aria-labelledby="dashboard-quick-actions-heading">
-      <h2 id="dashboard-quick-actions-heading" className="text-lg font-bold sm:text-xl">Bugün için hızlı işlemler</h2>
+      <h2 id="dashboard-quick-actions-heading" className="text-[22px] font-bold sm:text-2xl">Bugün için hızlı işlemler</h2>
 
       <div className="grid grid-cols-5 gap-1.5 sm:gap-3">
         <Link href="/meals/add?returnTo=%2Fdashboard" className={`${tileClass} bg-emerald-500/[0.06]`}>
           <Utensils className="size-6 text-emerald-500 sm:size-7" aria-hidden="true" />
-          <span className="text-[10px] font-semibold leading-tight sm:text-sm">Öğün Ekle</span>
+          <span className="text-[12px] font-semibold leading-tight sm:text-base">Öğün Ekle</span>
         </Link>
         <button type="button" onClick={() => openQuickAction("water")} className={`${tileClass} bg-sky-500/[0.06]`}>
           <Droplets className="size-6 text-sky-500 sm:size-7" aria-hidden="true" />
-          <span className="text-[10px] font-semibold leading-tight sm:text-sm">Su Ekle</span>
+          <span className="text-[12px] font-semibold leading-tight sm:text-base">Su Ekle</span>
         </button>
         <button type="button" onClick={() => openQuickAction("activity")} className={`${tileClass} bg-teal-500/[0.06]`}>
           <Footprints className="size-6 text-teal-500 sm:size-7" aria-hidden="true" />
-          <span className="text-[10px] font-semibold leading-tight sm:text-sm">Hareket</span>
+          <span className="text-[12px] font-semibold leading-tight sm:text-base">Hareket</span>
         </button>
         <button type="button" onClick={() => openQuickAction("weight")} className={`${tileClass} bg-violet-500/[0.06]`}>
           <WeightScaleIcon />
-          <span className="text-[10px] font-semibold leading-tight sm:text-sm">Kilo Ekle</span>
+          <span className="text-[12px] font-semibold leading-tight sm:text-base">Kilo Ekle</span>
         </button>
         <button type="button" onClick={() => openQuickAction("sleep")} className={`${tileClass} bg-indigo-500/[0.06]`}>
           <Moon className="size-6 text-indigo-500 sm:size-7" aria-hidden="true" />
-          <span className="text-[10px] font-semibold leading-tight sm:text-sm">Uyku Ekle</span>
+          <span className="text-[12px] font-semibold leading-tight sm:text-base">Uyku Ekle</span>
         </button>
       </div>
 
