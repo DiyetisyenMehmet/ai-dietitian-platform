@@ -151,12 +151,30 @@ export const accountRepository = {
   },
 
   /**
-   * Permanently deletes the account. Related profile, refresh tokens and
-   * account tokens are removed via `onDelete: Cascade`; audit logs intentionally
-   * survive (no FK relation). External objects must be removed before calling
-   * this method.
+   * Permanently deletes the account and writes the surviving deletion audit in
+   * the same database transaction. External objects must be removed first.
    */
-  async deleteAccount(userId: string): Promise<void> {
-    await prisma.user.delete({ where: { id: userId } });
+  async deleteAccountWithAudit(
+    userId: string,
+    input: {
+      ipAddress: string | null;
+      userAgent: string | null;
+      externalHealthObjectsDeleted: number;
+    },
+  ): Promise<void> {
+    await prisma.$transaction(async (tx) => {
+      await tx.auditLog.create({
+        data: {
+          action: "ACCOUNT_DELETED",
+          userId,
+          ipAddress: input.ipAddress,
+          userAgent: input.userAgent,
+          metadata: {
+            externalHealthObjectsDeleted: input.externalHealthObjectsDeleted,
+          },
+        },
+      });
+      await tx.user.delete({ where: { id: userId } });
+    });
   },
 };

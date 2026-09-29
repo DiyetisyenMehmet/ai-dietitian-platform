@@ -156,3 +156,77 @@ test("guest mode is isolated and converts in place without changing the user id"
   });
   assert.equal(convertedPrivateApi.status, 200);
 });
+
+
+test("permanent account deletion requires a completed grace period", async (t) => {
+  const email = `account.deletion.${Date.now()}@example.com`;
+  const password = "DeletionPass123";
+  await prisma.user.deleteMany({ where: { email } });
+
+  const { server, baseUrl } = await startServer();
+  let userId: string | null = null;
+  t.after(async () => {
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+    if (userId) await prisma.user.deleteMany({ where: { id: userId } });
+    await prisma.user.deleteMany({ where: { email } });
+    await prisma.$disconnect();
+  });
+
+  const registration = await fetch(`${baseUrl}/api/auth/register`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email, password, fullName: "Deletion User" }),
+  });
+  assert.equal(registration.status, 201);
+  const registrationBody = await json<SessionPayload>(registration);
+  assert.equal(registrationBody.success, true);
+  if (!registrationBody.success) return;
+
+  userId = registrationBody.data.user.id;
+  const accessToken = registrationBody.data.tokens.accessToken;
+
+  const requestDeletion = await fetch(`${baseUrl}/api/account/deletion/request`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ password }),
+  });
+  assert.equal(requestDeletion.status, 200);
+
+  const prematureDelete = await fetch(`${baseUrl}/api/account`, {
+    method: "DELETE",
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ password }),
+  });
+  assert.equal(prematureDelete.status, 409);
+  const prematureBody = await json<never>(prematureDelete);
+  assert.equal(prematureBody.success, false);
+  if (!prematureBody.success) {
+    assert.equal(prematureBody.error.code, "ACCOUNT_DELETION_GRACE_PERIOD_ACTIVE");
+  }
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: { deletionRequestedAt: new Date(Date.now() - 31 * 24 * 60 * 60 * 1000) },
+  });
+
+  const permanentDelete = await fetch(`${baseUrl}/api/account`, {
+    method: "DELETE",
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ password }),
+  });
+  assert.equal(permanentDelete.status, 200);
+  assert.equal(await prisma.user.findUnique({ where: { id: userId } }), null);
+  userId = null;
+});

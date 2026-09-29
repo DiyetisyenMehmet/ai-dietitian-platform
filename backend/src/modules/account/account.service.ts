@@ -235,6 +235,24 @@ export const accountService = {
       throw ApiError.unauthorized("Password is incorrect.");
     }
 
+    if (!user.deletionRequestedAt) {
+      throw new ApiError(409, "Account deletion must be requested before permanent deletion.", {
+        code: "ACCOUNT_DELETION_NOT_REQUESTED",
+      });
+    }
+    const purgeEligibleAt = new Date(
+      user.deletionRequestedAt.getTime() + env.ACCOUNT_DELETION_GRACE_DAYS * MS_PER_DAY,
+    );
+    if (purgeEligibleAt.getTime() > Date.now()) {
+      throw new ApiError(409, "Account deletion grace period is still active.", {
+        code: "ACCOUNT_DELETION_GRACE_PERIOD_ACTIVE",
+        details: {
+          purgeEligibleAt: purgeEligibleAt.toISOString(),
+          graceDays: env.ACCOUNT_DELETION_GRACE_DAYS,
+        },
+      });
+    }
+
     const storageRefs = await accountRepository.listBloodTestStorageRefs(user.id);
     try {
       for (const ref of storageRefs) {
@@ -254,15 +272,14 @@ export const accountService = {
       });
     }
 
-    // Keep the surviving audit record data-minimal: userId is sufficient for
-    // reconciliation. Do not retain the deleted account's email in metadata.
-    await recordAudit({
-      action: "ACCOUNT_DELETED",
-      userId: user.id,
-      context,
-      metadata: { externalHealthObjectsDeleted: storageRefs.length },
+    // Persist the surviving deletion audit and remove the account in one
+    // database transaction. External-object deletion is idempotent, so if this
+    // transaction fails the entire request can be retried safely.
+    await accountRepository.deleteAccountWithAudit(user.id, {
+      ipAddress: context.ipAddress ?? null,
+      userAgent: context.userAgent ?? null,
+      externalHealthObjectsDeleted: storageRefs.length,
     });
-    await accountRepository.deleteAccount(user.id);
     logger.info(
       { userId: user.id, externalHealthObjectsDeleted: storageRefs.length },
       "Account permanently deleted",

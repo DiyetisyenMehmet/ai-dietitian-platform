@@ -265,6 +265,8 @@ class GoogleCloudStorageProvider implements StorageProvider {
     const url = new URL(`${GCS_UPLOAD_API}/b/${encodeURIComponent(this.bucket)}/o`);
     url.searchParams.set("uploadType", "media");
     url.searchParams.set("name", this.objectName(input));
+    // Enforce the StorageProvider no-overwrite contract at GCS itself.
+    url.searchParams.set("ifGenerationMatch", "0");
 
     const response = await fetch(url, {
       method: "POST",
@@ -275,9 +277,12 @@ class GoogleCloudStorageProvider implements StorageProvider {
       body: input.body,
       signal: AbortSignal.timeout(30_000),
     });
+    if (response.status === 412) {
+      throw new StorageError("CONFLICT", "Storage object already exists.");
+    }
     if (!response.ok) {
       logger.error({ status: response.status }, "Google Cloud Storage object upload failed");
-      throw new Error("Health document could not be stored safely.");
+      throw new StorageError("IO_ERROR", "Health document could not be stored safely.");
     }
     return { namespace: input.namespace, key: input.key };
   }

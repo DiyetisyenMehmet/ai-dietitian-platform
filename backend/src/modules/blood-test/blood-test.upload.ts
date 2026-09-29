@@ -14,17 +14,14 @@ const MAX_UPLOAD_FIELDS = 2;
 const MAX_ACCEPTED_PARTS = MAX_UPLOAD_FILES + MAX_UPLOAD_FIELDS;
 
 /**
- * Busboy emits `partsLimit` when its internal part counter reaches the configured
- * value, not only after it exceeds it. Multer converts that event into
- * LIMIT_PART_COUNT. Therefore a parser limit of N rejects the Nth otherwise
- * valid part. We accept exactly one file plus the two documented metadata
- * fields, so the parser sentinel must be one greater than the application
- * maximum. A fourth real part reaches the sentinel and is still rejected.
+ * Multer 2.4 accepts exactly `limits.parts` parts and rejects the next one.
+ * Diewish accepts one file plus the two documented metadata fields, so the
+ * parser limit can match the application maximum directly.
  */
-const BUSBOY_PARTS_LIMIT_SENTINEL = MAX_ACCEPTED_PARTS + 1;
+const MULTIPART_PARTS_LIMIT = MAX_ACCEPTED_PARTS;
 
 type MulterLimits = NonNullable<MulterOptions["limits"]> & {
-  /** Multer 2.3 runtime limit; @types/multer 2.2 has not published it yet. */
+  /** Multer runtime limit; @types/multer 2.2 has not published it yet. */
   fieldArrayIndexLimit: number;
 };
 
@@ -32,7 +29,7 @@ const uploadLimits: MulterLimits = {
   fileSize: maxBytes,
   files: MAX_UPLOAD_FILES,
   fields: MAX_UPLOAD_FIELDS,
-  parts: BUSBOY_PARTS_LIMIT_SENTINEL,
+  parts: MULTIPART_PARTS_LIMIT,
   fieldNameSize: 100,
   fieldSize: 1024,
   fieldArrayIndexLimit: 0,
