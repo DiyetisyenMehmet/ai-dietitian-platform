@@ -95,3 +95,38 @@ test('dark feature cards use one uniform perimeter overlay', () => {
   assert.match(border, /inset_0_0_0_2px/);
   assert.match(border, /dark:block/);
 });
+
+
+test('progress light icon is normalized to the Food icon footprint', () => {
+  const source = fs.readFileSync(
+    path.join(__dirname, '../src/presentation/components/dashboard/dashboard-live-feature-card.tsx'),
+    'utf8',
+  );
+
+  assert.match(source, /data-progress-light-icon-normalizer/);
+  assert.match(source, /left-\[2\.8%\]/);
+  assert.match(source, /w-\[12\.7%\]/);
+  assert.match(source, /h-\[53\.4%\]/);
+});
+
+test('all live feature cards use the shared opaque chevron and dark-edge mask', () => {
+  const source = fs.readFileSync(
+    path.join(__dirname, '../src/presentation/components/dashboard/dashboard-live-feature-card.tsx'),
+    'utf8',
+  );
+  const chevron = fs.readFileSync(
+    path.join(__dirname, '../src/presentation/components/dashboard/dashboard-feature-chevron.tsx'),
+    'utf8',
+  );
+  const border = fs.readFileSync(
+    path.join(__dirname, '../src/presentation/components/dashboard/dashboard-card-night-border.tsx'),
+    'utf8',
+  );
+
+  assert.match(source, /DashboardFeatureChevron/);
+  assert.match(chevron, /data-dashboard-feature-chevron/);
+  assert.match(chevron, /bg-white/);
+  assert.match(chevron, /dark:bg-\[#06283c\]/);
+  assert.match(border, /inset_0_0_0_4px/);
+  assert.match(border, /border-\[#23585d\]/);
+});

@@ -34,3 +34,18 @@ test('blood-test dark card uses the same normalized perimeter overlay', () => {
 
   assert.match(source, /DashboardCardNightBorder/);
 });
+
+
+test('blood-test uses the same outer-frame chevron and dark perimeter as other cards', () => {
+  const source = fs.readFileSync(
+    path.join(__dirname, '../src/presentation/components/dashboard/blood-test-card.tsx'),
+    'utf8',
+  );
+
+  assert.match(source, /DashboardFeatureChevron/);
+  assert.match(source, /DashboardCardNightBorder/);
+  assert.match(source, /\[container-type:inline-size\]/);
+
+  const stageClose = source.indexOf('</div>\n\n      <DashboardFeatureChevron');
+  assert.ok(stageClose >= 0, 'shared chevron should be outside the cropped blood stage');
+});

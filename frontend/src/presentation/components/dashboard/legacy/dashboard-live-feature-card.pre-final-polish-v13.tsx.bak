@@ -1,10 +1,10 @@
 import type { CSSProperties } from "react";
 
+import { ChevronRight } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 
 import { DashboardCardNightBorder } from "@/presentation/components/dashboard/dashboard-card-night-border";
-import { DashboardFeatureChevron } from "@/presentation/components/dashboard/dashboard-feature-chevron";
 
 import {
   DASHBOARD_FEATURE_CARD_FRAME_ASPECT,
@@ -137,22 +137,14 @@ function ThemeArtwork({
   );
 }
 
-
-function ProgressLightIconNormalizer() {
+function UnifiedChevron() {
   return (
     <span
-      className="pointer-events-none absolute inset-0 z-20 dark:hidden"
+      className="pointer-events-none absolute right-[1%] top-1/2 z-20 flex size-[8cqw] -translate-y-1/2 items-center justify-center rounded-full border border-slate-200/70 bg-white/85 text-[#223552] shadow-sm backdrop-blur-[1px] dark:border-white/10 dark:bg-[#06283c]/80 dark:text-[#eaf8ff]"
       aria-hidden="true"
-      data-progress-light-icon-normalizer
+      data-dashboard-live-feature-chevron
     >
-      <span className="absolute left-[0.8%] top-[19%] h-[62%] w-[16.5%] bg-[linear-gradient(90deg,#ffffff_0%,#fbfffd_58%,#f4fdf9_100%)]" />
-      <span className="absolute left-[2.8%] top-[24.3%] flex h-[53.4%] w-[12.7%] items-center justify-center rounded-[2.2cqw] bg-[#e8f8f1]/95">
-        <span className="flex h-[48%] items-end gap-[0.8cqw]">
-          <span className="h-[46%] w-[1.65cqw] rounded-[0.25cqw] bg-[#0aa77b]" />
-          <span className="h-[67%] w-[1.65cqw] rounded-[0.25cqw] bg-[#0aa77b]" />
-          <span className="h-full w-[1.65cqw] rounded-[0.25cqw] bg-[#0aa77b]" />
-        </span>
-      </span>
+      <ChevronRight className="size-[5cqw]" strokeWidth={3} />
     </span>
   );
 }
@@ -195,8 +187,7 @@ export function DashboardLiveFeatureCard({
         data-dashboard-live-feature-link
       />
 
-      {kind === "progress" && <ProgressLightIconNormalizer />}
-      <DashboardFeatureChevron />
+      <UnifiedChevron />
       <DashboardCardNightBorder />
 
       <HtmlText

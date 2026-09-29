@@ -1,15 +1,14 @@
 /**
- * Temporary visual normalization for the dashboard feature-card perimeter.
+ * Uniform dark-mode perimeter for all dashboard feature cards.
  *
- * The approved dark artwork contains slightly different source-edge luminance
- * on each side. This transparent overlay paints the same two-pixel inset edge
- * around the complete visible frame, so the left edge cannot look brighter
- * than the top/right/bottom edges. Light mode is intentionally untouched.
+ * Dark source artwork contains baked cyan edge glow with uneven intensity.
+ * A dark inset mask first hides that legacy glow, then one consistent border
+ * is drawn above it. The result is the same edge intensity on all four sides.
  */
 export function DashboardCardNightBorder() {
   return (
     <span
-      className="pointer-events-none absolute inset-0 z-40 hidden rounded-[clamp(0.9rem,3.6cqw,1.35rem)] shadow-[inset_0_0_0_2px_rgba(25,82,88,0.96)] dark:block"
+      className="pointer-events-none absolute inset-0 z-40 hidden rounded-[clamp(0.9rem,3.6cqw,1.35rem)] border border-[#23585d] shadow-[inset_0_0_0_4px_rgba(5,30,33,0.97)] dark:block"
       aria-hidden="true"
       data-dashboard-card-night-border
     />
