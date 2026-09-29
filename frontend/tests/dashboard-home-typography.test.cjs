@@ -18,6 +18,10 @@ test('default home screen uses the enlarged typography scale', () => {
   assert.match(metrics, /text-\[13px\]/);
   assert.match(quick, /text-\[22px\]/);
   assert.match(quick, /text-\[12px\]/);
+  assert.match(quick, /data-quick-action-layout="equal-flex"/);
+  assert.match(quick, /data-max-actions="5"/);
+  assert.match(quick, /SHOW_SLEEP_QUICK_ACTION = false/);
+  assert.match(quick, /whitespace-nowrap/);
   assert.match(banner, /3\.2vw/);
   assert.match(banner, /2\.55vw/);
   assert.match(view, /text-lg font-semibold text-muted-foreground/);

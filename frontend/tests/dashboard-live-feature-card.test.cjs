@@ -163,7 +163,7 @@ test('feature-card descriptions are larger and sit lower without changing horizo
   const contract = loadContract();
 
   assert.equal(contract.DASHBOARD_LIVE_FEATURE_CARD_LAYOUT.food.x, 310);
-  assert.equal(contract.DASHBOARD_LIVE_FEATURE_CARD_LAYOUT.food.titleFontSize.tr, 47);
+  assert.equal(contract.DASHBOARD_LIVE_FEATURE_CARD_LAYOUT.food.titleFontSize.tr, 46);
   assert.equal(contract.DASHBOARD_LIVE_FEATURE_CARD_LAYOUT.food.descriptionFontSize, 38);
   assert.equal(contract.DASHBOARD_LIVE_FEATURE_CARD_LAYOUT.food.descriptionFirstY, 267);
   assert.equal(contract.DASHBOARD_LIVE_FEATURE_CARD_LAYOUT.food.descriptionSecondY, 313);

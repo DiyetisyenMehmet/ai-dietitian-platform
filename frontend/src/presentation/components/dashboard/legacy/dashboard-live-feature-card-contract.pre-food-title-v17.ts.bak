@@ -72,7 +72,7 @@ export const DASHBOARD_LIVE_FEATURE_CARD_LAYOUT = {
     titleY: 201,
     descriptionFirstY: 267,
     descriptionSecondY: 313,
-    titleFontSize: { tr: 46, en: 44 },
+    titleFontSize: { tr: 47, en: 44 },
     descriptionFontSize: 38,
     titleWeight: 800,
     descriptionWeight: 500,
