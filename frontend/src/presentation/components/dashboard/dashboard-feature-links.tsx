@@ -40,13 +40,13 @@ function BloodTestThemeSlot({
   return (
     <div
       className="relative w-full overflow-hidden"
-      style={{ aspectRatio: BLOOD_TEST_CARD_ASPECT }}
+      style={{ aspectRatio: DASHBOARD_LIVE_FEATURE_CARD_ASPECT }}
       data-blood-test-theme-slot
     >
-      <div className="absolute inset-0 dark:hidden">
+      <div className="absolute inset-0 flex items-center dark:hidden">
         <BloodTestCard href={href} locale={locale} theme="light" />
       </div>
-      <div className="absolute inset-0 hidden dark:block">
+      <div className="absolute inset-0 hidden items-center dark:flex">
         <BloodTestCard href={href} locale={locale} theme="dark" />
       </div>
     </div>
