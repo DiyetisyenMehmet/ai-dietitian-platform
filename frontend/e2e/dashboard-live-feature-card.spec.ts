@@ -31,10 +31,6 @@ test("real dashboard food and progress cards keep text and chevron geometry acro
     await expect(texts).toHaveCount(3);
     await expect(chevron).toHaveCount(1);
 
-    const cardBox = await card.boundingBox();
-    expect(cardBox).not.toBeNull();
-    expect(cardBox!.height).toBeCloseTo(cardBox!.width / 4.2, 1);
-
     await setDashboardTheme(page, "light");
     await expect(
       card.locator('[data-dashboard-live-feature-stage][data-theme="light"]'),
@@ -43,14 +39,31 @@ test("real dashboard food and progress cards keep text and chevron geometry acro
       card.locator('[data-dashboard-live-feature-stage][data-theme="dark"]'),
     ).toBeHidden();
 
-    const before = await texts.evaluateAll((nodes) =>
+    const lightCardBox = await card.boundingBox();
+    expect(lightCardBox).not.toBeNull();
+    expect(lightCardBox!.height).toBeCloseTo(lightCardBox!.width / 4.2, 1);
+
+    const lightTextBoxes = await texts.evaluateAll((nodes) =>
       nodes.map((node) => {
         const box = node.getBoundingClientRect();
         return { x: box.x, y: box.y, width: box.width, height: box.height };
       }),
     );
-    const chevronBefore = await chevron.boundingBox();
-    expect(chevronBefore).not.toBeNull();
+    const lightChevronBox = await chevron.boundingBox();
+    expect(lightChevronBox).not.toBeNull();
+
+    const before = lightTextBoxes.map((box) => ({
+      x: box.x - lightCardBox!.x,
+      y: box.y - lightCardBox!.y,
+      width: box.width,
+      height: box.height,
+    }));
+    const chevronBefore = {
+      x: lightChevronBox!.x - lightCardBox!.x,
+      y: lightChevronBox!.y - lightCardBox!.y,
+      width: lightChevronBox!.width,
+      height: lightChevronBox!.height,
+    };
 
     await setDashboardTheme(page, "dark");
     await expect(
@@ -60,14 +73,32 @@ test("real dashboard food and progress cards keep text and chevron geometry acro
       card.locator('[data-dashboard-live-feature-stage][data-theme="dark"]'),
     ).toBeVisible();
 
-    const after = await texts.evaluateAll((nodes) =>
+    const darkCardBox = await card.boundingBox();
+    expect(darkCardBox).not.toBeNull();
+    expect(darkCardBox!.width).toBeCloseTo(lightCardBox!.width, 2);
+    expect(darkCardBox!.height).toBeCloseTo(lightCardBox!.height, 2);
+
+    const darkTextBoxes = await texts.evaluateAll((nodes) =>
       nodes.map((node) => {
         const box = node.getBoundingClientRect();
         return { x: box.x, y: box.y, width: box.width, height: box.height };
       }),
     );
-    const chevronAfter = await chevron.boundingBox();
-    expect(chevronAfter).not.toBeNull();
+    const darkChevronBox = await chevron.boundingBox();
+    expect(darkChevronBox).not.toBeNull();
+
+    const after = darkTextBoxes.map((box) => ({
+      x: box.x - darkCardBox!.x,
+      y: box.y - darkCardBox!.y,
+      width: box.width,
+      height: box.height,
+    }));
+    const chevronAfter = {
+      x: darkChevronBox!.x - darkCardBox!.x,
+      y: darkChevronBox!.y - darkCardBox!.y,
+      width: darkChevronBox!.width,
+      height: darkChevronBox!.height,
+    };
 
     before.forEach((box, index) => {
       expect(after[index].x).toBeCloseTo(box.x, 2);
@@ -76,9 +107,9 @@ test("real dashboard food and progress cards keep text and chevron geometry acro
       expect(after[index].height).toBeCloseTo(box.height, 2);
     });
 
-    expect(chevronAfter!.x).toBeCloseTo(chevronBefore!.x, 2);
-    expect(chevronAfter!.y).toBeCloseTo(chevronBefore!.y, 2);
-    expect(chevronAfter!.width).toBeCloseTo(chevronBefore!.width, 2);
-    expect(chevronAfter!.height).toBeCloseTo(chevronBefore!.height, 2);
+    expect(chevronAfter.x).toBeCloseTo(chevronBefore.x, 2);
+    expect(chevronAfter.y).toBeCloseTo(chevronBefore.y, 2);
+    expect(chevronAfter.width).toBeCloseTo(chevronBefore.width, 2);
+    expect(chevronAfter.height).toBeCloseTo(chevronBefore.height, 2);
   }
 });
