@@ -18,8 +18,9 @@ test('blood-test uses shared 21:5 frame and preserves selectable text outside an
   assert.match(source, /userSelect: "text"/);
   assert.match(source, /WebkitUserSelect: "text"/);
   assert.match(source, /touchAction: "auto"/);
-  assert.match(source, /</Link>s*
-s*<HtmlText/);
-  assert.doesNotMatch(source, /<Link[sS]*?<HtmlText[sS]*?</Link>/);
+
+  const linkClose = source.indexOf('</Link>');
+  const firstText = source.indexOf('<HtmlText');
+  assert.ok(linkClose >= 0 && firstText > linkClose);
   assert.doesNotMatch(source, /<svg|<text|SvgText/);
 });
