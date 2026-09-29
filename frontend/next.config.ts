@@ -24,8 +24,16 @@ const securityHeaders = [
 // intentionally absent in normal builds unless a deployment supplies it.
 const apiProxyTarget = process.env.DIEWISH_API_PROXY_TARGET?.trim().replace(/\/+$/, "");
 
+// Temporary visual deployment marker for dashboard QA.
+// Because this module is evaluated during the Next.js build, each frontend
+// build receives a new immutable timestamp baked into the client bundle.
+const diewishBuildStamp = new Date().toISOString();
+
 const nextConfig: NextConfig = {
-  reactStrictMode: true,\n  // Temporary dashboard deployment marker. Rebuilt on every frontend build.\n  env: {\n    NEXT_PUBLIC_DIEWISH_BUILD_STAMP: diewishBuildStamp,\n  },
+  reactStrictMode: true,
+  env: {
+    NEXT_PUBLIC_DIEWISH_BUILD_STAMP: diewishBuildStamp,
+  },
   // Standalone output produces a minimal, self-contained server bundle for Docker.
   output: "standalone",
   // Never leak the framework via the X-Powered-By header.
