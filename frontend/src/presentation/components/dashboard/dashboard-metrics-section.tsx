@@ -73,17 +73,17 @@ function MetricRing({
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center px-1">
           <Icon className={`mb-0.5 size-4 sm:size-5 ${iconClassName}`} aria-hidden="true" />
-          <span className="max-w-full truncate text-[13px] font-bold leading-none tabular-nums sm:text-lg">
+          <span className="max-w-full truncate text-[16px] font-bold leading-none tabular-nums sm:text-xl">
             {value}
           </span>
           {unit && (
-            <span className="mt-0.5 text-[9px] font-medium leading-none text-muted-foreground sm:text-[11px]">
+            <span className="mt-0.5 text-[11px] font-medium leading-none text-muted-foreground sm:text-sm">
               {unit}
             </span>
           )}
         </div>
       </div>
-      <p className="mt-1.5 truncate text-[11px] font-semibold text-foreground sm:text-sm">{label}</p>
+      <p className="mt-1.5 truncate text-[13px] font-semibold text-foreground sm:text-base">{label}</p>
     </div>
   );
 }
