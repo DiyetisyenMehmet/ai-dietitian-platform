@@ -43,22 +43,22 @@ export const BLOOD_TEST_CARD_COPY = {
  * HTML text uses these exact design coordinates and scales with the card width.
  */
 export const BLOOD_TEST_CARD_LAYOUT = {
-  title: { x: 258, y: 158, fontSize: 45, fontWeight: 700 },
+  title: { x: 258, y: 158, fontSize: 52, fontWeight: 700 },
   description: {
     x: 258,
     firstY: 214,
     secondY: 250,
-    fontSize: 30,
+    fontSize: 36,
     fontWeight: 500,
   },
-  panelTitle: { x: 818, y: 88, fontSize: 23, fontWeight: 700 },
-  status: { x: 1117, y: 86, fontSize: 21, fontWeight: 700 },
+  panelTitle: { x: 818, y: 88, fontSize: 27, fontWeight: 700 },
+  status: { x: 1117, y: 86, fontSize: 25, fontWeight: 700 },
   rows: {
     labelX: 806,
     valueX: 1174,
     y: [140, 185, 230, 276, 322],
-    labelFontSize: 22,
-    valueFontSize: 21,
+    labelFontSize: 26,
+    valueFontSize: 25,
     labelWeight: 500,
     valueWeight: 600,
   },
