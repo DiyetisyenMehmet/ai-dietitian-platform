@@ -41,7 +41,7 @@ export function DashboardView() {
           type="button"
           aria-expanded={showDetails}
           onClick={() => setShowDetails((current) => !current)}
-          className="flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-semibold text-muted-foreground transition hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-lg font-semibold text-muted-foreground transition hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <span>{showDetails ? "Detaylı günlük takibi gizle" : "Detaylı günlük takibi göster"}</span>
           {showDetails ? <ChevronUp className="size-4" aria-hidden="true" /> : <ChevronDown className="size-4" aria-hidden="true" />}
@@ -55,10 +55,10 @@ export function DashboardView() {
             {secondaryInsights.length > 0 && (
               <section className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-base font-semibold">Koçundan notlar</h3>
+                  <h3 className="text-xl font-semibold">Koçundan notlar</h3>
                   <Link
                     href="/insights"
-                    className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                    className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
                   >
                     Tümünü gör
                     <ArrowRight className="size-3.5" aria-hidden="true" />
