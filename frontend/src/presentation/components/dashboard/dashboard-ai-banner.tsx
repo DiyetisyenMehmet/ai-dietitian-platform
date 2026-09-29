@@ -61,17 +61,17 @@ export function DashboardAiBanner() {
         </span>
 
         <div className="absolute left-[21.5%] right-[28%] top-1/2 min-w-0 -translate-y-1/2">
-          <h2 className="whitespace-nowrap text-[clamp(0.58rem,2.6vw,1rem)] font-extrabold leading-none tracking-[-0.025em] text-slate-950 dark:text-slate-50">
+          <h2 className="whitespace-nowrap text-[clamp(0.72rem,3.2vw,1.12rem)] font-extrabold leading-none tracking-[-0.025em] text-slate-950 dark:text-slate-50">
             Diewish Her Zaman Yanında
           </h2>
-          <p className="mt-[clamp(0.16rem,0.7vw,0.32rem)] whitespace-nowrap text-[clamp(0.45rem,2vw,0.74rem)] font-medium leading-none tracking-[-0.025em] text-slate-600 dark:text-slate-300">
+          <p className="mt-[clamp(0.16rem,0.7vw,0.32rem)] whitespace-nowrap text-[clamp(0.56rem,2.55vw,0.88rem)] font-medium leading-none tracking-[-0.025em] text-slate-600 dark:text-slate-300">
             Daha sağlıklı bir sen için buradayım.
           </p>
         </div>
 
         <Link
           href="/ai"
-          className="absolute right-[3.1%] top-1/2 inline-flex h-[50%] min-w-[23.5%] -translate-y-1/2 items-center justify-center gap-[clamp(0.08rem,0.55vw,0.3rem)] rounded-full bg-emerald-100/80 px-[clamp(0.45rem,2vw,0.9rem)] text-[clamp(0.58rem,2.45vw,0.84rem)] font-extrabold text-emerald-600 shadow-sm ring-1 ring-inset ring-emerald-200/50 transition hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/10 dark:hover:bg-emerald-500/15"
+          className="absolute right-[3.1%] top-1/2 inline-flex h-[50%] min-w-[23.5%] -translate-y-1/2 items-center justify-center gap-[clamp(0.08rem,0.55vw,0.3rem)] rounded-full bg-emerald-100/80 px-[clamp(0.45rem,2vw,0.9rem)] text-[clamp(0.68rem,2.9vw,0.96rem)] font-extrabold text-emerald-600 shadow-sm ring-1 ring-inset ring-emerald-200/50 transition hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/10 dark:hover:bg-emerald-500/15"
         >
           <span className="whitespace-nowrap">Hemen Sor</span>
           <ChevronRight className="size-[clamp(0.78rem,3vw,1.05rem)] shrink-0 stroke-[2.4]" aria-hidden="true" />
