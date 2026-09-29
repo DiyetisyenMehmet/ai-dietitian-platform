@@ -47,7 +47,6 @@ function designTextStyle({
     pointerEvents: "auto",
     userSelect: "text",
     WebkitUserSelect: "text",
-    touchAction: "auto",
   };
 
   if (anchor === "end") {
@@ -90,7 +89,6 @@ function HtmlText({
         ...designTextStyle({ x, y, fontSize, fontWeight, anchor }),
         color,
       }}
-      aria-hidden="true"
       data-blood-test-live-text
       data-selectable-text="true"
       data-blood-test-row={row}
@@ -103,10 +101,9 @@ function HtmlText({
 /**
  * Approved Blood Test HTML card.
  *
- * Artwork/navigation is one absolute link layer. All visible copy is genuine
- * selectable HTML and is rendered as a sibling above the link. The text is not
- * inside <a>, so Android/Chrome long-press can open native text selection and
- * Copy instead of a link context menu.
+ * The base visual contains artwork only. All title, description, panel and row
+ * strings are genuine selectable HTML text. The 1438 x 413 coordinate contract
+ * is identical in light and dark, so theme switching cannot move the card.
  */
 export function BloodTestCard({
   href = "/profile/blood-tests",
@@ -125,33 +122,28 @@ export function BloodTestCard({
   ].join(". ");
 
   return (
-    <div
-      className="relative block w-full overflow-hidden [container-type:inline-size]"
+    <Link
+      href={href}
+      className="relative block w-full overflow-hidden [container-type:inline-size] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
       style={{ aspectRatio: BLOOD_TEST_CARD_ASPECT }}
+      aria-label={accessibleName}
       data-blood-test-card
       data-locale={locale}
       data-theme={theme}
       data-theme-geometry="locked"
       data-text-layer="html"
     >
-      <Link
-        href={href}
-        className="absolute inset-0 z-10 block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-        aria-label={accessibleName}
-        data-blood-test-link
-      >
-        <Image
-          src={BLOOD_TEST_CARD_BASE[theme]}
-          alt=""
-          fill
-          unoptimized
-          draggable={false}
-          sizes="(max-width: 768px) 100vw, 672px"
-          className="pointer-events-none select-none object-fill"
-          aria-hidden="true"
-          data-blood-test-base-visual
-        />
-      </Link>
+      <Image
+        src={BLOOD_TEST_CARD_BASE[theme]}
+        alt=""
+        fill
+        unoptimized
+        draggable={false}
+        sizes="(max-width: 768px) 100vw, 672px"
+        className="pointer-events-none select-none object-fill"
+        aria-hidden="true"
+        data-blood-test-base-visual
+      />
 
       <HtmlText
         x={layout.title.x}
@@ -229,6 +221,6 @@ export function BloodTestCard({
           </HtmlText>
         </span>
       ))}
-    </div>
+    </Link>
   );
 }

@@ -43,7 +43,6 @@ function designTextStyle({
     pointerEvents: "auto",
     userSelect: "text",
     WebkitUserSelect: "text",
-    touchAction: "auto",
   };
 }
 
@@ -66,7 +65,6 @@ function HtmlText({
     <span
       className={`z-20 cursor-text select-text ${className}`}
       style={designTextStyle({ x, y, fontSize, fontWeight })}
-      aria-hidden="true"
       data-dashboard-live-feature-text
       data-selectable-text="true"
     >
@@ -78,11 +76,10 @@ function HtmlText({
 /**
  * Approved HTML card for Food/Barcode and Progress.
  *
- * The navigation link is an absolute artwork layer. Selectable HTML text is a
- * sibling above that link, not a descendant of <a>. This is deliberate:
- * Android/Chrome long-press on text inside an anchor opens link actions instead
- * of native text selection. Keeping the text outside the anchor restores the
- * Copy/Select interaction while preserving the card's locked geometry.
+ * The artwork is image-only. Every title/description is real selectable HTML
+ * text, not baked into the image and not SVG text. Light and dark base images
+ * stay mounted in one immutable 1536 x 512 box, so theme changes cannot alter
+ * card geometry or text coordinates.
  */
 export function DashboardLiveFeatureCard({
   kind,
@@ -94,47 +91,42 @@ export function DashboardLiveFeatureCard({
   const accessibleName = `${copy.title}. ${copy.description.join(" ")}`;
 
   return (
-    <div
-      className="relative block w-full overflow-hidden [container-type:inline-size]"
+    <Link
+      href={href}
+      className="relative block w-full overflow-hidden [container-type:inline-size] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
       style={{ aspectRatio: DASHBOARD_LIVE_FEATURE_CARD_ASPECT }}
+      aria-label={accessibleName}
       data-dashboard-live-feature-card
       data-kind={kind}
       data-locale={locale}
       data-theme-geometry="locked"
       data-text-layer="html"
     >
-      <Link
-        href={href}
-        className="absolute inset-0 z-10 block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-        aria-label={accessibleName}
-        data-dashboard-live-feature-link
-      >
-        <Image
-          src={DASHBOARD_LIVE_FEATURE_CARD_BASE[kind].light}
-          alt=""
-          fill
-          unoptimized
-          draggable={false}
-          sizes="(max-width: 768px) 100vw, 672px"
-          className="pointer-events-none select-none object-fill dark:hidden"
-          aria-hidden="true"
-          data-dashboard-live-feature-base
-          data-theme="light"
-        />
+      <Image
+        src={DASHBOARD_LIVE_FEATURE_CARD_BASE[kind].light}
+        alt=""
+        fill
+        unoptimized
+        draggable={false}
+        sizes="(max-width: 768px) 100vw, 672px"
+        className="pointer-events-none select-none object-fill dark:hidden"
+        aria-hidden="true"
+        data-dashboard-live-feature-base
+        data-theme="light"
+      />
 
-        <Image
-          src={DASHBOARD_LIVE_FEATURE_CARD_BASE[kind].dark}
-          alt=""
-          fill
-          unoptimized
-          draggable={false}
-          sizes="(max-width: 768px) 100vw, 672px"
-          className="pointer-events-none hidden select-none object-fill dark:block"
-          aria-hidden="true"
-          data-dashboard-live-feature-base
-          data-theme="dark"
-        />
-      </Link>
+      <Image
+        src={DASHBOARD_LIVE_FEATURE_CARD_BASE[kind].dark}
+        alt=""
+        fill
+        unoptimized
+        draggable={false}
+        sizes="(max-width: 768px) 100vw, 672px"
+        className="pointer-events-none hidden select-none object-fill dark:block"
+        aria-hidden="true"
+        data-dashboard-live-feature-base
+        data-theme="dark"
+      />
 
       <HtmlText
         x={layout.x}
@@ -165,6 +157,6 @@ export function DashboardLiveFeatureCard({
       >
         {copy.description[1]}
       </HtmlText>
-    </div>
+    </Link>
   );
 }
