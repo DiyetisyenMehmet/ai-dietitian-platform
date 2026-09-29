@@ -130,3 +130,28 @@ test('all live feature cards use the shared opaque chevron and dark-edge mask', 
   assert.match(border, /inset_0_0_0_4px/);
   assert.match(border, /border-\[#23585d\]/);
 });
+
+
+test('dark artwork edge masks target only the remaining bright edges', () => {
+  const source = fs.readFileSync(
+    path.join(
+      __dirname,
+      '../src/presentation/components/dashboard/dashboard-live-feature-card.tsx',
+    ),
+    'utf8',
+  );
+  const border = fs.readFileSync(
+    path.join(
+      __dirname,
+      '../src/presentation/components/dashboard/dashboard-card-night-border.tsx',
+    ),
+    'utf8',
+  );
+
+  assert.match(source, /data-dashboard-dark-edge-mask="food"/);
+  assert.match(source, /data-dashboard-dark-edge-mask="progress"/);
+  assert.match(source, /bottom-0 h-\[5%\]/);
+  assert.match(source, /left-0 w-\[1\.35%\]/);
+  assert.match(border, /border-\[#173f44\]/);
+  assert.match(border, /inset_0_0_0_3px/);
+});

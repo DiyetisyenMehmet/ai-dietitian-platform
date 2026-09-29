@@ -8,7 +8,7 @@
 export function DashboardCardNightBorder() {
   return (
     <span
-      className="pointer-events-none absolute inset-0 z-40 hidden rounded-[clamp(0.9rem,3.6cqw,1.35rem)] border border-[#173f44] shadow-[inset_0_0_0_3px_rgba(5,24,27,0.95)] dark:block"
+      className="pointer-events-none absolute inset-0 z-40 hidden rounded-[clamp(0.9rem,3.6cqw,1.35rem)] border border-[#23585d] shadow-[inset_0_0_0_4px_rgba(5,30,33,0.97)] dark:block"
       aria-hidden="true"
       data-dashboard-card-night-border
     />

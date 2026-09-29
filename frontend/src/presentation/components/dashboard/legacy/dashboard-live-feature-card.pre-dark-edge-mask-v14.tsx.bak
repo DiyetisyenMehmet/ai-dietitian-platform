@@ -157,50 +157,6 @@ function ProgressLightIconNormalizer() {
   );
 }
 
-
-function DarkArtworkEdgeMask({ kind }: { kind: DashboardLiveFeatureCardKind }) {
-  if (kind === "food") {
-    return (
-      <span
-        className="pointer-events-none absolute inset-0 z-20 hidden dark:block"
-        aria-hidden="true"
-        data-dashboard-dark-edge-mask="food"
-      >
-        <span
-          className="absolute inset-x-0 bottom-0 h-[5%]"
-          style={{
-            background:
-              "linear-gradient(to top, rgba(5,24,27,1) 0%, rgba(5,24,27,0.98) 38%, rgba(5,24,27,0) 100%)",
-          }}
-        />
-      </span>
-    );
-  }
-
-  return (
-    <span
-      className="pointer-events-none absolute inset-0 z-20 hidden dark:block"
-      aria-hidden="true"
-      data-dashboard-dark-edge-mask="progress"
-    >
-      <span
-        className="absolute inset-y-0 left-0 w-[1.35%]"
-        style={{
-          background:
-            "linear-gradient(to right, rgba(5,24,27,1) 0%, rgba(5,24,27,0.98) 42%, rgba(5,24,27,0) 100%)",
-        }}
-      />
-      <span
-        className="absolute inset-x-0 bottom-0 h-[5%]"
-        style={{
-          background:
-            "linear-gradient(to top, rgba(5,24,27,1) 0%, rgba(5,24,27,0.98) 38%, rgba(5,24,27,0) 100%)",
-        }}
-      />
-    </span>
-  );
-}
-
 /**
  * Food/Barcode and Progress share one immutable 21:5 outer frame.
  *
@@ -240,7 +196,6 @@ export function DashboardLiveFeatureCard({
       />
 
       {kind === "progress" && <ProgressLightIconNormalizer />}
-      <DarkArtworkEdgeMask kind={kind} />
       <DashboardFeatureChevron />
       <DashboardCardNightBorder />
 
