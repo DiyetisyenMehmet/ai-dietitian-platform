@@ -141,7 +141,7 @@ export function BloodTestCard({
 
   return (
     <div
-      className="relative block w-full overflow-hidden rounded-[clamp(0.9rem,3.6cqw,1.35rem)] border border-border/70 bg-card shadow-sm"
+      className="relative block w-full overflow-hidden rounded-[clamp(0.9rem,3.6cqw,1.35rem)] bg-transparent"
       style={{ aspectRatio: DASHBOARD_FEATURE_CARD_FRAME_ASPECT }}
       data-blood-test-card
       data-locale={locale}
