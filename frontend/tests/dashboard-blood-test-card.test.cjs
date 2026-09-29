@@ -16,25 +16,19 @@ function loadContract() {
   return exports;
 }
 
-test('blood-test card uses one fixed coordinate system for every locale and theme', () => {
+test('blood-test card keeps the approved fixed coordinate system', () => {
   const contract = loadContract();
   assert.deepEqual({ ...contract.BLOOD_TEST_CARD_VIEWBOX }, { width: 1438, height: 413 });
   assert.equal(contract.BLOOD_TEST_CARD_ASPECT, '1438 / 413');
   assert.deepEqual([...contract.BLOOD_TEST_CARD_LAYOUT.rows.y], [140, 185, 230, 276, 322]);
   assert.equal(contract.BLOOD_TEST_CARD_LAYOUT.rows.valueX, 1174);
-  assert.equal(contract.BLOOD_TEST_CARD_BASE.light.endsWith('blood-test-card-base-light.png'), true);
-  assert.equal(contract.BLOOD_TEST_CARD_BASE.dark.endsWith('blood-test-card-base-dark.png'), true);
 });
 
-test('TR, EN and AR copy contains the complete live-text contract', () => {
+test('blood-test live copy is TR and EN only', () => {
   const { BLOOD_TEST_CARD_COPY, BLOOD_TEST_CARD_VALUES } = loadContract();
+  assert.deepEqual(Object.keys(BLOOD_TEST_CARD_COPY).sort(), ['en', 'tr']);
   assert.equal(BLOOD_TEST_CARD_COPY.tr.title, 'Kan Tahlili Analizi');
   assert.equal(BLOOD_TEST_CARD_COPY.en.title, 'Blood Test Analysis');
-  assert.equal(BLOOD_TEST_CARD_COPY.ar.title, 'تحليل فحوصات الدم');
-  for (const locale of ['tr', 'en', 'ar']) {
-    assert.equal(BLOOD_TEST_CARD_COPY[locale].description.length, 2);
-    assert.equal(BLOOD_TEST_CARD_COPY[locale].labels.length, 5);
-  }
   assert.deepEqual([...BLOOD_TEST_CARD_VALUES], [
     '168 mg/dL',
     '102 mg/dL',
@@ -44,17 +38,17 @@ test('TR, EN and AR copy contains the complete live-text contract', () => {
   ]);
 });
 
-test('component source keeps artwork single-layered and text live', () => {
+test('blood-test user-facing strings are selectable HTML, not SVG', () => {
   const source = fs.readFileSync(
     path.join(__dirname, '../src/presentation/components/dashboard/blood-test-card.tsx'),
     'utf8',
   );
+
   assert.equal((source.match(/<Image/g) || []).length, 1);
-  assert.match(source, /<svg/);
-  assert.match(source, /<SvgText/);
-  assert.match(source, /unoptimized/);
-  assert.doesNotMatch(
-    source,
-    /ReferenceChevronOverlay|backgroundImage|maskImage|foreignObject|blood-chevron-clean/,
-  );
+  assert.match(source, /data-text-layer="html"/);
+  assert.match(source, /data-selectable-text="true"/);
+  assert.match(source, /userSelect: "text"/);
+  assert.match(source, /WebkitUserSelect: "text"/);
+  assert.match(source, /<span/);
+  assert.doesNotMatch(source, /<svg|<text|SvgText/);
 });

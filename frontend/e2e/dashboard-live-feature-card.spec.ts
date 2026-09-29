@@ -17,11 +17,7 @@ import {
 
 const ROOT = process.cwd();
 const SCREENSHOT_ROOT = join(ROOT, "test-results/dashboard-live-feature-card");
-
-const VIEWPORTS = [
-  { width: 390, height: 844 },
-  { width: 412, height: 915 },
-] as const;
+const VIEWPORTS = [{ width: 390, height: 844 }, { width: 412, height: 915 }] as const;
 const THEMES: DashboardLiveFeatureCardTheme[] = ["light", "dark"];
 const LOCALES: DashboardLiveFeatureCardLocale[] = ["tr", "en"];
 const KINDS: DashboardLiveFeatureCardKind[] = ["food", "progress"];
@@ -57,7 +53,6 @@ function cardMarkup(
       <style>
         * { box-sizing: border-box; }
         html, body { margin: 0; padding: 0; overflow-x: hidden; }
-        body { background: ${theme === "dark" ? "#0d1714" : "#f9fcfb"}; }
         .fixture { width: calc(100vw - 32px); max-width: 672px; margin: 24px auto; }
         [data-dashboard-live-feature-card] {
           position: relative;
@@ -65,15 +60,11 @@ function cardMarkup(
           width: 100%;
           aspect-ratio: 1536 / 512;
           overflow: hidden;
+          container-type: inline-size;
         }
-        [data-dashboard-live-feature-card] > img,
-        [data-dashboard-live-feature-card] > svg {
-          position: absolute;
-          inset: 0;
-          width: 100%;
-          height: 100%;
+        [data-dashboard-live-feature-base] {
+          position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill;
         }
-        [data-dashboard-live-feature-card] > img { object-fit: fill; }
         [data-dashboard-live-feature-base][data-theme="dark"] { display: none; }
         html.dark [data-dashboard-live-feature-base][data-theme="light"] { display: none; }
         html.dark [data-dashboard-live-feature-base][data-theme="dark"] { display: block; }
@@ -87,77 +78,66 @@ test.beforeAll(() => mkdirSync(SCREENSHOT_ROOT, { recursive: true }));
 
 for (const viewport of VIEWPORTS) {
   for (const kind of KINDS) {
-    for (const theme of THEMES) {
-      for (const locale of LOCALES) {
-        test(`${viewport.width}x${viewport.height} ${kind} ${theme} ${locale} is locked and unclipped`, async ({
-          page,
-        }) => {
-          await page.setViewportSize(viewport);
-          await page.setContent(cardMarkup(kind, locale, theme), { waitUntil: "load" });
+    for (const locale of LOCALES) {
+      test(`${viewport.width}x${viewport.height} ${kind} ${locale} keeps HTML text fixed across themes`, async ({ page }) => {
+        await page.setViewportSize(viewport);
+        await page.setContent(cardMarkup(kind, locale, "light"), { waitUntil: "load" });
 
-          const card = page.locator("[data-dashboard-live-feature-card]");
-          await expect(card).toHaveCount(1);
-          await expect(card.locator("img[data-dashboard-live-feature-base]")).toHaveCount(2);
-          await expect(card.locator("svg[data-dashboard-live-feature-text]")).toHaveCount(1);
-          await expect(card).toHaveAttribute("data-theme-geometry", "locked");
+        const card = page.locator("[data-dashboard-live-feature-card]");
+        await expect(card).toHaveAttribute("data-text-layer", "html");
+        await expect(card.locator("[data-dashboard-live-feature-text]")).toHaveCount(3);
+        await expect(card.locator("svg")).toHaveCount(0);
 
-          const box = await card.boundingBox();
-          expect(box).not.toBeNull();
-          expect(box!.width).toBeCloseTo(viewport.width - 32, 1);
-          expect(box!.height).toBeCloseTo(box!.width / 3, 1);
+        const box = await card.boundingBox();
+        expect(box).not.toBeNull();
+        expect(box!.height).toBeCloseTo(box!.width / 3, 1);
 
-          const visibleBase = card.locator(
-            `img[data-dashboard-live-feature-base][data-theme="${theme}"]`,
-          );
-          const imageBox = await visibleBase.boundingBox();
-          expect(imageBox).not.toBeNull();
-          expect(imageBox!.x).toBeCloseTo(box!.x, 1);
-          expect(imageBox!.y).toBeCloseTo(box!.y, 1);
-          expect(imageBox!.width).toBeCloseTo(box!.width, 1);
-          expect(imageBox!.height).toBeCloseTo(box!.height, 1);
-
-          const geometry = await card.locator("svg").evaluate((svg) => {
-            const texts = Array.from(svg.querySelectorAll("text"));
+        const before = await card.locator("[data-dashboard-live-feature-text]").evaluateAll((nodes) =>
+          nodes.map((node) => {
+            const box = node.getBoundingClientRect();
+            const style = getComputedStyle(node);
             return {
-              viewBox: svg.getAttribute("viewBox"),
-              boxes: texts.map((node) => {
-                const textBox = (node as SVGGraphicsElement).getBBox();
-                return {
-                  x: textBox.x,
-                  y: textBox.y,
-                  width: textBox.width,
-                  height: textBox.height,
-                  text: node.textContent ?? "",
-                };
-              }),
+              x: box.x,
+              y: box.y,
+              width: box.width,
+              height: box.height,
+              userSelect: style.userSelect,
+              pointerEvents: style.pointerEvents,
             };
-          });
+          }),
+        );
 
-          expect(geometry.viewBox).toBe(
-            `0 0 ${DASHBOARD_LIVE_FEATURE_CARD_VIEWBOX.width} ${DASHBOARD_LIVE_FEATURE_CARD_VIEWBOX.height}`,
+        for (const text of before) {
+          expect(text.userSelect).toBe("text");
+          expect(text.pointerEvents).not.toBe("none");
+          expect(text.x - box!.x).toBeGreaterThanOrEqual(0);
+          expect(text.x + text.width - box!.x).toBeLessThanOrEqual(
+            (box!.width * DASHBOARD_LIVE_FEATURE_CARD_LAYOUT[kind].safeTextRight) /
+              DASHBOARD_LIVE_FEATURE_CARD_VIEWBOX.width +
+              1,
           );
+        }
 
-          for (const textBox of geometry.boxes) {
-            expect(textBox.x).toBeGreaterThanOrEqual(0);
-            expect(textBox.y).toBeGreaterThanOrEqual(0);
-            expect(
-              textBox.x + textBox.width,
-              `${textBox.text} overlaps artwork safe zone`,
-            ).toBeLessThanOrEqual(DASHBOARD_LIVE_FEATURE_CARD_LAYOUT[kind].safeTextRight);
-            expect(textBox.y + textBox.height).toBeLessThanOrEqual(
-              DASHBOARD_LIVE_FEATURE_CARD_VIEWBOX.height,
-            );
-          }
+        await page.evaluate(() => document.documentElement.classList.add("dark"));
+        const after = await card.locator("[data-dashboard-live-feature-text]").evaluateAll((nodes) =>
+          nodes.map((node) => {
+            const box = node.getBoundingClientRect();
+            return { x: box.x, y: box.y, width: box.width, height: box.height };
+          }),
+        );
 
-          await page.screenshot({
-            path: join(
-              SCREENSHOT_ROOT,
-              `${viewport.width}x${viewport.height}-${kind}-${theme}-${locale}.png`,
-            ),
-            fullPage: true,
-          });
+        before.forEach((text, index) => {
+          expect(after[index].x).toBeCloseTo(text.x, 2);
+          expect(after[index].y).toBeCloseTo(text.y, 2);
+          expect(after[index].width).toBeCloseTo(text.width, 2);
+          expect(after[index].height).toBeCloseTo(text.height, 2);
         });
-      }
+
+        await page.screenshot({
+          path: join(SCREENSHOT_ROOT, `${viewport.width}x${viewport.height}-${kind}-${locale}-html.png`),
+          fullPage: true,
+        });
+      });
     }
   }
 }

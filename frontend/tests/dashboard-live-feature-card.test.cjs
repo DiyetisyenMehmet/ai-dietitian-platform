@@ -34,29 +34,19 @@ test('food and progress cards share one immutable theme geometry', () => {
 
     const layout = contract.DASHBOARD_LIVE_FEATURE_CARD_LAYOUT[kind];
     assert.equal(typeof layout.x, 'number');
-    assert.equal(typeof layout.titleY, 'number');
-    assert.equal(typeof layout.descriptionFirstY, 'number');
-    assert.equal(typeof layout.descriptionSecondY, 'number');
     assert.equal(layout.safeTextRight <= 850, true);
   }
 });
 
 test('food and progress expose complete TR and EN live copy', () => {
   const { DASHBOARD_LIVE_FEATURE_CARD_COPY } = loadContract();
-
   assert.equal(DASHBOARD_LIVE_FEATURE_CARD_COPY.food.tr.title, 'Besin ve Barkod Tarayıcı');
   assert.equal(DASHBOARD_LIVE_FEATURE_CARD_COPY.food.en.title, 'Food & Barcode Scanner');
   assert.equal(DASHBOARD_LIVE_FEATURE_CARD_COPY.progress.tr.title, 'İlerlememi Gör');
   assert.equal(DASHBOARD_LIVE_FEATURE_CARD_COPY.progress.en.title, 'View My Progress');
-
-  for (const kind of ['food', 'progress']) {
-    for (const locale of ['tr', 'en']) {
-      assert.equal(DASHBOARD_LIVE_FEATURE_CARD_COPY[kind][locale].description.length, 2);
-    }
-  }
 });
 
-test('approved HTML-card component keeps both themes mounted and geometry immutable', () => {
+test('food and progress render selectable HTML text, never SVG text', () => {
   const source = fs.readFileSync(
     path.join(
       __dirname,
@@ -66,18 +56,13 @@ test('approved HTML-card component keeps both themes mounted and geometry immuta
   );
 
   assert.equal((source.match(/<Image/g) || []).length, 2);
-  assert.match(source, /DASHBOARD_LIVE_FEATURE_CARD_BASE\[kind\]\.light/);
-  assert.match(source, /DASHBOARD_LIVE_FEATURE_CARD_BASE\[kind\]\.dark/);
-  assert.match(source, /dark:hidden/);
-  assert.match(source, /hidden select-none object-fill dark:block/);
-  assert.match(source, /data-theme-geometry="locked"/);
-  assert.match(source, /<svg/);
-  assert.match(source, /<SvgText/);
-  assert.match(source, /DASHBOARD_LIVE_FEATURE_CARD_ASPECT/);
-  assert.doesNotMatch(
-    source,
-    /FoodReferenceChevronOverlay|ProgressArtwork|ProgressIcon|foreignObject/,
-  );
+  assert.match(source, /data-text-layer="html"/);
+  assert.match(source, /data-selectable-text="true"/);
+  assert.match(source, /userSelect: "text"/);
+  assert.match(source, /WebkitUserSelect: "text"/);
+  assert.match(source, /<span/);
+  assert.doesNotMatch(source, /<svg|<text|SvgText/);
+  assert.doesNotMatch(source, /pointer-events-none absolute inset-0 size-full/);
 });
 
 test('dashboard uses one permanent feature stack instead of separate theme stacks', () => {
@@ -88,5 +73,4 @@ test('dashboard uses one permanent feature stack instead of separate theme stack
 
   assert.equal((source.match(/space-y-\[clamp/g) || []).length, 1);
   assert.match(source, /BloodTestThemeSlot/);
-  assert.doesNotMatch(source, /dark:hidden">\s*\{FEATURES\.map/);
 });

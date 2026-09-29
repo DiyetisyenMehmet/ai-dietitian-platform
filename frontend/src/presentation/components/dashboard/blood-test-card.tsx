@@ -1,3 +1,5 @@
+import type { CSSProperties } from "react";
+
 import Image from "next/image";
 import Link from "next/link";
 
@@ -19,54 +21,89 @@ interface BloodTestCardProps {
   theme: BloodTestCardTheme;
 }
 
-function SvgText({
+type Anchor = "start" | "middle" | "end";
+
+function designTextStyle({
   x,
   y,
-  children,
-  fill,
   fontSize,
   fontWeight,
   anchor = "start",
-  rtl = false,
-  numeric = false,
+}: {
+  x: number;
+  y: number;
+  fontSize: number;
+  fontWeight: number;
+  anchor?: Anchor;
+}): CSSProperties {
+  const style: CSSProperties = {
+    position: "absolute",
+    top: `${(y / BLOOD_TEST_CARD_VIEWBOX.height) * 100}%`,
+    fontFamily: "var(--font-sans), Inter, sans-serif",
+    fontSize: `${(fontSize / BLOOD_TEST_CARD_VIEWBOX.width) * 100}cqw`,
+    fontWeight,
+    lineHeight: 1,
+    whiteSpace: "nowrap",
+    pointerEvents: "auto",
+    userSelect: "text",
+    WebkitUserSelect: "text",
+  };
+
+  if (anchor === "end") {
+    style.right = `${((BLOOD_TEST_CARD_VIEWBOX.width - x) / BLOOD_TEST_CARD_VIEWBOX.width) * 100}%`;
+    style.transform = "translateY(-50%)";
+  } else if (anchor === "middle") {
+    style.left = `${(x / BLOOD_TEST_CARD_VIEWBOX.width) * 100}%`;
+    style.transform = "translate(-50%, -50%)";
+  } else {
+    style.left = `${(x / BLOOD_TEST_CARD_VIEWBOX.width) * 100}%`;
+    style.transform = "translateY(-50%)";
+  }
+
+  return style;
+}
+
+function HtmlText({
+  x,
+  y,
+  children,
+  color,
+  fontSize,
+  fontWeight,
+  anchor = "start",
+  row,
 }: {
   x: number;
   y: number;
   children: string;
-  fill: string;
+  color: string;
   fontSize: number;
   fontWeight: number;
-  anchor?: "start" | "middle" | "end";
-  rtl?: boolean;
-  numeric?: boolean;
+  anchor?: Anchor;
+  row?: number;
 }) {
-  const fontFamily =
-    rtl && !numeric ? "var(--font-arabic), sans-serif" : "var(--font-sans), Inter, sans-serif";
-
   return (
-    <text
-      x={x}
-      y={y}
-      fill={fill}
-      fontFamily={fontFamily}
-      fontSize={fontSize}
-      fontWeight={fontWeight}
-      textAnchor={anchor}
-      dominantBaseline="middle"
-      direction={numeric ? "ltr" : rtl ? "rtl" : "ltr"}
-      style={{ unicodeBidi: numeric ? "isolate" : "plaintext" }}
+    <span
+      className="z-20 cursor-text select-text"
+      style={{
+        ...designTextStyle({ x, y, fontSize, fontWeight, anchor }),
+        color,
+      }}
+      data-blood-test-live-text
+      data-selectable-text="true"
+      data-blood-test-row={row}
     >
       {children}
-    </text>
+    </span>
   );
 }
 
 /**
- * Pixel-locked Blood Test dashboard card.
+ * Approved Blood Test HTML card.
  *
- * The approved artwork is exactly one immutable, text-free base visual. Every
- * user-facing string is live SVG text in the same fixed coordinate system, so
- * responsive scaling cannot make artwork and typography drift independently.
+ * The base visual contains artwork only. All title, description, panel and row
+ * strings are genuine selectable HTML text. The 1438 x 413 coordinate contract
+ * is identical in light and dark, so theme switching cannot move the card.
  */
 export function BloodTestCard({
   href = "/profile/blood-tests",
@@ -75,7 +112,6 @@ export function BloodTestCard({
 }: BloodTestCardProps) {
   const copy = BLOOD_TEST_CARD_COPY[locale];
   const colors = BLOOD_TEST_CARD_COLORS[theme];
-  const rtl = locale === "ar";
   const layout = BLOOD_TEST_CARD_LAYOUT;
   const accessibleName = [
     copy.title,
@@ -88,12 +124,14 @@ export function BloodTestCard({
   return (
     <Link
       href={href}
-      className="relative block w-full overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+      className="relative block w-full overflow-hidden [container-type:inline-size] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
       style={{ aspectRatio: BLOOD_TEST_CARD_ASPECT }}
       aria-label={accessibleName}
       data-blood-test-card
       data-locale={locale}
       data-theme={theme}
+      data-theme-geometry="locked"
+      data-text-layer="html"
     >
       <Image
         src={BLOOD_TEST_CARD_BASE[theme]}
@@ -107,99 +145,82 @@ export function BloodTestCard({
         data-blood-test-base-visual
       />
 
-      <svg
-        viewBox={`0 0 ${BLOOD_TEST_CARD_VIEWBOX.width} ${BLOOD_TEST_CARD_VIEWBOX.height}`}
-        preserveAspectRatio="xMidYMid meet"
-        className="pointer-events-none absolute inset-0 size-full"
-        aria-hidden="true"
-        data-blood-test-live-text
+      <HtmlText
+        x={layout.title.x}
+        y={layout.title.y}
+        color={colors.title}
+        fontSize={layout.title.fontSize}
+        fontWeight={layout.title.fontWeight}
       >
-        <SvgText
-          x={rtl ? layout.title.rtlX : layout.title.x}
-          y={layout.title.y}
-          fill={colors.title}
-          fontSize={layout.title.fontSize}
-          fontWeight={layout.title.fontWeight}
-          anchor={rtl ? "end" : "start"}
-          rtl={rtl}
-        >
-          {copy.title}
-        </SvgText>
+        {copy.title}
+      </HtmlText>
 
-        <SvgText
-          x={rtl ? layout.description.rtlX : layout.description.x}
-          y={layout.description.firstY}
-          fill={colors.description}
-          fontSize={layout.description.fontSize}
-          fontWeight={layout.description.fontWeight}
-          anchor={rtl ? "end" : "start"}
-          rtl={rtl}
-        >
-          {copy.description[0]}
-        </SvgText>
-        <SvgText
-          x={rtl ? layout.description.rtlX : layout.description.x}
-          y={layout.description.secondY}
-          fill={colors.description}
-          fontSize={layout.description.fontSize}
-          fontWeight={layout.description.fontWeight}
-          anchor={rtl ? "end" : "start"}
-          rtl={rtl}
-        >
-          {copy.description[1]}
-        </SvgText>
+      <HtmlText
+        x={layout.description.x}
+        y={layout.description.firstY}
+        color={colors.description}
+        fontSize={layout.description.fontSize}
+        fontWeight={layout.description.fontWeight}
+      >
+        {copy.description[0]}
+      </HtmlText>
 
-        <SvgText
-          x={rtl ? layout.panelTitle.rtlX : layout.panelTitle.x}
-          y={layout.panelTitle.y}
-          fill={colors.panelTitle}
-          fontSize={layout.panelTitle.fontSize}
-          fontWeight={layout.panelTitle.fontWeight}
-          anchor={rtl ? "end" : "start"}
-          rtl={rtl}
-        >
-          {copy.panelTitle}
-        </SvgText>
+      <HtmlText
+        x={layout.description.x}
+        y={layout.description.secondY}
+        color={colors.description}
+        fontSize={layout.description.fontSize}
+        fontWeight={layout.description.fontWeight}
+      >
+        {copy.description[1]}
+      </HtmlText>
 
-        <SvgText
-          x={layout.status.x}
-          y={layout.status.y}
-          fill={colors.status}
-          fontSize={layout.status.fontSize}
-          fontWeight={layout.status.fontWeight}
-          anchor="middle"
-          rtl={rtl}
-        >
-          {copy.status}
-        </SvgText>
+      <HtmlText
+        x={layout.panelTitle.x}
+        y={layout.panelTitle.y}
+        color={colors.panelTitle}
+        fontSize={layout.panelTitle.fontSize}
+        fontWeight={layout.panelTitle.fontWeight}
+      >
+        {copy.panelTitle}
+      </HtmlText>
 
-        {copy.labels.map((label, index) => (
-          <g key={label} data-blood-test-row={index + 1}>
-            <SvgText
-              x={rtl ? layout.rows.rtlLabelX : layout.rows.labelX}
-              y={layout.rows.y[index]}
-              fill={colors.label}
-              fontSize={layout.rows.labelFontSize}
-              fontWeight={layout.rows.labelWeight}
-              anchor={rtl ? "end" : "start"}
-              rtl={rtl}
-            >
-              {label}
-            </SvgText>
-            <SvgText
-              x={layout.rows.valueX}
-              y={layout.rows.y[index]}
-              fill={colors.value}
-              fontSize={layout.rows.valueFontSize}
-              fontWeight={layout.rows.valueWeight}
-              anchor="end"
-              numeric
-            >
-              {BLOOD_TEST_CARD_VALUES[index]}
-            </SvgText>
-          </g>
-        ))}
-      </svg>
+      <HtmlText
+        x={layout.status.x}
+        y={layout.status.y}
+        color={colors.status}
+        fontSize={layout.status.fontSize}
+        fontWeight={layout.status.fontWeight}
+        anchor="middle"
+      >
+        {copy.status}
+      </HtmlText>
+
+      {copy.labels.map((label, index) => (
+        <span key={label}>
+          <HtmlText
+            x={layout.rows.labelX}
+            y={layout.rows.y[index]}
+            color={colors.label}
+            fontSize={layout.rows.labelFontSize}
+            fontWeight={layout.rows.labelWeight}
+            row={index + 1}
+          >
+            {label}
+          </HtmlText>
+          <HtmlText
+            x={layout.rows.valueX}
+            y={layout.rows.y[index]}
+            color={colors.value}
+            fontSize={layout.rows.valueFontSize}
+            fontWeight={layout.rows.valueWeight}
+            anchor="end"
+            row={index + 1}
+          >
+            {BLOOD_TEST_CARD_VALUES[index]}
+          </HtmlText>
+        </span>
+      ))}
     </Link>
   );
 }
