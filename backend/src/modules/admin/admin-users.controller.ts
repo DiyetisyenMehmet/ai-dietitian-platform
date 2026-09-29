@@ -3,7 +3,48 @@ import { asyncHandler } from "../../utils/async-handler";
 import type { AdminUsersQuery } from "./admin-users.schemas";
 import { adminUsersService } from "./admin-users.service";
 
+import { adminUserOperationsService } from "./admin-user-operations.service";
+
 export const adminUsersController = {
+  sessions: asyncHandler(async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    sendSuccess(res, await adminUserOperationsService.sessions(req.params.id!));
+  }),
+  status: asyncHandler(async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    sendSuccess(
+      res,
+      await adminUserOperationsService.status(
+        { actorAdminId: req.user!.id, requestId: String(req.id) },
+        req.params.id!,
+        req.body.isActive,
+        req.body.reason,
+      ),
+    );
+  }),
+  revoke: asyncHandler(async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    sendSuccess(
+      res,
+      await adminUserOperationsService.revoke(
+        { actorAdminId: req.user!.id, requestId: String(req.id) },
+        req.params.id!,
+        req.params.sessionId!,
+        req.body.reason,
+      ),
+    );
+  }),
+  revokeAll: asyncHandler(async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    sendSuccess(
+      res,
+      await adminUserOperationsService.revokeAll(
+        { actorAdminId: req.user!.id, requestId: String(req.id) },
+        req.params.id!,
+        req.body.reason,
+      ),
+    );
+  }),
   list: asyncHandler(async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     sendSuccess(res, await adminUsersService.list(req.query as unknown as AdminUsersQuery));

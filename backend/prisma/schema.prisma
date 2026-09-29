@@ -32,6 +32,8 @@ model User {
   onboardingCompleted Boolean          @default(false)
   subscriptionTier    SubscriptionTier @default(FREE)
   lastLoginAt         DateTime?
+  // Existing column created by 20260912180000_fr001_account_lifecycle.
+  deactivatedAt       DateTime?
   deletionRequestedAt DateTime?
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt

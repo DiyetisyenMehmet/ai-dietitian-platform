@@ -4,13 +4,6 @@ import { verifyPassword } from "../../utils/password";
 import { authRepository } from "../auth/auth.repository";
 import { issueAuthSession, type AuthResult, type SessionContext } from "../auth/auth.service";
 
-async function getDeactivatedAt(userId: string): Promise<Date | null> {
-  const rows = await prisma.$queryRaw<Array<{ deactivatedAt: Date | null }>>`
-    SELECT "deactivatedAt" FROM "users" WHERE "id" = ${userId} LIMIT 1
-  `;
-  return rows[0]?.deactivatedAt ?? null;
-}
-
 export const reactivationService = {
   async withPassword(
     email: string,
@@ -25,13 +18,15 @@ export const reactivationService = {
       await authRepository.updateLastLogin(user.id);
       return issueAuthSession(user, context);
     }
-    if (!(await getDeactivatedAt(user.id))) {
+    if (!user.deactivatedAt) {
       throw ApiError.forbidden("This account cannot be reactivated.");
     }
 
-    await prisma.$executeRaw`
-      UPDATE "users" SET "isActive" = true, "deactivatedAt" = NULL WHERE "id" = ${user.id}
-    `;
+    const changed = await prisma.user.updateMany({
+      where: { id: user.id, isActive: false, deactivatedAt: { not: null } },
+      data: { isActive: true, deactivatedAt: null },
+    });
+    if (changed.count !== 1) throw ApiError.forbidden("This account cannot be reactivated.");
     const reactivated = (await authRepository.findUserById(user.id))!;
     await authRepository.updateLastLogin(user.id);
     return issueAuthSession(reactivated, context);

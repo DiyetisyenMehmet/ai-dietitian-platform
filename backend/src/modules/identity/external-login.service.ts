@@ -7,20 +7,18 @@ import { authRepository } from "../auth/auth.repository";
 import { issueAuthSession, type AuthResult, type SessionContext } from "../auth/auth.service";
 import { firebaseAuthProvider } from "./firebase-auth.provider";
 
-function accountEmail(identity: { uid: string; email: string | null; emailVerified: boolean; phoneNumber: string | null }): string {
+function accountEmail(identity: {
+  uid: string;
+  email: string | null;
+  emailVerified: boolean;
+  phoneNumber: string | null;
+}): string {
   if (identity.phoneNumber) {
     return `phone.${identity.phoneNumber.replace(/\D/g, "")}@phone.diewish.invalid`;
   }
   if (identity.email && identity.emailVerified) return identity.email;
   const digest = crypto.createHash("sha256").update(identity.uid).digest("hex");
   return `social.${digest}@social.diewish.invalid`;
-}
-
-async function deactivatedAt(userId: string): Promise<Date | null> {
-  const rows = await prisma.$queryRaw<Array<{ deactivatedAt: Date | null }>>`
-    SELECT "deactivatedAt" FROM "users" WHERE "id" = ${userId} LIMIT 1
-  `;
-  return rows[0]?.deactivatedAt ?? null;
 }
 
 export const externalLoginService = {
@@ -51,12 +49,14 @@ export const externalLoginService = {
     }
 
     if (!user.isActive) {
-      if (!(await deactivatedAt(user.id))) {
+      if (!user.deactivatedAt) {
         throw ApiError.forbidden("This account is not available.");
       }
-      await prisma.$executeRaw`
-        UPDATE "users" SET "isActive" = true, "deactivatedAt" = NULL WHERE "id" = ${user.id}
-      `;
+      const changed = await prisma.user.updateMany({
+        where: { id: user.id, isActive: false, deactivatedAt: { not: null } },
+        data: { isActive: true, deactivatedAt: null },
+      });
+      if (changed.count !== 1) throw ApiError.forbidden("This account is not available.");
       user = (await authRepository.findUserById(user.id))!;
     }
 

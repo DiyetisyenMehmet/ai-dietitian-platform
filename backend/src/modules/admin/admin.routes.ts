@@ -4,10 +4,7 @@ import { Router } from "express";
 import { authenticate, authorize } from "../../middleware/authenticate";
 import { validate } from "../../middleware/validate";
 import { adminAccessController } from "./admin-access.controller";
-import {
-  adminAccessUserParamsSchema,
-  adminStaffUpdateSchema,
-} from "./admin-access.schemas";
+import { adminAccessUserParamsSchema, adminStaffUpdateSchema } from "./admin-access.schemas";
 import { adminGovernanceController } from "./admin-governance.controller";
 import {
   adminAuditQuerySchema,
@@ -35,15 +32,29 @@ import { ADMIN_PERMISSIONS } from "./admin.permissions";
 import { adminRateLimiter } from "./admin.rate-limit";
 
 import { adminUsersController } from "./admin-users.controller";
-import { adminUsersQuerySchema, adminUserParamsSchema } from "./admin-users.schemas";
+import {
+  adminUsersQuerySchema,
+  adminUserParamsSchema,
+  adminUserStatusSchema,
+  adminUserOperationSchema,
+  adminUserSessionParamsSchema,
+} from "./admin-users.schemas";
 
 export const adminRouter = Router();
 
 adminRouter.use(adminRateLimiter);
 adminRouter.use(requireAdminFoundationEnvironment);
 
-adminRouter.post("/auth/login", validate({ body: adminEmailLoginSchema }), adminAuthController.emailLogin);
-adminRouter.post("/auth/bootstrap", validate({ body: adminBootstrapSchema }), adminAuthController.bootstrap);
+adminRouter.post(
+  "/auth/login",
+  validate({ body: adminEmailLoginSchema }),
+  adminAuthController.emailLogin,
+);
+adminRouter.post(
+  "/auth/bootstrap",
+  validate({ body: adminBootstrapSchema }),
+  adminAuthController.bootstrap,
+);
 adminRouter.post(
   "/auth/password/forgot",
   validate({ body: adminForgotPasswordSchema }),
@@ -140,8 +151,51 @@ adminRouter.get(
   adminGovernanceController.audit,
 );
 
-adminRouter.get("/session", requireAdminPermission(ADMIN_PERMISSIONS.ACCESS), adminController.session);
-adminRouter.get("/environment", requireAdminPermission(ADMIN_PERMISSIONS.ACCESS), adminController.environment);
+adminRouter.get(
+  "/session",
+  requireAdminPermission(ADMIN_PERMISSIONS.ACCESS),
+  adminController.session,
+);
+adminRouter.get(
+  "/environment",
+  requireAdminPermission(ADMIN_PERMISSIONS.ACCESS),
+  adminController.environment,
+);
 
-adminRouter.get("/users", requireAdminPermission(ADMIN_PERMISSIONS.USERS_READ), validate({ query: adminUsersQuerySchema }), adminUsersController.list);
-adminRouter.get("/users/:id", requireAdminPermission(ADMIN_PERMISSIONS.USERS_READ), validate({ params: adminUserParamsSchema }), adminUsersController.detail);
+adminRouter.get(
+  "/users",
+  requireAdminPermission(ADMIN_PERMISSIONS.USERS_READ),
+  validate({ query: adminUsersQuerySchema }),
+  adminUsersController.list,
+);
+adminRouter.get(
+  "/users/:id",
+  requireAdminPermission(ADMIN_PERMISSIONS.USERS_READ),
+  validate({ params: adminUserParamsSchema }),
+  adminUsersController.detail,
+);
+
+adminRouter.patch(
+  "/users/:id/status",
+  requireAdminPermission(ADMIN_PERMISSIONS.USERS_MANAGE),
+  validate({ params: adminUserParamsSchema, body: adminUserStatusSchema }),
+  adminUsersController.status,
+);
+adminRouter.get(
+  "/users/:id/sessions",
+  requireAdminPermission(ADMIN_PERMISSIONS.USER_SESSIONS_REVOKE),
+  validate({ params: adminUserParamsSchema }),
+  adminUsersController.sessions,
+);
+adminRouter.delete(
+  "/users/:id/sessions/:sessionId",
+  requireAdminPermission(ADMIN_PERMISSIONS.USER_SESSIONS_REVOKE),
+  validate({ params: adminUserSessionParamsSchema, body: adminUserOperationSchema }),
+  adminUsersController.revoke,
+);
+adminRouter.delete(
+  "/users/:id/sessions",
+  requireAdminPermission(ADMIN_PERMISSIONS.USER_SESSIONS_REVOKE),
+  validate({ params: adminUserParamsSchema, body: adminUserOperationSchema }),
+  adminUsersController.revokeAll,
+);

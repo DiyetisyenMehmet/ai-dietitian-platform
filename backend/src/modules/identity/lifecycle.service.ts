@@ -5,19 +5,19 @@ import { authRepository } from "../auth/auth.repository";
 export const lifecycleService = {
   async deactivate(userId: string): Promise<void> {
     const user = await authRepository.findUserById(userId);
-    if (!user) throw ApiError.unauthorized("Session is no longer valid.");
+    if (!user?.isActive) throw ApiError.unauthorized("Session is no longer valid.");
 
-    await prisma.$transaction([
-      prisma.$executeRaw`
-        UPDATE "users"
-        SET "isActive" = false, "deactivatedAt" = NOW()
-        WHERE "id" = ${userId}
-      `,
-      prisma.refreshToken.updateMany({
+    await prisma.$transaction(async (tx) => {
+      const changed = await tx.user.updateMany({
+        where: { id: userId, isActive: true },
+        data: { isActive: false, deactivatedAt: new Date() },
+      });
+      if (changed.count !== 1) throw ApiError.unauthorized("Session is no longer valid.");
+      await tx.refreshToken.updateMany({
         where: { userId, revokedAt: null },
         data: { revokedAt: new Date() },
-      }),
-    ]);
+      });
+    });
   },
 
   listSessions(userId: string) {

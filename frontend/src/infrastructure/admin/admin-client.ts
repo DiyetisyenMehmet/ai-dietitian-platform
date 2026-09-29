@@ -143,7 +143,48 @@ export interface AdminUsersResult {
   users: AdminUserSummary[];
   pagination: { page: number; pageSize: number; total: number; totalPages: number };
 }
+export interface AdminUserSession {
+  id: string;
+  createdAt: string;
+  expiresAt: string;
+  device: string;
+}
 export const adminClient = {
+  getUserSessions(id: string): Promise<{ sessions: AdminUserSession[]; total: number }> {
+    return apiRequest({
+      path: `/admin/users/${encodeURIComponent(id)}/sessions`,
+      method: "GET",
+      auth: true,
+    });
+  },
+  setUserStatus(
+    id: string,
+    isActive: boolean,
+    reason: string,
+  ): Promise<{ id: string; isActive: boolean }> {
+    return apiRequest({
+      path: `/admin/users/${encodeURIComponent(id)}/status`,
+      method: "PATCH",
+      auth: true,
+      body: JSON.stringify({ isActive, reason, confirmed: true }),
+    });
+  },
+  revokeUserSession(id: string, sessionId: string, reason: string): Promise<{ revoked: boolean }> {
+    return apiRequest({
+      path: `/admin/users/${encodeURIComponent(id)}/sessions/${encodeURIComponent(sessionId)}`,
+      method: "DELETE",
+      auth: true,
+      body: JSON.stringify({ reason, confirmed: true }),
+    });
+  },
+  revokeAllUserSessions(id: string, reason: string): Promise<{ revokedCount: number }> {
+    return apiRequest({
+      path: `/admin/users/${encodeURIComponent(id)}/sessions`,
+      method: "DELETE",
+      auth: true,
+      body: JSON.stringify({ reason, confirmed: true }),
+    });
+  },
   listUsers(query: {
     search: string;
     status: string;

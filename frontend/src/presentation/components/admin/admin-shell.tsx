@@ -114,7 +114,7 @@ export function AdminShell({
         >
           <div className="mx-auto max-w-6xl space-y-6">
             {view === "users" ? (
-              <AdminUsers userId={userId} />
+              <AdminUsers userId={userId} permissions={session.permissions} />
             ) : view === "access" ? (
               <AdminAccessManagement
                 currentAdminId={session.admin.id}

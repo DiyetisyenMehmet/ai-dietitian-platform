@@ -11,6 +11,8 @@ import { Button } from "@/presentation/components/ui/button";
 import { Input } from "@/presentation/components/ui/input";
 import { Skeleton } from "@/presentation/components/ui/skeleton";
 
+import { AdminUserOperations } from "./admin-user-operations";
+
 const date = (value: string | null) =>
   value ? new Date(value).toLocaleString("tr-TR") : "Bilgi yok";
 const plan = (value: AdminUserSummary["subscriptionTier"]) =>
@@ -29,7 +31,13 @@ function Status({ active }: { active: boolean }) {
 const linkStyle =
   "rounded text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
-export function AdminUsers({ userId }: { userId?: string }) {
+export function AdminUsers({
+  userId,
+  permissions = [],
+}: {
+  userId?: string;
+  permissions?: string[];
+}) {
   const [search, setSearch] = React.useState("");
   const [status, setStatus] = React.useState("all");
   const [query, setQuery] = React.useState({ search: "", status: "all", page: 1, limit: 25 });
@@ -193,6 +201,14 @@ export function AdminUsers({ userId }: { userId?: string }) {
               </p>
             </div>
           </div>
+          <AdminUserOperations
+            key={user.id}
+            user={user}
+            permissions={permissions}
+            onStatus={(active) =>
+              setUser((current) => (current ? { ...current, isActive: active } : current))
+            }
+          />
         </>
       ) : (
         result && (

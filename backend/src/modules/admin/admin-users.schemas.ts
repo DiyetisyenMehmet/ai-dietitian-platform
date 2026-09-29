@@ -8,3 +8,17 @@ export const adminUsersQuerySchema = z.object({
 });
 export const adminUserParamsSchema = z.object({ id: z.string().uuid() });
 export type AdminUsersQuery = z.infer<typeof adminUsersQuerySchema>;
+
+export const adminUserStatusSchema = z
+  .object({
+    isActive: z.boolean(),
+    reason: z.string().trim().min(3).max(500),
+    confirmed: z.literal(true),
+  })
+  .strict();
+export const adminUserOperationSchema = z
+  .object({ reason: z.string().trim().min(3).max(500), confirmed: z.literal(true) })
+  .strict();
+export const adminUserSessionParamsSchema = adminUserParamsSchema.extend({
+  sessionId: z.string().uuid(),
+});
