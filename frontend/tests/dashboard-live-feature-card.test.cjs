@@ -33,7 +33,10 @@ test('food and progress keep one visible 21:5 frame with theme-specific artwork 
   }
 
   assert.equal(contract.DASHBOARD_LIVE_FEATURE_CARD_CROP.progress.light.left, 75);
-  assert.equal(contract.DASHBOARD_LIVE_FEATURE_CARD_CROP.progress.dark.left, 55);
+  assert.equal(contract.DASHBOARD_LIVE_FEATURE_CARD_CROP.progress.dark.left, 49);
+  assert.equal(contract.DASHBOARD_LIVE_FEATURE_CARD_CROP.progress.dark.top, 88);
+  assert.equal(contract.DASHBOARD_LIVE_FEATURE_CARD_CROP.progress.dark.width, 1432);
+  assert.equal(contract.DASHBOARD_LIVE_FEATURE_CARD_CROP.progress.dark.height, 341);
 });
 
 test('food and progress share one fixed chevron overlay across themes', () => {
@@ -68,4 +71,27 @@ test('selectable HTML text remains locked to the visible frame above artwork', (
   assert.match(source, /WebkitUserSelect: "text"/);
   assert.match(source, /touchAction: "auto"/);
   assert.doesNotMatch(source, /<svg|<text|SvgText/);
+});
+
+
+test('dark feature cards use one uniform perimeter overlay', () => {
+  const source = fs.readFileSync(
+    path.join(
+      __dirname,
+      '../src/presentation/components/dashboard/dashboard-live-feature-card.tsx',
+    ),
+    'utf8',
+  );
+  const border = fs.readFileSync(
+    path.join(
+      __dirname,
+      '../src/presentation/components/dashboard/dashboard-card-night-border.tsx',
+    ),
+    'utf8',
+  );
+
+  assert.match(source, /DashboardCardNightBorder/);
+  assert.match(border, /data-dashboard-card-night-border/);
+  assert.match(border, /inset_0_0_0_2px/);
+  assert.match(border, /dark:block/);
 });

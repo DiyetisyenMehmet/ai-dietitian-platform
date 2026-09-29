@@ -3,8 +3,6 @@ import type { CSSProperties } from "react";
 import Image from "next/image";
 import Link from "next/link";
 
-import { DashboardCardNightBorder } from "@/presentation/components/dashboard/dashboard-card-night-border";
-
 import {
   BLOOD_TEST_CARD_ASPECT,
   BLOOD_TEST_CARD_BASE,
@@ -224,8 +222,6 @@ export function BloodTestCard({
         >
           {copy.status}
         </HtmlText>
-
-        <DashboardCardNightBorder />
 
         {copy.labels.map((label, index) => (
           <span key={label}>

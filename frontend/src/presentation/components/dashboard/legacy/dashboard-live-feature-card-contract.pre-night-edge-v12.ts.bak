@@ -37,9 +37,7 @@ export const DASHBOARD_LIVE_FEATURE_CARD_CROP = {
   },
   progress: {
     light: { left: 75, top: 86, width: 1426, height: 340 },
-    // Normalized from the approved dark source so the visible progress icon
-    // tile matches Food: same left/top alignment and same displayed footprint.
-    dark: { left: 49, top: 88, width: 1432, height: 341 },
+    dark: { left: 55, top: 86, width: 1426, height: 340 },
   },
 } as const;
 

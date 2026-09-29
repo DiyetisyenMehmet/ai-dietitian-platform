@@ -24,3 +24,13 @@ test('blood-test uses shared 21:5 frame and preserves selectable text outside an
   assert.ok(linkClose >= 0 && firstText > linkClose);
   assert.doesNotMatch(source, /<svg|<text|SvgText/);
 });
+
+
+test('blood-test dark card uses the same normalized perimeter overlay', () => {
+  const source = fs.readFileSync(
+    path.join(__dirname, '../src/presentation/components/dashboard/blood-test-card.tsx'),
+    'utf8',
+  );
+
+  assert.match(source, /DashboardCardNightBorder/);
+});
