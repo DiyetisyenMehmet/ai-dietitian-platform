@@ -41,17 +41,19 @@ test('food and progress keep one visible 21:5 frame with theme-specific artwork 
 
 test('food and progress share one fixed chevron overlay across themes', () => {
   const source = fs.readFileSync(
-    path.join(
-      __dirname,
-      '../src/presentation/components/dashboard/dashboard-live-feature-card.tsx',
-    ),
+    path.join(__dirname, '../src/presentation/components/dashboard/dashboard-live-feature-card.tsx'),
+    'utf8',
+  );
+  const chevron = fs.readFileSync(
+    path.join(__dirname, '../src/presentation/components/dashboard/dashboard-feature-chevron.tsx'),
     'utf8',
   );
 
-  assert.match(source, /data-dashboard-live-feature-chevron/);
-  assert.match(source, /right-\[1%\]/);
-  assert.match(source, /top-1\/2/);
-  assert.match(source, /size-\[8cqw\]/);
+  assert.match(source, /DashboardFeatureChevron/);
+  assert.match(chevron, /data-dashboard-feature-chevron/);
+  assert.match(chevron, /right-\[1%\]/);
+  assert.match(chevron, /top-1\/2/);
+  assert.match(chevron, /size-\[8cqw\]/);
   assert.match(source, /ThemeArtwork kind=\{kind\} theme="light"/);
   assert.match(source, /ThemeArtwork kind=\{kind\} theme="dark"/);
 });
@@ -92,7 +94,7 @@ test('dark feature cards use one uniform perimeter overlay', () => {
 
   assert.match(source, /DashboardCardNightBorder/);
   assert.match(border, /data-dashboard-card-night-border/);
-  assert.match(border, /inset_0_0_0_2px/);
+  assert.match(border, /inset_0_0_0_3px/);
   assert.match(border, /dark:block/);
 });
 
@@ -127,8 +129,8 @@ test('all live feature cards use the shared opaque chevron and dark-edge mask', 
   assert.match(chevron, /data-dashboard-feature-chevron/);
   assert.match(chevron, /bg-white/);
   assert.match(chevron, /dark:bg-\[#06283c\]/);
-  assert.match(border, /inset_0_0_0_4px/);
-  assert.match(border, /border-\[#23585d\]/);
+  assert.match(border, /inset_0_0_0_3px/);
+  assert.match(border, /border-\[#173f44\]/);
 });
 
 
@@ -161,12 +163,14 @@ test('feature-card descriptions are larger and sit lower without changing horizo
   const contract = loadContract();
 
   assert.equal(contract.DASHBOARD_LIVE_FEATURE_CARD_LAYOUT.food.x, 310);
-  assert.equal(contract.DASHBOARD_LIVE_FEATURE_CARD_LAYOUT.food.descriptionFontSize, 32);
+  assert.equal(contract.DASHBOARD_LIVE_FEATURE_CARD_LAYOUT.food.titleFontSize.tr, 47);
+  assert.equal(contract.DASHBOARD_LIVE_FEATURE_CARD_LAYOUT.food.descriptionFontSize, 38);
   assert.equal(contract.DASHBOARD_LIVE_FEATURE_CARD_LAYOUT.food.descriptionFirstY, 267);
   assert.equal(contract.DASHBOARD_LIVE_FEATURE_CARD_LAYOUT.food.descriptionSecondY, 313);
 
   assert.equal(contract.DASHBOARD_LIVE_FEATURE_CARD_LAYOUT.progress.x, 305);
-  assert.equal(contract.DASHBOARD_LIVE_FEATURE_CARD_LAYOUT.progress.descriptionFontSize, 33);
+  assert.equal(contract.DASHBOARD_LIVE_FEATURE_CARD_LAYOUT.progress.titleFontSize.tr, 52);
+  assert.equal(contract.DASHBOARD_LIVE_FEATURE_CARD_LAYOUT.progress.descriptionFontSize, 39);
   assert.equal(contract.DASHBOARD_LIVE_FEATURE_CARD_LAYOUT.progress.descriptionFirstY, 259);
   assert.equal(contract.DASHBOARD_LIVE_FEATURE_CARD_LAYOUT.progress.descriptionSecondY, 303);
 });
