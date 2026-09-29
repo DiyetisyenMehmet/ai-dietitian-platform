@@ -56,7 +56,7 @@ test('food and progress expose complete TR and EN live copy', () => {
   }
 });
 
-test('component source keeps artwork single-layered and text live', () => {
+test('approved HTML-card component keeps both themes mounted and geometry immutable', () => {
   const source = fs.readFileSync(
     path.join(
       __dirname,
@@ -65,12 +65,28 @@ test('component source keeps artwork single-layered and text live', () => {
     'utf8',
   );
 
-  assert.equal((source.match(/<Image/g) || []).length, 1);
+  assert.equal((source.match(/<Image/g) || []).length, 2);
+  assert.match(source, /DASHBOARD_LIVE_FEATURE_CARD_BASE\[kind\]\.light/);
+  assert.match(source, /DASHBOARD_LIVE_FEATURE_CARD_BASE\[kind\]\.dark/);
+  assert.match(source, /dark:hidden/);
+  assert.match(source, /hidden select-none object-fill dark:block/);
+  assert.match(source, /data-theme-geometry="locked"/);
   assert.match(source, /<svg/);
   assert.match(source, /<SvgText/);
   assert.match(source, /DASHBOARD_LIVE_FEATURE_CARD_ASPECT/);
   assert.doesNotMatch(
     source,
-    /FoodReferenceChevronOverlay|ProgressArtwork|ProgressIcon|clamp\(|foreignObject/,
+    /FoodReferenceChevronOverlay|ProgressArtwork|ProgressIcon|foreignObject/,
   );
+});
+
+test('dashboard uses one permanent feature stack instead of separate theme stacks', () => {
+  const source = fs.readFileSync(
+    path.join(__dirname, '../src/presentation/components/dashboard/dashboard-feature-links.tsx'),
+    'utf8',
+  );
+
+  assert.equal((source.match(/space-y-\[clamp/g) || []).length, 1);
+  assert.match(source, /BloodTestThemeSlot/);
+  assert.doesNotMatch(source, /dark:hidden">\s*\{FEATURES\.map/);
 });

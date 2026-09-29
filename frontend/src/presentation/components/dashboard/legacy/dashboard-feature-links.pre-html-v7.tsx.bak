@@ -1,8 +1,5 @@
 import { BloodTestCard } from "@/presentation/components/dashboard/blood-test-card";
-import {
-  BLOOD_TEST_CARD_ASPECT,
-  type BloodTestCardLocale,
-} from "@/presentation/components/dashboard/blood-test-card-contract";
+import type { BloodTestCardLocale } from "@/presentation/components/dashboard/blood-test-card-contract";
 import { DashboardLiveFeatureCard } from "@/presentation/components/dashboard/dashboard-live-feature-card";
 import type {
   DashboardLiveFeatureCardKind,
@@ -30,36 +27,13 @@ function isLiveFeatureKind(
   return kind === "food" || kind === "progress";
 }
 
-function BloodTestThemeSlot({
-  href,
-  locale,
-}: {
-  href: string;
-  locale: BloodTestCardLocale;
-}) {
-  return (
-    <div
-      className="relative w-full overflow-hidden"
-      style={{ aspectRatio: BLOOD_TEST_CARD_ASPECT }}
-      data-blood-test-theme-slot
-    >
-      <div className="absolute inset-0 dark:hidden">
-        <BloodTestCard href={href} locale={locale} theme="light" />
-      </div>
-      <div className="absolute inset-0 hidden dark:block">
-        <BloodTestCard href={href} locale={locale} theme="dark" />
-      </div>
-    </div>
-  );
-}
-
 /**
- * One permanent dashboard stack is used for both themes.
+ * Dashboard feature cards deliberately keep theme geometry immutable.
  *
- * Food/Barcode and Progress use the approved HTML-card behavior: both theme
- * visuals stay mounted in one immutable 1536 x 512 geometry and only
- * visibility/colors change. Blood Test keeps its already-approved fixed SVG
- * contract inside one geometry-locked slot.
+ * Blood Test, Food/Barcode and Progress all use fixed-coordinate live text.
+ * Global i18n is intentionally out of scope; locale is still an explicit
+ * presentation input so the future language system can connect without
+ * rebuilding these cards.
  */
 export function DashboardFeatureLinks({
   bloodTestLocale = "tr",
@@ -73,20 +47,43 @@ export function DashboardFeatureLinks({
 
   return (
     <section id="diewish-tools" className="w-full" aria-label="Diewish araçları">
-      <div className="space-y-[clamp(0.45rem,1.8vw,0.8rem)]">
+      <div className="space-y-[clamp(0.45rem,1.8vw,0.8rem)] dark:hidden">
         {FEATURES.map((feature) =>
           feature.kind === "blood" ? (
-            <BloodTestThemeSlot
-              key={feature.href}
+            <BloodTestCard
+              key={`light-${feature.href}`}
               href={feature.href}
               locale={bloodTestLocale}
+              theme="light"
             />
           ) : isLiveFeatureKind(feature.kind) ? (
             <DashboardLiveFeatureCard
-              key={feature.href}
+              key={`light-${feature.href}`}
               kind={feature.kind}
               href={feature.href}
               locale={resolvedFeatureLocale}
+              theme="light"
+            />
+          ) : null,
+        )}
+      </div>
+
+      <div className="hidden space-y-[clamp(0.45rem,1.8vw,0.8rem)] dark:block">
+        {FEATURES.map((feature) =>
+          feature.kind === "blood" ? (
+            <BloodTestCard
+              key={`dark-${feature.href}`}
+              href={feature.href}
+              locale={bloodTestLocale}
+              theme="dark"
+            />
+          ) : isLiveFeatureKind(feature.kind) ? (
+            <DashboardLiveFeatureCard
+              key={`dark-${feature.href}`}
+              kind={feature.kind}
+              href={feature.href}
+              locale={resolvedFeatureLocale}
+              theme="dark"
             />
           ) : null,
         )}

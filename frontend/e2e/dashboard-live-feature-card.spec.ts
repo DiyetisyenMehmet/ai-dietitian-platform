@@ -39,12 +39,19 @@ function cardMarkup(
   theme: DashboardLiveFeatureCardTheme,
 ) {
   const href = kind === "food" ? "/meals/scan" : "/progress";
-  const markup = renderToStaticMarkup(
-    React.createElement(DashboardLiveFeatureCard, { kind, href, locale, theme }),
-  ).replaceAll(DASHBOARD_LIVE_FEATURE_CARD_BASE[kind][theme], baseDataUrl(kind, theme));
+  let markup = renderToStaticMarkup(
+    React.createElement(DashboardLiveFeatureCard, { kind, href, locale }),
+  );
+
+  for (const baseTheme of THEMES) {
+    markup = markup.replaceAll(
+      DASHBOARD_LIVE_FEATURE_CARD_BASE[kind][baseTheme],
+      baseDataUrl(kind, baseTheme),
+    );
+  }
 
   return `<!doctype html>
-  <html lang="${locale}">
+  <html lang="${locale}" class="${theme === "dark" ? "dark" : ""}">
     <head>
       <meta name="viewport" content="width=device-width,initial-scale=1" />
       <style>
@@ -56,6 +63,7 @@ function cardMarkup(
           position: relative;
           display: block;
           width: 100%;
+          aspect-ratio: 1536 / 512;
           overflow: hidden;
         }
         [data-dashboard-live-feature-card] > img,
@@ -66,6 +74,9 @@ function cardMarkup(
           height: 100%;
         }
         [data-dashboard-live-feature-card] > img { object-fit: fill; }
+        [data-dashboard-live-feature-base][data-theme="dark"] { display: none; }
+        html.dark [data-dashboard-live-feature-base][data-theme="light"] { display: none; }
+        html.dark [data-dashboard-live-feature-base][data-theme="dark"] { display: block; }
       </style>
     </head>
     <body><main class="fixture">${markup}</main></body>
@@ -86,25 +97,36 @@ for (const viewport of VIEWPORTS) {
 
           const card = page.locator("[data-dashboard-live-feature-card]");
           await expect(card).toHaveCount(1);
-          await expect(card.locator("img[data-dashboard-live-feature-base]")).toHaveCount(1);
+          await expect(card.locator("img[data-dashboard-live-feature-base]")).toHaveCount(2);
           await expect(card.locator("svg[data-dashboard-live-feature-text]")).toHaveCount(1);
+          await expect(card).toHaveAttribute("data-theme-geometry", "locked");
 
           const box = await card.boundingBox();
           expect(box).not.toBeNull();
           expect(box!.width).toBeCloseTo(viewport.width - 32, 1);
           expect(box!.height).toBeCloseTo(box!.width / 3, 1);
 
+          const visibleBase = card.locator(
+            `img[data-dashboard-live-feature-base][data-theme="${theme}"]`,
+          );
+          const imageBox = await visibleBase.boundingBox();
+          expect(imageBox).not.toBeNull();
+          expect(imageBox!.x).toBeCloseTo(box!.x, 1);
+          expect(imageBox!.y).toBeCloseTo(box!.y, 1);
+          expect(imageBox!.width).toBeCloseTo(box!.width, 1);
+          expect(imageBox!.height).toBeCloseTo(box!.height, 1);
+
           const geometry = await card.locator("svg").evaluate((svg) => {
             const texts = Array.from(svg.querySelectorAll("text"));
             return {
               viewBox: svg.getAttribute("viewBox"),
               boxes: texts.map((node) => {
-                const box = (node as SVGGraphicsElement).getBBox();
+                const textBox = (node as SVGGraphicsElement).getBBox();
                 return {
-                  x: box.x,
-                  y: box.y,
-                  width: box.width,
-                  height: box.height,
+                  x: textBox.x,
+                  y: textBox.y,
+                  width: textBox.width,
+                  height: textBox.height,
                   text: node.textContent ?? "",
                 };
               }),
@@ -118,9 +140,10 @@ for (const viewport of VIEWPORTS) {
           for (const textBox of geometry.boxes) {
             expect(textBox.x).toBeGreaterThanOrEqual(0);
             expect(textBox.y).toBeGreaterThanOrEqual(0);
-            expect(textBox.x + textBox.width, `${textBox.text} overlaps artwork safe zone`).toBeLessThanOrEqual(
-              DASHBOARD_LIVE_FEATURE_CARD_LAYOUT[kind].safeTextRight,
-            );
+            expect(
+              textBox.x + textBox.width,
+              `${textBox.text} overlaps artwork safe zone`,
+            ).toBeLessThanOrEqual(DASHBOARD_LIVE_FEATURE_CARD_LAYOUT[kind].safeTextRight);
             expect(textBox.y + textBox.height).toBeLessThanOrEqual(
               DASHBOARD_LIVE_FEATURE_CARD_VIEWBOX.height,
             );
