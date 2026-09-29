@@ -118,27 +118,6 @@ jobs:
           E2E_API_BASE_URL: ${{ env.STAGING_WEB_URL }}/api
         run: npx playwright test e2e/staging-weight-runtime.spec.js --workers=1 --reporter=line
 
-      - name: Run real staging History acceptance
-        working-directory: frontend
-        env:
-          E2E_WEB_BASE_URL: ${{ env.STAGING_WEB_URL }}
-          E2E_API_BASE_URL: ${{ env.STAGING_WEB_URL }}/api
-        run: npx playwright test e2e/staging-history-runtime.spec.js --workers=1 --reporter=line
 
-      - name: Verify History log safety
-        shell: bash
-        run: |
-          set -euo pipefail
-          since="$(date -u -d '45 minutes ago' +'%Y-%m-%dT%H:%M:%SZ')"
-          logs="$(gcloud logging read \
-            "resource.type=cloud_run_revision AND resource.labels.service_name=\"${BACKEND_SERVICE}\" AND timestamp>=\"${since}\"" \
-            --project "$PROJECT_ID" \
-            --limit 1000 \
-            --format=json || true)"
-
-          if grep -Eiq 'STAGE4_HISTORY_PRIVATE_|stage4-history-a\.|stage4-history-b\.' <<<"$logs"; then
-            echo "Sensitive Stage4 History test data appeared in backend logs." >&2
-            exit 1
-          fi
-
-          echo "History log-safety scan passed: no test meal/sleep-note/email sentinels found."
+      # History acceptance is intentionally not coupled to Body Weight here.
+      # Dedicated Stage4 History workflows own History runtime and log-safety checks.

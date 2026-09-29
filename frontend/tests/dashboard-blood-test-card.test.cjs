@@ -2,6 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const vm = require('node:vm');
+const ts = require('typescript');
 
 test('blood-test uses shared 21:5 frame and preserves selectable text outside anchor', () => {
   const source = fs.readFileSync(
@@ -65,4 +67,33 @@ test('blood-test description is larger and moved lower while keeping its x align
   assert.match(source, /fontSize: 36/);
   assert.match(source, /labelFontSize: 26/);
   assert.match(source, /valueFontSize: 25/);
+});
+
+
+function loadBloodContract() {
+  const file = path.join(
+    __dirname,
+    '../src/presentation/components/dashboard/blood-test-card-contract.ts',
+  );
+  const source = fs.readFileSync(file, 'utf8');
+  const code = ts.transpileModule(source, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+  }).outputText;
+  const exports = {};
+  vm.runInNewContext(code, { exports });
+  return exports;
+}
+
+test('blood-test copy contract remains complete in Turkish and English', () => {
+  const contract = loadBloodContract();
+
+  for (const locale of ['tr', 'en']) {
+    const copy = contract.BLOOD_TEST_CARD_COPY[locale];
+    assert.equal(typeof copy.title, 'string');
+    assert.ok(copy.title.length > 0);
+    assert.equal(copy.description.length, 2);
+    assert.ok(copy.description.every((line) => typeof line === 'string' && line.length > 0));
+    assert.equal(typeof copy.panelTitle, 'string');
+    assert.equal(copy.labels.length, 5);
+  }
 });

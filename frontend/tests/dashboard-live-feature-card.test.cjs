@@ -174,3 +174,18 @@ test('feature-card descriptions are larger and sit lower without changing horizo
   assert.equal(contract.DASHBOARD_LIVE_FEATURE_CARD_LAYOUT.progress.descriptionFirstY, 259);
   assert.equal(contract.DASHBOARD_LIVE_FEATURE_CARD_LAYOUT.progress.descriptionSecondY, 303);
 });
+
+
+test('food and progress copy contracts remain complete in Turkish and English', () => {
+  const contract = loadContract();
+
+  for (const kind of ['food', 'progress']) {
+    for (const locale of ['tr', 'en']) {
+      const copy = contract.DASHBOARD_LIVE_FEATURE_CARD_COPY[kind][locale];
+      assert.equal(typeof copy.title, 'string');
+      assert.ok(copy.title.length > 0);
+      assert.equal(copy.description.length, 2);
+      assert.ok(copy.description.every((line) => typeof line === 'string' && line.length > 0));
+    }
+  }
+});
