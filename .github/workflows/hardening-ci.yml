@@ -112,6 +112,8 @@ jobs:
         run: node --test tests/notification-lifecycle.test.cjs tests/web-push-service-worker.test.cjs
       - name: Test Blood Test card coordinate contract
         run: node --test tests/dashboard-blood-test-card.test.cjs
+      - name: Test Food and Progress card coordinate contract
+        run: node --test tests/dashboard-live-feature-card.test.cjs
       - name: Validate staging History runtime spec syntax
         run: node --check e2e/staging-history-runtime.spec.js
       - name: Lint frontend
@@ -310,6 +312,7 @@ jobs:
           e2e/history-ui.spec.js
           e2e/semantic-icon-browser.spec.js
           e2e/dashboard-blood-test-card.spec.ts
+          e2e/dashboard-live-feature-card.spec.ts
           e2e/admin-foundation.spec.js
           e2e/admin-shell.spec.js
           e2e/admin-users.spec.js
@@ -320,6 +323,14 @@ jobs:
         with:
           name: blood-test-card-browser-${{ github.run_number }}
           path: frontend/test-results/blood-test-card/
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Upload Food and Progress card browser screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dashboard-live-feature-card-browser-${{ github.run_number }}
+          path: frontend/test-results/dashboard-live-feature-card/
           if-no-files-found: warn
           retention-days: 7
       - name: Print service logs on failure
