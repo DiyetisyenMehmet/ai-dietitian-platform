@@ -143,6 +143,8 @@ export const trackingRepository = {
     fatG?: number;
     sodiumMg?: number;
     sugarG?: number;
+    consumedAmount?: number;
+    consumedUnit?: string;
     micronutrients?: Record<string, number>;
     loggedAt?: Date;
   }): Promise<MealLog> {
@@ -182,6 +184,8 @@ export const trackingRepository = {
       fatG?: number;
       sodiumMg?: number;
       sugarG?: number;
+      consumedAmount?: number;
+      consumedUnit?: string;
       micronutrients?: Record<string, number>;
       clearMicronutrients?: boolean;
     },

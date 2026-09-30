@@ -83,6 +83,15 @@ export const micronutrientSnapshotSchema = z
     message: "micronutrients must contain at least one canonical nutrient.",
   });
 
+const consumedAmountFields = {
+  consumedAmount: z.number().positive().max(5000).optional(),
+  consumedUnit: z.enum(["g", "ml", "serving", "piece", "tsp", "tbsp"]).optional(),
+} as const;
+
+function hasCompleteConsumedAmount(value: { consumedAmount?: number; consumedUnit?: string }): boolean {
+  return (value.consumedAmount === undefined) === (value.consumedUnit === undefined);
+}
+
 export const createMealLogSchema = z.object({
   mealType: z.enum(["BREAKFAST", "LUNCH", "DINNER", "SNACK"]),
   name: z.string().trim().max(200).optional(),
@@ -93,7 +102,10 @@ export const createMealLogSchema = z.object({
   sodiumMg: z.number().min(0).max(50000).optional(),
   sugarG: z.number().min(0).max(2000).optional(),
   micronutrients: micronutrientSnapshotSchema.optional(),
+  ...consumedAmountFields,
   loggedAt: optionalLoggedAt,
+}).refine(hasCompleteConsumedAmount, {
+  message: "consumedAmount and consumedUnit must be provided together.",
 });
 
 export const updateMealLogSchema = z
@@ -106,6 +118,10 @@ export const updateMealLogSchema = z
     sodiumMg: z.number().min(0).max(50000).optional(),
     sugarG: z.number().min(0).max(2000).optional(),
     micronutrients: micronutrientSnapshotSchema.optional(),
+    ...consumedAmountFields,
+  })
+  .refine(hasCompleteConsumedAmount, {
+    message: "consumedAmount and consumedUnit must be provided together.",
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: "At least one meal field must be provided.",

@@ -145,6 +145,8 @@ export const trackingService = {
       fatG: input.fatG,
       sodiumMg: input.sodiumMg,
       sugarG: input.sugarG,
+      consumedAmount: input.consumedAmount,
+      consumedUnit: input.consumedUnit,
       ...(micronutrients ? { micronutrients } : {}),
       loggedAt: toDate(input.loggedAt),
     });

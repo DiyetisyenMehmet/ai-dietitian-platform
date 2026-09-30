@@ -610,6 +610,9 @@ model MealLog {
   sodiumMg      Float?
   sugarG        Float?
   micronutrients Json?
+  /** User-confirmed consumed amount. Never inferred from package quantity or source serving. */
+  consumedAmount Float?
+  consumedUnit   String?
   loggedAt      DateTime @default(now())
   createdAt DateTime @default(now())
 
