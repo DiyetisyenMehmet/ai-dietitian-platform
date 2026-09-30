@@ -135,12 +135,12 @@ test("weight history keeps profile current weight chronological and owner-scoped
   const token = registration.body.data.tokens.accessToken;
   const userId = registration.body.data.user.id;
 
-  const emptyHistory = await apiRequest<WeightListData>(baseUrl, "/api/tracking/weight", {
+  const blockedHistory = await apiRequest<WeightListData>(baseUrl, "/api/tracking/weight", {
     token,
   });
-  assert.equal(emptyHistory.status, 200);
-  expectSuccess(emptyHistory.body);
-  assert.deepEqual(emptyHistory.body.data.logs, []);
+  assert.equal(blockedHistory.status, 403);
+  expectFailure(blockedHistory.body);
+  assert.equal(blockedHistory.body.error.code, "ONBOARDING_REQUIRED");
 
   const unauthorized = await apiRequest<WeightLogData>(baseUrl, "/api/tracking/weight", {
     method: "POST",
@@ -299,6 +299,11 @@ test("weight history keeps profile current weight chronological and owner-scoped
   assert.equal(otherRegistration.status, 201);
   expectSuccess(otherRegistration.body);
   const otherToken = otherRegistration.body.data.tokens.accessToken;
+  const otherUserId = otherRegistration.body.data.user.id;
+  await prisma.user.update({
+    where: { id: otherUserId },
+    data: { onboardingCompleted: true },
+  });
 
   const otherHistory = await apiRequest<WeightListData>(
     baseUrl,

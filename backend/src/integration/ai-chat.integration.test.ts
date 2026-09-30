@@ -155,7 +155,7 @@ test("AI Coach: consent gate -> provider -> persistence -> usage", async (t) => 
   });
   assert.equal(blocked.status, 403);
   expectFailure(blocked.body);
-  assert.equal(blocked.body.error.code, "CONSENT_REQUIRED");
+  assert.equal(blocked.body.error.code, "ONBOARDING_REQUIRED");
   assert.equal(providerCalls.length, 0, "provider must not run before mandatory consent");
   assert.equal(
     await prisma.aiUsageEvent.count({ where: { userId, feature: "DIETITIAN_CHAT" } }),

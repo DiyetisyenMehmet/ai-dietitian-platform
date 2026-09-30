@@ -129,11 +129,12 @@ test("nutrition routes enforce consent, read persistent cache and validate deter
   assert.equal(registration.status, 201);
   expectSuccess(registration.body);
   const token = registration.body.data.tokens.accessToken;
+  const userId = registration.body.data.user.id;
 
   const blocked = await apiRequest<unknown>(baseUrl, "/api/nutrition/search?q=tavuk", { token });
   assert.equal(blocked.status, 403);
   expectFailure(blocked.body);
-  assert.equal(blocked.body.error.code, "CONSENT_REQUIRED");
+  assert.equal(blocked.body.error.code, "ONBOARDING_REQUIRED");
 
   for (const type of ["TERMS_OF_SERVICE", "MEDICAL_DISCLAIMER", "KVKK_EXPLICIT_CONSENT"] as const) {
     const consent = await apiRequest<unknown>(baseUrl, "/api/legal/consents", {
@@ -144,6 +145,11 @@ test("nutrition routes enforce consent, read persistent cache and validate deter
     assert.equal(consent.status, 200);
     expectSuccess(consent.body);
   }
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: { onboardingCompleted: true },
+  });
 
   const food = cachedFood(externalId);
   await nutritionDataRepository.upsertFood(food, new Date(Date.now() + 60 * 60 * 1000));

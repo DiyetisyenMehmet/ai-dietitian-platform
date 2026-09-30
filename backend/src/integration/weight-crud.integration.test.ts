@@ -218,7 +218,12 @@ test("weight edit/delete stays chronological, bounded and owner-scoped", async (
   assert.equal(otherRegistration.status, 201);
   expectSuccess(otherRegistration.body);
   const otherToken = otherRegistration.body.data.tokens.accessToken;
+  const otherUserId = otherRegistration.body.data.user.id;
   await grantMandatoryConsents(baseUrl, otherToken);
+  await prisma.user.update({
+    where: { id: otherUserId },
+    data: { onboardingCompleted: true },
+  });
 
   const crossGet = await apiRequest<WeightLogData>(baseUrl, `/api/tracking/weight/${latestId}`, {
     token: otherToken,
