@@ -192,7 +192,11 @@ export function AdminUsers({
                 ))}
               </dl>
             </div>
-            <AdminUserSubscription userId={user.id} permissions={permissions} />
+            <AdminUserSubscription
+              userId={user.id}
+              userEmail={user.email}
+              permissions={permissions}
+            />
           </div>
           <AdminUserOperations
             key={user.id}
