@@ -50,3 +50,32 @@ test("Open Food Facts leaves per-serving nutrients null when upstream does not p
   assert.ok(result);
   assert.equal(result.nutrientsPerServing, null);
 });
+
+
+test("Open Food Facts normalization preserves allergen evidence and trace warnings", () => {
+  const food = normalizeOpenFoodFactsProduct({
+    code: "8690000000000",
+    product_name: "Test bar",
+    ingredients_text: "rice, cocoa",
+    allergens: "milk",
+    allergens_tags: ["en:milk"],
+    traces: "May contain peanut",
+    traces_tags: ["en:peanuts"],
+    nutriments: { "energy-kcal_100g": 100 },
+  });
+  assert.ok(food);
+  assert.equal(food.allergenEvidence?.ingredientList, "DECLARED");
+  assert.equal(food.allergenEvidence?.allergenDeclaration, "DECLARED");
+  assert.ok(food.allergenEvidence?.crossContaminationWarnings.some((item) => /peanut/i.test(item)));
+});
+
+test("Open Food Facts missing allergen/ingredient fields remain explicitly incomplete", () => {
+  const food = normalizeOpenFoodFactsProduct({
+    code: "8690000000001",
+    product_name: "Sparse product",
+    nutriments: { "energy-kcal_100g": 100 },
+  });
+  assert.ok(food);
+  assert.equal(food.allergenEvidence?.ingredientList, "MISSING");
+  assert.equal(food.allergenEvidence?.allergenDeclaration, "MISSING");
+});

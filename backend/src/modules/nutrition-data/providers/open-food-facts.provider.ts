@@ -18,6 +18,9 @@ function tags(value: unknown): string[] {
 function stripTag(value: string): string {
   return value.replace(/^[a-z]{2}:/i, "").replace(/-/g, " ");
 }
+function uniqueText(values: string[]): string[] {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+}
 function labelFlag(all: readonly string[], tag: string): boolean | null {
   if (all.includes(`en:${tag}`)) return true;
   if (all.includes(`en:non-${tag}`)) return false;
@@ -107,7 +110,14 @@ export function normalizeOpenFoodFactsProduct(raw: unknown, barcodeHint?: string
   const perServing = nutrientValues(nutriments, "serving");
   const labelTags = tags(product.labels_tags);
   const allergenTags = tags(product.allergens_tags);
+  const allergenText = text(product.allergens);
   const ingredientText = text(product.ingredients_text_tr) ?? text(product.ingredients_text);
+  const traceText = text(product.traces);
+  const traceTags = tags(product.traces_tags).map(stripTag);
+  const crossContaminationWarnings = uniqueText([
+    ...(traceText ? [traceText] : []),
+    ...traceTags,
+  ]);
   const servingQuantity = num(product.serving_quantity);
   const servingSize = text(product.serving_size);
   return {
@@ -125,7 +135,15 @@ export function normalizeOpenFoodFactsProduct(raw: unknown, barcodeHint?: string
     nutrientsPer100g,
     nutrientsPerServing: hasNutrientValues(perServing) ? perServing : null,
     ingredients: ingredientText?.split(/[,;]/).map((v) => v.trim()).filter(Boolean) ?? [],
-    allergens: allergenTags.map(stripTag),
+    allergens: uniqueText([
+      ...allergenTags.map(stripTag),
+      ...(allergenText ? allergenText.split(/[,;]/).map((value) => value.trim()) : []),
+    ]),
+    allergenEvidence: {
+      ingredientList: ingredientText ? "DECLARED" : "MISSING",
+      allergenDeclaration: allergenText || allergenTags.length > 0 ? "DECLARED" : "MISSING",
+      crossContaminationWarnings,
+    },
     additives: tags(product.additives_tags).map(stripTag),
     labels: labelTags.map(stripTag),
     vegan: labelFlag(labelTags, "vegan"),
@@ -157,7 +175,7 @@ export class OpenFoodFactsProvider implements NutritionProvider {
     if (!trimmed) return [];
     const fields = [
       "code","product_name","product_name_tr","generic_name","brands","quantity","serving_size","serving_quantity",
-      "image_front_url","image_url","ingredients_text","ingredients_text_tr","allergens_tags","additives_tags","labels_tags",
+      "image_front_url","image_url","ingredients_text","ingredients_text_tr","allergens","allergens_tags","traces","traces_tags","additives_tags","labels_tags",
       "nutriscore_grade","nutrition_grades","nova_group","last_modified_t","last_modified_datetime","nutriments"
     ].join(",");
     const params = new URLSearchParams({
@@ -191,7 +209,7 @@ export class OpenFoodFactsProvider implements NutritionProvider {
     if (!barcode) return null;
     const fields = [
       "code","product_name","product_name_tr","generic_name","brands","quantity","serving_size","serving_quantity",
-      "image_front_url","image_url","ingredients_text","ingredients_text_tr","allergens_tags","additives_tags","labels_tags",
+      "image_front_url","image_url","ingredients_text","ingredients_text_tr","allergens","allergens_tags","traces","traces_tags","additives_tags","labels_tags",
       "nutriscore_grade","nutrition_grades","nova_group","last_modified_t","last_modified_datetime","nutriments"
     ].join(",");
     const url = `${env.OPEN_FOOD_FACTS_BASE_URL.replace(/\/$/, "")}/api/v2/product/${barcode}.json?fields=${encodeURIComponent(fields)}`;

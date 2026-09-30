@@ -100,6 +100,11 @@ function fillEnergyAndSalt(input: PackageLabelDraft): NutrientValues {
   return nutrients;
 }
 
+function isCrossContaminationWarning(value: string): boolean {
+  const normalized = value.toLocaleLowerCase("tr-TR");
+  return /eser|içerebilir|icerebilir|aynı tesiste|ayni tesiste|may contain|traces?|shared facility|same facility|processed in/.test(normalized);
+}
+
 function hasUsefulCore(nutrients: NutrientValues): boolean {
   const macros = [nutrients.proteinG, nutrients.carbohydratesG, nutrients.fatG]
     .filter((value) => value !== null).length;
@@ -166,6 +171,11 @@ export function buildUserConfirmedPackageLabelFood(
       : null,
     ingredients: draft.ingredients,
     allergens: draft.allergens,
+    allergenEvidence: {
+      ingredientList: draft.ingredients.length > 0 ? "DECLARED" : "MISSING",
+      allergenDeclaration: draft.allergens.length > 0 ? "DECLARED" : "MISSING",
+      crossContaminationWarnings: draft.warnings.filter(isCrossContaminationWarning),
+    },
     additives: [],
     labels: ["user-confirmed-package-label"],
     vegan: null,

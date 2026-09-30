@@ -50,6 +50,15 @@ export interface NutritionProvenance {
   providerUpdatedAt?: string | null;
 }
 
+export type AllergenDataPresence = "DECLARED" | "MISSING";
+
+export interface AllergenEvidence {
+  ingredientList: AllergenDataPresence;
+  allergenDeclaration: AllergenDataPresence;
+  /** Source-declared "may contain", trace, or shared-facility statements only. */
+  crossContaminationWarnings: string[];
+}
+
 export interface FoodServing {
   amount: number;
   unit: string;
@@ -72,6 +81,8 @@ export interface CanonicalFood {
   nutrientsPerServing?: NutrientValues | null;
   ingredients: string[];
   allergens: string[];
+  /** Optional for legacy/cache rows. Missing evidence is treated as UNKNOWN, never safe. */
+  allergenEvidence?: AllergenEvidence;
   additives: string[];
   labels: string[];
   vegan: boolean | null;
