@@ -12,6 +12,7 @@ import { Input } from "@/presentation/components/ui/input";
 import { Skeleton } from "@/presentation/components/ui/skeleton";
 
 import { AdminUserOperations } from "./admin-user-operations";
+import { AdminUserSubscription } from "./admin-user-subscription";
 
 const date = (value: string | null) =>
   value ? new Date(value).toLocaleString("tr-TR") : "Bilgi yok";
@@ -182,6 +183,7 @@ export function AdminUsers({
                     "Başlangıç kurulumu",
                     user.onboardingCompleted ? "Tamamlanmış" : "Tamamlanmamış",
                   ],
+                  ["Kayıtlı plan", plan(user.subscriptionTier)],
                 ].map(([label, value]) => (
                   <div key={label}>
                     <dt className="text-muted-foreground">{label}</dt>
@@ -190,16 +192,7 @@ export function AdminUsers({
                 ))}
               </dl>
             </div>
-            <div className="min-w-0 self-start rounded-2xl border bg-card/80 p-5">
-              <h2 className="mb-4 font-semibold">Abonelik</h2>
-              <dl className="text-sm">
-                <dt className="text-muted-foreground">Kayıtlı plan</dt>
-                <dd className="mt-1 font-medium">{plan(user.subscriptionTier)}</dd>
-              </dl>
-              <p className="mt-3 text-sm text-muted-foreground">
-                Hesapta kayıtlı plan bilgisidir. Ödeme veya hak paketi değişikliği yapılamaz.
-              </p>
-            </div>
+            <AdminUserSubscription userId={user.id} permissions={permissions} />
           </div>
           <AdminUserOperations
             key={user.id}
