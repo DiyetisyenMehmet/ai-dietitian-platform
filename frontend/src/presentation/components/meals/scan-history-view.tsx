@@ -323,6 +323,23 @@ export function ScanHistoryView() {
   const [selectedPhotoId, setSelectedPhotoId] = React.useState<string | null>(null);
   const [selectedBarcodeId, setSelectedBarcodeId] = React.useState<string | null>(null);
 
+  const markViewed = React.useCallback((scan: ScanHistoryItemDto) => {
+    const viewedAt = new Date().toISOString();
+    setScans((current) =>
+      current
+        .map((item) => (item.id === scan.id ? { ...item, lastViewedAt: viewedAt } : item))
+        .sort((left, right) => {
+          const leftActivity = Date.parse(left.lastViewedAt ?? left.scannedAt);
+          const rightActivity = Date.parse(right.lastViewedAt ?? right.scannedAt);
+          return rightActivity - leftActivity || Date.parse(right.scannedAt) - Date.parse(left.scannedAt);
+        }),
+    );
+    void nutritionClient.markScanHistoryViewed(scan.id).catch(() => {
+      // Viewing the immutable snapshot must still work even if the non-critical
+      // recency metadata update cannot be persisted on this attempt.
+    });
+  }, []);
+
   React.useEffect(() => {
     let alive = true;
     void nutritionClient
@@ -524,7 +541,10 @@ export function ScanHistoryView() {
                     <button
                       key={scan.id}
                       type="button"
-                      onClick={() => setSelectedBarcodeId(scan.id)}
+                      onClick={() => {
+                        markViewed(scan);
+                        setSelectedBarcodeId(scan.id);
+                      }}
                       aria-label={`${scan.title} geçmiş tarama snapshot'ını aç`}
                       className="flex min-h-[76px] w-full items-center gap-3 rounded-2xl border bg-card p-3 text-left shadow-sm transition hover:bg-muted/30"
                     >
@@ -537,7 +557,10 @@ export function ScanHistoryView() {
                   <button
                     key={scan.id}
                     type="button"
-                    onClick={() => setSelectedPhotoId(scan.id)}
+                    onClick={() => {
+                      markViewed(scan);
+                      setSelectedPhotoId(scan.id);
+                    }}
                     aria-label={`${scan.title} tarama bilgilerini aç`}
                     className="flex min-h-[76px] w-full items-center gap-3 rounded-2xl border bg-card p-3 text-left shadow-sm transition hover:bg-muted/30"
                   >

@@ -27,6 +27,7 @@ interface ScanRow {
   product_name: string | null;
   payload: unknown;
   scanned_at: Date;
+  last_viewed_at?: Date | null;
 }
 
 interface FavoriteRow {
@@ -44,6 +45,7 @@ interface UnifiedScanRow {
   product_name: string | null;
   payload: unknown;
   scanned_at: Date;
+  last_viewed_at: Date | null;
 }
 
 export type ReferenceNutritionProvider = Extract<CanonicalFood["provider"], "CIQUAL" | "COFID">;
@@ -513,12 +515,13 @@ export const nutritionDataRepository = {
     productName: string | null;
     food: CanonicalFood | null;
     scannedAt: string;
+    lastViewedAt: string | null;
   }>> {
     const rows = await prisma.$queryRaw<ScanRow[]>`
       SELECT barcode, provider, product_name, payload, scanned_at
       FROM nutrition_barcode_scans
       WHERE user_id = ${userId}
-      ORDER BY scanned_at DESC
+      ORDER BY COALESCE(last_viewed_at, scanned_at) DESC, scanned_at DESC
       LIMIT ${limit}
     `;
     return rows.map((row) => ({
@@ -562,7 +565,8 @@ export const nutritionDataRepository = {
           barcode,
           product_name,
           payload,
-          scanned_at
+          scanned_at,
+          last_viewed_at
         FROM nutrition_barcode_scans
         WHERE user_id = ${userId}
 
@@ -574,7 +578,8 @@ export const nutritionDataRepository = {
           NULL::text AS barcode,
           dish_name AS product_name,
           payload,
-          scanned_at
+          scanned_at,
+          last_viewed_at
         FROM nutrition_photo_scans
         WHERE user_id = ${userId}
       ) history
@@ -598,6 +603,7 @@ export const nutritionDataRepository = {
           food,
           photo: null,
           scannedAt: row.scanned_at.toISOString(),
+          lastViewedAt: row.last_viewed_at?.toISOString() ?? null,
         };
       }
 
@@ -614,8 +620,30 @@ export const nutritionDataRepository = {
         food: null,
         photo,
         scannedAt: row.scanned_at.toISOString(),
+        lastViewedAt: row.last_viewed_at?.toISOString() ?? null,
       };
     });
+  },
+
+  async markScanHistoryViewed(
+    userId: string,
+    scanType: "BARCODE" | "PHOTO",
+    eventId: bigint,
+    viewedAt = new Date(),
+  ): Promise<boolean> {
+    const updated =
+      scanType === "BARCODE"
+        ? await prisma.$executeRaw`
+            UPDATE nutrition_barcode_scans
+            SET last_viewed_at = ${viewedAt}
+            WHERE user_id = ${userId} AND id = ${eventId}
+          `
+        : await prisma.$executeRaw`
+            UPDATE nutrition_photo_scans
+            SET last_viewed_at = ${viewedAt}
+            WHERE user_id = ${userId} AND id = ${eventId}
+          `;
+    return updated > 0;
   },
 
   async setFavorite(userId: string, barcode: string, food: CanonicalFood | null, favorite: boolean): Promise<void> {

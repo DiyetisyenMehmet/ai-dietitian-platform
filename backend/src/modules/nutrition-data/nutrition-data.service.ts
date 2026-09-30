@@ -480,6 +480,29 @@ export class NutritionDataService {
     return this.persistence?.listScanHistory(userId, boundedLimit) ?? Promise.resolve([]);
   }
 
+  async markScanHistoryViewed(userId: string, historyId: string): Promise<string> {
+    if (!this.persistence) {
+      throw ApiError.notFound("Tarama geçmişi kaydı bulunamadı.");
+    }
+    const match = /^(barcode|photo):(\d+)$/.exec(historyId);
+    if (!match) {
+      throw ApiError.badRequest("Geçersiz tarama geçmişi kaydı.");
+    }
+    const scanType = match[1] === "barcode" ? "BARCODE" : "PHOTO";
+    const eventId = BigInt(match[2] ?? "0");
+    const viewedAt = new Date();
+    const updated = await this.persistence.markScanHistoryViewed(
+      userId,
+      scanType,
+      eventId,
+      viewedAt,
+    );
+    if (!updated) {
+      throw ApiError.notFound("Tarama geçmişi kaydı bulunamadı.");
+    }
+    return viewedAt.toISOString();
+  }
+
   listFavorites(userId: string, limit = 50) {
     const boundedLimit = Math.min(Math.max(Math.trunc(limit) || 50, 1), 100);
     return this.persistence?.listFavorites(userId, boundedLimit) ?? Promise.resolve([]);

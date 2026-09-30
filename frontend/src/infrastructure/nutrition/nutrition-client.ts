@@ -155,6 +155,7 @@ export interface BarcodeHistoryDto {
   productName: string | null;
   food: CanonicalFoodDto | null;
   scannedAt: string;
+  lastViewedAt: string | null;
 }
 
 export interface PhotoScanHistoryDto {
@@ -303,6 +304,15 @@ export const nutritionClient = {
       path: `/nutrition/scan-history?limit=${limit}`,
       method: "GET",
       auth: true,
+    });
+  },
+
+  markScanHistoryViewed(historyId: string) {
+    return apiRequest<{ historyId: string; lastViewedAt: string }>({
+      path: "/nutrition/scan-history/view",
+      method: "POST",
+      auth: true,
+      body: JSON.stringify({ historyId }),
     });
   },
 

@@ -692,3 +692,64 @@ test("scan history is served from Diewish persistence without querying barcode p
   assert.equal(providerCalls, 0);
   assert.equal(newScanWrites, 0);
 });
+
+
+test("marking history viewed updates view metadata only and never creates a scan or queries providers", async () => {
+  let providerCalls = 0;
+  let scanWrites = 0;
+  const viewCalls: Array<{ userId: string; scanType: string; eventId: bigint; viewedAt: Date }> = [];
+
+  const persistence = {
+    async markScanHistoryViewed(
+      userId: string,
+      scanType: "BARCODE" | "PHOTO",
+      eventId: bigint,
+      viewedAt: Date,
+    ) {
+      viewCalls.push({ userId, scanType, eventId, viewedAt });
+      return true;
+    },
+    async recordBarcodeScan() {
+      scanWrites += 1;
+    },
+  } as unknown as NutritionDataRepository;
+
+  const service = new NutritionDataService(
+    providers({
+      onOffCall: () => (providerCalls += 1),
+      onUsdaCall: () => (providerCalls += 1),
+    }),
+    persistence,
+  );
+
+  const firstViewedAt = await service.markScanHistoryViewed("user-1", "barcode:42");
+  const secondViewedAt = await service.markScanHistoryViewed("user-1", "barcode:42");
+  await service.markScanHistoryViewed("user-1", "photo:7");
+
+  assert.equal(viewCalls.length, 3);
+  assert.equal(viewCalls[0]?.scanType, "BARCODE");
+  assert.equal(viewCalls[0]?.eventId, 42n);
+  assert.equal(viewCalls[2]?.scanType, "PHOTO");
+  assert.equal(viewCalls[2]?.eventId, 7n);
+  assert.ok(Date.parse(firstViewedAt) > 0);
+  assert.ok(Date.parse(secondViewedAt) > 0);
+  assert.equal(scanWrites, 0);
+  assert.equal(providerCalls, 0);
+});
+
+test("marking history viewed rejects malformed ids without touching persistence", async () => {
+  let viewCalls = 0;
+  const persistence = {
+    async markScanHistoryViewed() {
+      viewCalls += 1;
+      return true;
+    },
+  } as unknown as NutritionDataRepository;
+  const service = new NutritionDataService(providers(), persistence);
+
+  await assert.rejects(
+    () => service.markScanHistoryViewed("user-1", "barcode:not-a-number"),
+    /Geçersiz tarama geçmişi kaydı/,
+  );
+  assert.equal(viewCalls, 0);
+});

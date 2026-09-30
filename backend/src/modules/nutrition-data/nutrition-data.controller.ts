@@ -115,6 +115,18 @@ export const nutritionDataController = {
     sendSuccess(res, { scans });
   }),
 
+  markScanHistoryViewed: asyncHandler(async (req: Request, res: Response) => {
+    const body = req.body as { historyId?: unknown } | undefined;
+    if (typeof body?.historyId !== "string") {
+      throw ApiError.badRequest("historyId gereklidir.");
+    }
+    const lastViewedAt = await nutritionDataService.markScanHistoryViewed(
+      requireUserId(req),
+      body.historyId,
+    );
+    sendSuccess(res, { historyId: body.historyId, lastViewedAt });
+  }),
+
   favorites: asyncHandler(async (req: Request, res: Response) => {
     const favorites = await nutritionDataService.listFavorites(requireUserId(req), parsedLimit(req, 50));
     sendSuccess(res, { favorites });

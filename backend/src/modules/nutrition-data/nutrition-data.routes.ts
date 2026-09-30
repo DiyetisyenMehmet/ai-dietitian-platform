@@ -21,6 +21,7 @@ nutritionDataRouter.get("/search", nutritionDataController.search);
 nutritionDataRouter.get("/catalog/search", nutritionDataController.catalogSearch);
 nutritionDataRouter.get("/history", nutritionDataController.history);
 nutritionDataRouter.get("/scan-history", nutritionDataController.scanHistory);
+nutritionDataRouter.post("/scan-history/view", nutritionDataController.markScanHistoryViewed);
 nutritionDataRouter.get("/favorites", nutritionDataController.favorites);
 nutritionDataRouter.get("/barcode/:barcode", nutritionDataController.barcode);
 nutritionDataRouter.post("/barcode/:barcode/label-extract", labelLimiter, uploadPackageLabel(), nutritionDataController.extractPackageLabel);
