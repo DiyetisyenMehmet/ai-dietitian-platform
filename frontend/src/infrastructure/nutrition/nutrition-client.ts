@@ -98,6 +98,23 @@ export interface CanonicalFoodDto {
   glutenFree: boolean | null;
   nutriScore: string | null;
   novaGroup: number | null;
+  productCatalog?: {
+    category: { key: string; name: string } | null;
+    subcategory: { key: string; name: string } | null;
+    brand: { key: string; name: string } | null;
+    family: { key: string; name: string } | null;
+    variant: ({ key: string; name: string } & {
+      barcode: string | null;
+      packageQuantity: string | null;
+    }) | null;
+    barcode: string | null;
+    derivation: {
+      categoryBasis: "SOURCE_CATEGORY" | "UNRESOLVED";
+      familyBasis: "BRAND_PRODUCT_NAME" | "UNRESOLVED";
+      variantBasis: "BARCODE" | "PACKAGE_QUANTITY" | "UNRESOLVED";
+      evidence: string[];
+    };
+  };
   productUsage?: {
     type: ProductUsageTypeDto;
     basis:

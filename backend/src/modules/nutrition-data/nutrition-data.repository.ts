@@ -270,6 +270,9 @@ export const nutritionDataRepository = {
             OR LOWER(COALESCE(f.name, '')) LIKE ${pattern}
             OR LOWER(COALESCE(f.brand, '')) LIKE ${pattern}
             OR LOWER(COALESCE(f.brand, '') || ' ' || COALESCE(f.display_name_tr, '')) LIKE ${pattern}
+            OR COALESCE(f.catalog_brand_key, '') LIKE ${pattern}
+            OR COALESCE(f.product_family_key, '') LIKE ${pattern}
+            OR COALESCE(f.product_variant_key, '') LIKE ${pattern}
             OR a.normalized_alias LIKE ${pattern}
           )
         ORDER BY
@@ -348,8 +351,8 @@ export const nutritionDataRepository = {
     `;
   },
 
-  async updateProductUsage(food: CanonicalFood): Promise<void> {
-    if (!food.productUsage) return;
+  async updateProductMetadata(food: CanonicalFood): Promise<void> {
+    if (!food.productUsage && !food.productCatalog) return;
     const payloadFood: CanonicalFood = {
       ...food,
       provenance: {
@@ -364,10 +367,19 @@ export const nutritionDataRepository = {
       UPDATE nutrition_foods
       SET payload = ${payload}::jsonb,
           payload_hash = ${hash},
+          catalog_category_key = ${food.productCatalog?.category?.key ?? null},
+          catalog_subcategory_key = ${food.productCatalog?.subcategory?.key ?? null},
+          catalog_brand_key = ${food.productCatalog?.brand?.key ?? null},
+          product_family_key = ${food.productCatalog?.family?.key ?? null},
+          product_variant_key = ${food.productCatalog?.variant?.key ?? null},
           updated_at = CURRENT_TIMESTAMP
       WHERE provider = ${food.provider}
         AND external_id = ${food.externalId}
     `;
+  },
+
+  async updateProductUsage(food: CanonicalFood): Promise<void> {
+    await this.updateProductMetadata(food);
   },
 
   async upsertFood(food: CanonicalFood, expiresAt: Date): Promise<void> {
@@ -380,15 +392,23 @@ export const nutritionDataRepository = {
     const hash = payloadHash(payload);
     await prisma.$executeRaw`
       INSERT INTO nutrition_foods
-        (provider, external_id, barcode, name, display_name_tr, brand, payload, retrieved_at, expires_at, last_validated_at, payload_hash, updated_at)
+        (provider, external_id, barcode, name, display_name_tr, brand, payload, retrieved_at, expires_at, last_validated_at, payload_hash,
+         catalog_category_key, catalog_subcategory_key, catalog_brand_key, product_family_key, product_variant_key, updated_at)
       VALUES
-        (${food.provider}, ${food.externalId}, ${food.barcode}, ${food.name}, ${food.displayNameTr}, ${food.brand}, ${payload}::jsonb, ${new Date(food.provenance.retrievedAt)}, ${expiresAt}, ${validatedAt}, ${hash}, CURRENT_TIMESTAMP)
+        (${food.provider}, ${food.externalId}, ${food.barcode}, ${food.name}, ${food.displayNameTr}, ${food.brand}, ${payload}::jsonb, ${new Date(food.provenance.retrievedAt)}, ${expiresAt}, ${validatedAt}, ${hash},
+         ${food.productCatalog?.category?.key ?? null}, ${food.productCatalog?.subcategory?.key ?? null}, ${food.productCatalog?.brand?.key ?? null},
+         ${food.productCatalog?.family?.key ?? null}, ${food.productCatalog?.variant?.key ?? null}, CURRENT_TIMESTAMP)
       ON CONFLICT (provider, external_id) DO UPDATE SET
         barcode = EXCLUDED.barcode,
         name = EXCLUDED.name,
         display_name_tr = EXCLUDED.display_name_tr,
         brand = EXCLUDED.brand,
         payload = EXCLUDED.payload,
+        catalog_category_key = EXCLUDED.catalog_category_key,
+        catalog_subcategory_key = EXCLUDED.catalog_subcategory_key,
+        catalog_brand_key = EXCLUDED.catalog_brand_key,
+        product_family_key = EXCLUDED.product_family_key,
+        product_variant_key = EXCLUDED.product_variant_key,
         retrieved_at = EXCLUDED.retrieved_at,
         expires_at = EXCLUDED.expires_at,
         last_validated_at = EXCLUDED.last_validated_at,

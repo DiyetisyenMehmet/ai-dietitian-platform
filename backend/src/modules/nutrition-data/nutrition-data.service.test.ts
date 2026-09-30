@@ -544,7 +544,7 @@ test("catalog type-ahead rejects one-character queries", async () => {
 
 
 test("legacy fresh Diewish cache stores derived usage without refreshing external providers", async () => {
-  let usageUpdates = 0;
+  let metadataUpdates = 0;
   let providerCalls = 0;
   const cachedTea: CanonicalFood = {
     ...food("OPEN_FOOD_FACTS"),
@@ -560,9 +560,11 @@ test("legacy fresh Diewish cache stores derived usage without refreshing externa
   const persistence = {
     async getFreshBarcode() { return cachedTea; },
     async getStaleBarcode() { return null; },
-    async updateProductUsage(value: CanonicalFood) {
-      usageUpdates += 1;
+    async updateProductMetadata(value: CanonicalFood) {
+      metadataUpdates += 1;
       assert.equal(value.productUsage?.type, "BREWING");
+      assert.equal(value.productCatalog?.category?.name, "İçecek");
+      assert.equal(value.productCatalog?.subcategory?.name, "Çay");
     },
   } as unknown as NutritionDataRepository;
   const service = new NutritionDataService(
@@ -577,7 +579,7 @@ test("legacy fresh Diewish cache stores derived usage without refreshing externa
 
   const result = await service.getByBarcode("4006381333931");
   assert.equal(result?.productUsage?.type, "BREWING");
-  assert.equal(usageUpdates, 1);
+  assert.equal(metadataUpdates, 1);
   assert.equal(providerCalls, 0);
 });
 
@@ -616,6 +618,8 @@ test("accepted barcode product persists product usage intelligence with the exis
   assert.equal(result?.serving, null);
   assert.equal("consumedAmount" in (result ?? {}), false);
   assert.equal(stored?.productUsage?.type, "BREWING");
+  assert.equal(stored?.productCatalog?.family?.name, "Tomurcuk");
+  assert.equal(stored?.productCatalog?.variant?.barcode, "4006381333931");
   assert.equal(usdaCalls, 0);
 });
 

@@ -29,6 +29,34 @@ export interface ProductUsage {
   evidence: string[];
 }
 
+export interface ProductCatalogNode {
+  key: string;
+  name: string;
+}
+
+export type ProductCatalogCategoryBasis = "SOURCE_CATEGORY" | "UNRESOLVED";
+export type ProductCatalogFamilyBasis = "BRAND_PRODUCT_NAME" | "UNRESOLVED";
+export type ProductCatalogVariantBasis = "BARCODE" | "PACKAGE_QUANTITY" | "UNRESOLVED";
+
+export interface ProductCatalogIdentity {
+  category: ProductCatalogNode | null;
+  subcategory: ProductCatalogNode | null;
+  brand: ProductCatalogNode | null;
+  family: ProductCatalogNode | null;
+  variant: (ProductCatalogNode & {
+    barcode: string | null;
+    packageQuantity: string | null;
+  }) | null;
+  /** Barcode belongs to the variant level; family identity remains independent from it. */
+  barcode: string | null;
+  derivation: {
+    categoryBasis: ProductCatalogCategoryBasis;
+    familyBasis: ProductCatalogFamilyBasis;
+    variantBasis: ProductCatalogVariantBasis;
+    evidence: string[];
+  };
+}
+
 export const CORE_NUTRIENT_KEYS = [
   "energyKcal",
   "proteinG",
@@ -124,6 +152,8 @@ export interface CanonicalFood {
   novaGroup: number | null;
   /** Stored with the same canonical product record. Optional for legacy cache rows. */
   productUsage?: ProductUsage;
+  /** Normalized catalog identity stored with the same product record. Optional for legacy rows. */
+  productCatalog?: ProductCatalogIdentity;
   provenance: NutritionProvenance;
 }
 

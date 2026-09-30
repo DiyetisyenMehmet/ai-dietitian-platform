@@ -168,6 +168,11 @@ function preparationUsageNotice(food: CanonicalFoodDto): string | null {
 
 function productInfoRows(food: CanonicalFoodDto): Array<[string, string]> {
   return [
+    ["Kategori", food.productCatalog?.category?.name ?? "Bilgi bulunamadı"],
+    ["Alt kategori", food.productCatalog?.subcategory?.name ?? "Bilgi bulunamadı"],
+    ["Marka", food.productCatalog?.brand?.name ?? food.brand ?? "Bilgi bulunamadı"],
+    ["Ürün ailesi", food.productCatalog?.family?.name ?? "Bilgi bulunamadı"],
+    ["Varyant", food.productCatalog?.variant?.name ?? "Bilgi bulunamadı"],
     ["Kullanım", productUsageLabel(food)],
     ["Nutri-Score", food.nutriScore?.toUpperCase() ?? "Bilgi bulunamadı"],
     ["NOVA", food.novaGroup === null ? "Bilgi bulunamadı" : String(food.novaGroup)],
