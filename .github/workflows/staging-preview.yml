@@ -33,6 +33,7 @@ env:
   CUSTOM_FRONTEND_URL: https://staging.diewish.com
   ADMIN_STAGING_URL: https://admin-staging.diewish.com
   HEALTH_STORAGE_BUCKET: project-a2e260c1-839d-4f1d-b90-diewish-health-staging
+  NOTIFICATION_SCHEDULER_JOB: diewish-notification-dispatch-staging
 
 jobs:
   deploy-staging:
@@ -395,8 +396,58 @@ jobs:
           gcloud run services update "$BACKEND_SERVICE" \
             --project "$PROJECT_ID" \
             --region "$REGION" \
-            --update-env-vars "^|^CORS_ORIGIN=${FRONTEND_URL},${CANONICAL_FRONTEND_URL},${CUSTOM_FRONTEND_URL},${ADMIN_STAGING_URL}|APP_WEB_URL=${CUSTOM_FRONTEND_URL}|FIREBASE_WEB_API_KEY=${FIREBASE_WEB_API_KEY}|FIREBASE_AUTH_DOMAIN=${FIREBASE_AUTH_DOMAIN}|FIREBASE_WEB_APP_ID=${FIREBASE_WEB_APP_ID}|FIREBASE_MESSAGING_SENDER_ID=${PROJECT_NUMBER}" \
+            --update-env-vars "^|^CORS_ORIGIN=${FRONTEND_URL},${CANONICAL_FRONTEND_URL},${CUSTOM_FRONTEND_URL},${ADMIN_STAGING_URL}|APP_WEB_URL=${CUSTOM_FRONTEND_URL}|FIREBASE_WEB_API_KEY=${FIREBASE_WEB_API_KEY}|FIREBASE_AUTH_DOMAIN=${FIREBASE_AUTH_DOMAIN}|FIREBASE_WEB_APP_ID=${FIREBASE_WEB_APP_ID}|FIREBASE_MESSAGING_SENDER_ID=${PROJECT_NUMBER}|SCHEDULER_TRIGGER_ENABLED=true|SCHEDULER_OIDC_AUDIENCE=${BACKEND_URL}|SCHEDULER_SERVICE_ACCOUNT_EMAIL=${RUNTIME_SERVICE_ACCOUNT}" \
             --quiet
+
+      - name: Configure external staging notification scheduler
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${NOTIFICATION_SCHEDULER_JOB}" != *-staging ]]; then
+            echo "Refusing to configure a non-staging scheduler job." >&2
+            exit 1
+          fi
+
+          if ! gcloud services list             --project "$PROJECT_ID"             --enabled             --filter='config.name:cloudscheduler.googleapis.com'             --format='value(config.name)' | grep -qx 'cloudscheduler.googleapis.com'; then
+            echo "Cloud Scheduler API is not enabled in the isolated staging project." >&2
+            echo "Run scripts/bootstrap-staging-notification-scheduler-gcp.sh with an authorized staging administrator." >&2
+            exit 1
+          fi
+
+          scheduler_args=(
+            --project "$PROJECT_ID"
+            --location "$REGION"
+            --schedule "*/5 * * * *"
+            --time-zone "Etc/UTC"
+            --uri "${BACKEND_URL}/api/internal/scheduler/tick"
+            --http-method POST
+            --oidc-service-account-email "$RUNTIME_SERVICE_ACCOUNT"
+            --oidc-token-audience "$BACKEND_URL"
+            --attempt-deadline 120s
+            --max-retry-attempts 1
+          )
+
+          if gcloud scheduler jobs describe "$NOTIFICATION_SCHEDULER_JOB"             --project "$PROJECT_ID"             --location "$REGION" >/dev/null 2>&1; then
+            gcloud scheduler jobs update http "$NOTIFICATION_SCHEDULER_JOB" "${scheduler_args[@]}" --quiet
+          else
+            gcloud scheduler jobs create http "$NOTIFICATION_SCHEDULER_JOB" "${scheduler_args[@]}" --quiet
+          fi
+
+          job_json="$(gcloud scheduler jobs describe "$NOTIFICATION_SCHEDULER_JOB"             --project "$PROJECT_ID"             --location "$REGION"             --format=json)"
+          jq -e             --arg uri "${BACKEND_URL}/api/internal/scheduler/tick"             --arg audience "$BACKEND_URL"             --arg service_account "$RUNTIME_SERVICE_ACCOUNT"             '.schedule == "*/5 * * * *"
+             and .httpTarget.uri == $uri
+             and .httpTarget.oidcToken.audience == $audience
+             and .httpTarget.oidcToken.serviceAccountEmail == $service_account'             >/dev/null <<<"$job_json"
+
+          unauthenticated_status="$(curl --silent --show-error             --output /dev/null             --write-out '%{http_code}'             --request POST             "${BACKEND_URL}/api/internal/scheduler/tick")"
+          if [[ "$unauthenticated_status" != "401" ]]; then
+            echo "Scheduler endpoint must reject unauthenticated internet requests; got HTTP ${unauthenticated_status}." >&2
+            exit 1
+          fi
+
+          # Force one real external wake-up. The existing DB leases make this
+          # safe even if an in-process tick overlaps this invocation.
+          gcloud scheduler jobs run "$NOTIFICATION_SCHEDULER_JOB"             --project "$PROJECT_ID"             --location "$REGION"             --quiet
 
       - name: Verify staging health and Authentication runtime
         shell: bash

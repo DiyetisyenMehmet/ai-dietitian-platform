@@ -26,6 +26,7 @@ import { onboardingRouter } from "../modules/onboarding/onboarding.routes";
 import { foodScanRouter } from "../modules/food-scan/food-scan.routes";
 import { adminModule } from "../modules/admin/admin.module";
 import { healthRouter } from "./health.route";
+import { schedulerTriggerRouter } from "../scheduler/scheduler-trigger.routes";
 
 /**
  * Root API router. Domain routers are mounted here as sprints deliver them.
@@ -42,6 +43,7 @@ export const apiRouter = Router();
  * behavior, and the separately authorized Management Center.
  */
 apiRouter.use("/health", healthRouter);
+apiRouter.use("/internal/scheduler", schedulerTriggerRouter);
 apiRouter.use("/auth", authRouter);
 apiRouter.use("/identity", identityRouter);
 apiRouter.use("/account", accountRouter);

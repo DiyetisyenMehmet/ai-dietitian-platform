@@ -48,6 +48,11 @@ const envSchema = z.object({
   // and phone identities. This is a server-side lookup key, not a service-account secret.
   FIREBASE_WEB_API_KEY: z.string().default(""),
   FIREBASE_MESSAGING_SENDER_ID: z.string().default(""),
+  // External scheduler wake-up is disabled by default. Staging explicitly
+  // enables it and authenticates Cloud Scheduler with a Google OIDC identity.
+  SCHEDULER_TRIGGER_ENABLED: booleanFromEnv.default(false),
+  SCHEDULER_OIDC_AUDIENCE: z.string().default(""),
+  SCHEDULER_SERVICE_ACCOUNT_EMAIL: z.string().default(""),
   FIREBASE_WEB_PUSH_VAPID_KEY: z.string().default(""),
   FIREBASE_AUTH_API_BASE_URL: z.string().url().default("https://identitytoolkit.googleapis.com/v1"),
   STORAGE_PROVIDER: z.enum(["local", "gcs"]).default("local"),
@@ -131,6 +136,25 @@ function loadEnv(): Env {
   if (parsed.data.STORAGE_PROVIDER === "gcs" && !parsed.data.STORAGE_GCS_BUCKET.trim()) {
     console.error("❌ Invalid environment configuration:\n  - STORAGE_GCS_BUCKET: required when STORAGE_PROVIDER=gcs");
     process.exit(1);
+  }
+
+  if (parsed.data.SCHEDULER_TRIGGER_ENABLED) {
+    const runtimeEnvironment = parsed.data.DIEWISH_ENVIRONMENT ?? parsed.data.NODE_ENV;
+    if (runtimeEnvironment === "production") {
+      console.error("❌ Invalid environment configuration:\n  - SCHEDULER_TRIGGER_ENABLED: production activation requires an explicit reviewed change");
+      process.exit(1);
+    }
+    try {
+      const audience = new URL(parsed.data.SCHEDULER_OIDC_AUDIENCE);
+      if (!["http:", "https:"].includes(audience.protocol)) throw new Error("invalid protocol");
+    } catch {
+      console.error("❌ Invalid environment configuration:\n  - SCHEDULER_OIDC_AUDIENCE: required valid URL when scheduler trigger is enabled");
+      process.exit(1);
+    }
+    if (!parsed.data.SCHEDULER_SERVICE_ACCOUNT_EMAIL.endsWith(".iam.gserviceaccount.com")) {
+      console.error("❌ Invalid environment configuration:\n  - SCHEDULER_SERVICE_ACCOUNT_EMAIL: expected Google service-account email");
+      process.exit(1);
+    }
   }
   return parsed.data;
 }

@@ -66,6 +66,7 @@ JWT_REFRESH_SECRET="$(openssl rand -hex 48)"
 SERVICES=(
   run.googleapis.com
   cloudbuild.googleapis.com
+  cloudscheduler.googleapis.com
   artifactregistry.googleapis.com
   storage.googleapis.com
   secretmanager.googleapis.com
@@ -220,6 +221,7 @@ gcloud iam service-accounts add-iam-policy-binding "${DEPLOY_SA}" \
 for role in \
   roles/run.admin \
   roles/cloudbuild.builds.editor \
+  roles/cloudscheduler.admin \
   roles/serviceusage.serviceUsageConsumer; do
   gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
     --member "serviceAccount:${DEPLOY_SA}" \
