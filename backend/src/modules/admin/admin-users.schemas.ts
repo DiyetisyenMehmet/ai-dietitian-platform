@@ -22,3 +22,25 @@ export const adminUserOperationSchema = z
 export const adminUserSessionParamsSchema = adminUserParamsSchema.extend({
   sessionId: z.string().uuid(),
 });
+
+
+const adminEntitlementReasonSchema = z.string().trim().min(3).max(500);
+const adminEntitlementTimestampSchema = z.string().datetime({ offset: true });
+
+export const adminSupportEntitlementUpsertSchema = z
+  .object({
+    tier: z.enum(["PREMIUM", "PREMIUM_PLUS"]),
+    expiresAt: adminEntitlementTimestampSchema.nullable(),
+    expectedUpdatedAt: adminEntitlementTimestampSchema.nullable(),
+    reason: adminEntitlementReasonSchema,
+    confirmed: z.literal(true),
+  })
+  .strict();
+
+export const adminSupportEntitlementRevokeSchema = z
+  .object({
+    expectedUpdatedAt: adminEntitlementTimestampSchema,
+    reason: adminEntitlementReasonSchema,
+    confirmed: z.literal(true),
+  })
+  .strict();
