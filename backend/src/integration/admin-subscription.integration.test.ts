@@ -150,15 +150,18 @@ test("B1 read-only subscription management: canonical source, RBAC and data mini
     assert.equal(response.headers.get("cache-control"), "no-store");
     const { subscription } = (await read(response)).data;
     assert.equal(subscription.currentPlan, "FREE");
+    assert.equal(subscription.providerPlan, "FREE");
     assert.equal(subscription.currentPlanSource, "ACCOUNT_DEFAULT");
     assert.equal(subscription.entitlementStatus, "FREE");
     assert.equal(subscription.record, null);
+    assert.equal(subscription.supportEntitlement, null);
     assert.ok(subscription.entitlements.includes("DIETITIAN_CHAT"));
   });
 
   await t.test("active iyzico and Google Play paid states use real entitlement sources", async () => {
     const legacy = (await read(await get(paid.user.id, finance.token))).data.subscription;
     assert.equal(legacy.currentPlan, "PREMIUM");
+    assert.equal(legacy.providerPlan, "PREMIUM");
     assert.equal(legacy.currentPlanSource, "IYZICO_SUBSCRIPTION");
     assert.equal(legacy.entitlementStatus, "ACTIVE");
     assert.equal(legacy.record?.provider, "IYZICO");
@@ -168,6 +171,7 @@ test("B1 read-only subscription management: canonical source, RBAC and data mini
 
     const google = (await read(await get(play.user.id, finance.token))).data.subscription;
     assert.equal(google.currentPlan, "PREMIUM_PLUS");
+    assert.equal(google.providerPlan, "PREMIUM_PLUS");
     assert.equal(google.currentPlanSource, "GOOGLE_PLAY_ENTITLEMENT");
     assert.equal(google.record?.provider, "GOOGLE_PLAY");
     assert.equal(google.record?.status, "ACTIVE");
@@ -197,10 +201,12 @@ test("B1 read-only subscription management: canonical source, RBAC and data mini
     );
     assert.deepEqual(Object.keys(body.data.subscription).sort(), [
       "currentPlan",
+      "providerPlan",
       "currentPlanSource",
       "entitlementStatus",
       "entitlements",
       "record",
+      "supportEntitlement",
     ].sort());
   });
 
