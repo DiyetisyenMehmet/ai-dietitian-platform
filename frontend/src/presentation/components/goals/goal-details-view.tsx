@@ -10,7 +10,7 @@ import { cn } from "@/shared/lib/utils";
 import { DiewishHistoryMark } from "@/presentation/components/history/diewish-history-mark";
 import { formatNumber } from "@/shared/lib/format";
 import { getGoalTypeMeta } from "@/domain/goals/types";
-import { useGoal, goalsStore } from "@/application/goals/goals-store";
+import { useGoal, useGoalsStatus, goalsStore } from "@/application/goals/goals-store";
 import {
   computeProgress,
   computeStatus,
@@ -63,26 +63,26 @@ interface GoalDetailsViewProps {
 export function GoalDetailsView({ goalId }: GoalDetailsViewProps) {
   const router = useRouter();
   const goal = useGoal(goalId);
-  const [loading, setLoading] = React.useState(true);
+  const status = useGoalsStatus();
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   const [deleting, setDeleting] = React.useState(false);
-
-  // Brief mount loading for a polished perceived-performance experience.
-  React.useEffect(() => {
-    const t = setTimeout(() => setLoading(false), 350);
-    return () => clearTimeout(t);
-  }, []);
 
   const handleDelete = React.useCallback(async () => {
     if (!goal) return;
     setDeleting(true);
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    goalsStore.remove(goal.id);
-    toast.success("Hedef silindi");
-    router.push("/goals");
+    try {
+      await goalsStore.remove(goal.id);
+      toast.success("Hedef silindi");
+      router.push("/goals");
+    } catch {
+      setDeleting(false);
+      toast.error("Hedef silinemedi", {
+        description: "Bağlantını kontrol edip tekrar deneyebilirsin.",
+      });
+    }
   }, [goal, router]);
 
-  if (loading) {
+  if (status === "idle" || status === "loading") {
     return <Loading label="Hedef yükleniyor..." />;
   }
 
@@ -91,7 +91,13 @@ export function GoalDetailsView({ goalId }: GoalDetailsViewProps) {
       <ErrorState
         title="Hedef bulunamadı"
         message="Aradığın hedef silinmiş veya taşınmış olabilir."
-        onRetry={() => router.push("/goals")}
+        onRetry={
+          status === "error"
+            ? () => {
+                void goalsStore.hydrate(true);
+              }
+            : () => router.push("/goals")
+        }
       />
     );
   }
@@ -202,7 +208,13 @@ export function GoalDetailsView({ goalId }: GoalDetailsViewProps) {
               Son 7 gün
             </span>
           </div>
-          <WeeklyChart data={series} barClassName={GOAL_BAR[goal.type]} unit={meta.unit} />
+          {series.length > 0 ? (
+            <WeeklyChart data={series} barClassName={GOAL_BAR[goal.type]} unit={meta.unit} />
+          ) : (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              Henüz gerçek ilerleme kaydı yok.
+            </p>
+          )}
         </CardContent>
       </Card>
 

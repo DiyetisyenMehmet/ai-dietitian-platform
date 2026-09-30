@@ -1,8 +1,8 @@
 import { getGoalTypeMeta, type Goal, type GoalStatus } from "@/domain/goals/types";
 
 /**
- * Pure, dependency-free helpers that derive progress, status, estimates and
- * statistics from a Goal. All logic is local/placeholder — no backend or AI.
+ * Pure helpers that derive progress, status, estimates and statistics from a Goal.
+ * Goal values/history are supplied by the persisted owner-scoped backend.
  */
 
 /** Progress as a 0..100 percentage, respecting the goal's direction. */
@@ -129,29 +129,22 @@ export function computeStatistics(goal: Goal): GoalStatistics {
   };
 }
 
-/** A single bar in the weekly progress chart (placeholder). */
+/** A single bar in the weekly progress chart. */
 export interface WeeklyPoint {
   label: string;
   value: number;
 }
 
-/**
- * Builds a 7-point weekly series from history (or a gentle synthetic ramp
- * toward the current value when history is sparse). Placeholder visualization.
- */
+/** Builds a weekly series only from real persisted progress history. */
 export function weeklySeries(goal: Goal): WeeklyPoint[] {
-  const dayLabels = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];
-  const recent = goal.history.slice(-7);
-
-  if (recent.length >= 7) {
-    return recent.map((entry, i) => ({ label: dayLabels[i] ?? "", value: entry.value }));
-  }
-
-  // Synthetic ramp from startValue -> currentValue for a pleasing placeholder.
-  return dayLabels.map((label, i) => {
-    const ratio = i / (dayLabels.length - 1);
-    const value = goal.startValue + (goal.currentValue - goal.startValue) * ratio;
-    return { label, value: Math.round(value * 10) / 10 };
+  return goal.history.slice(-7).map((entry) => {
+    const date = new Date(entry.date + "T12:00:00");
+    const label = Number.isNaN(date.getTime())
+      ? entry.date.slice(5)
+      : new Intl.DateTimeFormat("tr-TR", { weekday: "short" })
+          .format(date)
+          .replace(".", "");
+    return { label, value: entry.value };
   });
 }
 

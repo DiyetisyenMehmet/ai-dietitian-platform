@@ -62,3 +62,8 @@ export const HISTORY_ENDPOINTS = {
   comparison: "/history/comparison",
   insight: "/history/insight",
 } as const;
+
+
+export const GOAL_ENDPOINTS = {
+  base: "/goals",
+} as const;

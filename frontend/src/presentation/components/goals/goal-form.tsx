@@ -108,9 +108,6 @@ export function GoalForm({ mode, goal }: GoalFormProps) {
 
   const onSubmit = React.useCallback(
     async (values: GoalFormInput) => {
-      // Simulate async persistence for realistic loading UX (no backend).
-      await new Promise((resolve) => setTimeout(resolve, 600));
-
       const draft = {
         type: values.type,
         title: values.title ?? "",
@@ -121,14 +118,20 @@ export function GoalForm({ mode, goal }: GoalFormProps) {
         notes: values.notes || undefined,
       };
 
-      if (mode === "edit" && goal) {
-        goalsStore.update(goal.id, draft);
-        toast.success("Hedef güncellendi");
-        router.push(`/goals/${goal.id}`);
-      } else {
-        const created = goalsStore.create(draft);
-        toast.success("Hedef oluşturuldu");
-        router.push(`/goals/${created.id}`);
+      try {
+        if (mode === "edit" && goal) {
+          await goalsStore.update(goal.id, draft);
+          toast.success("Hedef güncellendi");
+          router.push(`/goals/${goal.id}`);
+        } else {
+          const created = await goalsStore.create(draft);
+          toast.success("Hedef oluşturuldu");
+          router.push(`/goals/${created.id}`);
+        }
+      } catch {
+        toast.error("Hedef kaydedilemedi", {
+          description: "Bağlantını kontrol edip tekrar deneyebilirsin.",
+        });
       }
     },
     [mode, goal, router],
@@ -150,7 +153,7 @@ export function GoalForm({ mode, goal }: GoalFormProps) {
               name="type"
               render={({ field }) => (
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  {GOAL_TYPES.map(({ type, label }) => {
+                  {GOAL_TYPES.filter(({ type }) => type !== "steps").map(({ type, label }) => {
                     const Icon = GOAL_ICON[type];
                     const active = field.value === type;
                     return (
@@ -181,6 +184,7 @@ export function GoalForm({ mode, goal }: GoalFormProps) {
                 </div>
               )}
             />
+            <p className="text-[11px] text-muted-foreground">Adım hedefi, kalıcı adım verisi kaynağı bağlanana kadar oluşturulamaz.</p>
             {errors.type?.message && (
               <p role="alert" className="text-sm text-destructive">
                 {errors.type.message}

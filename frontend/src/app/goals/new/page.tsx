@@ -1,6 +1,12 @@
-import { redirect } from "next/navigation";
+import { AppShell } from "@/presentation/components/layout/app-shell";
+import { GoalForm } from "@/presentation/components/goals/goal-form";
 
-/** Weight and daily targets are edited from the persisted health profile. */
 export default function NewGoalPage() {
-  redirect("/profile/edit");
+  return (
+    <AppShell title="Yeni Hedef" showBack hideBottomNav>
+      <div className="animate-fade-in">
+        <GoalForm mode="create" />
+      </div>
+    </AppShell>
+  );
 }

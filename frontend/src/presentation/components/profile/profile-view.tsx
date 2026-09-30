@@ -13,6 +13,7 @@ import {
   Lock,
   ShieldCheck,
   Trophy,
+  Target,
   UserPen,
 } from "lucide-react";
 
@@ -224,6 +225,12 @@ export function ProfileView() {
           label="Kilo & ilerleme"
           description="Haftalık ve aylık trendler"
           href="/progress"
+        />
+        <SettingRow
+          icon={Target}
+          label="Hedefler"
+          description="Kalıcı kişisel hedeflerini yönet"
+          href="/goals"
         />
       </SettingGroup>
 

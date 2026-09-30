@@ -12,6 +12,7 @@ import { journeyStore } from "./journey-store";
 import { bloodTestStore } from "./blood-test-store";
 import { activityStore } from "./activity-store";
 import { nutritionPlanStore } from "./nutrition-plan-store";
+import { goalsStore } from "@/application/goals/goals-store";
 
 /** Last authenticated account whose client caches were hydrated. */
 let cacheOwnerUserId: string | null = null;
@@ -29,6 +30,7 @@ function resetUserCaches(): void {
   bloodTestStore.reset();
   activityStore.reset();
   nutritionPlanStore.reset();
+  goalsStore.reset();
   chatStore.resetSession();
   subscriptionStore.resetSession();
 }
