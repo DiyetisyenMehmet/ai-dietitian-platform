@@ -4,8 +4,13 @@ import type { AdminUsersQuery } from "./admin-users.schemas";
 import { adminUsersService } from "./admin-users.service";
 
 import { adminUserOperationsService } from "./admin-user-operations.service";
+import { adminUserSubscriptionService } from "./admin-user-subscription.service";
 
 export const adminUsersController = {
+  subscription: asyncHandler(async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    sendSuccess(res, await adminUserSubscriptionService.detail(req.params.id!));
+  }),
   sessions: asyncHandler(async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     sendSuccess(res, await adminUserOperationsService.sessions(req.params.id!));
