@@ -50,6 +50,7 @@ model User {
   subscriptions     Subscription[]
   payments          Payment[]
   consents          ConsentRecord[]
+  supportEntitlement AdminSupportEntitlement?
 
   weightLogs              WeightLog[]
   mealLogs                MealLog[]
@@ -494,6 +495,24 @@ model Subscription {
   @@index([status])
   @@index([providerRef])
   @@map("subscriptions")
+}
+
+model AdminSupportEntitlement {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  tier      SubscriptionTier
+  grantedAt DateTime         @default(now())
+  expiresAt DateTime?
+  revokedAt DateTime?
+
+  @@index([expiresAt])
+  @@index([revokedAt])
+  @@map("admin_support_entitlements")
 }
 
 model Payment {
