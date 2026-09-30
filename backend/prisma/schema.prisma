@@ -64,6 +64,7 @@ model User {
   notificationPreference  NotificationPreference?
   activities              Activity[]
   historyInsights          HistoryInsight[]
+  goals                   Goal[]
 
   adminRoleMemberships      AdminUserRole[]
   adminInvitationsReceived AdminInvitation[] @relation("AdminInvitationUser")
@@ -637,6 +638,26 @@ enum AiMemoryType {
   ACHIEVEMENTS
   ACTIVITY
   CONVERSATION_SUMMARY
+}
+
+model Goal {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type         String
+  title        String
+  startValue   Float
+  targetValue  Float
+  startDate    DateTime @db.Date
+  targetDate   DateTime @db.Date
+  reminderTime String?
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([userId, type])
+  @@map("goals")
 }
 
 model AiMemory {
