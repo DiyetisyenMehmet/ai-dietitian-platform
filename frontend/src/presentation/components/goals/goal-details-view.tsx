@@ -63,7 +63,7 @@ interface GoalDetailsViewProps {
 export function GoalDetailsView({ goalId }: GoalDetailsViewProps) {
   const router = useRouter();
   const goal = useGoal(goalId);
-  const status = useGoalsStatus();
+  const goalsStatus = useGoalsStatus();
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   const [deleting, setDeleting] = React.useState(false);
 
@@ -82,7 +82,7 @@ export function GoalDetailsView({ goalId }: GoalDetailsViewProps) {
     }
   }, [goal, router]);
 
-  if (status === "idle" || status === "loading") {
+  if (goalsStatus === "idle" || goalsStatus === "loading") {
     return <Loading label="Hedef yükleniyor..." />;
   }
 
@@ -92,7 +92,7 @@ export function GoalDetailsView({ goalId }: GoalDetailsViewProps) {
         title="Hedef bulunamadı"
         message="Aradığın hedef silinmiş veya taşınmış olabilir."
         onRetry={
-          status === "error"
+          goalsStatus === "error"
             ? () => {
                 void goalsStore.hydrate(true);
               }
