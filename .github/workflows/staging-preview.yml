@@ -164,6 +164,7 @@ jobs:
                 SUCCESS) break ;;
                 FAILURE|INTERNAL_ERROR|TIMEOUT|CANCELLED|EXPIRED)
                   echo "Health-storage bootstrap Cloud Build failed: $status" >&2
+                  gcloud builds log "$BUILD_ID" --project "$PROJECT_ID" --region=global || true
                   gcloud builds describe "$BUILD_ID" --project "$PROJECT_ID" --region=global \
                     --format='yaml(status,statusDetail,failureInfo,steps.id,steps.status)' || true
                   exit 1
