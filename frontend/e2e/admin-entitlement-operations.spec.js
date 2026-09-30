@@ -126,7 +126,19 @@ async function setup(page, options = {}) {
         ...activeSupport("2026-09-30T14:00:00.000Z"),
         status: "REVOKED",
       };
-      subscription = baseSubscription({ supportEntitlement: revoked });
+      const providerPlan = subscription.providerPlan;
+      subscription = {
+        ...subscription,
+        currentPlan: providerPlan,
+        currentPlanSource:
+          subscription.record?.source === "IYZICO_SUBSCRIPTION"
+            ? "IYZICO_SUBSCRIPTION"
+            : subscription.record?.source === "GOOGLE_PLAY_ENTITLEMENT"
+              ? "GOOGLE_PLAY_ENTITLEMENT"
+              : "ACCOUNT_DEFAULT",
+        entitlementStatus: providerPlan === "FREE" ? "FREE" : "ACTIVE",
+        supportEntitlement: revoked,
+      };
       return ok({ supportEntitlement: revoked });
     }
 
