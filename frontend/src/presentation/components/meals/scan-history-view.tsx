@@ -284,11 +284,18 @@ export function ScanHistoryView() {
             </h2>
             <div className="space-y-2">
               {group.items.map((scan) => {
-                const meta = [
-                  scan.brand,
-                  scan.grams === null ? null : `${compactNumber(scan.grams)} g`,
-                  scan.calories === null ? null : `${Math.round(scan.calories)} kcal`,
-                ].filter((item): item is string => Boolean(item));
+                const meta =
+                  scan.scanType === "BARCODE"
+                    ? [
+                        scan.brand,
+                        scan.food?.quantity ? `Paket: ${scan.food.quantity}` : null,
+                        "Tarama kaydı · tüketim değil",
+                      ].filter((item): item is string => Boolean(item))
+                    : [
+                        scan.brand,
+                        scan.grams === null ? null : `~${compactNumber(scan.grams)} g`,
+                        scan.calories === null ? null : `~${Math.round(scan.calories)} kcal`,
+                      ].filter((item): item is string => Boolean(item));
 
                 const body = (
                   <>

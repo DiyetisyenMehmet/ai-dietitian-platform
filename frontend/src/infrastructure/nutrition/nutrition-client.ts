@@ -96,10 +96,17 @@ export interface NormalizedNutritionScanDto {
     barcode: string | null;
     imageUrl: string | null;
   };
+  /** Provider/source serving metadata only; never user consumption. */
   serving: { description: string | null; grams: number | null; confidence: number | null };
+  nutritionReference: {
+    basis: "PER_100_G" | "PER_SERVING";
+    description: string;
+    grams: number | null;
+  };
   nutrients: {
     per100g: NutrientValuesDto | null;
     perServing: NutrientValuesDto;
+    reference: NutrientValuesDto;
     estimated: boolean;
   };
   ingredients: Array<{
@@ -366,6 +373,8 @@ export const nutritionClient = {
         sodiumMg: n.sodiumMg ?? undefined,
         sugarG: n.sugarsG ?? undefined,
         micronutrients: n.micronutrients ?? undefined,
+        consumedAmount: personalization.grams,
+        consumedUnit: "g",
       }),
     });
   },
