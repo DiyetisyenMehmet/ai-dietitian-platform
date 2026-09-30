@@ -28,6 +28,15 @@ export interface FoodScanNutritionResolutionDto {
   sourceReferences?: string[];
 }
 
+export interface FoodScanAllergenSafetyDto {
+  status: "KNOWN_SAFE" | "KNOWN_RISK" | "UNKNOWN";
+  matchedAllergens: string[];
+  crossContaminationMatches: string[];
+  dataComplete: boolean;
+  message: string | null;
+  crossContaminationWarnings: string[];
+}
+
 export interface FoodScanResultDto {
   isFood: boolean;
   confidence: number;
@@ -39,6 +48,7 @@ export interface FoodScanResultDto {
   totals: NutrientValuesDto;
   disclaimer: string;
   nutritionResolution?: FoodScanNutritionResolutionDto;
+  allergenSafety?: FoodScanAllergenSafetyDto;
 }
 
 export type MealTypeDto = "BREAKFAST" | "LUNCH" | "DINNER" | "SNACK";

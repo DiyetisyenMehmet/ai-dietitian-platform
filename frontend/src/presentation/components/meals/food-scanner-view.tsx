@@ -172,7 +172,10 @@ function coachHref(analysis: FoodScanResultDto): string {
       ? "Besin değerlerinin yaklaşık olduğunu ve doğrulanmış kaynak verisinin yetersiz olduğunu dikkate al."
       : "Kullanılan besin değerlerinin kaynak bilgisini dikkate al.";
   const prompt = `${grams} g ${analysis.dishName} ve günlük hedeflerim açısından benim için ne ifade ediyor? Fotoğraftaki tarif ve porsiyonun tahmini olduğunu dikkate al. ${sourceContext}`;
-  return `/ai?prompt=${encodeURIComponent(prompt)}`;
+  const allergyContext = analysis.allergenSafety?.message
+    ? ` Diewish taramasındaki alerjen durumu: ${analysis.allergenSafety.status}. ${analysis.allergenSafety.message}`
+    : "";
+  return `/ai?prompt=${encodeURIComponent(prompt + allergyContext)}`;
 }
 
 function sumIncluded(ingredients: EditableIngredient[]): number {
@@ -591,7 +594,10 @@ export function FoodScannerView() {
               <div className="mt-2">
                 <NutritionAttentionSection
                   flags={personalization?.attentionFlags ?? []}
-                  warnings={personalization?.warnings}
+                  warnings={[
+                    ...(analysis.allergenSafety?.message ? [analysis.allergenSafety.message] : []),
+                    ...(personalization?.warnings ?? []),
+                  ]}
                 />
               </div>
             </section>

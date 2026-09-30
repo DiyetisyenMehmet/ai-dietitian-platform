@@ -1,10 +1,12 @@
 import type { Request, Response } from "express";
 
 import { logger } from "../../lib/logger";
+import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/api-error";
 import { sendSuccess } from "../../utils/api-response";
 import { asyncHandler } from "../../utils/async-handler";
 import { nutritionDataService } from "../nutrition-data/nutrition-data.service";
+import { assessPhotoIngredientAllergenSafety } from "../nutrition-data/allergen-safety";
 import { toPhotoScanResult } from "../nutrition-data/nutrition-scan-result";
 import {
   analyzeConfirmedFoodName,
@@ -12,7 +14,19 @@ import {
   finalizeFoodScanRecalculation,
 } from "./food-scan-fallback";
 import { foodScanService } from "./food-scan.service";
-import type { FoodScanIngredientCorrection } from "./types";
+import type { FoodScanIngredientCorrection, FoodScanResult } from "./types";
+
+async function withAllergenSafety(userId: string, analysis: FoodScanResult): Promise<FoodScanResult> {
+  const profile = await prisma.userProfile.findUnique({
+    where: { userId },
+    select: { allergies: true },
+  });
+  if (!profile?.allergies.length) return analysis;
+  return {
+    ...analysis,
+    allergenSafety: assessPhotoIngredientAllergenSafety(analysis.ingredients, profile.allergies),
+  };
+}
 
 export const foodScanController = {
   analyze: asyncHandler(async (req: Request, res: Response) => {
@@ -21,7 +35,8 @@ export const foodScanController = {
       throw ApiError.badRequest('"file" alanında bir görsel yüklemelisiniz.');
     }
     const deterministic = await foodScanService.analyze(req.file.buffer);
-    const analysis = await applyFoodNutritionFallback(deterministic);
+    const resolved = await applyFoodNutritionFallback(deterministic);
+    const analysis = await withAllergenSafety(req.user.id, resolved);
     const scan = toPhotoScanResult(analysis);
     try {
       await nutritionDataService.recordPhotoScan(req.user.id, {
@@ -52,7 +67,8 @@ export const foodScanController = {
     if (typeof grams !== "number" || !Number.isFinite(grams) || grams <= 0 || grams > 5_000) {
       throw ApiError.badRequest("Porsiyon gramı 1-5000 aralığında olmalıdır.");
     }
-    const analysis = await analyzeConfirmedFoodName(body.foodName, grams);
+    const resolved = await analyzeConfirmedFoodName(body.foodName, grams);
+    const analysis = await withAllergenSafety(req.user.id, resolved);
     sendSuccess(res, { analysis, scan: toPhotoScanResult(analysis) });
   }),
 
@@ -79,10 +95,11 @@ export const foodScanController = {
     }
     const deterministic = await foodScanService.recalculate(corrections, targetGrams);
     const fallbackName = corrections.filter((item) => item.included).map((item) => item.name.trim()).filter(Boolean).join(" + ").slice(0, 120);
-    const analysis = await finalizeFoodScanRecalculation(
+    const resolved = await finalizeFoodScanRecalculation(
       typeof body.dishName === "string" && body.dishName.trim() ? body.dishName : fallbackName,
       deterministic,
     );
+    const analysis = await withAllergenSafety(req.user.id, resolved);
     sendSuccess(res, { analysis });
   }),
 };

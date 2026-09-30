@@ -1,4 +1,5 @@
 import type { NutrientValues, NutritionProviderId } from "../nutrition-data/nutrition-data.types";
+import type { AllergenSafetyAssessment } from "../nutrition-data/allergen-safety";
 
 export interface FoodVisionIngredientCandidate {
   name: string;
@@ -62,6 +63,8 @@ export interface FoodScanResult {
   disclaimer: string;
   /** Added after deterministic resolution; AI_ESTIMATE is never a verified source. */
   nutritionResolution?: FoodScanNutritionResolution;
+  /** Present when the authenticated user has recorded allergies. */
+  allergenSafety?: AllergenSafetyAssessment;
 }
 
 export interface FoodScanIngredientCorrection {
