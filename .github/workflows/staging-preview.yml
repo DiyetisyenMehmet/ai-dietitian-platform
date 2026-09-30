@@ -151,7 +151,7 @@ jobs:
             --project "$PROJECT_ID" \
             --format=json 2>"$error_file")"; then
             echo "Staging health-storage bootstrap is missing or unreadable." >&2
-            echo "Run scripts/bootstrap-staging-gcp.sh once with an authorized staging project administrator." >&2
+            echo "Run scripts/bootstrap-staging-health-storage-gcp.sh once with an authorized staging project administrator." >&2
             cat "$error_file" >&2
             exit 1
           fi
