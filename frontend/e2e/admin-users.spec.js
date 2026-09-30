@@ -123,7 +123,10 @@ for (const [width, height] of [
       page.getByRole("heading", { name: "Kullanıcı detayı", exact: true }),
     ).toBeVisible();
     await expect(page.getByText(users[0].id, { exact: true })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Abonelik", exact: true })).toBeVisible();
+    await expect(page.getByText("Kayıtlı plan", { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Abonelik ve hak paketi", exact: true }),
+    ).toHaveCount(0);
     await expect(page.getByText("Bilgi yok", { exact: true })).toHaveCount(2);
     await expect(
       page.getByRole("button", { name: /Premium ver|Pasif yap|Sil|Oturum iptal/i }),
