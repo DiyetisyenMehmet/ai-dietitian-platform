@@ -10,6 +10,7 @@ import {
 } from "@/infrastructure/admin/admin-client";
 import { Button } from "@/presentation/components/ui/button";
 import { Skeleton } from "@/presentation/components/ui/skeleton";
+import { AdminSupportEntitlementOperations } from "./admin-support-entitlement-operations";
 
 const PLAN_LABEL = {
   FREE: "Free",
@@ -29,6 +30,7 @@ const STATUS_LABEL: Record<AdminSubscriptionRecordStatus, string> = {
 const SOURCE_LABEL: Record<AdminUserSubscription["currentPlanSource"], string> = {
   GOOGLE_PLAY_ENTITLEMENT: "Google Play entitlement",
   IYZICO_SUBSCRIPTION: "IYZICO subscription",
+  ADMIN_SUPPORT: "Admin/Support entitlement",
   ACCOUNT_DEFAULT: "Hesap varsayılanı",
 };
 
@@ -54,9 +56,11 @@ function cancellationLabel(subscription: AdminUserSubscription) {
 
 export function AdminUserSubscription({
   userId,
+  userEmail,
   permissions,
 }: {
   userId: string;
+  userEmail: string;
   permissions: readonly AdminPermission[];
 }) {
   const allowed = permissions.includes("entitlements.read");
@@ -107,7 +111,7 @@ export function AdminUserSubscription({
         <div>
           <h2 className="font-semibold">Abonelik ve hak paketi</h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            Salt okunur görünüm · ödeme veya entitlement değişikliği yapılamaz.
+            Provider aboneliği salt okunurdur. Admin/Support entitlement ayrı ve kontrollü yönetilir.
           </p>
         </div>
         {subscription && (
@@ -140,6 +144,7 @@ export function AdminUserSubscription({
           <dl className="grid min-w-0 gap-3 text-sm sm:grid-cols-2">
             {[
               ["Current Plan", PLAN_LABEL[subscription.currentPlan]],
+              ["Provider Plan", PLAN_LABEL[subscription.providerPlan]],
               [
                 "Entitlement status",
                 subscription.entitlementStatus === "ACTIVE" ? "Aktif ücretli erişim" : "Free erişim",
@@ -187,6 +192,48 @@ export function AdminUserSubscription({
               )}
             </div>
           </div>
+
+          <div className="rounded-xl border border-border/60 bg-background/50 p-3 text-sm">
+            <p className="font-medium">Admin/Support entitlement</p>
+            {subscription.supportEntitlement ? (
+              <dl className="mt-2 grid min-w-0 gap-2 sm:grid-cols-2">
+                <div>
+                  <dt className="text-xs text-muted-foreground">Plan</dt>
+                  <dd className="font-medium">
+                    {PLAN_LABEL[subscription.supportEntitlement.tier]}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">Durum</dt>
+                  <dd className="font-medium">{subscription.supportEntitlement.status}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">Verildi</dt>
+                  <dd className="break-words font-medium">
+                    {formatDate(subscription.supportEntitlement.grantedAt)}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">Bitiş</dt>
+                  <dd className="break-words font-medium">
+                    {subscription.supportEntitlement.expiresAt
+                      ? formatDate(subscription.supportEntitlement.expiresAt)
+                      : "Süresiz"}
+                  </dd>
+                </div>
+              </dl>
+            ) : (
+              <p className="mt-2 text-muted-foreground">Support entitlement kaydı yok.</p>
+            )}
+          </div>
+
+          <AdminSupportEntitlementOperations
+            userId={userId}
+            userEmail={userEmail}
+            permissions={permissions}
+            subscription={subscription}
+            onChanged={() => setRetry((value) => value + 1)}
+          />
         </div>
       ) : null}
     </section>
