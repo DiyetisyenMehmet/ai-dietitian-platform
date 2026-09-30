@@ -1,4 +1,9 @@
-import type { Subscription, SubscriptionStatus, SubscriptionTier } from "@prisma/client";
+import type {
+  AdminSupportEntitlement,
+  Subscription,
+  SubscriptionStatus,
+  SubscriptionTier,
+} from "@prisma/client";
 
 import { ApiError } from "../../utils/api-error";
 import { entitlementsForTier } from "../payments/entitlements";
@@ -8,8 +13,13 @@ import {
 } from "../payments/google-play-entitlements.repository";
 import { paymentsRepository } from "../payments/payments.repository";
 import { readEffectiveSubscriptionState } from "../payments/subscription-state";
+import {
+  findSupportEntitlementForUser,
+  supportEntitlementStatus,
+} from "../payments/support-entitlements.repository";
 
 export type AdminSubscriptionRecordStatus = SubscriptionStatus | "REVOKED";
+export type AdminSupportEntitlementStatus = "ACTIVE" | "EXPIRED" | "REVOKED";
 
 export interface AdminSubscriptionRecordView {
   status: AdminSubscriptionRecordStatus;
@@ -22,15 +32,27 @@ export interface AdminSubscriptionRecordView {
   trial: null;
 }
 
+export interface AdminSupportEntitlementView {
+  id: string;
+  tier: SubscriptionTier;
+  status: AdminSupportEntitlementStatus;
+  grantedAt: Date;
+  expiresAt: Date | null;
+  updatedAt: Date;
+}
+
 export interface AdminUserSubscriptionView {
   currentPlan: SubscriptionTier;
+  providerPlan: SubscriptionTier;
   currentPlanSource:
     | "GOOGLE_PLAY_ENTITLEMENT"
     | "IYZICO_SUBSCRIPTION"
+    | "ADMIN_SUPPORT"
     | "ACCOUNT_DEFAULT";
   entitlementStatus: "ACTIVE" | "FREE";
   entitlements: string[];
   record: AdminSubscriptionRecordView | null;
+  supportEntitlement: AdminSupportEntitlementView | null;
 }
 
 function legacyStatus(row: Subscription, now: Date): AdminSubscriptionRecordStatus {
@@ -77,6 +99,21 @@ function playRecord(
   };
 }
 
+function supportRecord(
+  row: AdminSupportEntitlement | null,
+  now: Date,
+): AdminSupportEntitlementView | null {
+  if (!row) return null;
+  return {
+    id: row.id,
+    tier: row.tier,
+    status: supportEntitlementStatus(row, now),
+    grantedAt: row.grantedAt,
+    expiresAt: row.expiresAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
 function newerRecord(
   legacy: Subscription | null,
   play: GooglePlayEntitlementRow | null,
@@ -109,20 +146,25 @@ export const adminUserSubscriptionService = {
       if (latest === "GOOGLE_PLAY" && latestPlay) record = playRecord(latestPlay, now);
     }
 
+    const support = await findSupportEntitlementForUser(userId);
     const currentPlanSource =
       effective.source === "GOOGLE_PLAY"
         ? "GOOGLE_PLAY_ENTITLEMENT"
         : effective.source === "IYZICO"
           ? "IYZICO_SUBSCRIPTION"
-          : "ACCOUNT_DEFAULT";
+          : effective.source === "ADMIN_SUPPORT"
+            ? "ADMIN_SUPPORT"
+            : "ACCOUNT_DEFAULT";
 
     return {
       subscription: {
         currentPlan: effective.tier,
+        providerPlan: effective.providerTier,
         currentPlanSource,
         entitlementStatus: effective.tier === "FREE" ? "FREE" : "ACTIVE",
         entitlements: entitlementsForTier(effective.tier),
         record,
+        supportEntitlement: supportRecord(support, now),
       },
     };
   },
