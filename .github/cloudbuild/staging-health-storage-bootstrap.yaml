@@ -1,0 +1,52 @@
+steps:
+  - name: gcr.io/google.com/cloudsdktool/google-cloud-cli:stable
+    id: bootstrap-staging-health-storage
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        set -o pipefail
+        PROJECT_ID="project-a2e260c1-839d-4f1d-b90"
+        REGION="europe-west1"
+        BUCKET="project-a2e260c1-839d-4f1d-b90-diewish-health-staging"
+        RUNTIME_SA="diewish-staging-runtime@${PROJECT_ID}.iam.gserviceaccount.com"
+        DEPLOY_SA="diewish-staging-deployer@${PROJECT_ID}.iam.gserviceaccount.com"
+        test -n "${_GIT_SHA}"
+        bucket_uri="gs://${BUCKET}"
+
+        if ! gcloud storage buckets describe "${bucket_uri}" --project "${PROJECT_ID}" >/dev/null 2>&1; then
+          gcloud storage buckets create "${bucket_uri}" \
+            --project "${PROJECT_ID}" \
+            --location "${REGION}" \
+            --uniform-bucket-level-access \
+            --public-access-prevention
+        fi
+
+        gcloud storage buckets update "${bucket_uri}" \
+          --project "${PROJECT_ID}" \
+          --uniform-bucket-level-access \
+          --public-access-prevention
+
+        gcloud storage buckets add-iam-policy-binding "${bucket_uri}" \
+          --project "${PROJECT_ID}" \
+          --member "serviceAccount:${RUNTIME_SA}" \
+          --role roles/storage.objectUser \
+          --condition=None \
+          --quiet >/dev/null
+
+        gcloud storage buckets add-iam-policy-binding "${bucket_uri}" \
+          --project "${PROJECT_ID}" \
+          --member "serviceAccount:${DEPLOY_SA}" \
+          --role roles/storage.bucketViewer \
+          --condition=None \
+          --quiet >/dev/null
+
+        gcloud storage buckets describe "${bucket_uri}" \
+          --project "${PROJECT_ID}" \
+          --format='value(name,location,uniformBucketLevelAccess.enabled,publicAccessPrevention)'
+
+substitutions:
+  _GIT_SHA: unused
+
+options:
+  logging: LEGACY

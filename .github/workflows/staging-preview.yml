@@ -139,6 +139,44 @@ jobs:
             gcloud secrets describe "$secret" --project "$PROJECT_ID" >/dev/null
           done
 
+      - name: Bootstrap durable private health-document storage when missing
+        shell: bash
+        run: |
+          set -euo pipefail
+          bucket_uri="gs://${HEALTH_STORAGE_BUCKET}"
+          if ! gcloud storage buckets describe "$bucket_uri" --project "$PROJECT_ID" >/dev/null 2>&1; then
+            BUILD_ID="$(gcloud builds submit \
+              --no-source \
+              --project "$PROJECT_ID" \
+              --config .github/cloudbuild/staging-health-storage-bootstrap.yaml \
+              --substitutions "_GIT_SHA=${GITHUB_SHA}" \
+              --async \
+              --format='value(id)' \
+              --quiet)"
+            test -n "$BUILD_ID"
+            echo "Health-storage bootstrap Cloud Build: $BUILD_ID"
+            for attempt in {1..120}; do
+              status="$(gcloud builds describe "$BUILD_ID" \
+                --project "$PROJECT_ID" \
+                --region=global \
+                --format='value(status)')"
+              case "$status" in
+                SUCCESS) break ;;
+                FAILURE|INTERNAL_ERROR|TIMEOUT|CANCELLED|EXPIRED)
+                  echo "Health-storage bootstrap Cloud Build failed: $status" >&2
+                  gcloud builds describe "$BUILD_ID" --project "$PROJECT_ID" --region=global \
+                    --format='yaml(status,statusDetail,failureInfo,steps.id,steps.status)' || true
+                  exit 1
+                  ;;
+              esac
+              if [[ "$attempt" == "120" ]]; then
+                echo "Timed out waiting for health-storage bootstrap Cloud Build." >&2
+                exit 1
+              fi
+              sleep 5
+            done
+          fi
+
       - name: Verify durable private health-document storage
         shell: bash
         run: |
@@ -151,7 +189,7 @@ jobs:
             --project "$PROJECT_ID" \
             --format=json 2>"$error_file")"; then
             echo "Staging health-storage bootstrap is missing or unreadable." >&2
-            echo "Run scripts/bootstrap-staging-health-storage-gcp.sh once with an authorized staging project administrator." >&2
+            echo "The staging-only Cloud Build bootstrap could not make the bucket readable." >&2
             cat "$error_file" >&2
             exit 1
           fi
