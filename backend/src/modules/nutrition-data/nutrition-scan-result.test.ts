@@ -50,6 +50,8 @@ test("barcode normalized scan derives serving values from per-100g data when pro
   assert.equal(scan.nutritionReference.basis, "PER_100_G");
   assert.equal(scan.nutritionReference.grams, 100);
   assert.equal(scan.product?.quantity, "50 g");
+  assert.equal("consumedAmount" in scan, false);
+  assert.equal("consumedAmount" in (scan.product ?? {}), false);
   assert.equal(scan.nutrients.reference.energyKcal, 520);
   assert.equal(scan.nutrients.per100g?.energyKcal, 520);
   assert.equal(scan.nutrients.perServing.energyKcal, 130);

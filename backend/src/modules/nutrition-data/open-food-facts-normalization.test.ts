@@ -79,3 +79,27 @@ test("Open Food Facts missing allergen/ingredient fields remain explicitly incom
   assert.equal(food.allergenEvidence?.ingredientList, "MISSING");
   assert.equal(food.allergenEvidence?.allergenDeclaration, "MISSING");
 });
+
+
+test("Open Food Facts keeps a millilitre source serving as volume, not gram weight", () => {
+  const result = normalizeOpenFoodFactsProduct({
+    product: {
+      code: "8690000000200",
+      product_name: "Prepared drink",
+      quantity: "1 L",
+      serving_quantity: 200,
+      serving_size: "200 ml",
+      nutriments: {
+        "energy-kcal_100g": 40,
+        "energy-kcal_serving": 80,
+      },
+    },
+  });
+
+  assert.ok(result);
+  assert.equal(result.quantity, "1 L");
+  assert.equal(result.serving?.amount, 200);
+  assert.equal(result.serving?.unit, "ml");
+  assert.equal(result.serving?.gramWeight, null);
+  assert.equal(result.serving?.description, "200 ml");
+});

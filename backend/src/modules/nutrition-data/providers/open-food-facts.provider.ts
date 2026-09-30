@@ -90,6 +90,14 @@ function nutrientValues(n: Record<string, unknown>, basis: "100g" | "serving"): 
 function hasNutrientValues(values: NutrientValues): boolean {
   return Object.values(values).some((value) => value !== null);
 }
+function servingUnitFromDescription(description: string | null): "g" | "ml" | "serving" {
+  if (!description) return "serving";
+  const normalized = description.toLocaleLowerCase("tr-TR");
+  if (/\bml\b|mililitre|milliliter/.test(normalized)) return "ml";
+  if (/\bg\b|gram/.test(normalized)) return "g";
+  return "serving";
+}
+
 function providerUpdatedAt(product: Record<string, unknown>): string | null {
   const epochSeconds = num(product.last_modified_t);
   if (epochSeconds !== null && epochSeconds > 0) return new Date(epochSeconds * 1000).toISOString();
@@ -120,6 +128,7 @@ export function normalizeOpenFoodFactsProduct(raw: unknown, barcodeHint?: string
   ]);
   const servingQuantity = num(product.serving_quantity);
   const servingSize = text(product.serving_size);
+  const servingUnit = servingUnitFromDescription(servingSize);
   return {
     externalId: code,
     provider: "OPEN_FOOD_FACTS",
@@ -130,7 +139,13 @@ export function normalizeOpenFoodFactsProduct(raw: unknown, barcodeHint?: string
     imageUrl: text(product.image_front_url) ?? text(product.image_url),
     quantity: text(product.quantity),
     serving: servingQuantity !== null && servingQuantity > 0
-      ? { amount: servingQuantity, unit: "g", gramWeight: servingQuantity, description: servingSize }
+      ? {
+          amount: servingQuantity,
+          unit: servingUnit,
+          // Volume/count reference servings are not silently converted to grams.
+          gramWeight: servingUnit === "g" ? servingQuantity : null,
+          description: servingSize,
+        }
       : null,
     nutrientsPer100g,
     nutrientsPerServing: hasNutrientValues(perServing) ? perServing : null,
