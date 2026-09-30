@@ -42,7 +42,7 @@ test("confirmed per-serving label is converted deterministically to per 100 g", 
   assert.equal(food.provider, "DIEWISH");
   assert.equal(food.nutrientsPer100g.energyKcal, 200);
   assert.equal(food.nutrientsPer100g.proteinG, 10);
-  assert.equal(food.nutrientsPer100g.sodiumMg, 160);
+  assert.equal(food.nutrientsPer100g.sodiumMg, null);
   assert.equal(food.quantity, "50 g");
   assert.equal(food.serving?.gramWeight, 50);
   assert.equal(food.provenance.dataBasis, "PER_SERVING");
@@ -106,7 +106,7 @@ test("pure salt accepts real zero macros when salt or sodium is declared", () =>
   assert.equal(food.nutrientsPer100g.carbohydratesG, 0);
   assert.equal(food.nutrientsPer100g.fatG, 0);
   assert.equal(food.nutrientsPer100g.saltG, 100);
-  assert.equal(food.nutrientsPer100g.sodiumMg, 40000);
+  assert.equal(food.nutrientsPer100g.sodiumMg, null);
 });
 
 test("oil accepts zero protein and carbohydrate when energy and fat are declared", () => {

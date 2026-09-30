@@ -138,16 +138,13 @@ export function normalizePackageLabelDraft(value: unknown): PackageLabelDraft {
   };
 }
 
-function fillEnergyAndSalt(input: Pick<PackageLabelDraft, "nutrients" | "energyKj">): NutrientValues {
+function normalizeDeclaredNutrients(input: Pick<PackageLabelDraft, "nutrients" | "energyKj">): NutrientValues {
   const nutrients: NutrientValues = { ...input.nutrients };
+  // kJ -> kcal is only a unit normalization of the same visible energy fact.
+  // Salt and sodium are deliberately not synthesized from one another: if one
+  // is absent on the label it remains null.
   if (nutrients.energyKcal === null && input.energyKj !== null) {
     nutrients.energyKcal = Math.round((input.energyKj / 4.184) * 100) / 100;
-  }
-  if (nutrients.sodiumMg === null && nutrients.saltG !== null) {
-    nutrients.sodiumMg = Math.round(nutrients.saltG * 400 * 100) / 100;
-  }
-  if (nutrients.saltG === null && nutrients.sodiumMg !== null) {
-    nutrients.saltG = Math.round((nutrients.sodiumMg / 400) * 1000) / 1000;
   }
   return nutrients;
 }
@@ -306,7 +303,7 @@ function preparedNutritionReference(
     throw ApiError.badRequest("Hazırlanmış ürün porsiyon referansında porsiyon gramı gereklidir.");
   }
 
-  const nutrients = fillEnergyAndSalt(input);
+  const nutrients = normalizeDeclaredNutrients(input);
   if (!hasAnyDeclaredNutrient(nutrients)) {
     throw ApiError.badRequest("Hazırlanmış ürün için görünen besin değerlerini doğrulamalısın.");
   }
@@ -353,7 +350,7 @@ export function buildUserConfirmedPackageLabelFood(
     throw ApiError.badRequest("Porsiyon bazlı etikette porsiyon gramı gereklidir.");
   }
 
-  const declared = fillEnergyAndSalt(draft);
+  const declared = normalizeDeclaredNutrients(draft);
   const per100g = draft.basis === "PER_SERVING"
     ? scaledTo100g(declared, draft.servingGrams!)
     : declared;
