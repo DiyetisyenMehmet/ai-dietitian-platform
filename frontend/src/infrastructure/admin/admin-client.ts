@@ -157,11 +157,25 @@ export type AdminSubscriptionRecordStatus =
   | "EXPIRED"
   | "REVOKED";
 
+export type AdminSupportEntitlementStatus = "ACTIVE" | "EXPIRED" | "REVOKED";
+export type AdminSubscriptionTier = "FREE" | "PREMIUM" | "PREMIUM_PLUS";
+
+export interface AdminSupportEntitlement {
+  id: string;
+  tier: AdminSubscriptionTier;
+  status: AdminSupportEntitlementStatus;
+  grantedAt: string;
+  expiresAt: string | null;
+  updatedAt: string;
+}
+
 export interface AdminUserSubscription {
-  currentPlan: "FREE" | "PREMIUM" | "PREMIUM_PLUS";
+  currentPlan: AdminSubscriptionTier;
+  providerPlan: AdminSubscriptionTier;
   currentPlanSource:
     | "GOOGLE_PLAY_ENTITLEMENT"
     | "IYZICO_SUBSCRIPTION"
+    | "ADMIN_SUPPORT"
     | "ACCOUNT_DEFAULT";
   entitlementStatus: "ACTIVE" | "FREE";
   entitlements: string[];
@@ -175,6 +189,7 @@ export interface AdminUserSubscription {
     canceledAt: string | null;
     trial: null;
   } | null;
+  supportEntitlement: AdminSupportEntitlement | null;
 }
 export const adminClient = {
   getUserSubscription(id: string): Promise<{ subscription: AdminUserSubscription }> {
@@ -182,6 +197,34 @@ export const adminClient = {
       path: `/admin/users/${encodeURIComponent(id)}/subscription`,
       method: "GET",
       auth: true,
+    });
+  },
+  setUserSupportEntitlement(
+    id: string,
+    input: {
+      tier: "PREMIUM" | "PREMIUM_PLUS";
+      expiresAt: string | null;
+      expectedUpdatedAt: string | null;
+      reason: string;
+    },
+  ): Promise<{ supportEntitlement: AdminSupportEntitlement }> {
+    return apiRequest({
+      path: `/admin/users/${encodeURIComponent(id)}/subscription/support-entitlement`,
+      method: "PUT",
+      auth: true,
+      body: JSON.stringify({ ...input, confirmed: true }),
+    });
+  },
+  revokeUserSupportEntitlement(
+    id: string,
+    expectedUpdatedAt: string,
+    reason: string,
+  ): Promise<{ supportEntitlement: AdminSupportEntitlement }> {
+    return apiRequest({
+      path: `/admin/users/${encodeURIComponent(id)}/subscription/support-entitlement`,
+      method: "DELETE",
+      auth: true,
+      body: JSON.stringify({ expectedUpdatedAt, reason, confirmed: true }),
     });
   },
   getUserSessions(id: string): Promise<{ sessions: AdminUserSession[]; total: number }> {
