@@ -7,6 +7,8 @@ export interface AuthenticatedUser {
   email: string;
   role: UserRole;
   isGuest: boolean;
+  /** Current server-side onboarding state loaded with the authenticated account. */
+  onboardingCompleted: boolean;
   /** Access-token issued-at timestamp (seconds since epoch). */
   authenticatedAt: number;
 }

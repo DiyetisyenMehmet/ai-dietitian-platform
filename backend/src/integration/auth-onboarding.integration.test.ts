@@ -152,15 +152,28 @@ test("register -> consent gate -> onboarding -> persisted work-schedule update",
   expectSuccess(emptyProfile.body);
   assert.equal(emptyProfile.body.data.profile, null);
 
-  const inactiveCheckIn = await apiRequest<WeightCheckInData>(
+  const meBeforeOnboarding = await apiRequest<MeData>(baseUrl, "/api/auth/me", {
+    token: accessToken,
+  });
+  assert.equal(meBeforeOnboarding.status, 200);
+  expectSuccess(meBeforeOnboarding.body);
+  assert.equal(meBeforeOnboarding.body.data.user.onboardingCompleted, false);
+
+  const blockedCheckIn = await apiRequest<WeightCheckInData>(
     baseUrl,
     "/api/tracking/weight/check-in",
     { token: accessToken },
   );
-  assert.equal(inactiveCheckIn.status, 200);
-  expectSuccess(inactiveCheckIn.body);
-  assert.equal(inactiveCheckIn.body.data.checkIn.active, false);
-  assert.equal(inactiveCheckIn.body.data.checkIn.required, false);
+  assert.equal(blockedCheckIn.status, 403);
+  expectFailure(blockedCheckIn.body);
+  assert.equal(blockedCheckIn.body.error.code, "ONBOARDING_REQUIRED");
+
+  const blockedGoals = await apiRequest<unknown>(baseUrl, "/api/goals", {
+    token: accessToken,
+  });
+  assert.equal(blockedGoals.status, 403);
+  expectFailure(blockedGoals.body);
+  assert.equal(blockedGoals.body.error.code, "ONBOARDING_REQUIRED");
 
   const nightShiftProfile = {
     fullName: "Integration User",

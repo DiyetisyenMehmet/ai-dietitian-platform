@@ -1,5 +1,8 @@
 import { Router } from "express";
 
+import { authenticateAny } from "../middleware/authenticate";
+import { requireOnboardingCompleted } from "../middleware/require-onboarding";
+
 import { accountRouter } from "../modules/account/account.routes";
 import { authRouter } from "../modules/auth/auth.routes";
 import { identityRouter } from "../modules/identity/identity.routes";
@@ -31,76 +34,88 @@ import { healthRouter } from "./health.route";
  */
 export const apiRouter = Router();
 
+/**
+ * Routes intentionally available before onboarding completes.
+ *
+ * These cover service health, authentication/identity, account security,
+ * mandatory legal consent, onboarding itself, existing payment/webhook
+ * behavior, and the separately authorized Management Center.
+ */
 apiRouter.use("/health", healthRouter);
 apiRouter.use("/auth", authRouter);
 apiRouter.use("/identity", identityRouter);
 apiRouter.use("/account", accountRouter);
 apiRouter.use("/onboarding", onboardingRouter);
-apiRouter.use("/food-scan", foodScanRouter);
-for (const { path, router } of nutritionDataModule.routes) {
-  apiRouter.use(path, router);
-}
 
-// Blood-test analysis module (Sprint 12). `mountFirst` routers are mounted
-// before the Sprint 11 upload router so their concrete paths (e.g. /analyses)
-// are not shadowed by the upload router's parameterized `/:id` routes.
-for (const { path, router, mountFirst } of bloodTestAnalysisModule.routes) {
-  if (mountFirst) apiRouter.use(path, router);
-}
-apiRouter.use("/blood-tests", bloodTestRouter);
-for (const { path, router, mountFirst } of bloodTestAnalysisModule.routes) {
-  if (!mountFirst) apiRouter.use(path, router);
-}
-
-for (const { path, router } of nutritionPlanModule.routes) {
-  apiRouter.use(path, router);
-}
-
-for (const { path, router } of aiChatModule.routes) {
-  apiRouter.use(path, router);
-}
-for (const { path, router } of aiUsageModule.routes) {
-  apiRouter.use(path, router);
-}
-
-for (const { path, router } of paymentsModule.routes) {
-  apiRouter.use(path, router);
-}
 for (const { path, router } of legalModule.routes) {
   apiRouter.use(path, router);
 }
 
-for (const { path, router } of trackingModule.routes) {
+// Keep payment/webhook behavior unchanged in this task. Payment routes retain
+// their existing authentication/provider-signature controls.
+for (const { path, router } of paymentsModule.routes) {
   apiRouter.use(path, router);
 }
-for (const { path, router } of notificationModule.routes) {
-  apiRouter.use(path, router);
-}
-for (const { path, router } of aiCoachModule.routes) {
-  apiRouter.use(path, router);
-}
-
-for (const { path, router } of activityModule.routes) {
-  apiRouter.use(path, router);
-}
-
-for (const { path, router } of sleepModule.routes) {
-  apiRouter.use(path, router);
-}
-
-for (const { path, router } of historyModule.routes) {
-  apiRouter.use(path, router);
-}
-
-for (const { path, router } of expertProductModule.routes) {
-  apiRouter.use(path, router);
-}
-
-for (const { path, router } of goalsModule.routes) {
-  apiRouter.use(path, router);
-}
-
 
 for (const { path, router } of adminModule.routes) {
   apiRouter.use(path, router);
+}
+
+/**
+ * Central mount helper for normal application features. authenticateAny
+ * resolves the current server-side User row, then the onboarding gate blocks
+ * incomplete full accounts. Child routers keep their existing auth/consent/
+ * subscription guards, including their existing guest restrictions.
+ */
+function mountOnboarded(path: string, router: ReturnType<typeof Router>): void {
+  apiRouter.use(path, authenticateAny, requireOnboardingCompleted, router);
+}
+
+mountOnboarded("/food-scan", foodScanRouter);
+for (const { path, router } of nutritionDataModule.routes) {
+  mountOnboarded(path, router);
+}
+
+// Concrete blood-test analysis paths still mount before the upload router so
+// they cannot be shadowed by parameterized /:id routes.
+for (const { path, router, mountFirst } of bloodTestAnalysisModule.routes) {
+  if (mountFirst) mountOnboarded(path, router);
+}
+mountOnboarded("/blood-tests", bloodTestRouter);
+for (const { path, router, mountFirst } of bloodTestAnalysisModule.routes) {
+  if (!mountFirst) mountOnboarded(path, router);
+}
+
+for (const { path, router } of nutritionPlanModule.routes) {
+  mountOnboarded(path, router);
+}
+for (const { path, router } of aiChatModule.routes) {
+  mountOnboarded(path, router);
+}
+for (const { path, router } of aiUsageModule.routes) {
+  mountOnboarded(path, router);
+}
+for (const { path, router } of trackingModule.routes) {
+  mountOnboarded(path, router);
+}
+for (const { path, router } of notificationModule.routes) {
+  mountOnboarded(path, router);
+}
+for (const { path, router } of aiCoachModule.routes) {
+  mountOnboarded(path, router);
+}
+for (const { path, router } of activityModule.routes) {
+  mountOnboarded(path, router);
+}
+for (const { path, router } of sleepModule.routes) {
+  mountOnboarded(path, router);
+}
+for (const { path, router } of historyModule.routes) {
+  mountOnboarded(path, router);
+}
+for (const { path, router } of expertProductModule.routes) {
+  mountOnboarded(path, router);
+}
+for (const { path, router } of goalsModule.routes) {
+  mountOnboarded(path, router);
 }

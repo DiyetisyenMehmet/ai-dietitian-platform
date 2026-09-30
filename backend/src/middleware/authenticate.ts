@@ -38,6 +38,7 @@ function makeAuthenticationMiddleware(allowGuest: boolean): RequestHandler {
         email: claims.email,
         role: claims.role,
         isGuest,
+        onboardingCompleted: user.onboardingCompleted,
         authenticatedAt: typeof claims.iat === "number" ? claims.iat : 0,
       };
       next();
