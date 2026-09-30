@@ -40,6 +40,14 @@ export interface NormalizedNutritionScanResult {
   };
   /** Explicit nutrition declaration basis, separate from package quantity and consumed amount. */
   nutritionReference: NutritionReference;
+  /** Additional label-declared nutrition references. These are never consumed amounts. */
+  additionalNutritionReferences: Array<{
+    basis: NutritionDataBasis;
+    description: string;
+    grams: number | null;
+    preparationState: string;
+    nutrients: NutrientValues;
+  }>;
   nutrients: {
     per100g: NutrientValues | null;
     perServing: NutrientValues;
@@ -102,6 +110,26 @@ function productBlock(food: CanonicalFood) {
   };
 }
 
+function nutritionReferenceDescription(
+  food: CanonicalFood,
+  basis: NutritionDataBasis,
+  sourceServingGrams: number | null,
+): string {
+  const state = food.provenance.preparationState;
+  if (basis === "PER_SERVING") {
+    const base = food.serving?.description?.trim()
+      || (sourceServingGrams ? `${sourceServingGrams} g` : "Kaynak porsiyon");
+    if (state === "PREPARED") return `${base} hazırlanmış ürün`;
+    if (state === "AS_SOLD") return `${base} hazırlanma öncesi ürün`;
+    if (state === "LABEL_REFERENCE_UNSPECIFIED") return `${base} etiket referansı (hazırlanmış ürün olarak yorumlanmaz)`;
+    return base;
+  }
+  if (state === "PREPARED") return "100 g hazırlanmış ürün";
+  if (state === "AS_SOLD") return "100 g hazırlanma öncesi ürün";
+  if (state === "LABEL_REFERENCE_UNSPECIFIED") return "100 g etiket referansı (hazırlanmış ürün olarak yorumlanmaz)";
+  return "100 g";
+}
+
 export function toBarcodeScanResult(food: CanonicalFood): NormalizedNutritionScanResult {
   const qualityAssessment = assessBarcodeFoodQuality(food, food.barcode ?? "");
   const dataQuality = {
@@ -123,12 +151,14 @@ export function toBarcodeScanResult(food: CanonicalFood): NormalizedNutritionSca
     food.provenance.dataBasis === "PER_SERVING"
       ? {
           basis: "PER_SERVING",
-          description:
-            food.serving?.description?.trim()
-            || (sourceServingGrams ? `${sourceServingGrams} g` : "Kaynak porsiyon"),
+          description: nutritionReferenceDescription(food, "PER_SERVING", sourceServingGrams),
           grams: sourceServingGrams,
         }
-      : { basis: "PER_100_G", description: "100 g", grams: 100 };
+      : {
+          basis: "PER_100_G",
+          description: nutritionReferenceDescription(food, "PER_100_G", sourceServingGrams),
+          grams: 100,
+        };
   const referenceNutrients =
     nutritionReference.basis === "PER_SERVING" && food.nutrientsPerServing
       ? food.nutrientsPerServing
@@ -147,6 +177,13 @@ export function toBarcodeScanResult(food: CanonicalFood): NormalizedNutritionSca
       confidence: sourceServingGrams !== null || food.serving?.description ? 1 : null,
     },
     nutritionReference,
+    additionalNutritionReferences: (food.additionalNutritionReferences ?? []).map((reference) => ({
+      basis: reference.basis,
+      description: reference.description,
+      grams: reference.grams,
+      preparationState: reference.preparationState,
+      nutrients: reference.nutrients,
+    })),
     nutrients: {
       per100g: food.nutrientsPer100g,
       perServing,
@@ -183,6 +220,9 @@ export function toNutritionLabelScanResult(food: CanonicalFood): NormalizedNutri
     provenance: { nutrition: [food.provenance], recognition: "OCR_ESTIMATED" },
     disclaimer: [
       "Besin etiketi görselden okunmuş ve kullanıcı tarafından doğrulanmıştır. Bu kayıt yalnız bu kullanıcı için saklanır; global doğrulanmış ürün verisi olarak paylaşılmaz.",
+      food.provenance.preparationState === "LABEL_REFERENCE_UNSPECIFIED"
+        ? "Ana etiket referansı hazırlanmış içecek/ürün değeri olarak yorumlanmaz; yalnız ambalajda açıkça belirtilen hazırlanmış değerler ayrı referans olarak gösterilir."
+        : null,
       result.disclaimer,
     ].filter((value): value is string => Boolean(value)).join(" "),
   };
@@ -211,6 +251,7 @@ export function toPhotoScanResult(scan: PhotoScanLike): NormalizedNutritionScanR
       description: scan.estimatedPortion || "Taranan porsiyon",
       grams: scan.estimatedGrams,
     },
+    additionalNutritionReferences: [],
     nutrients: {
       per100g: null,
       perServing: scan.totals,

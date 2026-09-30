@@ -144,6 +144,13 @@ export interface NormalizedNutritionScanDto {
     description: string;
     grams: number | null;
   };
+  additionalNutritionReferences: Array<{
+    basis: "PER_100_G" | "PER_SERVING";
+    description: string;
+    grams: number | null;
+    preparationState: string;
+    nutrients: NutrientValuesDto;
+  }>;
   nutrients: {
     per100g: NutrientValuesDto | null;
     perServing: NutrientValuesDto;
@@ -180,14 +187,25 @@ export interface NormalizedNutritionScanDto {
   disclaimer: string | null;
 }
 
-export interface PackageLabelDraftDto {
-  productName: string | null;
-  brand: string | null;
-  quantity: string | null;
+export interface PackageLabelNutritionReferenceDraftDto {
   basis: "PER_100_G" | "PER_SERVING" | null;
   servingGrams: number | null;
   energyKj: number | null;
   nutrients: NutrientValuesDto;
+}
+
+export interface PackageLabelDraftDto {
+  productName: string | null;
+  brand: string | null;
+  quantity: string | null;
+  productTypeText?: string | null;
+  preparationInstructions?: string | null;
+  referenceState?: "AS_SOLD" | "PREPARED" | null;
+  basis: "PER_100_G" | "PER_SERVING" | null;
+  servingGrams: number | null;
+  energyKj: number | null;
+  nutrients: NutrientValuesDto;
+  preparedReference?: PackageLabelNutritionReferenceDraftDto | null;
   ingredients: string[];
   allergens: string[];
   confidence: number;

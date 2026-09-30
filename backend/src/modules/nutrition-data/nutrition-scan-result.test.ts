@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { toBarcodeScanResult, toPhotoScanResult } from "./nutrition-scan-result";
+import { toBarcodeScanResult, toNutritionLabelScanResult, toPhotoScanResult } from "./nutrition-scan-result";
 import type { CanonicalFood } from "./nutrition-data.types";
 
 const food: CanonicalFood = {
@@ -135,4 +135,30 @@ test("photo normalized scan keeps recognition estimation separate from nutrition
   assert.equal(scan.nutritionReference.grams, 250);
   assert.equal(scan.nutrients.reference.energyKcal, 340);
   assert.equal(scan.nutrients.perServing.energyKcal, 340);
+});
+
+
+test("nutrition-label scan keeps dry and prepared references separate", () => {
+  const scan = toNutritionLabelScanResult({
+    ...food,
+    provider: "DIEWISH",
+    productUsage: { type: "BREWING", basis: "SOURCE_CATEGORY", evidence: ["black tea"] },
+    provenance: {
+      ...food.provenance,
+      provider: "DIEWISH",
+      sourceReference: "USER_CONFIRMED_PACKAGE_LABEL",
+      preparationState: "AS_SOLD",
+    },
+    additionalNutritionReferences: [{
+      basis: "PER_100_G",
+      description: "100 g hazırlanmış ürün",
+      grams: 100,
+      preparationState: "PREPARED",
+      nutrients: { ...food.nutrientsPer100g, energyKcal: 1, proteinG: 0, carbohydratesG: 0, fatG: 0 },
+    }],
+  });
+  assert.equal(scan.nutritionReference.description, "100 g hazırlanma öncesi ürün");
+  assert.equal(scan.additionalNutritionReferences.length, 1);
+  assert.equal(scan.additionalNutritionReferences[0]?.nutrients.energyKcal, 1);
+  assert.equal("consumedAmount" in scan.additionalNutritionReferences[0]!, false);
 });

@@ -41,6 +41,16 @@ export function PackageLabelRecovery({ barcode, onConfirmed }: { barcode: string
   }, [barcode]);
 
   const updateNutrient = (key: CoreNutrientKeyDto, value: string) => setDraft((current) => current ? { ...current, nutrients: { ...current.nutrients, [key]: nullableNumber(value) } } : current);
+  const updatePreparedNutrient = (key: CoreNutrientKeyDto, value: string) => setDraft((current) => {
+    if (!current?.preparedReference) return current;
+    return {
+      ...current,
+      preparedReference: {
+        ...current.preparedReference,
+        nutrients: { ...current.preparedReference.nutrients, [key]: nullableNumber(value) },
+      },
+    };
+  });
 
   const confirm = React.useCallback(async () => {
     if (!draft || confirming) return;
@@ -59,7 +69,7 @@ export function PackageLabelRecovery({ barcode, onConfirmed }: { barcode: string
         <ScanText className="mt-0.5 size-5 shrink-0 text-primary" />
         <div>
           <p className="font-semibold">Paketteki besin etiketini okut</p>
-          <p className="text-xs text-muted-foreground">AI yalnız görünür etiket metnini okur; eksik değer üretmez. Son kayıt sen kontrol edip onayladıktan sonra yalnız kendi hesabında bu barkoda bağlanır.</p>
+          <p className="text-xs text-muted-foreground">Yalnız ambalajda görünen bilgiler okunur; eksik değer üretilmez. Son kayıt sen kontrol edip onayladıktan sonra yalnız kendi hesabında bu barkoda bağlanır.</p>
         </div>
       </div>
       <Button type="button" variant="outline" className="w-full" onClick={() => inputRef.current?.click()} isLoading={extracting}>
@@ -74,13 +84,32 @@ export function PackageLabelRecovery({ barcode, onConfirmed }: { barcode: string
             <label className="text-xs font-semibold">Ürün adı<input className="mt-1 w-full rounded-lg border px-2 py-1.5 text-sm font-normal" value={draft.productName ?? ""} onChange={(e) => setDraft({ ...draft, productName: e.target.value || null })} /></label>
             <label className="text-xs font-semibold">Marka<input className="mt-1 w-full rounded-lg border px-2 py-1.5 text-sm font-normal" value={draft.brand ?? ""} onChange={(e) => setDraft({ ...draft, brand: e.target.value || null })} /></label>
             <label className="text-xs font-semibold">Net miktar<input className="mt-1 w-full rounded-lg border px-2 py-1.5 text-sm font-normal" value={draft.quantity ?? ""} onChange={(e) => setDraft({ ...draft, quantity: e.target.value || null })} /></label>
+            <label className="text-xs font-semibold">Etikette yazan ürün türü<input className="mt-1 w-full rounded-lg border px-2 py-1.5 text-sm font-normal" value={draft.productTypeText ?? ""} onChange={(e) => setDraft({ ...draft, productTypeText: e.target.value || null })} /></label>
+            <label className="text-xs font-semibold">Ana besin tablosu durumu<select className="mt-1 w-full rounded-lg border bg-background px-2 py-1.5 text-sm font-normal" value={draft.referenceState ?? ""} onChange={(e) => setDraft({ ...draft, referenceState: e.target.value === "AS_SOLD" || e.target.value === "PREPARED" ? e.target.value : null })}><option value="">Etikette belirtilmemiş</option><option value="AS_SOLD">Hazırlanmadan / ürün hali</option><option value="PREPARED">Hazırlanmış ürün</option></select></label>
             <label className="text-xs font-semibold">Besin değerleri bazı<select className="mt-1 w-full rounded-lg border bg-background px-2 py-1.5 text-sm font-normal" value={draft.basis ?? ""} onChange={(e) => setDraft({ ...draft, basis: e.target.value === "PER_100_G" || e.target.value === "PER_SERVING" ? e.target.value : null })}><option value="">Seç</option><option value="PER_100_G">100 g / 100 ml</option><option value="PER_SERVING">Porsiyon</option></select></label>
             <label className="text-xs font-semibold">Porsiyon gramı<input type="number" min={0} className="mt-1 w-full rounded-lg border px-2 py-1.5 text-sm font-normal" value={draft.servingGrams ?? ""} onChange={(e) => setDraft({ ...draft, servingGrams: nullableNumber(e.target.value) })} /></label>
             <label className="text-xs font-semibold">Enerji kJ<input type="number" min={0} className="mt-1 w-full rounded-lg border px-2 py-1.5 text-sm font-normal" value={draft.energyKj ?? ""} onChange={(e) => setDraft({ ...draft, energyKj: nullableNumber(e.target.value) })} /></label>
           </div>
+          <label className="block text-xs font-semibold">Etiketteki hazırlama bilgisi<textarea rows={2} className="mt-1 w-full rounded-lg border px-2 py-1.5 text-sm font-normal" value={draft.preparationInstructions ?? ""} onChange={(e) => setDraft({ ...draft, preparationInstructions: e.target.value || null })} placeholder="Yalnız ambalajda açıkça yazıyorsa" /></label>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             {NUTRIENTS.map(([key, label, unit]) => <label key={key} className="text-xs font-semibold">{label} ({unit})<input type="number" min={0} step="any" className="mt-1 w-full rounded-lg border px-2 py-1.5 text-sm font-normal" value={draft.nutrients[key] ?? ""} onChange={(e) => updateNutrient(key, e.target.value)} /></label>)}
           </div>
+          {draft.preparedReference && (
+            <div className="space-y-3 rounded-xl border border-primary/20 p-3">
+              <div>
+                <p className="text-xs font-bold">Hazırlanmış ürün için ayrı etiket referansı</p>
+                <p className="text-[11px] text-muted-foreground">Yalnız ambalajda ayrıca “hazırlanmış” değerler yazıyorsa bu bölüm kullanılır.</p>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-3">
+                <label className="text-xs font-semibold">Referans<select className="mt-1 w-full rounded-lg border bg-background px-2 py-1.5 text-sm font-normal" value={draft.preparedReference.basis ?? ""} onChange={(e) => setDraft({ ...draft, preparedReference: { ...draft.preparedReference!, basis: e.target.value === "PER_100_G" || e.target.value === "PER_SERVING" ? e.target.value : null } })}><option value="">Seç</option><option value="PER_100_G">100 g / 100 ml</option><option value="PER_SERVING">Porsiyon</option></select></label>
+                <label className="text-xs font-semibold">Porsiyon gramı<input type="number" min={0} className="mt-1 w-full rounded-lg border px-2 py-1.5 text-sm font-normal" value={draft.preparedReference.servingGrams ?? ""} onChange={(e) => setDraft({ ...draft, preparedReference: { ...draft.preparedReference!, servingGrams: nullableNumber(e.target.value) } })} /></label>
+                <label className="text-xs font-semibold">Enerji kJ<input type="number" min={0} className="mt-1 w-full rounded-lg border px-2 py-1.5 text-sm font-normal" value={draft.preparedReference.energyKj ?? ""} onChange={(e) => setDraft({ ...draft, preparedReference: { ...draft.preparedReference!, energyKj: nullableNumber(e.target.value) } })} /></label>
+              </div>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {NUTRIENTS.map(([key, nutrientLabel, unit]) => <label key={key} className="text-xs font-semibold">{nutrientLabel} ({unit})<input type="number" min={0} step="any" className="mt-1 w-full rounded-lg border px-2 py-1.5 text-sm font-normal" value={draft.preparedReference!.nutrients[key] ?? ""} onChange={(e) => updatePreparedNutrient(key, e.target.value)} /></label>)}
+              </div>
+            </div>
+          )}
           <label className="block text-xs font-semibold">İçindekiler<textarea rows={2} className="mt-1 w-full rounded-lg border px-2 py-1.5 text-sm font-normal" value={draft.ingredients.join(", ")} onChange={(e) => setDraft({ ...draft, ingredients: splitList(e.target.value) })} /></label>
           <label className="block text-xs font-semibold">Alerjenler<textarea rows={2} className="mt-1 w-full rounded-lg border px-2 py-1.5 text-sm font-normal" value={draft.allergens.join(", ")} onChange={(e) => setDraft({ ...draft, allergens: splitList(e.target.value) })} /></label>
           {draft.warnings.length > 0 && <div className="text-xs text-muted-foreground">{draft.warnings.map((warning) => <p key={warning}>• {warning}</p>)}</div>}

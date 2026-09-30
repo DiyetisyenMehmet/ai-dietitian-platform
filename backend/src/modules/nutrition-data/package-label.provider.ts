@@ -8,8 +8,9 @@ import { normalizePackageLabelDraft, type PackageLabelDraft } from "./package-la
 
 const MAX_ATTEMPTS = 2;
 const METADATA_TOKEN_URL = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token";
-const SYSTEM_PROMPT = `Sen Diewish paketli gıda besin etiketi okuma motorusun. Yalnız görselde gerçekten okunabilen bilgileri yapılandırılmış JSON'a aktar. Eksik veya okunamayan hiçbir sayı, ürün adı, içerik ya da alerjeni tahmin etme. Birden fazla besin sütunu varsa mümkünse 100 g/100 ml sütununu seç; yalnız porsiyon sütunu varsa PER_SERVING kullan ve basılı porsiyon gramını aktar. Enerji için kcal ve kJ basılıysa ikisini de aktar. Tuz ile sodyumu birbirine dönüştürme; yalnız etikette yazanı aktar. ingredients ve allergens alanları yalnız görünür metinden gelsin. "eser miktarda içerebilir", "may contain", "aynı tesiste üretilmiştir" veya benzeri çapraz bulaşma ifadelerini warnings alanında görünür metne sadık kalarak koru; böyle bir ifade görünmüyorsa üretme. confidence 0..1 aralığında genel OCR güvenidir.`;
-const USER_PROMPT = "Bu paketli gıda etiketini oku. Görselde olmayan hiçbir besin değerini üretme. JSON şemasına göre yalnız görünen bilgileri döndür.";
+const SYSTEM_PROMPT = `Sen Diewish paketli gıda besin etiketi okuma motorusun. Yalnız görselde gerçekten okunabilen bilgileri yapılandırılmış JSON'a aktar. Eksik veya okunamayan hiçbir sayı, ürün adı, ürün türü, hazırlama talimatı, içerik ya da alerjeni tahmin etme. productTypeText alanına yalnız ambalajda açıkça yazan ürün türü/ürün tanımı varsa görünür metne sadık kalarak yaz; yoksa null kullan. preparationInstructions yalnız ambalajda açık hazırlama talimatı görünüyorsa doldur. referenceState yalnız besin tablosu açıkça ürünün hazırlanma öncesi/as sold/kuru hali içinse AS_SOLD, açıkça hazırlanmış/as prepared hali içinse PREPARED olmalı; aksi halde null. Birden fazla besin sütunu varsa ana nutrients alanında hazırlanma öncesi/ürün hali sütununu koru. Ayrıca açıkça "hazırlanmış/as prepared" diye ayrı bir besin sütunu varsa preparedReference içine ayrı olarak aktar; yoksa null. Yalnız porsiyon sütunu varsa PER_SERVING kullan ve basılı porsiyon gramını aktar. Enerji için kcal ve kJ basılıysa ikisini de aktar. Tuz ile sodyumu birbirine dönüştürme; yalnız etikette yazanı aktar. ingredients ve allergens alanları yalnız görünür metinden gelsin. "eser miktarda içerebilir", "may contain", "aynı tesiste üretilmiştir" veya benzeri çapraz bulaşma ifadelerini warnings alanında görünür metne sadık kalarak koru; böyle bir ifade görünmüyorsa üretme. confidence 0..1 aralığında genel OCR güvenidir.`;
+const USER_PROMPT = "Bu paketli gıda etiketini oku. Görselde olmayan hiçbir ürün türü, hazırlama bilgisi veya besin değeri üretme. Ayrı hazırlanmış ürün sütunu görünüyorsa onu preparedReference olarak ayrı tut.";
+
 
 export const PACKAGE_LABEL_VERTEX_SCHEMA = {
   type: "OBJECT",
@@ -17,6 +18,9 @@ export const PACKAGE_LABEL_VERTEX_SCHEMA = {
     productName: { type: "STRING", nullable: true },
     brand: { type: "STRING", nullable: true },
     quantity: { type: "STRING", nullable: true },
+    productTypeText: { type: "STRING", nullable: true },
+    preparationInstructions: { type: "STRING", nullable: true },
+    referenceState: { type: "STRING", enum: ["AS_SOLD", "PREPARED"], nullable: true },
     basis: { type: "STRING", enum: ["PER_100_G", "PER_SERVING"], nullable: true },
     servingGrams: { type: "NUMBER", nullable: true },
     energyKj: { type: "NUMBER", nullable: true },
@@ -35,12 +39,37 @@ export const PACKAGE_LABEL_VERTEX_SCHEMA = {
       },
       required: ["energyKcal", "proteinG", "carbohydratesG", "fatG", "saturatedFatG", "sugarsG", "fiberG", "sodiumMg", "saltG"],
     },
+    preparedReference: {
+      type: "OBJECT",
+      nullable: true,
+      properties: {
+        basis: { type: "STRING", enum: ["PER_100_G", "PER_SERVING"], nullable: true },
+        servingGrams: { type: "NUMBER", nullable: true },
+        energyKj: { type: "NUMBER", nullable: true },
+        nutrients: {
+          type: "OBJECT",
+          properties: {
+            energyKcal: { type: "NUMBER", nullable: true },
+            proteinG: { type: "NUMBER", nullable: true },
+            carbohydratesG: { type: "NUMBER", nullable: true },
+            fatG: { type: "NUMBER", nullable: true },
+            saturatedFatG: { type: "NUMBER", nullable: true },
+            sugarsG: { type: "NUMBER", nullable: true },
+            fiberG: { type: "NUMBER", nullable: true },
+            sodiumMg: { type: "NUMBER", nullable: true },
+            saltG: { type: "NUMBER", nullable: true },
+          },
+          required: ["energyKcal", "proteinG", "carbohydratesG", "fatG", "saturatedFatG", "sugarsG", "fiberG", "sodiumMg", "saltG"],
+        },
+      },
+      required: ["basis", "servingGrams", "energyKj", "nutrients"],
+    },
     ingredients: { type: "ARRAY", items: { type: "STRING" } },
     allergens: { type: "ARRAY", items: { type: "STRING" } },
     confidence: { type: "NUMBER" },
     warnings: { type: "ARRAY", items: { type: "STRING" } },
   },
-  required: ["productName", "brand", "quantity", "basis", "servingGrams", "energyKj", "nutrients", "ingredients", "allergens", "confidence", "warnings"],
+  required: ["productName", "brand", "quantity", "productTypeText", "preparationInstructions", "referenceState", "basis", "servingGrams", "energyKj", "nutrients", "preparedReference", "ingredients", "allergens", "confidence", "warnings"],
 } as const;
 
 type VertexResponse = {

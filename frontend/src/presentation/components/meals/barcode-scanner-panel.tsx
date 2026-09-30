@@ -696,6 +696,14 @@ export function BarcodeScannerPanel() {
                 <p className="text-sm text-muted-foreground">Kaynak besin değerleri bulunamadı.</p>
               )}
 
+              {scan?.additionalNutritionReferences.map((reference, index) => (
+                <div key={`${reference.description}-${index}`} className="space-y-2 rounded-2xl border border-primary/20 p-3">
+                  <p className="text-xs font-bold text-foreground">Hazırlanmış ürün için ayrı etiket referansı</p>
+                  <NutritionFactsGrid portion={reference.nutrients} portionLabel={reference.description} />
+                  <p className="text-[11px] text-muted-foreground">Bu değer ayrı bir etiket referansıdır; tüketilen miktar değildir.</p>
+                </div>
+              ))}
+
               <Button
                 className="h-12 w-full rounded-2xl text-base font-bold"
                 onClick={() => void logMeal()}

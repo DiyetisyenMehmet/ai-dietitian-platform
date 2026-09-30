@@ -85,6 +85,19 @@ export interface NutrientValues {
   micronutrients?: MicronutrientValues | null;
 }
 
+export type NutritionReferenceState =
+  | "AS_SOLD"
+  | "PREPARED"
+  | "LABEL_REFERENCE_UNSPECIFIED";
+
+export interface AdditionalNutritionReference {
+  basis: NutritionDataBasis;
+  description: string;
+  grams: number | null;
+  preparationState: NutritionReferenceState;
+  nutrients: NutrientValues;
+}
+
 export interface NutritionProvenance {
   provider: NutritionProviderId;
   externalId: string;
@@ -139,6 +152,8 @@ export interface CanonicalFood {
   nutrientsPer100g: NutrientValues;
   /** Provider-declared per-serving values when supplied upstream; never inferred here. */
   nutrientsPerServing?: NutrientValues | null;
+  /** Extra label-declared references (for example an explicit prepared-product column). Never user consumption. */
+  additionalNutritionReferences?: AdditionalNutritionReference[];
   ingredients: string[];
   allergens: string[];
   /** Optional for legacy/cache rows. Missing evidence is treated as UNKNOWN, never safe. */
