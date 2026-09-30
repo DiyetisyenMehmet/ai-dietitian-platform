@@ -139,29 +139,41 @@ jobs:
             gcloud secrets describe "$secret" --project "$PROJECT_ID" >/dev/null
           done
 
-      - name: Ensure durable private health-document storage
+      - name: Verify durable private health-document storage
         shell: bash
         run: |
           set -euo pipefail
           bucket_uri="gs://${HEALTH_STORAGE_BUCKET}"
-          if ! gcloud storage buckets describe "$bucket_uri" --project "$PROJECT_ID" >/dev/null 2>&1; then
-            gcloud storage buckets create "$bucket_uri" \
-              --project "$PROJECT_ID" \
-              --location "$REGION" \
-              --uniform-bucket-level-access \
-              --public-access-prevention
+          error_file="$(mktemp)"
+          trap 'rm -f "$error_file"' EXIT
+
+          if ! bucket_json="$(gcloud storage buckets describe "$bucket_uri" \
+            --project "$PROJECT_ID" \
+            --format=json 2>"$error_file")"; then
+            echo "Staging health-storage bootstrap is missing or unreadable." >&2
+            echo "Run scripts/bootstrap-staging-gcp.sh once with an authorized staging project administrator." >&2
+            cat "$error_file" >&2
+            exit 1
           fi
-          gcloud storage buckets update "$bucket_uri" \
-            --project "$PROJECT_ID" \
-            --uniform-bucket-level-access \
-            --public-access-prevention
-          gcloud storage buckets add-iam-policy-binding "$bucket_uri" \
-            --project "$PROJECT_ID" \
-            --member "serviceAccount:${RUNTIME_SERVICE_ACCOUNT}" \
-            --role "roles/storage.objectUser" >/dev/null
-          gcloud storage buckets describe "$bucket_uri" \
-            --project "$PROJECT_ID" \
-            --format='value(name,location,uniformBucketLevelAccess.enabled,publicAccessPrevention)'
+
+          bucket_location="$(jq -r '.location // empty' <<<"$bucket_json")"
+          uniform_access="$(jq -r '.iamConfiguration.uniformBucketLevelAccess.enabled // false' <<<"$bucket_json")"
+          public_access="$(jq -r '.iamConfiguration.publicAccessPrevention // empty' <<<"$bucket_json")"
+
+          if [[ "${bucket_location,,}" != "${REGION,,}" ]]; then
+            echo "Staging health-storage bucket is in unexpected location: ${bucket_location}" >&2
+            exit 1
+          fi
+          if [[ "$uniform_access" != "true" ]]; then
+            echo "Staging health-storage bucket must enforce uniform bucket-level access." >&2
+            exit 1
+          fi
+          if [[ "${public_access,,}" != "enforced" ]]; then
+            echo "Staging health-storage bucket must enforce public access prevention." >&2
+            exit 1
+          fi
+
+          echo "Verified durable private staging health storage: ${HEALTH_STORAGE_BUCKET}"
 
       - name: Migrate staging database and build backend image
         shell: bash

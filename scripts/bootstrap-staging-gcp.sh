@@ -5,6 +5,7 @@ PROJECT_ID="project-a2e260c1-839d-4f1d-b90"
 PROJECT_NUMBER="730419163638"
 REGION="europe-west1"
 REPOSITORY="diewish-staging"
+HEALTH_STORAGE_BUCKET="project-a2e260c1-839d-4f1d-b90-diewish-health-staging"
 RUNTIME_SA_NAME="diewish-staging-runtime"
 DEPLOY_SA_NAME="diewish-staging-deployer"
 POOL_ID="github-actions"
@@ -66,6 +67,7 @@ SERVICES=(
   run.googleapis.com
   cloudbuild.googleapis.com
   artifactregistry.googleapis.com
+  storage.googleapis.com
   secretmanager.googleapis.com
   aiplatform.googleapis.com
   fcm.googleapis.com
@@ -100,6 +102,38 @@ ensure_service_account() {
 
 ensure_service_account "${RUNTIME_SA_NAME}" "Diewish staging runtime"
 ensure_service_account "${DEPLOY_SA_NAME}" "Diewish staging GitHub deployer"
+
+echo "Provisioning durable private health-document storage..."
+HEALTH_BUCKET_URI="gs://${HEALTH_STORAGE_BUCKET}"
+if ! gcloud storage buckets describe "${HEALTH_BUCKET_URI}" --project "${PROJECT_ID}" >/dev/null 2>&1; then
+  gcloud storage buckets create "${HEALTH_BUCKET_URI}" \
+    --project "${PROJECT_ID}" \
+    --location "${REGION}" \
+    --uniform-bucket-level-access \
+    --public-access-prevention
+fi
+
+# Bucket policy is a one-time administrator bootstrap concern. The ordinary
+# GitHub deploy identity gets read-only bucket metadata access and cannot grant
+# itself broader Storage IAM permissions during a deploy.
+gcloud storage buckets update "${HEALTH_BUCKET_URI}" \
+  --project "${PROJECT_ID}" \
+  --uniform-bucket-level-access \
+  --public-access-prevention
+
+gcloud storage buckets add-iam-policy-binding "${HEALTH_BUCKET_URI}" \
+  --project "${PROJECT_ID}" \
+  --member "serviceAccount:${RUNTIME_SA}" \
+  --role roles/storage.objectUser \
+  --condition=None \
+  --quiet >/dev/null
+
+gcloud storage buckets add-iam-policy-binding "${HEALTH_BUCKET_URI}" \
+  --project "${PROJECT_ID}" \
+  --member "serviceAccount:${DEPLOY_SA}" \
+  --role roles/storage.bucketViewer \
+  --condition=None \
+  --quiet >/dev/null
 
 echo "Configuring least-privilege runtime access..."
 gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
