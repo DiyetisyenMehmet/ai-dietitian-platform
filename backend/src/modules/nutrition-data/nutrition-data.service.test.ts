@@ -543,6 +543,44 @@ test("catalog type-ahead rejects one-character queries", async () => {
 });
 
 
+test("accepted barcode product persists product usage intelligence with the existing Diewish food record", async () => {
+  let stored: CanonicalFood | null = null;
+  let usdaCalls = 0;
+  const tea: CanonicalFood = {
+    ...food("OPEN_FOOD_FACTS"),
+    name: "Tomurcuk Black Tea",
+    displayNameTr: "Çaykur Tomurcuk",
+    brand: "Çaykur",
+    quantity: "125 g",
+    ingredients: ["black tea"],
+    provenance: {
+      ...food("OPEN_FOOD_FACTS").provenance,
+      sourceCategories: ["black teas", "teas"],
+    },
+  };
+  const persistence = {
+    async getFreshBarcode() { return null; },
+    async getStaleBarcode() { return null; },
+    async upsertFood(value: CanonicalFood) { stored = value; },
+  } as unknown as NutritionDataRepository;
+  const service = new NutritionDataService(
+    providers({
+      off: tea,
+      usda: food("USDA"),
+      onUsdaCall: () => (usdaCalls += 1),
+    }),
+    persistence,
+  );
+
+  const result = await service.getByBarcode("4006381333931");
+  assert.equal(result?.productUsage?.type, "BREWING");
+  assert.equal(result?.quantity, "125 g");
+  assert.equal(result?.serving, null);
+  assert.equal("consumedAmount" in (result ?? {}), false);
+  assert.equal(stored?.productUsage?.type, "BREWING");
+  assert.equal(usdaCalls, 0);
+});
+
 test("weak fresh Diewish cache is cross-checked instead of being returned as final data", async () => {
   let usdaCalls = 0;
   const weakCached: CanonicalFood = {

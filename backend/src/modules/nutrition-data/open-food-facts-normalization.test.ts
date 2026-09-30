@@ -35,6 +35,27 @@ test("Open Food Facts keeps provider-declared per-serving nutrients separate fro
   assert.equal(result.nutrientsPerServing?.sodiumMg, 180);
 });
 
+test("Open Food Facts preserves provider category and preparation evidence for product usage", () => {
+  const result = normalizeOpenFoodFactsProduct({
+    product: {
+      code: "8690000000125",
+      product_name: "Tomurcuk Black Tea",
+      categories_tags: ["en:teas", "en:black-teas"],
+      categories: "Teas, Black teas",
+      preparation: "Brew with hot water.",
+      nutriments: {
+        "energy-kcal_100g": 1,
+        "proteins_100g": 0,
+        "carbohydrates_100g": 0,
+        "fat_100g": 0,
+      },
+    },
+  });
+  assert.ok(result);
+  assert.ok(result.provenance.sourceCategories?.some((value) => /black teas/i.test(value)));
+  assert.equal(result.provenance.preparationInstructions, "Brew with hot water.");
+});
+
 test("Open Food Facts leaves per-serving nutrients null when upstream does not provide them", () => {
   const result = normalizeOpenFoodFactsProduct({
     product: {

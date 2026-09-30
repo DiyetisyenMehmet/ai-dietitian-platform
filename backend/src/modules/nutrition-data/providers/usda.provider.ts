@@ -125,6 +125,8 @@ export function normalizeUsdaFood(raw: unknown): CanonicalFood | null {
   const barcode = text(food.gtinUpc);
   const servingSize = num(food.servingSize);
   const servingUnit = text(food.servingSizeUnit);
+  const sourceCategories = [text(food.foodCategory), text(food.dataType)]
+    .filter((value): value is string => Boolean(value));
   return {
     externalId: String(fdcId),
     provider: "USDA",
@@ -154,6 +156,7 @@ export function normalizeUsdaFood(raw: unknown): CanonicalFood | null {
       retrievedAt: new Date().toISOString(),
       dataBasis: "PER_100_G",
       preparationState: text(food.foodCategory) ?? text(food.dataType),
+      sourceCategories,
       confidence: 0.95,
       sourceReference: `https://fdc.nal.usda.gov/fdc-app.html#/food-details/${fdcId}`,
     },

@@ -117,6 +117,12 @@ export function normalizeOpenFoodFactsProduct(raw: unknown, barcodeHint?: string
   const nutrientsPer100g = nutrientValues(nutriments, "100g");
   const perServing = nutrientValues(nutriments, "serving");
   const labelTags = tags(product.labels_tags);
+  const sourceCategories = uniqueText([
+    ...tags(product.categories_tags).map(stripTag),
+    ...(text(product.categories)?.split(/[,;]/).map((value) => value.trim()) ?? []),
+  ]);
+  const preparationInstructions =
+    text(product.preparation) ?? text(product.preparation_instructions);
   const allergenTags = tags(product.allergens_tags);
   const allergenText = text(product.allergens);
   const ingredientText = text(product.ingredients_text_tr) ?? text(product.ingredients_text);
@@ -175,6 +181,8 @@ export function normalizeOpenFoodFactsProduct(raw: unknown, barcodeHint?: string
       confidence: 0.75,
       sourceReference: `${env.OPEN_FOOD_FACTS_BASE_URL.replace(/\/$/, "")}/product/${code}`,
       providerUpdatedAt: providerUpdatedAt(product),
+      sourceCategories,
+      preparationInstructions,
     },
   };
 }
@@ -191,6 +199,7 @@ export class OpenFoodFactsProvider implements NutritionProvider {
     const fields = [
       "code","product_name","product_name_tr","generic_name","brands","quantity","serving_size","serving_quantity",
       "image_front_url","image_url","ingredients_text","ingredients_text_tr","allergens","allergens_tags","traces","traces_tags","additives_tags","labels_tags",
+      "categories","categories_tags","preparation","preparation_instructions",
       "nutriscore_grade","nutrition_grades","nova_group","last_modified_t","last_modified_datetime","nutriments"
     ].join(",");
     const params = new URLSearchParams({
@@ -225,6 +234,7 @@ export class OpenFoodFactsProvider implements NutritionProvider {
     const fields = [
       "code","product_name","product_name_tr","generic_name","brands","quantity","serving_size","serving_quantity",
       "image_front_url","image_url","ingredients_text","ingredients_text_tr","allergens","allergens_tags","traces","traces_tags","additives_tags","labels_tags",
+      "categories","categories_tags","preparation","preparation_instructions",
       "nutriscore_grade","nutrition_grades","nova_group","last_modified_t","last_modified_datetime","nutriments"
     ].join(",");
     const url = `${env.OPEN_FOOD_FACTS_BASE_URL.replace(/\/$/, "")}/api/v2/product/${barcode}.json?fields=${encodeURIComponent(fields)}`;

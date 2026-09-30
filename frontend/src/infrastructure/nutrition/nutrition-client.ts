@@ -34,6 +34,17 @@ export interface NutrientValuesDto {
 
 export type MealTypeDto = "BREAKFAST" | "LUNCH" | "DINNER" | "SNACK";
 
+export type ProductUsageTypeDto =
+  | "DIRECT_CONSUMPTION"
+  | "BREWING"
+  | "BLENDING_AROMA"
+  | "SPICE"
+  | "COOKING_INGREDIENT"
+  | "SAUCE"
+  | "SWEETENER"
+  | "PREPARATION_BASE"
+  | "UNKNOWN";
+
 export interface NutritionProvenanceDto {
   provider: "USDA" | "CNF" | "CIQUAL" | "COFID" | "OPEN_FOOD_FACTS" | "DIEWISH";
   externalId: string;
@@ -46,6 +57,8 @@ export interface NutritionProvenanceDto {
   dataHash?: string | null;
   stale?: boolean;
   providerUpdatedAt?: string | null;
+  sourceCategories?: string[];
+  preparationInstructions?: string | null;
 }
 
 export interface AllergenEvidenceDto {
@@ -85,6 +98,17 @@ export interface CanonicalFoodDto {
   glutenFree: boolean | null;
   nutriScore: string | null;
   novaGroup: number | null;
+  productUsage?: {
+    type: ProductUsageTypeDto;
+    basis:
+      | "SOURCE_PREPARATION"
+      | "SOURCE_CATEGORY"
+      | "CORROBORATED_PRODUCT_CONTEXT"
+      | "INSUFFICIENT_EVIDENCE"
+      | "INSUFFICIENT_DATA_QUALITY"
+      | "CONFLICTING_EVIDENCE";
+    evidence: string[];
+  };
   provenance: NutritionProvenanceDto;
 }
 

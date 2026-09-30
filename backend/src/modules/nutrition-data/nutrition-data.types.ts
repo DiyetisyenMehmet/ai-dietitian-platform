@@ -4,6 +4,31 @@ export type NutritionProviderId = "USDA" | "CNF" | "CIQUAL" | "COFID" | "OPEN_FO
 
 export type NutritionDataBasis = "PER_100_G" | "PER_SERVING";
 
+export type ProductUsageType =
+  | "DIRECT_CONSUMPTION"
+  | "BREWING"
+  | "BLENDING_AROMA"
+  | "SPICE"
+  | "COOKING_INGREDIENT"
+  | "SAUCE"
+  | "SWEETENER"
+  | "PREPARATION_BASE"
+  | "UNKNOWN";
+
+export type ProductUsageBasis =
+  | "SOURCE_PREPARATION"
+  | "SOURCE_CATEGORY"
+  | "CORROBORATED_PRODUCT_CONTEXT"
+  | "INSUFFICIENT_EVIDENCE"
+  | "INSUFFICIENT_DATA_QUALITY"
+  | "CONFLICTING_EVIDENCE";
+
+export interface ProductUsage {
+  type: ProductUsageType;
+  basis: ProductUsageBasis;
+  evidence: string[];
+}
+
 export const CORE_NUTRIENT_KEYS = [
   "energyKcal",
   "proteinG",
@@ -49,6 +74,10 @@ export interface NutritionProvenance {
   stale?: boolean;
   /** Provider-declared update timestamp, when the upstream source exposes one. */
   providerUpdatedAt?: string | null;
+  /** Raw provider category hints used only as usage evidence, not a Diewish taxonomy. */
+  sourceCategories?: string[];
+  /** Provider-declared preparation directions when the source exposes them. */
+  preparationInstructions?: string | null;
 }
 
 export type AllergenDataPresence = "DECLARED" | "MISSING";
@@ -93,6 +122,8 @@ export interface CanonicalFood {
   glutenFree: boolean | null;
   nutriScore: string | null;
   novaGroup: number | null;
+  /** Stored with the same canonical product record. Optional for legacy cache rows. */
+  productUsage?: ProductUsage;
   provenance: NutritionProvenance;
 }
 

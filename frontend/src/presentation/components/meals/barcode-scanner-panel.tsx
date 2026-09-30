@@ -135,8 +135,40 @@ function coachHref(food: CanonicalFoodDto, grams: number, nutrients: NutrientVal
   return `/ai?prompt=${encodeURIComponent(prompt)}`;
 }
 
+function productUsageLabel(food: CanonicalFoodDto): string {
+  switch (food.productUsage?.type ?? "UNKNOWN") {
+    case "DIRECT_CONSUMPTION": return "Doğrudan tüketilir";
+    case "BREWING": return "Demlenerek kullanılır";
+    case "BLENDING_AROMA": return "Harmanlama / aroma amaçlı kullanılır";
+    case "SPICE": return "Baharat / çeşni";
+    case "COOKING_INGREDIENT": return "Yemek hazırlamada kullanılır";
+    case "SAUCE": return "Sos";
+    case "SWEETENER": return "Tatlandırıcı";
+    case "PREPARATION_BASE": return "Hazırlanarak tüketilir";
+    default: return "Kullanım şekli doğrulanamadı";
+  }
+}
+
+function preparationUsageNotice(food: CanonicalFoodDto): string | null {
+  switch (food.productUsage?.type) {
+    case "BREWING":
+      return "Bu ürün demlenerek kullanılır. Paket miktarı ve kuru ürünün 100 g besin referansı, hazırlanmış içeceğin tüketim miktarı değildir.";
+    case "BLENDING_AROMA":
+      return "Bu ürün harmanlama veya aroma amacıyla kullanılabilir. Paket miktarı otomatik tüketim porsiyonu değildir.";
+    case "PREPARATION_BASE":
+      return "Bu ürün hazırlanarak tüketilir. Kaynakta kuru/toz ürün için verilen besin değerleri hazırlanmış ürünün aynı miktardaki değeri gibi yorumlanmaz.";
+    case "SPICE":
+      return "Baharat ve çeşnilerde paket miktarı otomatik tüketim porsiyonu değildir.";
+    case "COOKING_INGREDIENT":
+      return "Bu ürün yemek hazırlamada kullanılır. Paket miktarı otomatik tüketim porsiyonu değildir.";
+    default:
+      return null;
+  }
+}
+
 function productInfoRows(food: CanonicalFoodDto): Array<[string, string]> {
   return [
+    ["Kullanım", productUsageLabel(food)],
     ["Nutri-Score", food.nutriScore?.toUpperCase() ?? "Bilgi bulunamadı"],
     ["NOVA", food.novaGroup === null ? "Bilgi bulunamadı" : String(food.novaGroup)],
     ["Vegan", yesNoUnknown(food.vegan, "Evet", "Hayır")],
@@ -588,6 +620,11 @@ export function BarcodeScannerPanel() {
               {food.provenance.sourceReference === "USER_CONFIRMED_PACKAGE_LABEL" && (
                 <p className="rounded-xl bg-primary/5 px-3 py-2 text-xs font-semibold text-primary">
                   Kullanıcı doğrulamalı paket etiketi
+                </p>
+              )}
+              {preparationUsageNotice(food) && (
+                <p className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
+                  {preparationUsageNotice(food)}
                 </p>
               )}
             </CardContent>

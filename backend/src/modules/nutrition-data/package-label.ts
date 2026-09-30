@@ -1,6 +1,7 @@
 import { ApiError } from "../../utils/api-error";
 import { calculatePortion } from "./nutrition-calculator";
 import { normalizeBarcode } from "./barcode";
+import { unknownProductUsage } from "./product-usage";
 import { CORE_NUTRIENT_KEYS, EMPTY_NUTRIENTS, type CanonicalFood, type NutrientValues } from "./nutrition-data.types";
 
 export type PackageLabelBasis = "PER_100_G" | "PER_SERVING";
@@ -183,6 +184,7 @@ export function buildUserConfirmedPackageLabelFood(
     glutenFree: null,
     nutriScore: null,
     novaGroup: null,
+    productUsage: unknownProductUsage("INSUFFICIENT_EVIDENCE"),
     provenance: {
       provider: "DIEWISH",
       externalId: `user-label:${barcode}`,
