@@ -515,13 +515,12 @@ export const nutritionDataRepository = {
     productName: string | null;
     food: CanonicalFood | null;
     scannedAt: string;
-    lastViewedAt: string | null;
   }>> {
     const rows = await prisma.$queryRaw<ScanRow[]>`
       SELECT barcode, provider, product_name, payload, scanned_at
       FROM nutrition_barcode_scans
       WHERE user_id = ${userId}
-      ORDER BY COALESCE(last_viewed_at, scanned_at) DESC, scanned_at DESC
+      ORDER BY scanned_at DESC
       LIMIT ${limit}
     `;
     return rows.map((row) => ({
@@ -555,6 +554,7 @@ export const nutritionDataRepository = {
     food: CanonicalFood | null;
     photo: PhotoScanHistoryInput | null;
     scannedAt: string;
+    lastViewedAt: string | null;
   }>> {
     const rows = await prisma.$queryRaw<UnifiedScanRow[]>`
       SELECT *
@@ -583,7 +583,7 @@ export const nutritionDataRepository = {
         FROM nutrition_photo_scans
         WHERE user_id = ${userId}
       ) history
-      ORDER BY scanned_at DESC
+      ORDER BY COALESCE(last_viewed_at, scanned_at) DESC, scanned_at DESC
       LIMIT ${limit}
     `;
 

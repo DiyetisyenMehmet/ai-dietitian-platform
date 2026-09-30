@@ -155,7 +155,6 @@ export interface BarcodeHistoryDto {
   productName: string | null;
   food: CanonicalFoodDto | null;
   scannedAt: string;
-  lastViewedAt: string | null;
 }
 
 export interface PhotoScanHistoryDto {
@@ -183,6 +182,7 @@ export interface ScanHistoryItemDto {
   food: CanonicalFoodDto | null;
   photo: PhotoScanHistoryDto | null;
   scannedAt: string;
+  lastViewedAt: string | null;
 }
 
 export interface NutritionAttentionFlagDto {
