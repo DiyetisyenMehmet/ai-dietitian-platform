@@ -1,5 +1,5 @@
 import { calculatePortion } from "./nutrition-calculator";
-import type { CanonicalFood, NutrientValues, NutritionProvenance } from "./nutrition-data.types";
+import type { CanonicalFood, NutrientValues, NutritionDataBasis, NutritionProvenance } from "./nutrition-data.types";
 
 export type NutritionScanType = "PHOTO" | "BARCODE" | "NUTRITION_LABEL";
 
@@ -16,6 +16,12 @@ export interface NormalizedScanIngredient {
   } | null;
 }
 
+export interface NutritionReference {
+  basis: NutritionDataBasis;
+  description: string;
+  grams: number | null;
+}
+
 export interface NormalizedNutritionScanResult {
   scanType: NutritionScanType;
   identity: {
@@ -24,14 +30,19 @@ export interface NormalizedNutritionScanResult {
     barcode: string | null;
     imageUrl: string | null;
   };
+  /** Source/reference serving only. For barcode products this is never user consumption. */
   serving: {
     description: string | null;
     grams: number | null;
     confidence: number | null;
   };
+  /** Explicit nutrition declaration basis, separate from package quantity and consumed amount. */
+  nutritionReference: NutritionReference;
   nutrients: {
     per100g: NutrientValues | null;
     perServing: NutrientValues;
+    /** Nutrients corresponding exactly to nutritionReference. */
+    reference: NutrientValues;
     estimated: boolean;
   };
   ingredients: NormalizedScanIngredient[];
@@ -85,13 +96,29 @@ function productBlock(food: CanonicalFood) {
 }
 
 export function toBarcodeScanResult(food: CanonicalFood): NormalizedNutritionScanResult {
-  const servingGrams = food.serving?.gramWeight && food.serving.gramWeight > 0
-    ? food.serving.gramWeight
-    : 100;
-  // Preserve provider-declared serving values when available. Only derive from
-  // per-100g data when the upstream product does not publish a serving basis.
+  const sourceServingGrams =
+    food.serving?.gramWeight && food.serving.gramWeight > 0 ? food.serving.gramWeight : null;
+  // A provider serving is reference metadata only. When the provider did not
+  // publish per-serving nutrients, deriving them is allowed only for that
+  // declared reference serving and never creates a consumed amount.
   const perServing = food.nutrientsPerServing
-    ?? calculatePortion(food.nutrientsPer100g, servingGrams).nutrients;
+    ?? (sourceServingGrams
+      ? calculatePortion(food.nutrientsPer100g, sourceServingGrams).nutrients
+      : food.nutrientsPer100g);
+  const nutritionReference: NutritionReference =
+    food.provenance.dataBasis === "PER_SERVING"
+      ? {
+          basis: "PER_SERVING",
+          description:
+            food.serving?.description?.trim()
+            || (sourceServingGrams ? `${sourceServingGrams} g` : "Kaynak porsiyon"),
+          grams: sourceServingGrams,
+        }
+      : { basis: "PER_100_G", description: "100 g", grams: 100 };
+  const referenceNutrients =
+    nutritionReference.basis === "PER_SERVING" && food.nutrientsPerServing
+      ? food.nutrientsPerServing
+      : food.nutrientsPer100g;
   return {
     scanType: "BARCODE",
     identity: {
@@ -101,13 +128,15 @@ export function toBarcodeScanResult(food: CanonicalFood): NormalizedNutritionSca
       imageUrl: food.imageUrl,
     },
     serving: {
-      description: food.serving?.description ?? (servingGrams === 100 ? "100 g" : `${servingGrams} g`),
-      grams: servingGrams,
-      confidence: 1,
+      description: food.serving?.description ?? null,
+      grams: sourceServingGrams,
+      confidence: sourceServingGrams !== null || food.serving?.description ? 1 : null,
     },
+    nutritionReference,
     nutrients: {
       per100g: food.nutrientsPer100g,
       perServing,
+      reference: referenceNutrients,
       estimated: false,
     },
     ingredients: food.ingredients.map((name) => ({
@@ -155,7 +184,17 @@ export function toPhotoScanResult(scan: PhotoScanLike): NormalizedNutritionScanR
       grams: scan.estimatedGrams,
       confidence: Math.max(0, Math.min(1, scan.confidence / 100)),
     },
-    nutrients: { per100g: null, perServing: scan.totals, estimated: true },
+    nutritionReference: {
+      basis: "PER_SERVING",
+      description: scan.estimatedPortion || "Taranan porsiyon",
+      grams: scan.estimatedGrams,
+    },
+    nutrients: {
+      per100g: null,
+      perServing: scan.totals,
+      reference: scan.totals,
+      estimated: true,
+    },
     ingredients: scan.ingredients.map((item) => ({
       name: item.name,
       grams: item.estimatedGrams,

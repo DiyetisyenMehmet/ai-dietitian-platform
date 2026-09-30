@@ -43,6 +43,9 @@ test("confirmed per-serving label is converted deterministically to per 100 g", 
   assert.equal(food.nutrientsPer100g.energyKcal, 200);
   assert.equal(food.nutrientsPer100g.proteinG, 10);
   assert.equal(food.nutrientsPer100g.sodiumMg, 160);
+  assert.equal(food.quantity, "50 g");
+  assert.equal(food.serving?.gramWeight, 50);
+  assert.equal(food.provenance.dataBasis, "PER_SERVING");
   assert.equal(food.provenance.sourceReference, "USER_CONFIRMED_PACKAGE_LABEL");
 });
 

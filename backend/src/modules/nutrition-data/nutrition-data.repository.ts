@@ -592,8 +592,9 @@ export const nutritionDataRepository = {
           brand: food?.brand ?? null,
           barcode: row.barcode,
           imageUrl: food?.imageUrl ?? null,
-          grams: food?.serving?.gramWeight ?? null,
-          calories: food?.nutrientsPerServing?.energyKcal ?? null,
+          // Barcode scan history is an observation event, not a consumption event.
+          grams: null,
+          calories: null,
           food,
           photo: null,
           scannedAt: row.scanned_at.toISOString(),

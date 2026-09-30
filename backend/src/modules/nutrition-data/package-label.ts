@@ -187,7 +187,7 @@ export function buildUserConfirmedPackageLabelFood(
       provider: "DIEWISH",
       externalId: `user-label:${barcode}`,
       retrievedAt: now,
-      dataBasis: "PER_100_G",
+      dataBasis: draft.basis,
       confidence: 0.9,
       sourceReference: "USER_CONFIRMED_PACKAGE_LABEL",
       lastValidatedAt: now,

@@ -133,3 +133,14 @@ test("sums ingredient portions and calculates calorie-equivalent servings", () =
   assert.equal(comparison.servingGrams, 200);
   assert.equal(comparison.nutrients?.proteinG, 62);
 });
+
+
+test("scales 400 kcal per 100 g to an explicitly consumed 25 g without using package size", () => {
+  const source: NutrientValues = {
+    ...base,
+    energyKcal: 400,
+  };
+  const consumed = calculatePortion(source, 25);
+  assert.equal(consumed.grams, 25);
+  assert.equal(consumed.nutrients.energyKcal, 100);
+});

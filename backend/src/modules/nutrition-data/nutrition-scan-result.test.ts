@@ -47,6 +47,10 @@ test("barcode normalized scan derives serving values from per-100g data when pro
   const scan = toBarcodeScanResult(food);
   assert.equal(scan.scanType, "BARCODE");
   assert.equal(scan.serving.grams, 25);
+  assert.equal(scan.nutritionReference.basis, "PER_100_G");
+  assert.equal(scan.nutritionReference.grams, 100);
+  assert.equal(scan.product?.quantity, "50 g");
+  assert.equal(scan.nutrients.reference.energyKcal, 520);
   assert.equal(scan.nutrients.per100g?.energyKcal, 520);
   assert.equal(scan.nutrients.perServing.energyKcal, 130);
   assert.equal(scan.nutrients.estimated, false);
@@ -70,6 +74,16 @@ test("barcode normalized scan prefers provider-declared serving nutrients when a
   assert.equal(scan.serving.grams, 25);
   assert.equal(scan.nutrients.perServing.energyKcal, 128);
   assert.equal(scan.nutrients.perServing.proteinG, 4.8);
+  assert.equal(scan.nutrients.reference.energyKcal, 520);
+});
+
+test("barcode scan does not invent a source serving when only the 100 g reference exists", () => {
+  const scan = toBarcodeScanResult({ ...food, serving: null, nutrientsPerServing: null });
+  assert.equal(scan.serving.grams, null);
+  assert.equal(scan.serving.description, null);
+  assert.equal(scan.nutritionReference.basis, "PER_100_G");
+  assert.equal(scan.nutritionReference.grams, 100);
+  assert.equal(scan.nutrients.reference.energyKcal, 520);
 });
 
 test("photo normalized scan keeps recognition estimation separate from nutrition source", () => {
@@ -93,5 +107,8 @@ test("photo normalized scan keeps recognition estimation separate from nutrition
   assert.equal(scan.provenance.recognition, "AI_ESTIMATED");
   assert.equal(scan.provenance.nutrition[0]?.provider, "USDA");
   assert.equal(scan.nutrients.per100g, null);
+  assert.equal(scan.nutritionReference.basis, "PER_SERVING");
+  assert.equal(scan.nutritionReference.grams, 250);
+  assert.equal(scan.nutrients.reference.energyKcal, 340);
   assert.equal(scan.nutrients.perServing.energyKcal, 340);
 });

@@ -36,6 +36,7 @@ export interface NutritionProvenance {
   provider: NutritionProviderId;
   externalId: string;
   retrievedAt: string;
+  /** Basis used by the upstream/source nutrition declaration, not user consumption. */
   dataBasis: NutritionDataBasis;
   preparationState?: string | null;
   confidence: number;
@@ -74,7 +75,9 @@ export interface CanonicalFood {
   brand: string | null;
   barcode: string | null;
   imageUrl: string | null;
+  /** Package/net quantity printed or declared for the whole product. Never consumption. */
   quantity: string | null;
+  /** Provider-declared reference serving. Never interpreted as the user's consumed amount. */
   serving: FoodServing | null;
   nutrientsPer100g: NutrientValues;
   /** Provider-declared per-serving values when supplied upstream; never inferred here. */
