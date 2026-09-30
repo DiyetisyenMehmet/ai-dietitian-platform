@@ -147,6 +147,8 @@ async function generateValidatedBatch(
         receivedDays: output.cycle.length,
         invalidMealStructure,
         allergenViolationCount: allergenViolations.length,
+        allergenRiskCount: allergenViolations.filter((item) => item.reason === "KNOWN_RISK").length,
+        allergenUnknownCount: allergenViolations.filter((item) => item.reason === "UNKNOWN").length,
         nutritionViolationCount: nutritionViolations.length,
         realismViolationCount: realismViolations.length,
         startDayNumber: input.startDayNumber ?? 1,
@@ -200,10 +202,14 @@ async function generateValidatedBatch(
       { violationCount: allergenViolations.length, startDayNumber: input.startDayNumber ?? 1 },
       "Nutrition-plan batch still contained allergen(s) after retry; rejecting batch",
     );
-    throw new ApiError(502, "The nutrition-plan provider could not produce an allergy-safe plan.", {
-      code: "NUTRITION_PLAN_ALLERGEN_VALIDATION_FAILED",
-      isOperational: false,
-    });
+    throw new ApiError(
+      502,
+      "The nutrition-plan provider could not produce a plan with sufficiently verified ingredient and allergen information.",
+      {
+        code: "NUTRITION_PLAN_ALLERGEN_VALIDATION_FAILED",
+        isOperational: false,
+      },
+    );
   }
 
   if (nutritionViolations.length > 0) {

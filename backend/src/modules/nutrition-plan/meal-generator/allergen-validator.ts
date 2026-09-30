@@ -8,35 +8,27 @@
  * never silently serves an allergen to the user.
  */
 
+import { assessPlannedFoodAllergenSafety } from "../../nutrition-data/allergen-safety";
 import type { DailyPlan } from "../types";
 
 /** A detected allergen occurrence within generated content. */
 export interface AllergenViolation {
-  /** The user-declared allergen that was matched. */
-  allergen: string;
+  /** Explicit risk or insufficient ingredient evidence. */
+  reason: "KNOWN_RISK" | "UNKNOWN";
+  /** User-declared allergens matched by deterministic evidence. */
+  matchedAllergens: string[];
   /** Cycle day label where it was found. */
   dayLabel: string;
   /** Meal name where it was found. */
   mealName: string;
-  /** The offending food name. */
+  /** The offending or insufficiently-described food name. */
   food: string;
 }
 
 /**
- * Normalizes a string for case-insensitive, accent-tolerant substring matching.
- */
-function normalize(value: string): string {
-  return value
-    .toLowerCase()
-    .normalize("NFD")
-    // Strip combining diacritical marks so "süt" matches "sut", etc.
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim();
-}
-
-/**
- * Scans a generated rotation cycle for any declared allergen appearing in a
- * food name.
+ * Scans a generated rotation cycle using the central allergen-safety rule.
+ * Product/food name can establish an explicit risk, but cannot establish safety;
+ * allergy-constrained generated foods must also carry explicit ingredients.
  *
  * @param cycle - The generated daily plans (rotation cycle).
  * @param allergies - User-declared allergens (hard exclusions).
@@ -46,27 +38,21 @@ export function findAllergenViolations(
   cycle: DailyPlan[],
   allergies: string[],
 ): AllergenViolation[] {
-  const normalizedAllergens = allergies
-    .map((allergen) => ({ raw: allergen, norm: normalize(allergen) }))
-    .filter((entry) => entry.norm.length > 0);
-
-  if (normalizedAllergens.length === 0) return [];
+  if (allergies.map((item) => item.trim()).filter(Boolean).length === 0) return [];
 
   const violations: AllergenViolation[] = [];
   for (const day of cycle) {
     for (const meal of day.meals) {
       for (const food of meal.foods) {
-        const foodNorm = normalize(food.name);
-        for (const allergen of normalizedAllergens) {
-          if (foodNorm.includes(allergen.norm)) {
-            violations.push({
-              allergen: allergen.raw,
-              dayLabel: day.dayLabel,
-              mealName: meal.name,
-              food: food.name,
-            });
-          }
-        }
+        const assessment = assessPlannedFoodAllergenSafety(food, allergies);
+        if (assessment.status === "KNOWN_SAFE") continue;
+        violations.push({
+          reason: assessment.status,
+          matchedAllergens: assessment.matchedAllergens,
+          dayLabel: day.dayLabel,
+          mealName: meal.name,
+          food: food.name,
+        });
       }
     }
   }
