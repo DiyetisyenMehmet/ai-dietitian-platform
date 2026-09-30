@@ -318,6 +318,7 @@ jobs:
           e2e/admin-users.spec.js
           e2e/admin-user-operations.spec.js
           e2e/admin-subscription.spec.js
+          e2e/admin-entitlement-operations.spec.js
           --workers=1 --reporter=line
       - name: Upload Blood Test card browser screenshots
         if: always()
