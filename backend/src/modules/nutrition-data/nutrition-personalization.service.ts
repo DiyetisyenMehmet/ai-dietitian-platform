@@ -1,6 +1,7 @@
 import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/api-error";
 import { derivePer100gAttentionFlags, derivePortionAttentionFlags } from "./nutrition-attention";
+import { assessFoodAllergenSafety } from "./allergen-safety";
 import { calculatePortion, compareByCalories } from "./nutrition-calculator";
 import { nutritionDataService } from "./nutrition-data.service";
 import { MICRONUTRIENT_KEYS } from "./micronutrients";
@@ -15,22 +16,10 @@ function sum(values: Array<number | null>): number {
   return Math.round(total * 10) / 10;
 }
 
-function normalize(value: string): string {
-  return value.trim().toLocaleLowerCase("tr-TR").normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
-}
-
 function validGrams(grams: number): void {
   if (!Number.isFinite(grams) || grams <= 0 || grams > 5_000) {
     throw ApiError.badRequest("Porsiyon 0-5000 g aralığında olmalıdır.");
   }
-}
-
-function allergenMatch(food: CanonicalFood, allergies: string[]): string[] {
-  const declared = food.allergens.map(normalize);
-  return allergies.filter((allergy) => {
-    const key = normalize(allergy);
-    return declared.some((item) => item.includes(key) || key.includes(item));
-  });
 }
 
 function dietaryCompatibility(
@@ -121,21 +110,21 @@ async function personalizeLocal(userId: string, nutrients: NutrientValues, food?
         consumed,
       )
     : null;
-  const matchedAllergies = food && profile ? allergenMatch(food, profile.allergies) : [];
+  const allergenSafety = food
+    ? assessFoodAllergenSafety(food, profile?.allergies ?? [])
+    : null;
   const dietary = food ? dietaryCompatibility(food, profile?.dietaryPreference ?? null) : "UNKNOWN";
   const warnings: string[] = [];
-  if (matchedAllergies.length > 0) {
+  if (allergenSafety?.message) {
+    warnings.push(allergenSafety.message);
+  }
+  if (allergenSafety?.crossContaminationWarnings.length) {
     warnings.push(
-      `Ürün kaynağında profilindeki alerjenlerle eşleşen bilgi var: ${matchedAllergies.join(", ")}.`,
+      `Kaynakta olası çapraz bulaşma uyarısı: ${allergenSafety.crossContaminationWarnings.join("; ")}.`,
     );
   }
   if (food && dietary === "INCOMPATIBLE") {
     warnings.push("Ürün, profilindeki beslenme tercihiyle uyumlu görünmüyor.");
-  }
-  if (food && food.allergens.length === 0) {
-    warnings.push(
-      "Bu ürün için alerjen verisi eksik olabilir; alerjen güvenliği doğrulanmış kabul edilmemelidir.",
-    );
   }
   if (food?.provenance.stale) {
     warnings.push("Ürün verisi şu anda yeniden doğrulanamadı; son bilinen önbellek kaydı gösteriliyor.");
@@ -154,7 +143,8 @@ async function personalizeLocal(userId: string, nutrients: NutrientValues, food?
     profileContextUsed: Boolean(profile),
     activePlanUsed: Boolean(plan),
     dietaryCompatibility: dietary,
-    allergenDataComplete: food ? food.allergens.length > 0 : false,
+    allergenDataComplete: allergenSafety?.dataComplete ?? false,
+    allergenSafety,
     warnings,
     attentionFlags,
     windowHours: 24,
@@ -247,8 +237,14 @@ export const nutritionPersonalizationService = {
     }
 
     const comparisons = candidates
-      .filter((food) => (profile ? allergenMatch(food, profile.allergies).length === 0 : true))
-      .map((food) => {
+      .map((food) => ({
+        food,
+        allergenSafety: assessFoodAllergenSafety(food, profile?.allergies ?? []),
+      }))
+      .filter(({ allergenSafety }) =>
+        !profile?.allergies.length || allergenSafety.status === "KNOWN_SAFE",
+      )
+      .map(({ food, allergenSafety }) => {
         const comparison = compareByCalories(food, targetCalories);
         if (!comparison.nutrients || comparison.servingGrams === null) return null;
         return {
@@ -262,7 +258,8 @@ export const nutritionPersonalizationService = {
           nutrients: comparison.nutrients,
           differenceFromSource: nutrientDifference(sourcePortion.nutrients, comparison.nutrients),
           dietaryCompatibility: dietaryCompatibility(food, profile?.dietaryPreference ?? null),
-          allergenDataComplete: food.allergens.length > 0,
+          allergenDataComplete: allergenSafety.dataComplete,
+          allergenSafety,
         };
       })
       .filter((value): value is NonNullable<typeof value> => value !== null)

@@ -65,6 +65,13 @@ export interface MinimizedNutritionGrounding {
     sodiumMg: number | null;
     saltG: number | null;
   };
+  allergenSafety: {
+    status: "KNOWN_SAFE" | "KNOWN_RISK" | "UNKNOWN";
+    matchedAllergens: string[];
+    dataComplete: boolean;
+    message: string | null;
+    crossContaminationWarnings: string[];
+  };
   rule: "VERIFIED_NUMBERS_MUST_NOT_BE_CHANGED_OR_INVENTED";
 }
 

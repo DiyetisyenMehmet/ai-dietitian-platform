@@ -51,19 +51,20 @@ export const aiChatService = {
       const last24Hours = new Date(now - DAY_MS);
       const last14Days = new Date(now - 14 * DAY_MS);
 
-      const [profile, activePlan, analyses, recentMeals, recentWater, recentWeights, nutritionGrounding] = await Promise.all([
+      const [profile, activePlan, analyses, recentMeals, recentWater, recentWeights] = await Promise.all([
         prisma.userProfile.findUnique({ where: { userId } }),
         prisma.nutritionPlan.findFirst({ where: { userId, isActive: true }, orderBy: { updatedAt: "desc" } }),
         bloodTestAnalysisRepository.listByUser(userId),
         trackingRepository.listMealLogs(userId, last24Hours),
         trackingRepository.listWaterLogs(userId, last24Hours),
         trackingRepository.listWeightLogs(userId, last14Days),
-        // This resolver sends only the food query to NutritionService/provider; no profile or health data leaves Diewish.
-        resolveNutritionGrounding(message),
       ]);
 
       const latestAnalysis = analyses.find((analysis) => analysis.status === "COMPLETED") ?? null;
       const context = buildMinimizedContext({ profile, activePlan, latestAnalysis, recentMeals, recentWater, recentWeights });
+      // Product allergy safety is resolved server-side from the same nutrition record,
+      // using only the user's already-stored allergy list.
+      const nutritionGrounding = await resolveNutritionGrounding(message, profile?.allergies ?? []);
       if (nutritionGrounding) context.nutritionGrounding = nutritionGrounding;
 
       const premium = await isUserPremium(userId);

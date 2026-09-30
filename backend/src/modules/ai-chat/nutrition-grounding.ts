@@ -1,4 +1,5 @@
 import { calculatePortion } from "../nutrition-data/nutrition-calculator";
+import { assessFoodAllergenSafety, type AllergenSafetyStatus } from "../nutrition-data/allergen-safety";
 import { nutritionDataService } from "../nutrition-data/nutrition-data.service";
 import type { NutrientValues, NutritionProviderId } from "../nutrition-data/nutrition-data.types";
 
@@ -7,6 +8,13 @@ export interface NutritionGrounding {
   servingGrams: number;
   food: { displayNameTr: string; provider: NutritionProviderId; externalId: string };
   nutrients: NutrientValues;
+  allergenSafety: {
+    status: AllergenSafetyStatus;
+    matchedAllergens: string[];
+    dataComplete: boolean;
+    message: string | null;
+    crossContaminationWarnings: string[];
+  };
   rule: "VERIFIED_NUMBERS_MUST_NOT_BE_CHANGED_OR_INVENTED";
 }
 
@@ -52,7 +60,7 @@ export function parseNutritionQuestion(message: string): { query: string; grams:
   return null;
 }
 
-export async function resolveNutritionGrounding(message: string): Promise<NutritionGrounding | null> {
+export async function resolveNutritionGrounding(message: string, allergies: string[] = []): Promise<NutritionGrounding | null> {
   const parsed = parseNutritionQuestion(message);
   const barcode = parseNutritionBarcode(message);
   if (!parsed && !barcode) return null;
@@ -65,6 +73,7 @@ export async function resolveNutritionGrounding(message: string): Promise<Nutrit
 
     const grams = parsed?.grams ?? food.serving?.gramWeight ?? 100;
     const portion = calculatePortion(food.nutrientsPer100g, grams);
+    const allergenSafety = assessFoodAllergenSafety(food, allergies);
     return {
       query: parsed?.query ?? food.displayNameTr,
       servingGrams: portion.grams,
@@ -74,6 +83,13 @@ export async function resolveNutritionGrounding(message: string): Promise<Nutrit
         externalId: food.externalId,
       },
       nutrients: portion.nutrients,
+      allergenSafety: {
+        status: allergenSafety.status,
+        matchedAllergens: allergenSafety.matchedAllergens,
+        dataComplete: allergenSafety.dataComplete,
+        message: allergenSafety.message,
+        crossContaminationWarnings: allergenSafety.crossContaminationWarnings,
+      },
       rule: "VERIFIED_NUMBERS_MUST_NOT_BE_CHANGED_OR_INVENTED",
     };
   } catch {
