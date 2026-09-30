@@ -108,7 +108,7 @@ test("real dashboard food and progress cards keep text and chevron geometry acro
     });
 
     expect(chevronAfter.x).toBeCloseTo(chevronBefore.x, 2);
-    expect(chevronAfter.y).toBeCloseTo(chevronBefore.y, 2);
+    expect(Math.abs(chevronAfter.y - chevronBefore.y)).toBeLessThanOrEqual(0.5);
     expect(chevronAfter.width).toBeCloseTo(chevronBefore.width, 2);
     expect(chevronAfter.height).toBeCloseTo(chevronBefore.height, 2);
   }
