@@ -543,6 +543,44 @@ test("catalog type-ahead rejects one-character queries", async () => {
 });
 
 
+test("legacy fresh Diewish cache stores derived usage without refreshing external providers", async () => {
+  let usageUpdates = 0;
+  let providerCalls = 0;
+  const cachedTea: CanonicalFood = {
+    ...food("OPEN_FOOD_FACTS"),
+    name: "Black Tea",
+    displayNameTr: "Siyah Çay",
+    brand: "Test",
+    quantity: "125 g",
+    provenance: {
+      ...food("OPEN_FOOD_FACTS").provenance,
+      sourceCategories: ["black teas"],
+    },
+  };
+  const persistence = {
+    async getFreshBarcode() { return cachedTea; },
+    async getStaleBarcode() { return null; },
+    async updateProductUsage(value: CanonicalFood) {
+      usageUpdates += 1;
+      assert.equal(value.productUsage?.type, "BREWING");
+    },
+  } as unknown as NutritionDataRepository;
+  const service = new NutritionDataService(
+    providers({
+      off: null,
+      usda: null,
+      onOffCall: () => (providerCalls += 1),
+      onUsdaCall: () => (providerCalls += 1),
+    }),
+    persistence,
+  );
+
+  const result = await service.getByBarcode("4006381333931");
+  assert.equal(result?.productUsage?.type, "BREWING");
+  assert.equal(usageUpdates, 1);
+  assert.equal(providerCalls, 0);
+});
+
 test("accepted barcode product persists product usage intelligence with the existing Diewish food record", async () => {
   let stored: CanonicalFood | null = null;
   let usdaCalls = 0;

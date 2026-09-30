@@ -325,6 +325,9 @@ export class NutritionDataService {
         const persistedQuality = assessBarcodeFoodQuality(persisted, barcode);
         if (!persistedQuality.shouldCrossCheck && persistedQuality.tier !== "REJECT") {
           const persistedWithUsage = withProductUsage(persisted, persistedQuality.tier);
+          if (!persisted.productUsage && this.persistence) {
+            await this.persistence.updateProductUsage(persistedWithUsage);
+          }
           logger.info(
             {
               event: "barcode_cache_hit",

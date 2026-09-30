@@ -348,6 +348,28 @@ export const nutritionDataRepository = {
     `;
   },
 
+  async updateProductUsage(food: CanonicalFood): Promise<void> {
+    if (!food.productUsage) return;
+    const payloadFood: CanonicalFood = {
+      ...food,
+      provenance: {
+        ...food.provenance,
+        dataHash: undefined,
+        stale: false,
+      },
+    };
+    const payload = JSON.stringify(payloadFood);
+    const hash = payloadHash(payload);
+    await prisma.$executeRaw`
+      UPDATE nutrition_foods
+      SET payload = ${payload}::jsonb,
+          payload_hash = ${hash},
+          updated_at = CURRENT_TIMESTAMP
+      WHERE provider = ${food.provider}
+        AND external_id = ${food.externalId}
+    `;
+  },
+
   async upsertFood(food: CanonicalFood, expiresAt: Date): Promise<void> {
     const validatedAt = new Date();
     const enriched: CanonicalFood = {
