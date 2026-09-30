@@ -277,9 +277,10 @@ test("B2 duplicate submit is blocked while mutation is in flight", async ({ page
   await operations.getByRole("button", { name: "Support erişimi ver" }).click();
   const modal = page.getByRole("dialog");
   await modal.getByLabel("İşlem gerekçesi").fill("Approved controlled access");
-  const confirm = modal.getByRole("button", { name: "Onayla ve uygula" });
+  const confirm = modal.locator('button[type="submit"]');
   await confirm.click();
   await expect(confirm).toBeDisabled();
+  await expect(confirm).toHaveText("İşleniyor…");
   expect(fixture.mutationCalls()).toBe(1);
   fixture.releaseMutation();
   await expect(operations.getByRole("status")).toContainText("güncellendi");
