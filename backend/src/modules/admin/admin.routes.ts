@@ -175,6 +175,14 @@ adminRouter.get(
   adminUsersController.detail,
 );
 
+adminRouter.get(
+  "/users/:id/subscription",
+  requireAdminPermission(ADMIN_PERMISSIONS.USERS_READ),
+  requireAdminPermission(ADMIN_PERMISSIONS.ENTITLEMENTS_READ),
+  validate({ params: adminUserParamsSchema }),
+  adminUsersController.subscription,
+);
+
 adminRouter.patch(
   "/users/:id/status",
   requireAdminPermission(ADMIN_PERMISSIONS.USERS_MANAGE),
