@@ -56,6 +56,28 @@ test("barcode normalized scan derives serving values from per-100g data when pro
   assert.equal(scan.nutrients.per100g?.energyKcal, 520);
   assert.equal(scan.nutrients.perServing.energyKcal, 130);
   assert.equal(scan.nutrients.estimated, false);
+  assert.equal(scan.dataQuality?.status, "QUALITY_ACCEPTED");
+});
+
+test("barcode normalized scan marks incomplete but usable nutrition as partial and discloses it", () => {
+  const scan = toBarcodeScanResult({
+    ...food,
+    brand: null,
+    quantity: null,
+    serving: null,
+    nutrientsPer100g: {
+      ...food.nutrientsPer100g,
+      carbohydratesG: null,
+      fatG: null,
+      saturatedFatG: null,
+      sugarsG: null,
+      fiberG: null,
+      sodiumMg: null,
+      saltG: null,
+    },
+  });
+  assert.equal(scan.dataQuality?.status, "QUALITY_PARTIAL");
+  assert.match(scan.disclaimer ?? "", /Bazı ürün veya besin bilgileri eksik/);
 });
 
 test("barcode normalized scan prefers provider-declared serving nutrients when available", () => {

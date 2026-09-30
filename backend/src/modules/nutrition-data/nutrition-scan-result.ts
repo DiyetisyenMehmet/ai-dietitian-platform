@@ -1,7 +1,9 @@
+import { assessBarcodeFoodQuality } from "./barcode-quality";
 import { calculatePortion } from "./nutrition-calculator";
 import type { CanonicalFood, NutrientValues, NutritionDataBasis, NutritionProvenance } from "./nutrition-data.types";
 
 export type NutritionScanType = "PHOTO" | "BARCODE" | "NUTRITION_LABEL";
+export type BarcodeDataQualityStatus = "QUALITY_ACCEPTED" | "QUALITY_PARTIAL";
 
 export interface NormalizedScanIngredient {
   name: string;
@@ -50,6 +52,11 @@ export interface NormalizedNutritionScanResult {
     nutrition: NutritionProvenance[];
     recognition: "AI_ESTIMATED" | "BARCODE_EXACT" | "OCR_ESTIMATED";
   };
+  /** Coarse barcode data-quality state. No dynamic confidence percentage is exposed. */
+  dataQuality: {
+    status: BarcodeDataQualityStatus;
+    issues: string[];
+  } | null;
   product: {
     quantity: string | null;
     allergens: string[];
@@ -96,6 +103,13 @@ function productBlock(food: CanonicalFood) {
 }
 
 export function toBarcodeScanResult(food: CanonicalFood): NormalizedNutritionScanResult {
+  const qualityAssessment = assessBarcodeFoodQuality(food, food.barcode ?? "");
+  const dataQuality = {
+    status: qualityAssessment.tier === "STRONG"
+      ? "QUALITY_ACCEPTED" as const
+      : "QUALITY_PARTIAL" as const,
+    issues: [...qualityAssessment.issues],
+  };
   const sourceServingGrams =
     food.serving?.gramWeight && food.serving.gramWeight > 0 ? food.serving.gramWeight : null;
   // A provider serving is reference metadata only. When the provider did not
@@ -148,10 +162,16 @@ export function toBarcodeScanResult(food: CanonicalFood): NormalizedNutritionSca
       nutritionSource: null,
     })),
     provenance: { nutrition: [food.provenance], recognition: "BARCODE_EXACT" },
+    dataQuality,
     product: productBlock(food),
-    disclaimer: food.provenance.stale
-      ? "Ürün kaynağı geçici olarak doğrulanamadığı için son bilinen önbellek verisi gösteriliyor."
-      : null,
+    disclaimer: [
+      food.provenance.stale
+        ? "Ürün kaynağı geçici olarak doğrulanamadığı için son bilinen önbellek verisi gösteriliyor."
+        : null,
+      dataQuality.status === "QUALITY_PARTIAL"
+        ? "Bazı ürün veya besin bilgileri eksik. Gösterilen alanlar kaynaktaki mevcut veriye dayanır."
+        : null,
+    ].filter((value): value is string => Boolean(value)).join(" ") || null,
   };
 }
 
@@ -161,8 +181,10 @@ export function toNutritionLabelScanResult(food: CanonicalFood): NormalizedNutri
     ...result,
     scanType: "NUTRITION_LABEL",
     provenance: { nutrition: [food.provenance], recognition: "OCR_ESTIMATED" },
-    disclaimer:
+    disclaimer: [
       "Besin etiketi görselden okunmuş ve kullanıcı tarafından doğrulanmıştır. Bu kayıt yalnız bu kullanıcı için saklanır; global doğrulanmış ürün verisi olarak paylaşılmaz.",
+      result.disclaimer,
+    ].filter((value): value is string => Boolean(value)).join(" "),
   };
 }
 
@@ -204,6 +226,7 @@ export function toPhotoScanResult(scan: PhotoScanLike): NormalizedNutritionScanR
       nutritionSource: item.matchedFood,
     })),
     provenance: { nutrition, recognition: "AI_ESTIMATED" },
+    dataQuality: null,
     product: null,
     disclaimer: scan.disclaimer,
   };

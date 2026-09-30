@@ -240,7 +240,12 @@ export class NutritionDataService {
       // Persist only relevant candidates. This keeps Diewish resilient without
       // turning broad provider search noise into an ever-growing data dump.
       const ranked = rankNutritionMatches(query, foods);
-      const persistable = ranked.slice(0, Math.min(5, boundedLimit));
+      const persistable = ranked
+        .slice(0, Math.min(5, boundedLimit))
+        .filter((match) => {
+          if (!match.food.barcode) return true;
+          return assessBarcodeFoodQuality(match.food, match.food.barcode).persistable;
+        });
       await Promise.all(
         persistable.map((match) => this.persistence!.upsertFood(match.food, expiresAt(match.food))),
       );
@@ -305,13 +310,38 @@ export class NutritionDataService {
       return cached.value ?? this.userConfirmedFallback(userId, barcode);
     }
 
+    let persistedCandidate: CanonicalFood | null = null;
     let stale: CanonicalFood | null = null;
     if (this.persistence) {
       const persisted = await this.persistence.getFreshBarcode(barcode);
       if (persisted) {
-        logger.info({ event: "barcode_cache_hit", layer: "database", barcodeLength: barcode.length }, "Barcode cache hit");
-        this.foodCache.set(key, persisted, 15 * 60 * 1000);
-        return persisted;
+        const persistedQuality = assessBarcodeFoodQuality(persisted, barcode);
+        if (!persistedQuality.shouldCrossCheck && persistedQuality.tier !== "REJECT") {
+          logger.info(
+            {
+              event: "barcode_cache_hit",
+              layer: "database",
+              barcodeLength: barcode.length,
+              qualityTier: persistedQuality.tier,
+            },
+            "Barcode cache hit",
+          );
+          this.foodCache.set(key, persisted, 15 * 60 * 1000);
+          return persisted;
+        }
+        if (persistedQuality.tier !== "REJECT") {
+          persistedCandidate = persisted;
+        }
+        logger.info(
+          {
+            event: "barcode_cache_quality_crosscheck",
+            layer: "database",
+            barcodeLength: barcode.length,
+            qualityTier: persistedQuality.tier,
+            qualityIssues: persistedQuality.issues,
+          },
+          "Cached barcode candidate requires quality cross-check",
+        );
       }
       stale = await this.persistence.getStaleBarcode(barcode);
     }
@@ -371,7 +401,9 @@ export class NutritionDataService {
     }
 
     const selection = selectBestBarcodeFood(
-      [offFood, usdaFood].filter((value): value is CanonicalFood => value !== null),
+      [persistedCandidate, offFood, usdaFood].filter(
+        (value): value is CanonicalFood => value !== null,
+      ),
       barcode,
     );
     if (selection) {
@@ -389,7 +421,7 @@ export class NutritionDataService {
           qualityScore: selection.assessment.score,
           qualityTier: selection.assessment.tier,
           qualityIssues: selection.assessment.issues,
-          crossChecked: Boolean(offFood && this.providers.usda.isConfigured()),
+          crossChecked: [persistedCandidate, offFood, usdaFood].filter(Boolean).length > 1,
           crossSourceAgreement: selection.comparison,
         },
         "Barcode lookup succeeded",
@@ -399,13 +431,34 @@ export class NutritionDataService {
 
     const providerFailed = Boolean(offError || usdaError);
     if (providerFailed && stale) {
-      const staleFood: CanonicalFood = {
-        ...stale,
-        provenance: { ...stale.provenance, stale: true },
-      };
-      this.foodCache.set(key, staleFood, 5 * 60 * 1000);
-      logger.warn({ event: "barcode_stale_fallback", provider: staleFood.provider, barcodeLength: barcode.length }, "Serving bounded stale barcode data after provider failure");
-      return staleFood;
+      const staleQuality = assessBarcodeFoodQuality(stale, barcode);
+      if (staleQuality.tier !== "REJECT") {
+        const staleFood: CanonicalFood = {
+          ...stale,
+          provenance: { ...stale.provenance, stale: true },
+        };
+        this.foodCache.set(key, staleFood, 5 * 60 * 1000);
+        logger.warn(
+          {
+            event: "barcode_stale_fallback",
+            provider: staleFood.provider,
+            barcodeLength: barcode.length,
+            qualityTier: staleQuality.tier,
+            qualityIssues: staleQuality.issues,
+          },
+          "Serving bounded stale barcode data after provider failure",
+        );
+        return staleFood;
+      }
+      logger.warn(
+        {
+          event: "barcode_stale_rejected",
+          provider: stale.provider,
+          barcodeLength: barcode.length,
+          qualityIssues: staleQuality.issues,
+        },
+        "Rejected stale barcode data that failed the quality gate",
+      );
     }
 
     const confirmed = await this.userConfirmedFallback(userId, barcode);
@@ -446,16 +499,33 @@ export class NutritionDataService {
 
     const consensus = await this.persistence.getUserConfirmedBarcodeConsensus(barcode, 3);
     if (consensus) {
-      await this.persistence.upsertFood(consensus, expiresAt(consensus));
-      this.foodCache.set(
-        `barcode:${barcode}`,
-        consensus,
-        15 * 60 * 1000,
-      );
-      logger.info(
-        { event: "barcode_label_consensus_promoted", barcodeLength: barcode.length },
-        "Independent package-label confirmations promoted to Diewish shared knowledge",
-      );
+      const consensusQuality = assessBarcodeFoodQuality(consensus, barcode);
+      if (consensusQuality.persistable) {
+        await this.persistence.upsertFood(consensus, expiresAt(consensus));
+        this.foodCache.set(
+          `barcode:${barcode}`,
+          consensus,
+          15 * 60 * 1000,
+        );
+        logger.info(
+          {
+            event: "barcode_label_consensus_promoted",
+            barcodeLength: barcode.length,
+            qualityTier: consensusQuality.tier,
+          },
+          "Independent package-label confirmations promoted to Diewish shared knowledge",
+        );
+      } else {
+        logger.warn(
+          {
+            event: "barcode_label_consensus_not_promoted",
+            barcodeLength: barcode.length,
+            qualityTier: consensusQuality.tier,
+            qualityIssues: consensusQuality.issues,
+          },
+          "Package-label consensus was not promoted because barcode data quality was insufficient",
+        );
+      }
     }
   }
 

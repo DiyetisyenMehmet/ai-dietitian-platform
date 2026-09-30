@@ -121,6 +121,10 @@ export interface NormalizedNutritionScanDto {
     nutrition: NutritionProvenanceDto[];
     recognition: "AI_ESTIMATED" | "BARCODE_EXACT" | "OCR_ESTIMATED";
   };
+  dataQuality: {
+    status: "QUALITY_ACCEPTED" | "QUALITY_PARTIAL";
+    issues: string[];
+  } | null;
   product: {
     quantity: string | null;
     allergens: string[];

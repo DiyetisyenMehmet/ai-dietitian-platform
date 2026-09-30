@@ -543,6 +543,77 @@ test("catalog type-ahead rejects one-character queries", async () => {
 });
 
 
+test("weak fresh Diewish cache is cross-checked instead of being returned as final data", async () => {
+  let usdaCalls = 0;
+  const weakCached: CanonicalFood = {
+    ...food("OPEN_FOOD_FACTS"),
+    name: "Product",
+    displayNameTr: "Ürün",
+    nutrientsPer100g: {
+      energyKcal: null,
+      proteinG: null,
+      carbohydratesG: null,
+      fatG: null,
+      saturatedFatG: null,
+      sugarsG: null,
+      fiberG: null,
+      sodiumMg: null,
+      saltG: null,
+    },
+  };
+  const persistence = {
+    async getFreshBarcode() { return weakCached; },
+    async getStaleBarcode() { return null; },
+    async upsertFood() {},
+  } as unknown as NutritionDataRepository;
+  const service = new NutritionDataService(
+    providers({
+      off: null,
+      usda: food("USDA"),
+      onUsdaCall: () => (usdaCalls += 1),
+    }),
+    persistence,
+  );
+
+  const result = await service.getByBarcode("4006381333931");
+  assert.equal(result?.provider, "USDA");
+  assert.equal(usdaCalls, 1);
+});
+
+test("partial barcode result can be returned but is not persisted as definitive shared data", async () => {
+  let writes = 0;
+  const partial: CanonicalFood = {
+    ...food("OPEN_FOOD_FACTS"),
+    brand: null,
+    quantity: null,
+    serving: null,
+    nutrientsPer100g: {
+      energyKcal: 120,
+      proteinG: null,
+      carbohydratesG: null,
+      fatG: null,
+      saturatedFatG: null,
+      sugarsG: null,
+      fiberG: null,
+      sodiumMg: null,
+      saltG: null,
+    },
+  };
+  const persistence = {
+    async getFreshBarcode() { return null; },
+    async getStaleBarcode() { return null; },
+    async upsertFood() { writes += 1; },
+  } as unknown as NutritionDataRepository;
+  const service = new NutritionDataService(
+    providers({ off: partial, usda: null, usdaConfigured: false }),
+    persistence,
+  );
+
+  const result = await service.getByBarcode("4006381333931");
+  assert.equal(result?.provider, "OPEN_FOOD_FACTS");
+  assert.equal(writes, 0);
+});
+
 test("suspicious Open Food Facts barcode data is cross-checked and stronger USDA data wins", async () => {
   let usdaCalls = 0;
   const weakOff: CanonicalFood = {
