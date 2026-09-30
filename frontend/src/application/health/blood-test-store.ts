@@ -8,6 +8,7 @@ import {
   type BloodTestExplanation,
   type BloodTestNormalizedValue,
   type BloodTestNutritionImplication,
+  type BloodTestFreshness,
 } from "@/infrastructure/tracking/blood-test-client";
 
 export type BloodTestUiStatus = "analyzing" | "analyzed" | "failed";
@@ -25,6 +26,10 @@ export interface BloodTestSummaryView {
   explanations: BloodTestExplanation[];
   nutritionImplications: BloodTestNutritionImplication[];
   recommendations: string[];
+  freshness: BloodTestFreshness | null;
+  freshnessAgeDays: number | null;
+  freshnessMessage: string | null;
+  personalizationEligible: boolean;
   fileName?: string;
 }
 
@@ -33,10 +38,6 @@ const nextId = () => `bt-local-${Date.now()}-${uid++}`;
 
 const LEGACY_BLOOD_DISCLAIMER_START =
   "Diewish provides educational and nutrition-focused information only.";
-
-function today(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 function failureSummary(message?: string | null): string {
   const value = message?.trim();
@@ -82,7 +83,7 @@ function toSummary(
   return {
     id: analysis.id,
     uploadId: analysis.bloodTestId,
-    date: analysis.createdAt.slice(0, 10),
+    date: analysis.testDate ?? analysis.createdAt.slice(0, 10),
     title: options?.title ?? options?.fileName?.replace(/\.[^.]+$/, "") ?? "Kan Tahlili Analizi",
     summary:
       status === "failed"
@@ -95,6 +96,10 @@ function toSummary(
     explanations,
     nutritionImplications,
     recommendations,
+    freshness: analysis.freshness ?? null,
+    freshnessAgeDays: analysis.freshnessAgeDays ?? null,
+    freshnessMessage: analysis.freshnessMessage ?? null,
+    personalizationEligible: analysis.personalizationEligible ?? false,
     ...(options?.fileName ? { fileName: options.fileName } : {}),
   };
 }
@@ -141,11 +146,11 @@ export const bloodTestStore = {
    * Uploads and analyzes in one server request so Cloud Run's ephemeral local
    * filesystem cannot split the upload and analysis across different instances.
    */
-  async uploadAndAnalyze(file: File): Promise<BloodTestSummaryView> {
+  async uploadAndAnalyze(file: File, testDate: string): Promise<BloodTestSummaryView> {
     const temporaryId = nextId();
     const temporary: BloodTestSummaryView = {
       id: temporaryId,
-      date: today(),
+      date: testDate,
       title: file.name.replace(/\.[^.]+$/, "") || "Kan Tahlili",
       summary: "Dosya doğrulanıyor ve analiz ediliyor…",
       flaggedCount: 0,
@@ -155,13 +160,17 @@ export const bloodTestStore = {
       explanations: [],
       nutritionImplications: [],
       recommendations: [],
+      freshness: null,
+      freshnessAgeDays: null,
+      freshnessMessage: null,
+      personalizationEligible: false,
       fileName: file.name,
     };
     tests = [temporary, ...tests];
     emit();
 
     try {
-      const { upload, analysis } = await bloodTestClient.uploadAndAnalyze(file);
+      const { upload, analysis } = await bloodTestClient.uploadAndAnalyze(file, testDate);
       const completed = toSummary(analysis, { fileName: file.name, title: temporary.title });
       completed.uploadId = upload.id;
       replaceById(temporaryId, completed);

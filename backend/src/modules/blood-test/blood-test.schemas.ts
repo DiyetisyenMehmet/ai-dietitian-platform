@@ -14,9 +14,9 @@ export const uploadIdParamSchema = z.object({
 });
 
 /**
- * Optional metadata sent alongside an upload as multipart form fields. Values
- * arrive as strings; `testDate` is an ISO calendar date (YYYY-MM-DD) that must
- * not be in the future.
+ * Metadata sent alongside an upload as multipart form fields. Values arrive as
+ * strings; `testDate` is required because freshness must use the report's real
+ * calendar date rather than its upload time. It must not be in the future.
  */
 export const uploadMetadataSchema = z.object({
   label: z.string().trim().min(1).max(120).optional(),
@@ -27,8 +27,7 @@ export const uploadMetadataSchema = z.object({
     .refine(isValidIsoCalendarDate, "testDate is not a valid calendar date")
     .refine((value) => new Date(`${value}T00:00:00.000Z`).getTime() <= Date.now(), {
       message: "testDate cannot be in the future",
-    })
-    .optional(),
+    }),
 });
 
 export type UploadIdParam = z.infer<typeof uploadIdParamSchema>;

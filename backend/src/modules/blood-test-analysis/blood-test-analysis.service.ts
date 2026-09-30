@@ -1,10 +1,14 @@
-import type { BloodTestAnalysis } from "@prisma/client";
-
 import { logger } from "../../lib/logger";
 import { prisma } from "../../lib/prisma";
 import { getStorageProviderByName } from "../../lib/storage";
 import { ApiError } from "../../utils/api-error";
 import { bloodTestRepository } from "../blood-test/blood-test.repository";
+import {
+  assessBloodTestFreshness,
+  bloodTestFreshnessService,
+  toPublicBloodTestAnalysis,
+  type PublicBloodTestAnalysis,
+} from "../blood-test/blood-test-freshness";
 import { getAIAdapter } from "./ai-adapter/ai-adapter.factory";
 import { bloodTestAnalysisRepository } from "./blood-test-analysis.repository";
 import {
@@ -261,7 +265,7 @@ function reconcileNutritionImplications(
 }
 
 export const bloodTestAnalysisService = {
-  async analyze(userId: string, bloodTestId: string): Promise<BloodTestAnalysis> {
+  async analyze(userId: string, bloodTestId: string): Promise<PublicBloodTestAnalysis> {
     const upload = await bloodTestRepository.findByIdForUser(bloodTestId, userId);
     if (!upload) {
       throw ApiError.notFound("Blood test upload not found.");
@@ -367,7 +371,7 @@ export const bloodTestAnalysisService = {
         model: adapter.info.model,
       });
 
-      return completed;
+      return toPublicBloodTestAnalysis(completed, upload.testDate);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Analysis failed.";
       logger.error({ err: error, bloodTestId, userId }, "Blood test analysis failed");
@@ -389,17 +393,23 @@ export const bloodTestAnalysisService = {
         await prisma.bloodTestUpload
           .update({ where: { id: bloodTestId }, data: { status: "ANALYZED" } })
           .catch(() => undefined);
-        void nutritionAdaptationService.analyzeAndAdapt(userId).catch((err: unknown) => {
-          logger.warn({ err, userId }, "Nutrition adaptation after blood test failed");
-        });
+        const freshness = upload.testDate ? assessBloodTestFreshness(upload.testDate) : null;
+        if (freshness?.status === "CURRENT") {
+          void nutritionAdaptationService.analyzeAndAdapt(userId).catch((err: unknown) => {
+            logger.warn({ err, userId }, "Nutrition adaptation after blood test failed");
+          });
+        }
       }
     }
   },
 
-  async getByBloodTestId(userId: string, bloodTestId: string): Promise<BloodTestAnalysis> {
-    const analysis = await bloodTestAnalysisRepository.findByBloodTestIdForUser(
-      bloodTestId,
+  async getByBloodTestId(
+    userId: string,
+    bloodTestId: string,
+  ): Promise<PublicBloodTestAnalysis> {
+    const analysis = await bloodTestFreshnessService.getByBloodTestIdForHistory(
       userId,
+      bloodTestId,
     );
     if (!analysis) {
       throw ApiError.notFound("No analysis found for this blood test.");
@@ -407,7 +417,7 @@ export const bloodTestAnalysisService = {
     return analysis;
   },
 
-  list(userId: string): Promise<BloodTestAnalysis[]> {
-    return bloodTestAnalysisRepository.listByUser(userId);
+  list(userId: string): Promise<PublicBloodTestAnalysis[]> {
+    return bloodTestFreshnessService.listForHistory(userId);
   },
 };

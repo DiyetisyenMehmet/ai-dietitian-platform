@@ -32,3 +32,9 @@ test("blood-test metadata accepts real dates including leap day", () => {
   expectAcceptedDate("2026-02-28");
   expectAcceptedDate("2024-02-29");
 });
+
+
+test("blood-test metadata requires the real test date and rejects future dates", () => {
+  assert.equal(uploadMetadataSchema.safeParse({}).success, false);
+  assert.equal(uploadMetadataSchema.safeParse({ testDate: "2999-01-01" }).success, false);
+});

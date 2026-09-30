@@ -8,6 +8,7 @@ import { cn } from "@/shared/lib/utils";
 import { formatLongDate } from "@/shared/lib/format";
 import { Button } from "@/presentation/components/ui/button";
 import { Card, CardContent } from "@/presentation/components/ui/card";
+import { Input } from "@/presentation/components/ui/input";
 import { EmptyState } from "@/presentation/components/feedback/empty-state";
 import { healthIcon } from "@/presentation/components/health/health-icon";
 import { getBiomarkerEducation } from "@/presentation/components/health/blood-biomarker-education";
@@ -78,6 +79,20 @@ function StatusBadge({ test }: { test: BloodTestSummaryView }) {
       Analiz tamamlandı
     </span>
   );
+}
+
+function FreshnessBadge({ test }: { test: BloodTestSummaryView }) {
+  if (test.status !== "analyzed") return null;
+  if (test.freshness === "CURRENT") {
+    return <span className="inline-flex w-fit rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">Güncel</span>;
+  }
+  if (test.freshness === "STALE") {
+    return <span className="inline-flex w-fit rounded-full bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">Eski</span>;
+  }
+  if (test.freshness === "ARCHIVED") {
+    return <span className="inline-flex w-fit rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground">Arşiv</span>;
+  }
+  return null;
 }
 
 function friendlyUploadError(error: unknown): string {
@@ -588,7 +603,12 @@ export function BloodTestsView() {
   const { subscription, loading: subscriptionLoading } = useSubscription();
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = React.useState(false);
+  const [testDate, setTestDate] = React.useState("");
   const [removingId, setRemovingId] = React.useState<string | null>(null);
+  const localToday = React.useMemo(() => {
+    const now = new Date();
+    return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
+  }, []);
 
   const latest = tests[0];
   const premiumDetails =
@@ -619,7 +639,7 @@ export function BloodTestsView() {
 
     setUploading(true);
     try {
-      const result = await bloodTestStore.uploadAndAnalyze(file);
+      const result = await bloodTestStore.uploadAndAnalyze(file, testDate);
       if (result.status === "analyzed") {
         journeyStore.add({
           type: "blood-test",
@@ -627,13 +647,14 @@ export function BloodTestsView() {
           description: file.name,
         });
         toast.success("Kan tahlili analizi tamamlandı.");
+        setTestDate("");
       }
     } catch (error) {
       toast.error("Analiz tamamlanamadı", { description: friendlyUploadError(error) });
     } finally {
       setUploading(false);
     }
-  }, [uploading]);
+  }, [testDate, uploading]);
 
   const onRemove = React.useCallback(async (test: BloodTestSummaryView) => {
     if (removingId) return;
@@ -670,11 +691,28 @@ export function BloodTestsView() {
             Son kayıt: {formatLongDate(new Date(latest.date))}
           </p>
         )}
+        <div className="mt-4">
+          <label htmlFor="blood-test-date" className="mb-1.5 block text-xs font-semibold">
+            Tahlil tarihi
+          </label>
+          <Input
+            id="blood-test-date"
+            type="date"
+            value={testDate}
+            max={localToday}
+            onChange={(event) => setTestDate(event.target.value)}
+            disabled={uploading}
+            aria-describedby="blood-test-date-help"
+          />
+          <p id="blood-test-date-help" className="mt-1.5 text-[11px] text-muted-foreground">
+            Raporun üzerinde yazan gerçek tahlil tarihini seç.
+          </p>
+        </div>
         <Button
           className="mt-4 w-full"
           onClick={() => fileInputRef.current?.click()}
           isLoading={uploading}
-          disabled={uploading}
+          disabled={uploading || !testDate}
         >
           {!uploading && <Upload aria-hidden="true" />}
           {uploading ? "Yükleniyor ve analiz ediliyor" : "Yeni tahlil yükle"}
@@ -725,8 +763,9 @@ export function BloodTestsView() {
                           {formatLongDate(new Date(test.date))}
                         </p>
                       </div>
-                      <div className="sm:justify-self-end">
+                      <div className="flex flex-wrap gap-1.5 sm:justify-self-end">
                         <StatusBadge test={test} />
+                        <FreshnessBadge test={test} />
                       </div>
                     </div>
                     <p
@@ -737,6 +776,19 @@ export function BloodTestsView() {
                     >
                       {test.summary}
                     </p>
+
+                    {test.freshnessMessage && (
+                      <p
+                        className={cn(
+                          "rounded-xl px-3 py-2 text-xs leading-relaxed",
+                          test.freshness === "STALE"
+                            ? "bg-amber-500/10 text-amber-800 dark:text-amber-300"
+                            : "bg-muted text-muted-foreground",
+                        )}
+                      >
+                        {test.freshnessMessage}
+                      </p>
+                    )}
 
                     {test.status === "analyzed" && (
                       <AnalysisDetails test={test} premiumDetails={premiumDetails} />

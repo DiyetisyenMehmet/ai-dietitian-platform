@@ -3,6 +3,7 @@ import { BLOOD_TEST_ENDPOINTS } from "@/infrastructure/auth/endpoints";
 
 /** Lifecycle status of an AI blood-test analysis run (backend enum). */
 export type BloodTestAnalysisStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
+export type BloodTestFreshness = "CURRENT" | "STALE" | "ARCHIVED";
 
 export type BloodTestValueStatus =
   | "NORMAL"
@@ -55,6 +56,7 @@ export interface BloodTestUpload {
   originalFilename: string;
   mimeType: string;
   fileSizeBytes: number;
+  testDate: string | null;
   createdAt: string;
 }
 
@@ -70,34 +72,40 @@ export interface BloodTestAnalysis {
   nutritionImplications?: BloodTestNutritionImplication[];
   overallRecommendations?: string[];
   errorMessage?: string | null;
+  testDate?: string | null;
+  freshness?: BloodTestFreshness | null;
+  freshnessAgeDays?: number | null;
+  personalizationEligible?: boolean;
+  freshnessMessage?: string | null;
   createdAt: string;
   updatedAt?: string;
 }
 
-function uploadForm(file: File): FormData {
+function uploadForm(file: File, testDate: string): FormData {
   const form = new FormData();
   form.append("file", file, file.name);
+  form.append("testDate", testDate);
   return form;
 }
 
 export const bloodTestClient = {
   /** Preferred browser flow: upload and analyze on the same backend request/instance. */
-  uploadAndAnalyze(file: File) {
+  uploadAndAnalyze(file: File, testDate: string) {
     return apiRequest<{ upload: BloodTestUpload; analysis: BloodTestAnalysis }>({
       path: "/blood-tests/analyze-upload",
       method: "POST",
       auth: true,
-      body: uploadForm(file),
+      body: uploadForm(file, testDate),
     });
   },
 
   /** Upload-only endpoint kept for lower-level workflows. */
-  upload(file: File) {
+  upload(file: File, testDate: string) {
     return apiRequest<{ upload: BloodTestUpload }>({
       path: "/blood-tests",
       method: "POST",
       auth: true,
-      body: uploadForm(file),
+      body: uploadForm(file, testDate),
     });
   },
 

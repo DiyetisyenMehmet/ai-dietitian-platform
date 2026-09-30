@@ -3,7 +3,7 @@ import type { NutritionPlan } from "@prisma/client";
 import { logger } from "../../lib/logger";
 import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/api-error";
-import { bloodTestAnalysisRepository } from "../blood-test-analysis/blood-test-analysis.repository";
+import { bloodTestFreshnessService } from "../blood-test/blood-test-freshness";
 import { aiUsageService } from "../ai-usage/ai-usage.service";
 import { ENTITLEMENT_REQUIRED_CODE } from "../payments/constants";
 import { calculateCalories } from "./calculations/calorie-calculator";
@@ -93,8 +93,7 @@ async function loadBloodTestImplications(userId: string): Promise<{
   analysisId: string | null;
   implications: BloodTestImplicationInput[];
 }> {
-  const analyses = await bloodTestAnalysisRepository.listByUser(userId);
-  const latest = analyses.find((a) => a.status === "COMPLETED");
+  const { currentAnalysis: latest } = await bloodTestFreshnessService.loadContext(userId);
   if (!latest) return { analysisId: null, implications: [] };
 
   const raw = latest.nutritionImplications as unknown;

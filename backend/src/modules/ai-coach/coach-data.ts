@@ -10,7 +10,7 @@ import type {
 
 import { prisma } from "../../lib/prisma";
 import { activityRepository } from "../activity/activity.repository";
-import { bloodTestAnalysisRepository } from "../blood-test-analysis/blood-test-analysis.repository";
+import { bloodTestFreshnessService } from "../blood-test/blood-test-freshness";
 import { trackingRepository } from "../tracking/tracking.repository";
 import { average, daysAgo, groupByDay } from "./metrics";
 
@@ -40,7 +40,7 @@ export interface CoachDataBundle {
 /** Loads the coach data bundle for a user over the given window. */
 export async function loadCoachData(userId: string, windowDays: number): Promise<CoachDataBundle> {
   const since = daysAgo(windowDays);
-  const [profile, activePlan, weightLogs, mealLogs, waterLogs, analyses, activities] = await Promise.all([
+  const [profile, activePlan, weightLogs, mealLogs, waterLogs, bloodTestContext, activities] = await Promise.all([
     prisma.userProfile.findUnique({ where: { userId } }).catch(() => null),
     prisma.nutritionPlan
       .findFirst({
@@ -51,13 +51,12 @@ export async function loadCoachData(userId: string, windowDays: number): Promise
     trackingRepository.listWeightLogs(userId, since).catch(() => []),
     trackingRepository.listMealLogs(userId, since).catch(() => []),
     trackingRepository.listWaterLogs(userId, since).catch(() => []),
-    bloodTestAnalysisRepository.listByUser(userId).catch(() => []),
+    bloodTestFreshnessService.loadContext(userId).catch(() => ({ currentAnalysis: null, currentTestDate: null, latestTestDate: null })),
     activityRepository.listActivities(userId, since).catch(() => []),
   ]);
 
-  const completed = (analyses ?? []).filter((a) => a.status === "COMPLETED");
-  const latestAnalysis = completed[0] ?? null;
-  const lastAnalysisAt = latestAnalysis?.createdAt ?? null;
+  const latestAnalysis = bloodTestContext.currentAnalysis;
+  const lastAnalysisAt = bloodTestContext.latestTestDate;
 
   return {
     windowDays,
