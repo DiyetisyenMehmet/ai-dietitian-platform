@@ -121,7 +121,7 @@ export function AdminUserSubscription({
         )}
       </div>
 
-      {loading ? (
+      {loading && !subscription ? (
         <div role="status" className="mt-4 space-y-3">
           <span className="sr-only">Abonelik bilgileri yükleniyor</span>
           <Skeleton className="h-16 w-full" />
