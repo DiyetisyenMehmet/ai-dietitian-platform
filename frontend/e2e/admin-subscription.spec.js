@@ -131,7 +131,7 @@ for (const [width, height] of [
     await expect(
       section.getByRole("heading", { name: "Abonelik ve hak paketi" }),
     ).toBeVisible();
-    await expect(section.getByText("Premium Plus", { exact: true })).toBeVisible();
+    await expect(section.getByText("Premium Plus", { exact: true }).first()).toBeVisible();
     await expect(section.getByText("Aktif ücretli erişim", { exact: true })).toBeVisible();
     await expect(section.getByText("Google Play", { exact: true })).toBeVisible();
     await expect(section.getByText("Öncelikli destek", { exact: true })).toBeVisible();
@@ -146,7 +146,7 @@ test("B1 free user without subscription record renders safe empty state", async 
   await setup(page, { subscription: free });
   await page.goto(`${WEB}/admin/users/${user.id}`);
   const section = page.getByTestId("admin-user-subscription");
-  await expect(section.getByText("Free", { exact: true })).toBeVisible();
+  await expect(section.getByText("Free", { exact: true }).first()).toBeVisible();
   await expect(section.getByText("Free erişim", { exact: true })).toBeVisible();
   await expect(section.getByText("Kayıt yok", { exact: true })).toBeVisible();
   await expect(section.getByText("Hesap varsayılanı", { exact: true })).toBeVisible();
