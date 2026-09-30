@@ -11,6 +11,7 @@ import {
   type StoredObjectRef,
 } from "../../lib/storage";
 import { ApiError } from "../../utils/api-error";
+import { parseIsoCalendarDateUtc } from "../../utils/calendar-date";
 import {
   detectAllowedMimeType,
   MIME_EXTENSION,
@@ -132,7 +133,7 @@ export const bloodTestService = {
         fileSizeBytes: file.size,
         checksumSha256: checksum,
         label: metadata.label ?? null,
-        testDate: metadata.testDate ? new Date(`${metadata.testDate}T00:00:00.000Z`) : null,
+        testDate: metadata.testDate ? parseIsoCalendarDateUtc(metadata.testDate) : null,
       });
     } catch (error) {
       // Roll back the orphaned object if the metadata insert fails.
