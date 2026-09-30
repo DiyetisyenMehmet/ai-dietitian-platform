@@ -48,6 +48,21 @@ export interface NutritionProvenanceDto {
   providerUpdatedAt?: string | null;
 }
 
+export interface AllergenEvidenceDto {
+  ingredientList: "DECLARED" | "MISSING";
+  allergenDeclaration: "DECLARED" | "MISSING";
+  crossContaminationWarnings: string[];
+}
+
+export interface AllergenSafetyDto {
+  status: "KNOWN_SAFE" | "KNOWN_RISK" | "UNKNOWN";
+  matchedAllergens: string[];
+  crossContaminationMatches: string[];
+  dataComplete: boolean;
+  message: string | null;
+  crossContaminationWarnings: string[];
+}
+
 export interface CanonicalFoodDto {
   externalId: string;
   provider: "USDA" | "CNF" | "CIQUAL" | "COFID" | "OPEN_FOOD_FACTS" | "DIEWISH";
@@ -62,6 +77,7 @@ export interface CanonicalFoodDto {
   nutrientsPerServing?: NutrientValuesDto | null;
   ingredients: string[];
   allergens: string[];
+  allergenEvidence?: AllergenEvidenceDto;
   additives: string[];
   labels: string[];
   vegan: boolean | null;
@@ -197,6 +213,7 @@ export interface PersonalizationContextDto {
   activePlanUsed: boolean;
   dietaryCompatibility: "COMPATIBLE" | "INCOMPATIBLE" | "UNKNOWN";
   allergenDataComplete: boolean;
+  allergenSafety: AllergenSafetyDto | null;
   warnings: string[];
   attentionFlags: NutritionAttentionFlagDto[];
   windowHours: number;
@@ -220,6 +237,7 @@ export interface ComparisonDto {
     differenceFromSource: Partial<Record<CoreNutrientKeyDto, number>>;
     dietaryCompatibility: "COMPATIBLE" | "INCOMPATIBLE" | "UNKNOWN";
     allergenDataComplete: boolean;
+    allergenSafety: AllergenSafetyDto;
   }>;
   warning: string;
 }

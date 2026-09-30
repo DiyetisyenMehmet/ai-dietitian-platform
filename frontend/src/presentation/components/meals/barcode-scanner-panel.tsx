@@ -145,6 +145,12 @@ function productInfoRows(food: CanonicalFoodDto): Array<[string, string]> {
     ["Gluten bilgisi", yesNoUnknown(food.glutenFree, "Glutensiz", "Gluten içeriyor")],
     ["İçerik", food.ingredients.length > 0 ? food.ingredients.join(", ") : "Bilgi bulunamadı"],
     ["Alerjenler", food.allergens.length > 0 ? food.allergens.join(", ") : "Bilgi bulunamadı"],
+    [
+      "Çapraz bulaşma uyarısı",
+      food.allergenEvidence?.crossContaminationWarnings.length
+        ? food.allergenEvidence.crossContaminationWarnings.join("; ")
+        : "Kaynakta bilgi bulunamadı",
+    ],
     ["Katkı maddeleri", food.additives.length > 0 ? food.additives.join(", ") : "Bilgi bulunamadı"],
   ];
 }
@@ -783,7 +789,13 @@ export function BarcodeScannerPanel() {
                   </p>
                   <p className="text-xs text-muted-foreground">
                     Tercih uyumu: {item.dietaryCompatibility === "COMPATIBLE" ? "uygun" : item.dietaryCompatibility === "INCOMPATIBLE" ? "uygun değil" : "doğrulanamadı"}
-                    {!item.allergenDataComplete ? " · alerjen verisi eksik olabilir" : ""}
+                    {item.allergenSafety.status === "UNKNOWN"
+                      ? " · alerjen bilgisi yeterli değil"
+                      : item.allergenSafety.status === "KNOWN_RISK"
+                        ? " · kayıtlı alerji eşleşmesi var"
+                        : item.allergenDataComplete
+                          ? " · kayıtlı alerjilerle eşleşme bulunmadı"
+                          : ""}
                   </p>
                 </div>
               ))
