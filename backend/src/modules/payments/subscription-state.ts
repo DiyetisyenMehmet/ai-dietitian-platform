@@ -1,7 +1,78 @@
-import type { SubscriptionTier } from "@prisma/client";
+import type { Subscription, SubscriptionTier } from "@prisma/client";
 
 import { prisma } from "../../lib/prisma";
-import { googlePlayEntitlementsRepository } from "./google-play-entitlements.repository";
+import {
+  googlePlayEntitlementsRepository,
+  type GooglePlayEntitlementRow,
+} from "./google-play-entitlements.repository";
+import { paymentsRepository } from "./payments.repository";
+
+export interface EffectiveSubscriptionReadState {
+  cachedTier: SubscriptionTier;
+  tier: SubscriptionTier;
+  source: "GOOGLE_PLAY" | "IYZICO" | null;
+  googlePlay: GooglePlayEntitlementRow | null;
+  subscription: Subscription | null;
+}
+
+/**
+ * Side-effect-free projection of the same source order used by the canonical
+ * resolver. Admin/read-only surfaces use this so a GET never repairs cache or
+ * changes subscription rows.
+ */
+export async function readEffectiveSubscriptionState(
+  userId: string,
+): Promise<EffectiveSubscriptionReadState | null> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { subscriptionTier: true },
+  });
+  if (!user) return null;
+
+  const play = await googlePlayEntitlementsRepository.findBestActiveForUser(userId);
+  if (play) {
+    return {
+      cachedTier: user.subscriptionTier,
+      tier: play.tier,
+      source: "GOOGLE_PLAY",
+      googlePlay: play,
+      subscription: null,
+    };
+  }
+
+  if (user.subscriptionTier === "FREE") {
+    return {
+      cachedTier: user.subscriptionTier,
+      tier: "FREE",
+      source: null,
+      googlePlay: null,
+      subscription: null,
+    };
+  }
+
+  const matching = await paymentsRepository.findEntitlingSubscription(
+    userId,
+    user.subscriptionTier,
+  );
+  if (matching) {
+    return {
+      cachedTier: user.subscriptionTier,
+      tier: matching.tier,
+      source: "IYZICO",
+      googlePlay: null,
+      subscription: matching,
+    };
+  }
+
+  const fallback = await paymentsRepository.findEntitlingSubscription(userId);
+  return {
+    cachedTier: user.subscriptionTier,
+    tier: fallback?.tier ?? "FREE",
+    source: fallback ? "IYZICO" : null,
+    googlePlay: null,
+    subscription: fallback,
+  };
+}
 
 /**
  * Resolves the tier that is entitled *right now* and repairs stale persisted
@@ -15,36 +86,23 @@ import { googlePlayEntitlementsRepository } from "./google-play-entitlements.rep
 export async function resolveEffectiveSubscriptionTier(
   userId: string,
 ): Promise<SubscriptionTier | null> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { subscriptionTier: true },
-  });
-  if (!user) return null;
+  const state = await readEffectiveSubscriptionState(userId);
+  if (!state) return null;
 
-  const play = await googlePlayEntitlementsRepository.findBestActiveForUser(userId);
-  if (play) {
-    if (user.subscriptionTier !== play.tier) {
+  if (state.googlePlay) {
+    if (state.cachedTier !== state.googlePlay.tier) {
       await prisma.user.update({
         where: { id: userId },
-        data: { subscriptionTier: play.tier },
+        data: { subscriptionTier: state.googlePlay.tier },
       });
     }
-    return play.tier;
+    return state.googlePlay.tier;
   }
 
-  if (user.subscriptionTier === "FREE") return "FREE";
+  if (state.cachedTier === "FREE") return "FREE";
+  if (state.subscription?.tier === state.cachedTier) return state.cachedTier;
 
   const now = new Date();
-  const cachedTierStillValid = await prisma.subscription.findFirst({
-    where: {
-      userId,
-      tier: user.subscriptionTier,
-      status: "ACTIVE",
-      currentPeriodEnd: { gt: now },
-    },
-    select: { id: true },
-  });
-  if (cachedTierStillValid) return user.subscriptionTier;
 
   return prisma.$transaction(async (tx) => {
     // Close legacy ACTIVE rows that can no longer entitle the account. An ACTIVE
