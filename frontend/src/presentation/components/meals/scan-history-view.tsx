@@ -1,23 +1,25 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 import {
   ArrowLeft,
   Camera,
   ChevronRight,
   Clock3,
-  Flame,
   Package,
   ScanBarcode,
 } from "lucide-react";
 
 import {
   nutritionClient,
+  type CanonicalFoodDto,
   type ScanHistoryItemDto,
 } from "@/infrastructure/nutrition/nutrition-client";
 import { Card, CardContent } from "@/presentation/components/ui/card";
-import { NutritionFactsGrid } from "@/presentation/components/meals/nutrition-scan-sections";
+import {
+  NutritionFactsGrid,
+  NutritionProvenanceSection,
+} from "@/presentation/components/meals/nutrition-scan-sections";
 
 type Filter = "ALL" | "PHOTO" | "BARCODE";
 
@@ -60,6 +62,169 @@ function timeLabel(value: string): string {
 function compactNumber(value: number): string {
   const rounded = Math.round(value * 10) / 10;
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
+
+
+function sourceServingLabel(food: CanonicalFoodDto): string {
+  if (!food.serving) return "Bilgi bulunamadı";
+  if (food.serving.description) return food.serving.description;
+  return `${compactNumber(food.serving.amount)} ${food.serving.unit}`;
+}
+
+function nutritionReference(food: CanonicalFoodDto): {
+  label: string;
+  nutrients: CanonicalFoodDto["nutrientsPer100g"];
+} {
+  if (food.provenance.dataBasis === "PER_SERVING" && food.nutrientsPerServing) {
+    return {
+      label: `${sourceServingLabel(food)} referans`,
+      nutrients: food.nutrientsPerServing,
+    };
+  }
+  return { label: "100 g referans", nutrients: food.nutrientsPer100g };
+}
+
+function BarcodeSnapshotDetail({
+  item,
+  onBack,
+}: {
+  item: ScanHistoryItemDto;
+  onBack(): void;
+}) {
+  const food = item.food;
+
+  return (
+    <div className="space-y-4">
+      <button
+        type="button"
+        onClick={onBack}
+        className="inline-flex min-h-10 items-center gap-2 rounded-xl border bg-background px-3 py-2 text-sm font-semibold"
+      >
+        <ArrowLeft className="size-4" aria-hidden="true" />
+        Tarama geçmişine dön
+      </button>
+
+      <Card>
+        <CardContent className="space-y-4 p-5">
+          <div className="flex items-start gap-3">
+            {food?.imageUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={food.imageUrl}
+                alt=""
+                className="size-16 shrink-0 rounded-2xl border bg-primary/5 object-contain p-1"
+              />
+            ) : (
+              <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                <ScanBarcode className="size-5" aria-hidden="true" />
+              </span>
+            )}
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-semibold uppercase tracking-wide text-primary">
+                Barkod taraması · kayıtlı snapshot
+              </p>
+              <h2 className="mt-1 break-words text-xl font-extrabold">{item.title}</h2>
+              {item.brand && <p className="mt-1 text-sm text-muted-foreground">{item.brand}</p>}
+              <p className="mt-1 text-xs text-muted-foreground">
+                {dateLabel(item.scannedAt)} · {timeLabel(item.scannedAt)}
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-2 text-xs sm:grid-cols-3">
+            <div className="rounded-xl bg-primary/5 px-3 py-2">
+              <p className="text-muted-foreground">Barkod</p>
+              <p className="mt-0.5 break-all font-bold text-foreground">
+                {item.barcode ?? "Bilgi bulunamadı"}
+              </p>
+            </div>
+            <div className="rounded-xl bg-primary/5 px-3 py-2">
+              <p className="text-muted-foreground">Paket</p>
+              <p className="mt-0.5 font-bold text-foreground">
+                {food?.quantity ?? "Bilgi bulunamadı"}
+              </p>
+            </div>
+            <div className="rounded-xl bg-primary/5 px-3 py-2">
+              <p className="text-muted-foreground">Kaynak porsiyon</p>
+              <p className="mt-0.5 font-bold text-foreground">
+                {food ? sourceServingLabel(food) : "Bilgi bulunamadı"}
+              </p>
+            </div>
+          </div>
+
+          <p className="rounded-xl bg-muted/50 p-3 text-xs leading-relaxed text-muted-foreground">
+            Bu ekran tarama anında Diewish&apos;te saklanan sonucu gösterir. Ürün kaynağı yeniden
+            sorgulanmaz ve bu görüntüleme yeni tarama kaydı oluşturmaz.
+          </p>
+        </CardContent>
+      </Card>
+
+      {food ? (
+        <>
+          <Card>
+            <CardContent className="space-y-4 p-5">
+              <h3 className="font-bold">Tarama anındaki besin bilgileri</h3>
+              {(() => {
+                const reference = nutritionReference(food);
+                return (
+                  <NutritionFactsGrid
+                    portion={reference.nutrients}
+                    portionLabel={reference.label}
+                  />
+                );
+              })()}
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                Bu değerler tarama anındaki kaynak snapshot&apos;ıdır. Paket miktarı veya kaynak
+                porsiyon, kullanıcının tükettiği miktar anlamına gelmez.
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="space-y-3 p-5 text-sm">
+              <h3 className="font-bold">İçerik ve uyarılar</h3>
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground">İçerikler</p>
+                <p className="mt-1 leading-relaxed">
+                  {food.ingredients.length > 0 ? food.ingredients.join(", ") : "Bilgi bulunamadı"}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground">Alerjenler</p>
+                <p className="mt-1 leading-relaxed">
+                  {food.allergens.length > 0 ? food.allergens.join(", ") : "Bilgi bulunamadı"}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground">Çapraz bulaşma uyarıları</p>
+                <p className="mt-1 leading-relaxed">
+                  {food.allergenEvidence?.crossContaminationWarnings.length
+                    ? food.allergenEvidence.crossContaminationWarnings.join("; ")
+                    : "Kaynak snapshot'ında bilgi bulunamadı"}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <NutritionProvenanceSection sources={[food.provenance]} />
+        </>
+      ) : (
+        <Card>
+          <CardContent className="space-y-2 p-5">
+            <h3 className="font-bold">Snapshot ayrıntısı bulunamadı</h3>
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              Bu eski kayıtta ayrıntılı ürün snapshot&apos;ı bulunmuyor. Diewish geçmişi
+              görüntülemek için dış kaynağı otomatik sorgulamaz.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      <p className="px-1 text-xs leading-relaxed text-muted-foreground">
+        Bu kayıt bir tarama olayıdır. Kullanıcının ürünü tükettiğini veya öğüne eklediğini göstermez.
+      </p>
+    </div>
+  );
 }
 
 function PhotoDetail({
@@ -156,6 +321,7 @@ export function ScanHistoryView() {
   const [failed, setFailed] = React.useState(false);
   const [filter, setFilter] = React.useState<Filter>("ALL");
   const [selectedPhotoId, setSelectedPhotoId] = React.useState<string | null>(null);
+  const [selectedBarcodeId, setSelectedBarcodeId] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     let alive = true;
@@ -184,6 +350,11 @@ export function ScanHistoryView() {
       ? null
       : scans.find((item) => item.id === selectedPhotoId && item.scanType === "PHOTO") ?? null;
 
+  const selectedBarcode =
+    selectedBarcodeId === null
+      ? null
+      : scans.find((item) => item.id === selectedBarcodeId && item.scanType === "BARCODE") ?? null;
+
   const filtered = React.useMemo(
     () => scans.filter((item) => filter === "ALL" || item.scanType === filter),
     [filter, scans],
@@ -202,6 +373,15 @@ export function ScanHistoryView() {
 
   if (selectedPhoto) {
     return <PhotoDetail item={selectedPhoto} onBack={() => setSelectedPhotoId(null)} />;
+  }
+
+  if (selectedBarcode) {
+    return (
+      <BarcodeSnapshotDetail
+        item={selectedBarcode}
+        onBack={() => setSelectedBarcodeId(null)}
+      />
+    );
   }
 
   if (loading) {
@@ -339,16 +519,17 @@ export function ScanHistoryView() {
                   </>
                 );
 
-                if (scan.scanType === "BARCODE" && scan.barcode) {
+                if (scan.scanType === "BARCODE") {
                   return (
-                    <Link
+                    <button
                       key={scan.id}
-                      href={`/meals/scan?mode=barcode&barcode=${encodeURIComponent(scan.barcode)}`}
-                      aria-label={`${scan.title} ürün bilgilerini aç`}
-                      className="flex min-h-[76px] items-center gap-3 rounded-2xl border bg-card p-3 shadow-sm transition hover:bg-muted/30"
+                      type="button"
+                      onClick={() => setSelectedBarcodeId(scan.id)}
+                      aria-label={`${scan.title} geçmiş tarama snapshot'ını aç`}
+                      className="flex min-h-[76px] w-full items-center gap-3 rounded-2xl border bg-card p-3 text-left shadow-sm transition hover:bg-muted/30"
                     >
                       {body}
-                    </Link>
+                    </button>
                   );
                 }
 

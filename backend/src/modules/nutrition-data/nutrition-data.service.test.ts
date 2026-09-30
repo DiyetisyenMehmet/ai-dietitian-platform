@@ -644,3 +644,51 @@ test("logically inconsistent Open Food Facts nutrients trigger a USDA cross-chec
   assert.equal(result?.provider, "USDA");
   assert.equal(usdaCalls, 1);
 });
+
+
+test("scan history is served from Diewish persistence without querying barcode providers or creating another scan", async () => {
+  let providerCalls = 0;
+  let newScanWrites = 0;
+  const snapshot = food("OPEN_FOOD_FACTS");
+  snapshot.quantity = "125 g";
+  snapshot.displayNameTr = "Snapshot ürün";
+
+  const persistence = {
+    async listScanHistory(userId: string, limit: number) {
+      assert.equal(userId, "user-1");
+      assert.equal(limit, 100);
+      return [{
+        id: "barcode:event-1",
+        scanType: "BARCODE" as const,
+        title: snapshot.displayNameTr,
+        brand: snapshot.brand,
+        barcode: snapshot.barcode,
+        imageUrl: snapshot.imageUrl,
+        grams: null,
+        calories: null,
+        food: snapshot,
+        photo: null,
+        scannedAt: "2026-09-30T12:00:00.000Z",
+      }];
+    },
+    async recordBarcodeScan() {
+      newScanWrites += 1;
+    },
+  } as unknown as NutritionDataRepository;
+
+  const service = new NutritionDataService(
+    providers({
+      onOffCall: () => (providerCalls += 1),
+      onUsdaCall: () => (providerCalls += 1),
+    }),
+    persistence,
+  );
+
+  const history = await service.listScanHistory("user-1", 500);
+  assert.equal(history.length, 1);
+  assert.equal(history[0]?.food?.quantity, "125 g");
+  assert.equal(history[0]?.grams, null);
+  assert.equal(history[0]?.calories, null);
+  assert.equal(providerCalls, 0);
+  assert.equal(newScanWrites, 0);
+});
