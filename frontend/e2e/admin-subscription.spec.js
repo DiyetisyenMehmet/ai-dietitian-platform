@@ -16,6 +16,7 @@ const user = {
 
 const paid = {
   currentPlan: "PREMIUM_PLUS",
+  providerPlan: "PREMIUM_PLUS",
   currentPlanSource: "GOOGLE_PLAY_ENTITLEMENT",
   entitlementStatus: "ACTIVE",
   entitlements: [
@@ -34,14 +35,17 @@ const paid = {
     canceledAt: null,
     trial: null,
   },
+  supportEntitlement: null,
 };
 
 const free = {
   currentPlan: "FREE",
+  providerPlan: "FREE",
   currentPlanSource: "ACCOUNT_DEFAULT",
   entitlementStatus: "FREE",
   entitlements: ["DIETITIAN_CHAT", "BLOOD_TEST_ANALYSIS", "NUTRITION_PLAN"],
   record: null,
+  supportEntitlement: null,
 };
 
 async function setup(page, options = {}) {
