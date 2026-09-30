@@ -38,6 +38,8 @@ import {
   adminUserStatusSchema,
   adminUserOperationSchema,
   adminUserSessionParamsSchema,
+  adminSupportEntitlementUpsertSchema,
+  adminSupportEntitlementRevokeSchema,
 } from "./admin-users.schemas";
 
 export const adminRouter = Router();
@@ -181,6 +183,24 @@ adminRouter.get(
   requireAdminPermission(ADMIN_PERMISSIONS.ENTITLEMENTS_READ),
   validate({ params: adminUserParamsSchema }),
   adminUsersController.subscription,
+);
+
+adminRouter.put(
+  "/users/:id/subscription/support-entitlement",
+  requireAdminPermission(ADMIN_PERMISSIONS.USERS_READ),
+  requireAdminPermission(ADMIN_PERMISSIONS.ENTITLEMENTS_READ),
+  requireAdminPermission(ADMIN_PERMISSIONS.ENTITLEMENTS_GRANT),
+  validate({ params: adminUserParamsSchema, body: adminSupportEntitlementUpsertSchema }),
+  adminUsersController.upsertSupportEntitlement,
+);
+
+adminRouter.delete(
+  "/users/:id/subscription/support-entitlement",
+  requireAdminPermission(ADMIN_PERMISSIONS.USERS_READ),
+  requireAdminPermission(ADMIN_PERMISSIONS.ENTITLEMENTS_READ),
+  requireAdminPermission(ADMIN_PERMISSIONS.ENTITLEMENTS_REVOKE),
+  validate({ params: adminUserParamsSchema, body: adminSupportEntitlementRevokeSchema }),
+  adminUsersController.revokeSupportEntitlement,
 );
 
 adminRouter.patch(
