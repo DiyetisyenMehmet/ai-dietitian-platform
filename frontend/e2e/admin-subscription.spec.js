@@ -171,5 +171,5 @@ test("B1 subscription loading, sanitized error and retry", async ({ page }) => {
   await expect(page.getByText("B1 PRIVATE INTERNAL STACK")).toHaveCount(0);
   fixture.recover();
   await section.getByRole("button", { name: "Tekrar dene" }).click();
-  await expect(section.getByText("Premium Plus", { exact: true })).toBeVisible();
+  await expect(section.getByText("Premium Plus", { exact: true }).first()).toBeVisible();
 });
