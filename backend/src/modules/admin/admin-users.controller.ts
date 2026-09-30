@@ -5,8 +5,37 @@ import { adminUsersService } from "./admin-users.service";
 
 import { adminUserOperationsService } from "./admin-user-operations.service";
 import { adminUserSubscriptionService } from "./admin-user-subscription.service";
+import { adminEntitlementOperationsService } from "./admin-entitlement-operations.service";
 
 export const adminUsersController = {
+  upsertSupportEntitlement: asyncHandler(async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    sendSuccess(
+      res,
+      await adminEntitlementOperationsService.upsert(
+        { actorAdminId: req.user!.id, requestId: String(req.id) },
+        req.params.id!,
+        {
+          tier: req.body.tier,
+          expiresAt: req.body.expiresAt ? new Date(req.body.expiresAt) : null,
+          expectedUpdatedAt: req.body.expectedUpdatedAt,
+          reason: req.body.reason,
+        },
+      ),
+    );
+  }),
+  revokeSupportEntitlement: asyncHandler(async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    sendSuccess(
+      res,
+      await adminEntitlementOperationsService.revoke(
+        { actorAdminId: req.user!.id, requestId: String(req.id) },
+        req.params.id!,
+        req.body.expectedUpdatedAt,
+        req.body.reason,
+      ),
+    );
+  }),
   subscription: asyncHandler(async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     sendSuccess(res, await adminUserSubscriptionService.detail(req.params.id!));
