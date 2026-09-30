@@ -304,3 +304,58 @@ test("unknown type keeps conservative energy plus two macro fallback", () => {
     warnings: [],
   }), /en az iki temel makro/);
 });
+
+
+test("salt and sodium declarations that disagree materially are rejected", () => {
+  assert.throws(() => buildUserConfirmedPackageLabelFood("4006381333931", {
+    productName: "Saf Tuz",
+    brand: "Test",
+    quantity: "500 g",
+    productTypeText: "tuz",
+    basis: "PER_100_G",
+    servingGrams: null,
+    energyKj: null,
+    nutrients: {
+      energyKcal: null,
+      proteinG: 0,
+      carbohydratesG: 0,
+      fatG: 0,
+      saturatedFatG: null,
+      sugarsG: null,
+      fiberG: null,
+      sodiumMg: 100,
+      saltG: 100,
+    },
+    ingredients: ["tuz"],
+    allergens: [],
+    confidence: 0.9,
+    warnings: [],
+  }), /Tuz ve sodyum değerleri/);
+});
+
+test("direct-consumption product keeps the conservative normal packaged-food rule", () => {
+  assert.throws(() => buildUserConfirmedPackageLabelFood("4006381333931", {
+    productName: "Test Yoğurt",
+    brand: "Test",
+    quantity: "150 g",
+    productTypeText: "yoğurt",
+    basis: "PER_100_G",
+    servingGrams: null,
+    energyKj: null,
+    nutrients: {
+      energyKcal: 70,
+      proteinG: 4,
+      carbohydratesG: null,
+      fatG: null,
+      saturatedFatG: null,
+      sugarsG: null,
+      fiberG: null,
+      sodiumMg: null,
+      saltG: null,
+    },
+    ingredients: ["süt"],
+    allergens: ["süt"],
+    confidence: 0.9,
+    warnings: [],
+  }), /en az iki temel makro/);
+});
