@@ -122,6 +122,17 @@ export const googlePlayEntitlementsRepository = {
     return rows[0] ?? null;
   },
 
+  async findLatestForUser(userId: string): Promise<GooglePlayEntitlementRow | null> {
+    const rows = await prisma.$queryRaw<GooglePlayEntitlementRow[]>(Prisma.sql`
+      SELECT ${SELECT_COLUMNS}
+      FROM "google_play_entitlements"
+      WHERE "userId" = ${userId}
+      ORDER BY "updatedAt" DESC
+      LIMIT 1
+    `);
+    return rows[0] ?? null;
+  },
+
   /**
    * Idempotently grants/refreshes a verified Play entitlement in one database
    * transaction and synchronizes users.subscriptionTier to the highest active
