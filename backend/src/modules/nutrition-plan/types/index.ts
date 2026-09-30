@@ -71,6 +71,8 @@ export interface PlannedFood {
   name: string;
   portion: string;
   calories: number;
+  /** Explicit composition required for newly generated plans when allergy constraints exist. */
+  ingredients?: string[];
 }
 
 export interface PlannedMeal {

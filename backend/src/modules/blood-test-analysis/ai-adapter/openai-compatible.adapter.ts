@@ -396,6 +396,12 @@ export class OpenAICompatibleAdapter implements IAIAdapter {
             name: this.sanitizeText(String(f.name)),
             portion: this.sanitizeText(String(f.portion ?? "")),
             calories: this.num(f.calories),
+            ingredients: Array.isArray(f.ingredients)
+              ? f.ingredients
+                  .map((item) => this.sanitizeText(String(item)))
+                  .filter(Boolean)
+                  .slice(0, 30)
+              : [],
           }))
       : [];
 
@@ -448,7 +454,7 @@ export class OpenAICompatibleAdapter implements IAIAdapter {
       '    "dayLabel": "Day 1",',
       '    "meals": [{',
       '      "name": "Breakfast", "time": "08:00",',
-      '      "foods": [{"name": "string", "portion": "string", "calories": 0}],',
+      '      "foods": [{"name": "string", "portion": "string", "calories": 0, "ingredients": ["complete ingredient/component list"]}],',
       '      "calories": 0, "proteinGrams": 0, "carbsGrams": 0, "fatGrams": 0,',
       '      "explanation": "why this meal fits the user"',
       "    }],",
@@ -465,6 +471,7 @@ export class OpenAICompatibleAdapter implements IAIAdapter {
       "Treat behaviorInsights only as bounded preference/adherence context for practical food selection; they must never override calorie/macro targets, mealTiming, allergies, dietary preference, health constraints, or safety rules.",
       "Each day's meals must sum close to the daily calorie and macro targets.",
       "Honor every allergy as a HARD exclusion — no allergen in any food, ever.",
+      "For every food, return an explicit complete ingredients array. When allergies are present, do not use packaged, branded, mixed, sauce-based, or composite foods unless their full composition can be stated. Missing ingredient composition is not permission to assume allergy safety.",
     ].join("\n");
 
     const payload = {
