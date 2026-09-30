@@ -149,7 +149,41 @@ export interface AdminUserSession {
   expiresAt: string;
   device: string;
 }
+export type AdminSubscriptionRecordStatus =
+  | "PENDING"
+  | "ACTIVE"
+  | "PAST_DUE"
+  | "CANCELED"
+  | "EXPIRED"
+  | "REVOKED";
+
+export interface AdminUserSubscription {
+  currentPlan: "FREE" | "PREMIUM" | "PREMIUM_PLUS";
+  currentPlanSource:
+    | "GOOGLE_PLAY_ENTITLEMENT"
+    | "IYZICO_SUBSCRIPTION"
+    | "ACCOUNT_DEFAULT";
+  entitlementStatus: "ACTIVE" | "FREE";
+  entitlements: string[];
+  record: {
+    status: AdminSubscriptionRecordStatus;
+    provider: "GOOGLE_PLAY" | "IYZICO";
+    source: "GOOGLE_PLAY_ENTITLEMENT" | "IYZICO_SUBSCRIPTION";
+    startDate: string | null;
+    expiryOrRenewalDate: string | null;
+    cancelAtPeriodEnd: boolean | null;
+    canceledAt: string | null;
+    trial: null;
+  } | null;
+}
 export const adminClient = {
+  getUserSubscription(id: string): Promise<{ subscription: AdminUserSubscription }> {
+    return apiRequest({
+      path: `/admin/users/${encodeURIComponent(id)}/subscription`,
+      method: "GET",
+      auth: true,
+    });
+  },
   getUserSessions(id: string): Promise<{ sessions: AdminUserSession[]; total: number }> {
     return apiRequest({
       path: `/admin/users/${encodeURIComponent(id)}/sessions`,
