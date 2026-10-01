@@ -114,7 +114,7 @@ function familyName(food: CanonicalFood, brand: ProductCatalogNode): string | nu
     .replace(/\b\d+\s*[x×]\s*\d+(?:[.,]\d+)?\s*(?:kg|g|gr|mg|ml|cl|l)\b/gi, " ")
     .replace(/\b\d+(?:[.,]\d+)?\s*(?:kg|g|gr|mg|ml|cl|l)\b/gi, " ")
     .replace(/\b(?:paket|package|pack)\b/gi, " ")
-    .replace(/[()\[\]{}|/\\_-]+/g, " ")
+    .replace(/[()[\]{}|/\\_-]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 
