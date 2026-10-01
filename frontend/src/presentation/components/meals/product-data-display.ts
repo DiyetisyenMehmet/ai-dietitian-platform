@@ -51,7 +51,7 @@ export function nutriScoreText(value: string | null): string {
 }
 
 export function novaText(value: number | null): string {
-  return Number.isInteger(value) && value !== null && value >= 1 && value <= 4
+  return value !== null && Number.isInteger(value) && value >= 1 && value <= 4
     ? String(value)
     : "NOVA bilgisi yok";
 }

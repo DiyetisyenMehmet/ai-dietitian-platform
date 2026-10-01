@@ -26,7 +26,8 @@ import type {
   NutritionProvenanceDto,
 } from "@/infrastructure/nutrition/nutrition-client";
 
-function formatValue(value: number, unit: string): string {
+function formatValue(value: number | null, unit: string): string {
+  if (value === null) return "Bilgi bulunamadı";
   if (unit === "kcal") return `${Math.round(value)} ${unit}`;
   if (unit === "mg") return `${Math.round(value)} ${unit}`;
   const rounded = Math.round(value * (Math.abs(value) < 1 ? 100 : 10)) / (Math.abs(value) < 1 ? 100 : 10);
@@ -85,18 +86,22 @@ const NUTRIENTS: readonly [
 export function NutritionFactsGrid({
   portion,
   portionLabel,
+  hideMissing = false,
 }: {
   portion: NutrientValuesDto;
   portionLabel: string;
+  hideMissing?: boolean;
 }) {
   const micronutrients = availableMicronutrients(portion.micronutrients);
-  const visibleNutrients = NUTRIENTS.filter(([key]) => portion[key] !== null);
+  const visibleNutrients = hideMissing
+    ? NUTRIENTS.filter(([key]) => portion[key] !== null)
+    : NUTRIENTS;
   const hasAnyNutrition =
     portion.energyKcal !== null ||
-    visibleNutrients.length > 0 ||
+    NUTRIENTS.some(([key]) => portion[key] !== null) ||
     micronutrients.length > 0;
 
-  if (!hasAnyNutrition) {
+  if (hideMissing && !hasAnyNutrition) {
     return (
       <p className="rounded-xl bg-muted/50 p-3 text-sm text-muted-foreground">
         Kaynak bu referans için besin değeri sağlamamış.
@@ -106,7 +111,7 @@ export function NutritionFactsGrid({
 
   return (
     <div className="space-y-3">
-      {portion.energyKcal !== null && (
+      {(!hideMissing || portion.energyKcal !== null) && (
         <div className="relative overflow-hidden rounded-2xl border border-primary/10 bg-primary/5 p-4">
           <Leaf
             className="absolute -bottom-6 -right-3 size-28 rotate-[-18deg] text-primary/[0.07]"
@@ -141,7 +146,7 @@ export function NutritionFactsGrid({
               <div className="min-w-0">
                 <p className="break-words text-[11px] leading-tight text-muted-foreground sm:text-xs">{label}</p>
                 <p className="break-words text-lg font-bold leading-tight text-foreground">
-                  {formatValue(portion[key]!, unit)}
+                  {formatValue(portion[key], unit)}
                 </p>
               </div>
             </div>

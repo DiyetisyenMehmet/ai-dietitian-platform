@@ -246,6 +246,7 @@ function BarcodeSnapshotDetail({
                   <NutritionFactsGrid
                     portion={reference.nutrients}
                     portionLabel={reference.label}
+                    hideMissing
                   />
                 );
               })()}

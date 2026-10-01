@@ -675,9 +675,9 @@ export function BarcodeScannerPanel() {
               </div>
 
               {portionNutrients && grams !== null ? (
-                <NutritionFactsGrid portion={portionNutrients} portionLabel={consumedPortionLabel(grams)} />
+                <NutritionFactsGrid portion={portionNutrients} portionLabel={consumedPortionLabel(grams)} hideMissing />
               ) : referenceNutrients ? (
-                <NutritionFactsGrid portion={referenceNutrients} portionLabel={`${referenceLabel} referans`} />
+                <NutritionFactsGrid portion={referenceNutrients} portionLabel={`${referenceLabel} referans`} hideMissing />
               ) : (
                 <p className="text-sm text-muted-foreground">Kaynak besin değerleri bulunamadı.</p>
               )}
@@ -685,7 +685,7 @@ export function BarcodeScannerPanel() {
               {scan?.additionalNutritionReferences.map((reference, index) => (
                 <div key={`${reference.description}-${index}`} className="space-y-2 rounded-2xl border border-primary/20 p-3">
                   <p className="text-xs font-bold text-foreground">Hazırlanmış ürün için ayrı etiket referansı</p>
-                  <NutritionFactsGrid portion={reference.nutrients} portionLabel={reference.description} />
+                  <NutritionFactsGrid portion={reference.nutrients} portionLabel={reference.description} hideMissing />
                   <p className="text-[11px] text-muted-foreground">Bu değer ayrı bir etiket referansıdır; tüketilen miktar değildir.</p>
                 </div>
               ))}
