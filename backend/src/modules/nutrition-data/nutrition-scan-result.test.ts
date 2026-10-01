@@ -59,7 +59,7 @@ test("barcode normalized scan derives serving values from per-100g data when pro
   assert.equal(scan.dataQuality?.status, "QUALITY_ACCEPTED");
 });
 
-test("barcode normalized scan marks incomplete but usable nutrition as partial and discloses it", () => {
+test("barcode normalized scan marks incomplete but usable nutrition as partial without exposing its enum as copy", () => {
   const scan = toBarcodeScanResult({
     ...food,
     brand: null,
@@ -77,7 +77,7 @@ test("barcode normalized scan marks incomplete but usable nutrition as partial a
     },
   });
   assert.equal(scan.dataQuality?.status, "QUALITY_PARTIAL");
-  assert.match(scan.disclaimer ?? "", /Bazı ürün veya besin bilgileri eksik/);
+  assert.equal(scan.disclaimer, null);
 });
 
 test("barcode normalized scan prefers provider-declared serving nutrients when available", () => {

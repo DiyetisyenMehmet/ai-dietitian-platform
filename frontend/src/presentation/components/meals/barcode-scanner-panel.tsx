@@ -39,6 +39,12 @@ import {
 } from "./nutrition-scan-sections";
 import { BarcodeProductSearch } from "./barcode-product-search";
 import { PackageLabelRecovery } from "./package-label-recovery";
+import {
+  allergenDataNotice,
+  comparisonNutritionText,
+  partialProductDataNotice,
+  productInfoRows,
+} from "./product-data-display";
 
 interface DetectedBarcode {
   rawValue: string;
@@ -75,10 +81,6 @@ function validDecodedBarcode(value: string): string {
   return /^(?:\d{8}|\d{12}|\d{13}|\d{14})$/.test(normalized) ? normalized : "";
 }
 
-function nutrient(value: number | null, unit: string): string {
-  return value === null ? "Bilgi bulunamadı" : `${Math.round(value * 10) / 10} ${unit}`;
-}
-
 function roundedGrams(value: number): string {
   const rounded = Math.round(value * 10) / 10;
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
@@ -92,10 +94,6 @@ function parseGrams(value: string): number | null {
 function defaultMealType(): MealTypeDto {
   const h = new Date().getHours();
   return h < 11 ? "BREAKFAST" : h < 16 ? "LUNCH" : h < 22 ? "DINNER" : "SNACK";
-}
-
-function yesNoUnknown(value: boolean | null, yes: string, no: string): string {
-  return value === true ? yes : value === false ? no : "Bilgi bulunamadı";
 }
 
 function sourceBasis(food: CanonicalFoodDto): string {
@@ -135,20 +133,6 @@ function coachHref(food: CanonicalFoodDto, grams: number, nutrients: NutrientVal
   return `/ai?prompt=${encodeURIComponent(prompt)}`;
 }
 
-function productUsageLabel(food: CanonicalFoodDto): string {
-  switch (food.productUsage?.type ?? "UNKNOWN") {
-    case "DIRECT_CONSUMPTION": return "Doğrudan tüketilir";
-    case "BREWING": return "Demlenerek kullanılır";
-    case "BLENDING_AROMA": return "Harmanlama / aroma amaçlı kullanılır";
-    case "SPICE": return "Baharat / çeşni";
-    case "COOKING_INGREDIENT": return "Yemek hazırlamada kullanılır";
-    case "SAUCE": return "Sos";
-    case "SWEETENER": return "Tatlandırıcı";
-    case "PREPARATION_BASE": return "Hazırlanarak tüketilir";
-    default: return "Kullanım şekli doğrulanamadı";
-  }
-}
-
 function preparationUsageNotice(food: CanonicalFoodDto): string | null {
   switch (food.productUsage?.type) {
     case "BREWING":
@@ -166,16 +150,6 @@ function preparationUsageNotice(food: CanonicalFoodDto): string | null {
   }
 }
 
-function productLifecycleLabel(food: CanonicalFoodDto): string {
-  switch (food.productLifecycle?.status ?? "UNKNOWN") {
-    case "ACTIVE": return "Güncel ürün";
-    case "OLD_VERSION": return "Eski sürüm";
-    case "DISCONTINUED": return "Üretimden kaldırılmış";
-    case "REPLACED": return "Yeni sürümü mevcut";
-    default: return "Durum doğrulanamadı";
-  }
-}
-
 function productLifecycleNotice(food: CanonicalFoodDto): string | null {
   switch (food.productLifecycle?.status) {
     case "OLD_VERSION":
@@ -189,32 +163,6 @@ function productLifecycleNotice(food: CanonicalFoodDto): string | null {
     default:
       return null;
   }
-}
-
-function productInfoRows(food: CanonicalFoodDto): Array<[string, string]> {
-  return [
-    ["Ürün durumu", productLifecycleLabel(food)],
-    ["Kategori", food.productCatalog?.category?.name ?? "Bilgi bulunamadı"],
-    ["Alt kategori", food.productCatalog?.subcategory?.name ?? "Bilgi bulunamadı"],
-    ["Marka", food.productCatalog?.brand?.name ?? food.brand ?? "Bilgi bulunamadı"],
-    ["Ürün ailesi", food.productCatalog?.family?.name ?? "Bilgi bulunamadı"],
-    ["Varyant", food.productCatalog?.variant?.name ?? "Bilgi bulunamadı"],
-    ["Kullanım", productUsageLabel(food)],
-    ["Nutri-Score", food.nutriScore?.toUpperCase() ?? "Bilgi bulunamadı"],
-    ["NOVA", food.novaGroup === null ? "Bilgi bulunamadı" : String(food.novaGroup)],
-    ["Vegan", yesNoUnknown(food.vegan, "Evet", "Hayır")],
-    ["Vejetaryen", yesNoUnknown(food.vegetarian, "Evet", "Hayır")],
-    ["Gluten bilgisi", yesNoUnknown(food.glutenFree, "Glutensiz", "Gluten içeriyor")],
-    ["İçerik", food.ingredients.length > 0 ? food.ingredients.join(", ") : "Bilgi bulunamadı"],
-    ["Alerjenler", food.allergens.length > 0 ? food.allergens.join(", ") : "Bilgi bulunamadı"],
-    [
-      "Çapraz bulaşma uyarısı",
-      food.allergenEvidence?.crossContaminationWarnings.length
-        ? food.allergenEvidence.crossContaminationWarnings.join("; ")
-        : "Kaynakta bilgi bulunamadı",
-    ],
-    ["Katkı maddeleri", food.additives.length > 0 ? food.additives.join(", ") : "Bilgi bulunamadı"],
-  ];
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
@@ -624,11 +572,13 @@ export function BarcodeScannerPanel() {
                     {food.displayNameTr || food.name}
                   </h3>
                   {food.brand && <p className="mt-0.5 text-sm font-medium text-muted-foreground">{food.brand}</p>}
-                  <div className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
-                    <div className="rounded-xl bg-primary/5 px-3 py-2">
-                      <p className="text-muted-foreground">Paket</p>
-                      <p className="mt-0.5 font-bold text-foreground">{food.quantity ?? "Bilgi bulunamadı"}</p>
-                    </div>
+                  <div className={`mt-3 grid gap-2 text-xs ${food.quantity ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
+                    {food.quantity && (
+                      <div className="rounded-xl bg-primary/5 px-3 py-2">
+                        <p className="text-muted-foreground">Paket</p>
+                        <p className="mt-0.5 font-bold text-foreground">{food.quantity}</p>
+                      </div>
+                    )}
                     <div className="rounded-xl bg-primary/5 px-3 py-2">
                       <p className="text-muted-foreground">Besin referansı</p>
                       <p className="mt-0.5 font-bold text-foreground">{referenceLabel} için</p>
@@ -651,6 +601,11 @@ export function BarcodeScannerPanel() {
               {food.provenance.sourceReference === "USER_CONFIRMED_PACKAGE_LABEL" && (
                 <p className="rounded-xl bg-primary/5 px-3 py-2 text-xs font-semibold text-primary">
                   Kullanıcı doğrulamalı paket etiketi
+                </p>
+              )}
+              {partialProductDataNotice(scan) && (
+                <p className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
+                  {partialProductDataNotice(scan)}
                 </p>
               )}
               {preparationUsageNotice(food) && (
@@ -814,6 +769,11 @@ export function BarcodeScannerPanel() {
                     </div>
                   ))}
                 </dl>
+                {allergenDataNotice(food) && (
+                  <p className="border-t border-amber-500/20 bg-amber-500/5 px-4 py-3 text-xs leading-relaxed text-muted-foreground">
+                    {allergenDataNotice(food)}
+                  </p>
+                )}
               </CardContent>
             </Card>
           </section>
@@ -899,7 +859,7 @@ export function BarcodeScannerPanel() {
                     <p className="shrink-0 font-semibold">~{Math.round(item.servingGrams)} g</p>
                   </div>
                   <p className="mt-1 break-words text-xs text-muted-foreground">
-                    Protein {nutrient(item.nutrients.proteinG, "g")} · Lif {nutrient(item.nutrients.fiberG, "g")} · Şeker {nutrient(item.nutrients.sugarsG, "g")}
+                    {comparisonNutritionText(item.nutrients)}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     Tercih uyumu: {item.dietaryCompatibility === "COMPATIBLE" ? "uygun" : item.dietaryCompatibility === "INCOMPATIBLE" ? "uygun değil" : "doğrulanamadı"}

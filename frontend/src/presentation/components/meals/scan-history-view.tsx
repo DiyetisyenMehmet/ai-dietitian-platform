@@ -114,10 +114,14 @@ function lifecycleText(
   }
 }
 
-function sourceServingLabel(food: CanonicalFoodDto): string {
-  if (!food.serving) return "Bilgi bulunamadı";
+function sourceServingText(food: CanonicalFoodDto): string | null {
+  if (!food.serving) return null;
   if (food.serving.description) return food.serving.description;
   return `${compactNumber(food.serving.amount)} ${food.serving.unit}`;
+}
+
+function sourceServingLabel(food: CanonicalFoodDto): string {
+  return sourceServingText(food) ?? "Kaynak porsiyon";
 }
 
 function nutritionReference(food: CanonicalFoodDto): {
@@ -149,6 +153,7 @@ function BarcodeSnapshotDetail({
   const resolvedLifecycle = item.resolvedProduct
     ? lifecycleText(item.resolvedProduct.lifecycleStatus)
     : null;
+  const sourceServing = food ? sourceServingText(food) : null;
 
   return (
     <div className="space-y-4">
@@ -189,24 +194,24 @@ function BarcodeSnapshotDetail({
           </div>
 
           <div className="grid gap-2 text-xs sm:grid-cols-3">
-            <div className="rounded-xl bg-primary/5 px-3 py-2">
-              <p className="text-muted-foreground">Barkod</p>
-              <p className="mt-0.5 break-all font-bold text-foreground">
-                {item.barcode ?? "Bilgi bulunamadı"}
-              </p>
-            </div>
-            <div className="rounded-xl bg-primary/5 px-3 py-2">
-              <p className="text-muted-foreground">Paket</p>
-              <p className="mt-0.5 font-bold text-foreground">
-                {food?.quantity ?? "Bilgi bulunamadı"}
-              </p>
-            </div>
-            <div className="rounded-xl bg-primary/5 px-3 py-2">
-              <p className="text-muted-foreground">Kaynak porsiyon</p>
-              <p className="mt-0.5 font-bold text-foreground">
-                {food ? sourceServingLabel(food) : "Bilgi bulunamadı"}
-              </p>
-            </div>
+            {item.barcode && (
+              <div className="rounded-xl bg-primary/5 px-3 py-2">
+                <p className="text-muted-foreground">Barkod</p>
+                <p className="mt-0.5 break-all font-bold text-foreground">{item.barcode}</p>
+              </div>
+            )}
+            {food?.quantity && (
+              <div className="rounded-xl bg-primary/5 px-3 py-2">
+                <p className="text-muted-foreground">Paket</p>
+                <p className="mt-0.5 font-bold text-foreground">{food.quantity}</p>
+              </div>
+            )}
+            {sourceServing && (
+              <div className="rounded-xl bg-primary/5 px-3 py-2">
+                <p className="text-muted-foreground">Kaynak porsiyon</p>
+                <p className="mt-0.5 font-bold text-foreground">{sourceServing}</p>
+              </div>
+            )}
           </div>
 
           {identityWasResolved && (
@@ -257,23 +262,30 @@ function BarcodeSnapshotDetail({
               <div>
                 <p className="text-xs font-semibold text-muted-foreground">İçerikler</p>
                 <p className="mt-1 leading-relaxed">
-                  {food.ingredients.length > 0 ? food.ingredients.join(", ") : "Bilgi bulunamadı"}
+                  {food.ingredients.length > 0
+                    ? food.ingredients.join(", ")
+                    : "İçerik bilgisi kaynak snapshot'ında sağlanmamış."}
                 </p>
               </div>
               <div>
                 <p className="text-xs font-semibold text-muted-foreground">Alerjenler</p>
                 <p className="mt-1 leading-relaxed">
-                  {food.allergens.length > 0 ? food.allergens.join(", ") : "Bilgi bulunamadı"}
+                  {food.allergens.length > 0
+                    ? food.allergens.join(", ")
+                    : food.allergenEvidence?.ingredientList === "DECLARED" &&
+                        food.allergenEvidence.allergenDeclaration === "DECLARED"
+                      ? "Kaynak snapshot'ında bildirilen alerjen yok."
+                      : "Alerjen bilgisi yeterli değil. Ambalaj üzerindeki bilgileri kontrol et."}
                 </p>
               </div>
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground">Çapraz bulaşma uyarıları</p>
-                <p className="mt-1 leading-relaxed">
-                  {food.allergenEvidence?.crossContaminationWarnings.length
-                    ? food.allergenEvidence.crossContaminationWarnings.join("; ")
-                    : "Kaynak snapshot'ında bilgi bulunamadı"}
-                </p>
-              </div>
+              {food.allergenEvidence?.crossContaminationWarnings.length ? (
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground">Çapraz bulaşma uyarıları</p>
+                  <p className="mt-1 leading-relaxed">
+                    {food.allergenEvidence.crossContaminationWarnings.join("; ")}
+                  </p>
+                </div>
+              ) : null}
             </CardContent>
           </Card>
 

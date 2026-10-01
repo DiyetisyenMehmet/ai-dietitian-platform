@@ -205,9 +205,6 @@ export function toBarcodeScanResult(food: CanonicalFood): NormalizedNutritionSca
       food.provenance.stale
         ? "Ürün kaynağı geçici olarak doğrulanamadığı için son bilinen önbellek verisi gösteriliyor."
         : null,
-      dataQuality.status === "QUALITY_PARTIAL"
-        ? "Bazı ürün veya besin bilgileri eksik. Gösterilen alanlar kaynaktaki mevcut veriye dayanır."
-        : null,
     ].filter((value): value is string => Boolean(value)).join(" ") || null,
   };
 }

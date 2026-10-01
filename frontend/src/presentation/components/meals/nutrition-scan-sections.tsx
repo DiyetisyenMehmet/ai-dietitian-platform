@@ -26,8 +26,7 @@ import type {
   NutritionProvenanceDto,
 } from "@/infrastructure/nutrition/nutrition-client";
 
-function formatValue(value: number | null, unit: string): string {
-  if (value === null) return "Bilgi bulunamadı";
+function formatValue(value: number, unit: string): string {
   if (unit === "kcal") return `${Math.round(value)} ${unit}`;
   if (unit === "mg") return `${Math.round(value)} ${unit}`;
   const rounded = Math.round(value * (Math.abs(value) < 1 ? 100 : 10)) / (Math.abs(value) < 1 ? 100 : 10);
@@ -91,46 +90,64 @@ export function NutritionFactsGrid({
   portionLabel: string;
 }) {
   const micronutrients = availableMicronutrients(portion.micronutrients);
+  const visibleNutrients = NUTRIENTS.filter(([key]) => portion[key] !== null);
+  const hasAnyNutrition =
+    portion.energyKcal !== null ||
+    visibleNutrients.length > 0 ||
+    micronutrients.length > 0;
+
+  if (!hasAnyNutrition) {
+    return (
+      <p className="rounded-xl bg-muted/50 p-3 text-sm text-muted-foreground">
+        Kaynak bu referans için besin değeri sağlamamış.
+      </p>
+    );
+  }
+
   return (
     <div className="space-y-3">
-      <div className="relative overflow-hidden rounded-2xl border border-primary/10 bg-primary/5 p-4">
-        <Leaf
-          className="absolute -bottom-6 -right-3 size-28 rotate-[-18deg] text-primary/[0.07]"
-          strokeWidth={1.5}
-          aria-hidden="true"
-        />
-        <div className="relative flex items-center gap-4">
-          <span className="flex size-14 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm">
-            <Zap className="size-7" aria-hidden="true" />
-          </span>
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-muted-foreground">Enerji</p>
-            <p className="break-words text-3xl font-extrabold leading-none tracking-tight text-foreground">
-              {formatValue(portion.energyKcal, "kcal")}
-            </p>
-            <p className="mt-1 text-sm text-muted-foreground">{portionLabel}</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-2.5">
-        {NUTRIENTS.map(([key, label, unit, Icon, iconClass]) => (
-          <div key={key} className="flex min-h-[78px] items-center gap-3 rounded-2xl border bg-card p-3 shadow-sm">
-            <span
-              className={`flex size-10 shrink-0 items-center justify-center rounded-full ${iconClass}`}
-              aria-hidden="true"
-            >
-              <Icon className="size-5" strokeWidth={2.25} />
+      {portion.energyKcal !== null && (
+        <div className="relative overflow-hidden rounded-2xl border border-primary/10 bg-primary/5 p-4">
+          <Leaf
+            className="absolute -bottom-6 -right-3 size-28 rotate-[-18deg] text-primary/[0.07]"
+            strokeWidth={1.5}
+            aria-hidden="true"
+          />
+          <div className="relative flex items-center gap-4">
+            <span className="flex size-14 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm">
+              <Zap className="size-7" aria-hidden="true" />
             </span>
             <div className="min-w-0">
-              <p className="break-words text-[11px] leading-tight text-muted-foreground sm:text-xs">{label}</p>
-              <p className="break-words text-lg font-bold leading-tight text-foreground">
-                {formatValue(portion[key], unit)}
+              <p className="text-sm font-medium text-muted-foreground">Enerji</p>
+              <p className="break-words text-3xl font-extrabold leading-none tracking-tight text-foreground">
+                {formatValue(portion.energyKcal, "kcal")}
               </p>
+              <p className="mt-1 text-sm text-muted-foreground">{portionLabel}</p>
             </div>
           </div>
-        ))}
-      </div>
+        </div>
+      )}
+
+      {visibleNutrients.length > 0 && (
+        <div className="grid grid-cols-2 gap-2.5">
+          {visibleNutrients.map(([key, label, unit, Icon, iconClass]) => (
+            <div key={key} className="flex min-h-[78px] items-center gap-3 rounded-2xl border bg-card p-3 shadow-sm">
+              <span
+                className={`flex size-10 shrink-0 items-center justify-center rounded-full ${iconClass}`}
+                aria-hidden="true"
+              >
+                <Icon className="size-5" strokeWidth={2.25} />
+              </span>
+              <div className="min-w-0">
+                <p className="break-words text-[11px] leading-tight text-muted-foreground sm:text-xs">{label}</p>
+                <p className="break-words text-lg font-bold leading-tight text-foreground">
+                  {formatValue(portion[key]!, unit)}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {micronutrients.length > 0 && (
         <details className="group rounded-2xl border bg-card shadow-sm">
