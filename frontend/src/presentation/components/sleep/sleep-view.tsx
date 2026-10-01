@@ -17,13 +17,6 @@ import { Input } from "@/presentation/components/ui/input";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-function localDateKey(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
 function localDateTimeInput(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");

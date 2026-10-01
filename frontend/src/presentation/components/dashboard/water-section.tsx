@@ -67,7 +67,7 @@ function buildTrend(logs: WaterLog[], days: number): TrendPoint[] {
 
 /** Complete persisted FR-010 water experience. */
 export function WaterSection() {
-  const { waterMl, waterGoalMl } = useDailyTracking();
+  const { waterMl, waterGoalMl, waterReadiness } = useDailyTracking();
   const [logs, setLogs] = React.useState<WaterLog[]>([]);
   const [goalDraft, setGoalDraft] = React.useState("");
   const [trendDays, setTrendDays] = React.useState<7 | 30>(7);
@@ -108,7 +108,8 @@ export function WaterSection() {
     };
   }, [refresh]);
 
-  const percent = waterGoalMl > 0 ? toPercent(waterMl, waterGoalMl) : 0;
+  const percent =
+    waterReadiness !== "UNKNOWN" && waterGoalMl > 0 ? toPercent(waterMl, waterGoalMl) : 0;
   const todayStart = startOfToday().getTime();
   const latestTodayLog = logs.find((log) => new Date(log.loggedAt).getTime() >= todayStart) ?? null;
   const trend = React.useMemo(() => buildTrend(logs, trendDays), [logs, trendDays]);
@@ -210,18 +211,22 @@ export function WaterSection() {
               <p className="text-xs text-muted-foreground">
                 {loading
                   ? "Yükleniyor…"
-                  : waterGoalMl > 0
-                    ? `${formatNumber(waterMl)} / ${formatNumber(waterGoalMl)} ml`
-                    : `${formatNumber(waterMl)} ml`}
+                  : waterReadiness === "UNKNOWN"
+                    ? "Bugünkü su verisi doğrulanamadı"
+                    : waterGoalMl > 0
+                      ? `${formatNumber(waterMl)} / ${formatNumber(waterGoalMl)} ml`
+                      : `${formatNumber(waterMl)} ml`}
               </p>
             </div>
           </div>
-          {waterGoalMl > 0 && (
+          {waterReadiness !== "UNKNOWN" && waterGoalMl > 0 && (
             <span className="text-2xl font-bold tabular-nums text-sky-500">%{percent}</span>
           )}
         </div>
 
-        {waterGoalMl > 0 && <ProgressBar value={percent} indicatorClassName="bg-sky-500" />}
+        {waterReadiness !== "UNKNOWN" && waterGoalMl > 0 && (
+          <ProgressBar value={percent} indicatorClassName="bg-sky-500" />
+        )}
 
         <div className="grid grid-cols-3 gap-2">
           {QUICK_ADD.map((preset) => (

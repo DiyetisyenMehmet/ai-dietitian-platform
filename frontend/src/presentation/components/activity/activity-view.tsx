@@ -87,7 +87,7 @@ function savedActivityDescription(activity: Activity): string {
 }
 
 export function ActivityView() {
-  const { activities, activeMinutes, estimatedCaloriesBurned } = useActivity();
+  const { activities, activeMinutes, estimatedCaloriesBurned, readiness } = useActivity();
   const [type, setType] = React.useState<ActivityType>("WALKING");
   const [duration, setDuration] = React.useState("10");
   const [distance, setDistance] = React.useState("");
@@ -208,7 +208,9 @@ export function ActivityView() {
                 <Timer className="size-4" aria-hidden="true" />
                 <span className="text-xs font-medium">Toplam süre</span>
               </div>
-              <p className="mt-2 text-2xl font-bold tabular-nums">{activeMinutes} dk</p>
+              <p className="mt-2 text-2xl font-bold tabular-nums">
+                {readiness === "UNKNOWN" ? "—" : `${activeMinutes} dk`}
+              </p>
             </CardContent>
           </Card>
           <Card>
@@ -218,15 +220,15 @@ export function ActivityView() {
                 <span className="text-xs font-medium">Tahmini harcama</span>
               </div>
               <p className="mt-2 text-2xl font-bold tabular-nums">
-                ~{Math.round(estimatedCaloriesBurned)} kcal
+                {readiness === "UNKNOWN" ? "—" : `~${Math.round(estimatedCaloriesBurned)} kcal`}
               </p>
             </CardContent>
           </Card>
         </div>
         <p className="text-xs leading-relaxed text-muted-foreground">
-          Bugün kaydettiğin her hareketin tahmini enerji harcaması bu toplama dahil edilir. Diewish
-          bu değeri günlük yemek hedefini otomatik artırmak için kullanmaz; böylece aktivitenin iki
-          kez hesaplanması önlenir.
+          {readiness === "UNKNOWN"
+            ? "Bugünkü hareket verileri doğrulanamadı. Kayıt ekleyebilirsin; mevcut toplamlar yeniden doğrulandığında gösterilir."
+            : "Bugün kaydettiğin her hareketin tahmini enerji harcaması bu toplama dahil edilir. Diewish bu değeri günlük yemek hedefini otomatik artırmak için kullanmaz; böylece aktivitenin iki kez hesaplanması önlenir."}
         </p>
       </section>
 
@@ -362,7 +364,13 @@ export function ActivityView() {
             </p>
           )}
         </div>
-        {activities.length === 0 ? (
+        {readiness === "UNKNOWN" ? (
+          <Card>
+            <CardContent className="p-5 text-center text-sm text-muted-foreground">
+              Bugünkü hareket kayıtları doğrulanamadı.
+            </CardContent>
+          </Card>
+        ) : activities.length === 0 ? (
           <Card>
             <CardContent className="p-5 text-center text-sm text-muted-foreground">
               Bugün henüz hareket kaydı yok.
