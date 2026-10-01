@@ -827,6 +827,7 @@ test("scan history is served from Diewish persistence without querying barcode p
           replacedByBarcode: null,
         },
         scannedAt: "2026-09-30T12:00:00.000Z",
+        lastViewedAt: "2026-09-30T13:00:00.000Z",
       }];
     },
     async recordBarcodeScan() {
@@ -845,7 +846,10 @@ test("scan history is served from Diewish persistence without querying barcode p
   const history = await service.listScanHistory("user-1", 500);
   assert.equal(history.length, 1);
   assert.equal(history[0]?.food?.quantity, "125 g");
+  assert.equal(history[0]?.food?.displayNameTr, "Snapshot ürün");
   assert.equal(history[0]?.resolvedProduct?.displayNameTr, "Kristal Kaya Tuzu");
+  assert.equal(history[0]?.scannedAt, "2026-09-30T12:00:00.000Z");
+  assert.equal(history[0]?.lastViewedAt, "2026-09-30T13:00:00.000Z");
   assert.equal(history[0]?.grams, null);
   assert.equal(history[0]?.calories, null);
   assert.equal(providerCalls, 0);

@@ -102,9 +102,9 @@ function displayHistoryBrand(item: ScanHistoryItemDto): string | null {
   return item.brand;
 }
 
-function lifecycleText(status: ScanHistoryItemDto["resolvedProduct"] extends infer R
-  ? R extends { lifecycleStatus: infer S } ? S : never
-  : never): string | null {
+function lifecycleText(
+  status: "ACTIVE" | "OLD_VERSION" | "DISCONTINUED" | "REPLACED" | "UNKNOWN",
+): string | null {
   switch (status) {
     case "ACTIVE": return "Güncel ürün";
     case "OLD_VERSION": return "Eski sürüm";
