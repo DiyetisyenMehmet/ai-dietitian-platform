@@ -60,9 +60,10 @@ export interface NormalizedNutritionScanResult {
     nutrition: NutritionProvenance[];
     recognition: "AI_ESTIMATED" | "BARCODE_EXACT" | "OCR_ESTIMATED";
   };
-  /** Coarse barcode data-quality state. No dynamic confidence percentage is exposed. */
+  /** Product data quality. Internal numeric score is deliberately not exposed to clients. */
   dataQuality: {
     status: BarcodeDataQualityStatus;
+    level: "HIGH" | "MEDIUM" | "LOW";
     issues: string[];
   } | null;
   product: {
@@ -136,6 +137,7 @@ export function toBarcodeScanResult(food: CanonicalFood): NormalizedNutritionSca
     status: qualityAssessment.tier === "STRONG"
       ? "QUALITY_ACCEPTED" as const
       : "QUALITY_PARTIAL" as const,
+    level: qualityAssessment.trustLevel,
     issues: [...qualityAssessment.issues],
   };
   const sourceServingGrams =

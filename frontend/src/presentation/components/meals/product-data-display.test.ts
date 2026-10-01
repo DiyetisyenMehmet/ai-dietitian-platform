@@ -7,6 +7,8 @@ import {
   novaText,
   nutriScoreText,
   partialProductDataNotice,
+  productDataTrustExplanation,
+  productDataTrustText,
   productInfoRows,
   type ProductDisplayFood,
 } from "./product-data-display";
@@ -64,11 +66,11 @@ test("complete empty allergen declaration is not presented as missing", () => {
 
 test("partial quality becomes one short user-facing message", () => {
   assert.equal(
-    partialProductDataNotice({ dataQuality: { status: "QUALITY_PARTIAL" } }),
+    partialProductDataNotice({ dataQuality: { status: "QUALITY_PARTIAL", level: "MEDIUM" } }),
     "Bazı ürün veya besin bilgileri eksik.",
   );
   assert.equal(
-    partialProductDataNotice({ dataQuality: { status: "QUALITY_ACCEPTED" } }),
+    partialProductDataNotice({ dataQuality: { status: "QUALITY_ACCEPTED", level: "HIGH" } }),
     null,
   );
 });
@@ -78,4 +80,15 @@ test("comparison summary omits missing fields rather than repeating placeholders
     comparisonNutritionText({ proteinG: 8, fiberG: null, sugarsG: null }),
     "Protein 8 g",
   );
+});
+
+
+test("product data trust is qualitative and never rendered as a percentage", () => {
+  const high = { dataQuality: { status: "QUALITY_ACCEPTED" as const, level: "HIGH" as const } };
+  const medium = { dataQuality: { status: "QUALITY_PARTIAL" as const, level: "MEDIUM" as const } };
+  assert.equal(productDataTrustText(high), "Yüksek");
+  assert.equal(productDataTrustText(medium), "Orta");
+  assert.doesNotMatch(productDataTrustExplanation(high) ?? "", /%|\/100|doğru/i);
+  assert.ok(productInfoRows(food(), high).some(([label, value]) =>
+    label === "Veri güveni" && value === "Yüksek"));
 });

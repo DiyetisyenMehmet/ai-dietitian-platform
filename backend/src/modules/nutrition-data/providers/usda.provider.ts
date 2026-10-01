@@ -157,7 +157,6 @@ export function normalizeUsdaFood(raw: unknown): CanonicalFood | null {
       dataBasis: "PER_100_G",
       preparationState: text(food.foodCategory) ?? text(food.dataType),
       sourceCategories,
-      confidence: 0.95,
       sourceReference: `https://fdc.nal.usda.gov/fdc-app.html#/food-details/${fdcId}`,
     },
   };

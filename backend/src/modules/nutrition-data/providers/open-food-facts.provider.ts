@@ -198,7 +198,6 @@ export function normalizeOpenFoodFactsProduct(raw: unknown, barcodeHint?: string
       retrievedAt: new Date().toISOString(),
       dataBasis: "PER_100_G",
       preparationState: "PACKAGED_PRODUCT",
-      confidence: 0.75,
       sourceReference,
       providerUpdatedAt: providerUpdatedAt(product),
       sourceCategories,

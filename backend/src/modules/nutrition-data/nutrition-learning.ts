@@ -82,7 +82,6 @@ export function buildPackageLabelConsensus(
   if (!winner?.food.barcode) return null;
 
   const now = new Date().toISOString();
-  const confidence = Math.min(0.97, 0.9 + Math.min(winner.users.size, 7) * 0.01);
   return {
     ...winner.food,
     externalId: `package-consensus:${winner.food.barcode}`,
@@ -97,7 +96,6 @@ export function buildPackageLabelConsensus(
       externalId: `package-consensus:${winner.food.barcode}`,
       retrievedAt: now,
       lastValidatedAt: now,
-      confidence,
       sourceReference: "DIEWISH_PACKAGE_LABEL_CONSENSUS",
       stale: false,
     },

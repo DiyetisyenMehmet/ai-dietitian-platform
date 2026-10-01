@@ -396,7 +396,6 @@ export function buildUserConfirmedPackageLabelFood(
       retrievedAt: now,
       dataBasis: draft.basis,
       preparationState: draft.referenceState ?? null,
-      confidence: 0.9,
       sourceReference: "USER_CONFIRMED_PACKAGE_LABEL",
       sourceCategories: draft.productTypeText ? [draft.productTypeText] : [],
       preparationInstructions: draft.preparationInstructions ?? null,

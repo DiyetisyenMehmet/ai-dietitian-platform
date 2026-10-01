@@ -249,11 +249,6 @@ function dateText(value: string | null | undefined): string | null {
   return Number.isNaN(date.getTime()) ? null : date.toLocaleString("tr-TR");
 }
 
-function confidenceText(value: number): string | null {
-  if (!Number.isFinite(value) || value < 0 || value > 1) return null;
-  return `%${Math.round(value * 100)}`;
-}
-
 export function NutritionProvenanceSection({ sources }: { sources: NutritionProvenanceDto[] }) {
   if (sources.length === 0) return null;
   return (
@@ -261,7 +256,6 @@ export function NutritionProvenanceSection({ sources }: { sources: NutritionProv
       {sources.map((source) => {
         const validated = dateText(source.lastValidatedAt ?? source.retrievedAt);
         const updated = dateText(source.providerUpdatedAt);
-        const confidence = confidenceText(source.confidence);
         return (
           <div key={`${source.provider}-${source.externalId}`} className="rounded-2xl border bg-card p-4 shadow-sm">
             <div className="flex items-center gap-3">
@@ -292,12 +286,6 @@ export function NutritionProvenanceSection({ sources }: { sources: NutritionProv
                 <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)] gap-3 py-1.5">
                   <dt className="text-muted-foreground">Kaynak son güncelleme</dt>
                   <dd className="font-medium text-foreground">{updated}</dd>
-                </div>
-              )}
-              {confidence && (
-                <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)] gap-3 py-1.5">
-                  <dt className="text-muted-foreground">Güven</dt>
-                  <dd className="font-medium text-foreground">{confidence}</dd>
                 </div>
               )}
             </dl>

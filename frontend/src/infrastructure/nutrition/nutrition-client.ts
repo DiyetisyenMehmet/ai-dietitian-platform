@@ -51,7 +51,7 @@ export interface NutritionProvenanceDto {
   retrievedAt: string;
   dataBasis: "PER_100_G" | "PER_SERVING";
   preparationState?: string | null;
-  confidence: number;
+  confidence?: number;
   sourceReference?: string | null;
   lastValidatedAt?: string | null;
   dataHash?: string | null;
@@ -181,6 +181,7 @@ export interface NormalizedNutritionScanDto {
   };
   dataQuality: {
     status: "QUALITY_ACCEPTED" | "QUALITY_PARTIAL";
+    level: "HIGH" | "MEDIUM" | "LOW";
     issues: string[];
   } | null;
   product: {

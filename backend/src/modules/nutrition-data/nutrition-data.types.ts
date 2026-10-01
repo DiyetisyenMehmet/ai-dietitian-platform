@@ -133,7 +133,8 @@ export interface NutritionProvenance {
   /** Basis used by the upstream/source nutrition declaration, not user consumption. */
   dataBasis: NutritionDataBasis;
   preparationState?: string | null;
-  confidence: number;
+  /** Optional source/recognition metadata. Never interpreted as product correctness probability. */
+  confidence?: number;
   sourceReference?: string | null;
   /** Timestamp at which Diewish last successfully checked this provider record. */
   lastValidatedAt?: string | null;

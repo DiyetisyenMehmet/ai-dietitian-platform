@@ -33,6 +33,9 @@ export function selectPreferredFood(
   return [...candidates].sort((a, b) => {
     const priority = sourcePriority(b.provider, context) - sourcePriority(a.provider, context);
     if (priority !== 0) return priority;
-    return b.provenance.confidence - a.provenance.confidence;
+    const bDate = Date.parse(b.provenance.lastValidatedAt ?? b.provenance.retrievedAt);
+    const aDate = Date.parse(a.provenance.lastValidatedAt ?? a.provenance.retrievedAt);
+    if (Number.isFinite(bDate) && Number.isFinite(aDate) && bDate !== aDate) return bDate - aDate;
+    return a.externalId.localeCompare(b.externalId);
   })[0] ?? null;
 }

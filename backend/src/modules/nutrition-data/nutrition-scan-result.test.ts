@@ -57,6 +57,7 @@ test("barcode normalized scan derives serving values from per-100g data when pro
   assert.equal(scan.nutrients.perServing.energyKcal, 130);
   assert.equal(scan.nutrients.estimated, false);
   assert.equal(scan.dataQuality?.status, "QUALITY_ACCEPTED");
+  assert.equal(scan.dataQuality?.level, "HIGH");
 });
 
 test("barcode normalized scan marks incomplete but usable nutrition as partial without exposing its enum as copy", () => {
@@ -77,6 +78,7 @@ test("barcode normalized scan marks incomplete but usable nutrition as partial w
     },
   });
   assert.equal(scan.dataQuality?.status, "QUALITY_PARTIAL");
+  assert.notEqual(scan.dataQuality?.level, "HIGH");
   assert.equal(scan.disclaimer, null);
 });
 

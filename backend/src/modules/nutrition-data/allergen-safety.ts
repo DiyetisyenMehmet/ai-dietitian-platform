@@ -42,11 +42,13 @@ function matchedAllergens(allergies: string[], evidence: string[]): string[] {
 }
 
 function hasReliableCompleteEvidence(food: CanonicalFood, evidence?: AllergenEvidence): boolean {
+  const validationDate = new Date(food.provenance.lastValidatedAt ?? food.provenance.retrievedAt);
   return Boolean(
     evidence?.ingredientList === "DECLARED" &&
       evidence.allergenDeclaration === "DECLARED" &&
       !food.provenance.stale &&
-      food.provenance.confidence >= 0.7,
+      food.provenance.sourceReference?.trim() &&
+      Number.isFinite(validationDate.getTime()),
   );
 }
 

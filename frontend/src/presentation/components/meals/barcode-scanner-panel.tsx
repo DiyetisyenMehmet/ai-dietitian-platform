@@ -43,6 +43,7 @@ import {
   allergenDataNotice,
   comparisonNutritionText,
   partialProductDataNotice,
+  productDataTrustExplanation,
   productInfoRows,
 } from "./product-data-display";
 
@@ -762,13 +763,18 @@ export function BarcodeScannerPanel() {
             <Card>
               <CardContent className="p-0">
                 <dl className="divide-y">
-                  {productInfoRows(food).map(([label, value]) => (
+                  {productInfoRows(food, scan).map(([label, value]) => (
                     <div key={label} className="grid grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] gap-3 px-4 py-2 text-sm">
                       <dt className="text-muted-foreground">{label}</dt>
                       <dd className="break-words text-right font-semibold text-foreground">{value}</dd>
                     </div>
                   ))}
                 </dl>
+                {productDataTrustExplanation(scan) && (
+                  <p className="border-t bg-muted/30 px-4 py-3 text-xs leading-relaxed text-muted-foreground">
+                    {productDataTrustExplanation(scan)}
+                  </p>
+                )}
                 {allergenDataNotice(food) && (
                   <p className="border-t border-amber-500/20 bg-amber-500/5 px-4 py-3 text-xs leading-relaxed text-muted-foreground">
                     {allergenDataNotice(food)}

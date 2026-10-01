@@ -40,6 +40,7 @@ export interface ProductDisplayFood {
 export interface ProductDisplayScan {
   dataQuality: {
     status: "QUALITY_ACCEPTED" | "QUALITY_PARTIAL";
+    level: "HIGH" | "MEDIUM" | "LOW";
   } | null;
 }
 
@@ -101,7 +102,28 @@ export function partialProductDataNotice(scan: ProductDisplayScan | null): strin
     : null;
 }
 
-export function productInfoRows(food: ProductDisplayFood): ProductInfoRow[] {
+export function productDataTrustText(scan: ProductDisplayScan | null): string | null {
+  switch (scan?.dataQuality?.level) {
+    case "HIGH": return "Yüksek";
+    case "MEDIUM": return "Orta";
+    case "LOW": return "Düşük";
+    default: return null;
+  }
+}
+
+export function productDataTrustExplanation(scan: ProductDisplayScan | null): string | null {
+  switch (scan?.dataQuality?.level) {
+    case "HIGH": return "Ürün bilgileri güçlü ve tutarlı veri sinyalleriyle destekleniyor.";
+    case "MEDIUM": return "Temel ürün bilgileri kullanılabilir; bazı doğrulama sinyalleri sınırlı.";
+    case "LOW": return "Ürün verisi sınırlı. Ambalaj bilgilerini kontrol etmek yararlı olabilir.";
+    default: return null;
+  }
+}
+
+export function productInfoRows(
+  food: ProductDisplayFood,
+  scan: ProductDisplayScan | null = null,
+): ProductInfoRow[] {
   const rows: ProductInfoRow[] = [];
   const lifecycle = productLifecycleText(food);
   const usage = productUsageText(food);
@@ -110,6 +132,8 @@ export function productInfoRows(food: ProductDisplayFood): ProductInfoRow[] {
   const gluten = booleanText(food.glutenFree, "Glutensiz", "Gluten içeriyor");
 
   if (lifecycle) rows.push(["Ürün durumu", lifecycle]);
+  const trust = productDataTrustText(scan);
+  if (trust) rows.push(["Veri güveni", trust]);
   if (food.productCatalog?.category?.name) rows.push(["Kategori", food.productCatalog.category.name]);
   if (food.productCatalog?.subcategory?.name) rows.push(["Alt kategori", food.productCatalog.subcategory.name]);
   if (food.productCatalog?.brand?.name || food.brand) {
