@@ -112,7 +112,7 @@ function HtmlText({
       aria-hidden="true"
       data-blood-test-live-text
       data-selectable-text="false"
-      data-dashboard-decorative-text
+      data-dashboard-decorative-text=""
       data-blood-test-row={row}
     >
       {children}
@@ -146,7 +146,7 @@ export function BloodTestCard({
       className="relative block w-full overflow-hidden rounded-[clamp(0.9rem,3.6cqw,1.35rem)] bg-transparent [container-type:inline-size]"
       style={{ aspectRatio: DASHBOARD_FEATURE_CARD_FRAME_ASPECT }}
       data-blood-test-card
-      data-dashboard-fixed-geometry
+      data-dashboard-fixed-geometry=""
       data-locale={locale}
       data-theme={theme}
       data-theme-geometry="locked"

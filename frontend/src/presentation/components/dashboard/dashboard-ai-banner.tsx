@@ -50,7 +50,7 @@ export function DashboardAiBanner() {
         className="relative w-full overflow-hidden rounded-[clamp(1.1rem,4vw,2rem)] border border-sky-300/25 bg-[linear-gradient(100deg,#f7fbff_0%,#f2fbff_45%,#ebfff8_100%)] shadow-sm dark:border-sky-500/15 dark:bg-[linear-gradient(100deg,rgba(14,63,78,0.52)_0%,rgba(10,45,48,0.72)_52%,rgba(8,72,56,0.48)_100%)]"
         style={{ aspectRatio: "670 / 126" }}
         data-dashboard-coach-banner
-        data-dashboard-fixed-geometry
+        data-dashboard-fixed-geometry=""
       >
         <Leaf className="pointer-events-none absolute -bottom-3 right-[18%] hidden size-16 rotate-[-22deg] text-emerald-400/[0.08] dark:block" aria-hidden="true" />
         <Leaf className="pointer-events-none absolute -top-5 right-2 hidden size-14 rotate-[20deg] text-sky-400/[0.07] dark:block" aria-hidden="true" />
@@ -64,7 +64,7 @@ export function DashboardAiBanner() {
 
         <div
           className="pointer-events-none absolute left-[21.5%] right-[28%] top-1/2 min-w-0 -translate-y-1/2 select-none"
-          data-dashboard-decorative-text
+          data-dashboard-decorative-text=""
         >
           <h2 className="whitespace-nowrap text-[clamp(0.72rem,3.2vw,1.12rem)] font-extrabold leading-none tracking-[-0.025em] text-slate-950 dark:text-slate-50">
             Diewish Her Zaman Yanında
