@@ -904,3 +904,62 @@ test("marking history viewed rejects malformed ids without touching persistence"
   );
   assert.equal(viewCalls, 0);
 });
+
+
+test("old-version barcode remains retrievable from the existing cache", async () => {
+  let providerCalls = 0;
+  const oldVariant: CanonicalFood = {
+    ...food("OPEN_FOOD_FACTS"),
+    name: "Çaykur Tomurcuk 125 g",
+    displayNameTr: "Çaykur Tomurcuk 125 g",
+    brand: "Çaykur",
+    quantity: "125 g",
+    productCatalog: {
+      category: { key: "beverages", name: "İçecek" },
+      subcategory: { key: "tea", name: "Çay" },
+      brand: { key: "caykur", name: "Çaykur" },
+      family: { key: "caykur::tomurcuk", name: "Tomurcuk" },
+      variant: {
+        key: "caykur::tomurcuk::gtin:4006381333931",
+        name: "Tomurcuk 125 g",
+        barcode: "4006381333931",
+        packageQuantity: "125 g",
+      },
+      barcode: "4006381333931",
+      derivation: {
+        categoryBasis: "SOURCE_CATEGORY",
+        familyBasis: "BRAND_PRODUCT_NAME",
+        variantBasis: "BARCODE",
+        evidence: ["black teas", "Çaykur", "Tomurcuk", "125 g"],
+      },
+    },
+    productLifecycle: {
+      status: "OLD_VERSION",
+      replacedBy: null,
+      source: {
+        provider: "OPEN_FOOD_FACTS",
+        reference: "https://example.test/product",
+        observedAt: "2026-10-01T00:00:00.000Z",
+        effectiveAt: null,
+      },
+    },
+  };
+  const persistence = {
+    async getFreshBarcode() { return oldVariant; },
+    async getStaleBarcode() { return null; },
+  } as unknown as NutritionDataRepository;
+  const service = new NutritionDataService(
+    providers({
+      off: null,
+      usda: null,
+      onOffCall: () => (providerCalls += 1),
+      onUsdaCall: () => (providerCalls += 1),
+    }),
+    persistence,
+  );
+
+  const result = await service.getByBarcode("4006381333931");
+  assert.equal(result?.barcode, "4006381333931");
+  assert.equal(result?.productLifecycle?.status, "OLD_VERSION");
+  assert.equal(providerCalls, 0);
+});

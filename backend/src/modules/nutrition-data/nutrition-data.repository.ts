@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 
 import { prisma } from "../../lib/prisma";
 import { buildPackageLabelConsensus } from "./nutrition-learning";
+import { productStorageExternalId } from "./product-catalog";
 import type { CanonicalFood, NutrientValues } from "./nutrition-data.types";
 
 interface FoodRow {
@@ -14,6 +15,7 @@ interface FoodRow {
 interface CatalogFoodRow extends FoodRow {
   is_stale: boolean;
   match_rank: number;
+  lifecycle_status: string | null;
 }
 
 interface ConfirmedLabelRow {
@@ -240,7 +242,8 @@ export const nutritionDataRepository = {
         ranked.last_validated_at,
         ranked.payload_hash,
         ranked.is_stale,
-        ranked.match_rank
+        ranked.match_rank,
+        ranked.lifecycle_status
       FROM (
         SELECT DISTINCT ON (f.barcode)
           f.barcode,
@@ -248,6 +251,7 @@ export const nutritionDataRepository = {
           f.expires_at,
           f.last_validated_at,
           f.payload_hash,
+          f.lifecycle_status,
           (f.expires_at <= ${now}) AS is_stale,
           CASE
             WHEN LOWER(COALESCE(f.brand, '') || ' ' || COALESCE(f.display_name_tr, '')) = ${normalized} THEN 0
@@ -278,6 +282,14 @@ export const nutritionDataRepository = {
         ORDER BY
           f.barcode,
           CASE
+            WHEN f.lifecycle_status = 'ACTIVE' THEN 0
+            WHEN f.lifecycle_status IS NULL OR f.lifecycle_status = 'UNKNOWN' THEN 1
+            WHEN f.lifecycle_status = 'OLD_VERSION' THEN 2
+            WHEN f.lifecycle_status = 'REPLACED' THEN 3
+            WHEN f.lifecycle_status = 'DISCONTINUED' THEN 4
+            ELSE 1
+          END,
+          CASE
             WHEN f.provider = 'DIEWISH' THEN 0
             WHEN f.provider = 'OPEN_FOOD_FACTS' THEN 1
             WHEN f.provider = 'USDA' THEN 2
@@ -289,7 +301,18 @@ export const nutritionDataRepository = {
           (f.expires_at > ${now}) DESC,
           COALESCE(f.last_validated_at, f.retrieved_at) DESC
       ) ranked
-      ORDER BY ranked.match_rank ASC, ranked.is_stale ASC, ranked.last_validated_at DESC NULLS LAST
+      ORDER BY
+        ranked.match_rank ASC,
+        CASE ranked.lifecycle_status
+          WHEN 'ACTIVE' THEN 0
+          WHEN 'UNKNOWN' THEN 1
+          WHEN 'OLD_VERSION' THEN 2
+          WHEN 'REPLACED' THEN 3
+          WHEN 'DISCONTINUED' THEN 4
+          ELSE 1
+        END ASC,
+        ranked.is_stale ASC,
+        ranked.last_validated_at DESC NULLS LAST
       LIMIT ${limit}
     `;
     return rows
@@ -342,9 +365,10 @@ export const nutritionDataRepository = {
     const normalized = normalizeAlias(alias);
     if (!normalized) return;
     const boundedConfidence = Math.max(0, Math.min(1, confidence));
+    const storageExternalId = productStorageExternalId(food);
     await prisma.$executeRaw`
       INSERT INTO nutrition_food_aliases (alias, normalized_alias, provider, external_id, confidence)
-      VALUES (${alias}, ${normalized}, ${food.provider}, ${food.externalId}, ${boundedConfidence})
+      VALUES (${alias}, ${normalized}, ${food.provider}, ${storageExternalId}, ${boundedConfidence})
       ON CONFLICT (normalized_alias, provider, external_id) DO UPDATE SET
         alias = EXCLUDED.alias,
         confidence = GREATEST(nutrition_food_aliases.confidence, EXCLUDED.confidence)
@@ -352,7 +376,8 @@ export const nutritionDataRepository = {
   },
 
   async updateProductMetadata(food: CanonicalFood): Promise<void> {
-    if (!food.productUsage && !food.productCatalog) return;
+    if (!food.productUsage && !food.productCatalog && !food.productLifecycle) return;
+    const storageExternalId = productStorageExternalId(food);
     const payloadFood: CanonicalFood = {
       ...food,
       provenance: {
@@ -372,9 +397,17 @@ export const nutritionDataRepository = {
           catalog_brand_key = ${food.productCatalog?.brand?.key ?? null},
           product_family_key = ${food.productCatalog?.family?.key ?? null},
           product_variant_key = ${food.productCatalog?.variant?.key ?? null},
+          lifecycle_status = ${food.productLifecycle?.status ?? "UNKNOWN"},
+          lifecycle_replaced_by_variant_key = ${food.productLifecycle?.replacedBy?.variantKey ?? null},
+          lifecycle_replaced_by_barcode = ${food.productLifecycle?.replacedBy?.barcode ?? null},
+          lifecycle_source_reference = ${food.productLifecycle?.source?.reference ?? null},
+          lifecycle_effective_at = ${food.productLifecycle?.source?.effectiveAt ? new Date(food.productLifecycle.source.effectiveAt) : null},
           updated_at = CURRENT_TIMESTAMP
       WHERE provider = ${food.provider}
-        AND external_id = ${food.externalId}
+        AND (
+          external_id = ${storageExternalId}
+          OR (external_id = ${food.externalId} AND barcode IS NOT DISTINCT FROM ${food.barcode})
+        )
     `;
   },
 
@@ -384,6 +417,7 @@ export const nutritionDataRepository = {
 
   async upsertFood(food: CanonicalFood, expiresAt: Date): Promise<void> {
     const validatedAt = new Date();
+    const storageExternalId = productStorageExternalId(food);
     const enriched: CanonicalFood = {
       ...food,
       provenance: { ...food.provenance, lastValidatedAt: validatedAt.toISOString(), stale: false },
@@ -393,22 +427,59 @@ export const nutritionDataRepository = {
     await prisma.$executeRaw`
       INSERT INTO nutrition_foods
         (provider, external_id, barcode, name, display_name_tr, brand, payload, retrieved_at, expires_at, last_validated_at, payload_hash,
-         catalog_category_key, catalog_subcategory_key, catalog_brand_key, product_family_key, product_variant_key, updated_at)
+         catalog_category_key, catalog_subcategory_key, catalog_brand_key, product_family_key, product_variant_key,
+         lifecycle_status, lifecycle_replaced_by_variant_key, lifecycle_replaced_by_barcode, lifecycle_source_reference, lifecycle_effective_at, updated_at)
       VALUES
-        (${food.provider}, ${food.externalId}, ${food.barcode}, ${food.name}, ${food.displayNameTr}, ${food.brand}, ${payload}::jsonb, ${new Date(food.provenance.retrievedAt)}, ${expiresAt}, ${validatedAt}, ${hash},
+        (${food.provider}, ${storageExternalId}, ${food.barcode}, ${food.name}, ${food.displayNameTr}, ${food.brand}, ${payload}::jsonb, ${new Date(food.provenance.retrievedAt)}, ${expiresAt}, ${validatedAt}, ${hash},
          ${food.productCatalog?.category?.key ?? null}, ${food.productCatalog?.subcategory?.key ?? null}, ${food.productCatalog?.brand?.key ?? null},
-         ${food.productCatalog?.family?.key ?? null}, ${food.productCatalog?.variant?.key ?? null}, CURRENT_TIMESTAMP)
+         ${food.productCatalog?.family?.key ?? null}, ${food.productCatalog?.variant?.key ?? null},
+         ${food.productLifecycle?.status ?? "UNKNOWN"}, ${food.productLifecycle?.replacedBy?.variantKey ?? null},
+         ${food.productLifecycle?.replacedBy?.barcode ?? null}, ${food.productLifecycle?.source?.reference ?? null},
+         ${food.productLifecycle?.source?.effectiveAt ? new Date(food.productLifecycle.source.effectiveAt) : null}, CURRENT_TIMESTAMP)
       ON CONFLICT (provider, external_id) DO UPDATE SET
         barcode = EXCLUDED.barcode,
         name = EXCLUDED.name,
         display_name_tr = EXCLUDED.display_name_tr,
         brand = EXCLUDED.brand,
-        payload = EXCLUDED.payload,
+        payload = CASE
+          WHEN nutrition_foods.lifecycle_status IS NOT NULL
+            AND nutrition_foods.lifecycle_status <> 'UNKNOWN'
+            AND COALESCE(EXCLUDED.lifecycle_status, 'UNKNOWN') = 'UNKNOWN'
+            AND nutrition_foods.payload ? 'productLifecycle'
+          THEN jsonb_set(EXCLUDED.payload, '{productLifecycle}', nutrition_foods.payload->'productLifecycle', true)
+          ELSE EXCLUDED.payload
+        END,
         catalog_category_key = EXCLUDED.catalog_category_key,
         catalog_subcategory_key = EXCLUDED.catalog_subcategory_key,
         catalog_brand_key = EXCLUDED.catalog_brand_key,
         product_family_key = EXCLUDED.product_family_key,
         product_variant_key = EXCLUDED.product_variant_key,
+        lifecycle_status = CASE
+          WHEN COALESCE(EXCLUDED.lifecycle_status, 'UNKNOWN') = 'UNKNOWN'
+            AND nutrition_foods.lifecycle_status IS NOT NULL
+          THEN nutrition_foods.lifecycle_status
+          ELSE EXCLUDED.lifecycle_status
+        END,
+        lifecycle_replaced_by_variant_key = CASE
+          WHEN COALESCE(EXCLUDED.lifecycle_status, 'UNKNOWN') = 'UNKNOWN'
+          THEN nutrition_foods.lifecycle_replaced_by_variant_key
+          ELSE EXCLUDED.lifecycle_replaced_by_variant_key
+        END,
+        lifecycle_replaced_by_barcode = CASE
+          WHEN COALESCE(EXCLUDED.lifecycle_status, 'UNKNOWN') = 'UNKNOWN'
+          THEN nutrition_foods.lifecycle_replaced_by_barcode
+          ELSE EXCLUDED.lifecycle_replaced_by_barcode
+        END,
+        lifecycle_source_reference = CASE
+          WHEN COALESCE(EXCLUDED.lifecycle_status, 'UNKNOWN') = 'UNKNOWN'
+          THEN nutrition_foods.lifecycle_source_reference
+          ELSE EXCLUDED.lifecycle_source_reference
+        END,
+        lifecycle_effective_at = CASE
+          WHEN COALESCE(EXCLUDED.lifecycle_status, 'UNKNOWN') = 'UNKNOWN'
+          THEN nutrition_foods.lifecycle_effective_at
+          ELSE EXCLUDED.lifecycle_effective_at
+        END,
         retrieved_at = EXCLUDED.retrieved_at,
         expires_at = EXCLUDED.expires_at,
         last_validated_at = EXCLUDED.last_validated_at,
@@ -423,7 +494,7 @@ export const nutritionDataRepository = {
       const confidence = alias === food.displayNameTr ? 0.95 : 0.8;
       await prisma.$executeRaw`
         INSERT INTO nutrition_food_aliases (alias, normalized_alias, provider, external_id, confidence)
-        VALUES (${alias}, ${normalized}, ${food.provider}, ${food.externalId}, ${confidence})
+        VALUES (${alias}, ${normalized}, ${food.provider}, ${storageExternalId}, ${confidence})
         ON CONFLICT (normalized_alias, provider, external_id) DO UPDATE SET
           alias = EXCLUDED.alias,
           confidence = GREATEST(nutrition_food_aliases.confidence, EXCLUDED.confidence)

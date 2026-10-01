@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { buildProductCatalog, normalizeCatalogKey } from "./product-catalog";
+import { buildProductCatalog, normalizeCatalogKey, productStorageExternalId } from "./product-catalog";
 import type { CanonicalFood } from "./nutrition-data.types";
 
 function food(overrides: Partial<CanonicalFood> = {}): CanonicalFood {
@@ -98,4 +98,26 @@ test("weak barcode data does not create category family or variant relationships
   assert.equal(result.category, null);
   assert.equal(result.family, null);
   assert.equal(result.variant, null);
+});
+
+
+test("storage identity preserves two barcodes when the provider reuses the same external id", () => {
+  const oldVariant = food({
+    externalId: "stable-source-id",
+    barcode: "8690101000125",
+    quantity: "125 g",
+  });
+  oldVariant.productCatalog = buildProductCatalog(oldVariant, "STRONG");
+
+  const newVariant = food({
+    externalId: "stable-source-id",
+    barcode: "8690101000200",
+    quantity: "200 g",
+    name: "Çaykur Tomurcuk 200 g",
+    displayNameTr: "Çaykur Tomurcuk 200 g",
+  });
+  newVariant.productCatalog = buildProductCatalog(newVariant, "STRONG");
+
+  assert.notEqual(productStorageExternalId(oldVariant), productStorageExternalId(newVariant));
+  assert.equal(oldVariant.externalId, newVariant.externalId);
 });

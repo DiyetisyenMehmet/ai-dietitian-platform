@@ -202,3 +202,14 @@ export function withProductCatalog(
   if (food.productCatalog) return food;
   return { ...food, productCatalog: buildProductCatalog(food, qualityTier) };
 }
+
+
+/**
+ * Internal persistence identity for barcode variants.
+ * Canonical externalId/provenance stay unchanged; this key only prevents a
+ * provider from overwriting an older barcode when it reuses the same source id.
+ */
+export function productStorageExternalId(food: CanonicalFood): string {
+  const barcode = food.productCatalog?.variant?.barcode ?? food.barcode;
+  return barcode ? `${food.externalId}::gtin:${barcode}` : food.externalId;
+}
