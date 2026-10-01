@@ -269,11 +269,18 @@ export class NutritionDataService {
       );
 
       const best = persistable[0];
-      if (best && best.relevance >= 0.72 && best.food.provenance.confidence >= 0.7) {
+      const sourceConfidence = best?.food.provenance.confidence;
+      if (
+        best &&
+        typeof sourceConfidence === "number" &&
+        Number.isFinite(sourceConfidence) &&
+        best.relevance >= 0.72 &&
+        sourceConfidence >= 0.7
+      ) {
         await this.persistence.rememberSearchAlias(
           query,
           best.food,
-          Math.min(best.relevance, best.food.provenance.confidence),
+          Math.min(best.relevance, sourceConfidence),
         );
       }
     }

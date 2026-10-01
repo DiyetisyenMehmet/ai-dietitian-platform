@@ -584,7 +584,7 @@ test("legacy fresh Diewish cache stores derived usage without refreshing externa
 });
 
 test("accepted barcode product persists product usage intelligence with the existing Diewish food record", async () => {
-  let stored: CanonicalFood | null = null;
+  const stored: CanonicalFood[] = [];
   let usdaCalls = 0;
   const tea: CanonicalFood = {
     ...food("OPEN_FOOD_FACTS"),
@@ -601,7 +601,7 @@ test("accepted barcode product persists product usage intelligence with the exis
   const persistence = {
     async getFreshBarcode() { return null; },
     async getStaleBarcode() { return null; },
-    async upsertFood(value: CanonicalFood) { stored = value; },
+    async upsertFood(value: CanonicalFood) { stored.push(value); },
   } as unknown as NutritionDataRepository;
   const service = new NutritionDataService(
     providers({
@@ -617,9 +617,11 @@ test("accepted barcode product persists product usage intelligence with the exis
   assert.equal(result?.quantity, "125 g");
   assert.equal(result?.serving, null);
   assert.equal("consumedAmount" in (result ?? {}), false);
-  assert.equal(stored?.productUsage?.type, "BREWING");
-  assert.equal(stored?.productCatalog?.family?.name, "Tomurcuk");
-  assert.equal(stored?.productCatalog?.variant?.barcode, "4006381333931");
+  const persisted = stored[0];
+  assert.ok(persisted);
+  assert.equal(persisted.productUsage?.type, "BREWING");
+  assert.equal(persisted.productCatalog?.family?.name, "Tomurcuk");
+  assert.equal(persisted.productCatalog?.variant?.barcode, "4006381333931");
   assert.equal(usdaCalls, 0);
 });
 

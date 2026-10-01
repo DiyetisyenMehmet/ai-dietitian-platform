@@ -113,8 +113,15 @@ export function rankNutritionMatches(query: string, candidates: readonly Canonic
     .sort((a, b) => {
       const relevance = b.relevance - a.relevance;
       if (relevance !== 0) return relevance;
-      const sourceConfidence = b.food.provenance.confidence - a.food.provenance.confidence;
-      if (sourceConfidence !== 0) return sourceConfidence;
+      const aSourceConfidence = a.food.provenance.confidence;
+      const bSourceConfidence = b.food.provenance.confidence;
+      if (
+        typeof aSourceConfidence === "number" &&
+        typeof bSourceConfidence === "number"
+      ) {
+        const sourceConfidence = bSourceConfidence - aSourceConfidence;
+        if (sourceConfidence !== 0) return sourceConfidence;
+      }
       return Number(Boolean(a.food.brand)) - Number(Boolean(b.food.brand));
     });
 }

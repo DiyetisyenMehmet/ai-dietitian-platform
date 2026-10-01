@@ -186,7 +186,11 @@ export async function analyzeConfirmedFoodName(
           externalId: match.food.externalId,
           provider: match.food.provider,
           displayNameTr: match.food.displayNameTr,
-          confidence: Math.round(Math.min(match.relevance, match.food.provenance.confidence) * 100) / 100,
+          confidence: Math.round(
+            (typeof match.food.provenance.confidence === "number"
+              ? Math.min(match.relevance, match.food.provenance.confidence)
+              : match.relevance) * 100,
+          ) / 100,
         },
         nutrients: calculatePortion(match.food.nutrientsPer100g, grams).nutrients,
       };

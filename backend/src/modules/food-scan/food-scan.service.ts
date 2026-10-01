@@ -155,7 +155,12 @@ async function bestFoodMatch(service: NutritionLookupPort, name: string): Promis
 }
 
 function boundedMatchConfidence(match: NutritionMatch): number {
-  return Math.round(Math.min(match.relevance, match.food.provenance.confidence) * 100) / 100;
+  const sourceConfidence = match.food.provenance.confidence;
+  const confidence =
+    typeof sourceConfidence === "number"
+      ? Math.min(match.relevance, sourceConfidence)
+      : match.relevance;
+  return Math.round(confidence * 100) / 100;
 }
 
 async function resolveIngredient(
