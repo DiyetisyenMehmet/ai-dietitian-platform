@@ -959,6 +959,7 @@ test("old-version barcode remains retrievable from the existing cache", async ()
   const persistence = {
     async getFreshBarcode() { return oldVariant; },
     async getStaleBarcode() { return null; },
+    async updateProductMetadata() {},
   } as unknown as NutritionDataRepository;
   const service = new NutritionDataService(
     providers({

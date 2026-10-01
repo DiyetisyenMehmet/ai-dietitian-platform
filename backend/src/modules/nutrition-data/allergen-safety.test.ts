@@ -56,7 +56,16 @@ test("explicit registered allergen match is KNOWN_RISK", () => {
 });
 
 test("complete reliable data with no registered-allergen match is KNOWN_SAFE", () => {
-  const result = assessFoodAllergenSafety(food(), ["peanut"]);
+  const completeFood = food();
+  const result = assessFoodAllergenSafety(
+    food({
+      provenance: {
+        ...completeFood.provenance,
+        sourceReference: "https://world.openfoodfacts.org/product/test",
+      },
+    }),
+    ["peanut"],
+  );
   assert.equal(result.status, "KNOWN_SAFE");
   assert.equal(result.dataComplete, true);
 });
