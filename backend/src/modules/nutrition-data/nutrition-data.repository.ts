@@ -483,7 +483,13 @@ export const nutritionDataRepository = {
         retrieved_at = EXCLUDED.retrieved_at,
         expires_at = EXCLUDED.expires_at,
         last_validated_at = EXCLUDED.last_validated_at,
-        payload_hash = EXCLUDED.payload_hash,
+        payload_hash = CASE
+          WHEN nutrition_foods.lifecycle_status IS NOT NULL
+            AND nutrition_foods.lifecycle_status <> 'UNKNOWN'
+            AND COALESCE(EXCLUDED.lifecycle_status, 'UNKNOWN') = 'UNKNOWN'
+          THEN nutrition_foods.payload_hash
+          ELSE EXCLUDED.payload_hash
+        END,
         updated_at = CURRENT_TIMESTAMP
     `;
 
