@@ -12,6 +12,7 @@ import { journeyStore } from "./journey-store";
 import { bloodTestStore } from "./blood-test-store";
 import { activityStore } from "./activity-store";
 import { nutritionPlanStore } from "./nutrition-plan-store";
+import { sleepStore } from "./sleep-store";
 import { goalsStore } from "@/application/goals/goals-store";
 
 /** Last authenticated account whose client caches were hydrated. */
@@ -29,6 +30,7 @@ function resetUserCaches(): void {
   journeyStore.reset();
   bloodTestStore.reset();
   activityStore.reset();
+  sleepStore.reset();
   nutritionPlanStore.reset();
   goalsStore.reset();
   chatStore.resetSession();
@@ -78,12 +80,13 @@ export async function hydrateProfileFromBackend(userId: string, fullName: string
 
   const nutritionPlanPromise = nutritionPlanStore.hydrateFromBackend();
 
-  const [, , , , , , activePlan] = await Promise.all([
+  const [, , , , , , , activePlan] = await Promise.all([
     dailyTrackingStore.hydrateWaterFromBackend(),
     mealsStore.hydrateMealsFromBackend(),
     journeyStore.hydrateJourneyFromBackend(),
     bloodTestStore.hydrateBloodTestsFromBackend(),
     activityStore.hydrateFromBackend(),
+    sleepStore.hydrateTodayFromBackend(),
     weightStore.hydrateWeightFromBackend(profile?.currentWeightKg),
     nutritionPlanPromise,
   ]);

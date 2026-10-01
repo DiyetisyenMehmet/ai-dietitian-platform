@@ -6,11 +6,11 @@ import { toast } from "sonner";
 
 import {
   sleepClient,
-  type DailySleepAssessment,
   type SleepAiComment,
   type SleepLog,
   type WeeklySleepAnalysis,
 } from "@/infrastructure/sleep/sleep-client";
+import { sleepStore, useSleepDaily } from "@/application/health/sleep-store";
 import { Button } from "@/presentation/components/ui/button";
 import { Card, CardContent } from "@/presentation/components/ui/card";
 import { Input } from "@/presentation/components/ui/input";
@@ -63,13 +63,12 @@ function defaultTimes(): { sleepStart: string; wakeTime: string } {
 
 export function SleepView() {
   const defaults = React.useMemo(defaultTimes, []);
-  const today = React.useMemo(() => localDateKey(new Date()), []);
+  const { dayKey: today, readiness: dailyReadiness, assessment: daily } = useSleepDaily();
   const [sleepStart, setSleepStart] = React.useState(defaults.sleepStart);
   const [wakeTime, setWakeTime] = React.useState(defaults.wakeTime);
   const [quality, setQuality] = React.useState("3");
   const [note, setNote] = React.useState("");
   const [logs, setLogs] = React.useState<SleepLog[]>([]);
-  const [daily, setDaily] = React.useState<DailySleepAssessment | null>(null);
   const [weekly, setWeekly] = React.useState<WeeklySleepAnalysis | null>(null);
   const [aiComment, setAiComment] = React.useState<SleepAiComment | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -78,21 +77,29 @@ export function SleepView() {
   const [deletingId, setDeletingId] = React.useState<string | null>(null);
 
   const refresh = React.useCallback(async () => {
-    try {
-      const since = new Date(Date.now() - 14 * DAY_MS);
-      const [logResult, dailyResult, weeklyResult] = await Promise.all([
-        sleepClient.list(since),
-        sleepClient.dailyAssessment(today),
-        sleepClient.weeklyAnalysis(today),
-      ]);
-      setLogs(logResult.sleeps);
-      setDaily(dailyResult.assessment);
-      setWeekly(weeklyResult.analysis);
-    } catch {
-      toast.error("Uyku verileri yüklenemedi. Lütfen tekrar dene.");
-    } finally {
-      setLoading(false);
+    const since = new Date(Date.now() - 14 * DAY_MS);
+    const [logResult, dailyResult, weeklyResult] = await Promise.allSettled([
+      sleepClient.list(since),
+      sleepClient.dailyAssessment(today),
+      sleepClient.weeklyAnalysis(today),
+    ]);
+
+    let failed = false;
+    if (logResult.status === "fulfilled") setLogs(logResult.value.sleeps);
+    else failed = true;
+
+    if (dailyResult.status === "fulfilled") {
+      sleepStore.setDailyAssessment(dailyResult.value.assessment);
+    } else {
+      sleepStore.markUnknown(today);
+      failed = true;
     }
+
+    if (weeklyResult.status === "fulfilled") setWeekly(weeklyResult.value.analysis);
+    else failed = true;
+
+    if (failed) toast.error("Uyku verilerinin bir bölümü yüklenemedi. Lütfen tekrar dene.");
+    setLoading(false);
   }, [today]);
 
   React.useEffect(() => {
@@ -174,10 +181,16 @@ export function SleepView() {
                 <span className="text-xs font-medium">Bugün</span>
               </div>
               <p className="mt-2 text-xl font-bold tabular-nums">
-                {loading ? "…" : durationLabel(daily?.totalDurationMinutes ?? 0)}
+                {loading && dailyReadiness === "UNKNOWN"
+                  ? "…"
+                  : dailyReadiness === "UNKNOWN"
+                    ? "—"
+                    : durationLabel(daily?.totalDurationMinutes ?? 0)}
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
-                Kalite {qualityLabel(daily?.averageQuality ?? null)}
+                {dailyReadiness === "UNKNOWN"
+                  ? "Günlük uyku verisi doğrulanamadı"
+                  : `Kalite ${qualityLabel(daily?.averageQuality ?? null)}`}
               </p>
             </CardContent>
           </Card>
