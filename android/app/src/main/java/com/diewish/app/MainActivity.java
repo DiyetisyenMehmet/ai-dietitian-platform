@@ -165,6 +165,12 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
         webView = new WebView(this);
         webView.setBackgroundColor(Color.TRANSPARENT);
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG);
+        // The native shell owns long-press behavior. Consume WebView long-clicks
+        // so Android does not open browser-style copy/web-search context actions.
+        // CSS selection rules remain scoped; normal document text is not globally
+        // marked user-select:none.
+        webView.setOnLongClickListener(view -> true);
+        webView.setHapticFeedbackEnabled(false);
 
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);

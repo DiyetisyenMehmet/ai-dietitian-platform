@@ -88,6 +88,30 @@
   html.diewish-android [data-diewish-web-back] {
     display: none !important;
   }
+
+  /*
+   * Fixed-geometry dashboard artwork uses author-sized HTML text positioned
+   * against immutable card coordinates. Lock text inflation only on these
+   * surfaces so Android WebView cannot autosize the copy away from its artwork.
+   * Normal application content keeps the browser/OS text scaling behavior.
+   */
+  [data-dashboard-fixed-geometry],
+  [data-dashboard-fixed-geometry] * {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  [data-dashboard-fixed-geometry] {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  [data-dashboard-decorative-text] {
+    pointer-events: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
 }
 
 @layer utilities {

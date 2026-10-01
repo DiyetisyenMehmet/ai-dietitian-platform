@@ -5,7 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const ts = require('typescript');
 
-test('blood-test uses shared 21:5 frame and preserves selectable text outside anchor', () => {
+test('blood-test uses shared 21:5 frame with non-interactive decorative text outside anchor', () => {
   const source = fs.readFileSync(
     path.join(__dirname, '../src/presentation/components/dashboard/blood-test-card.tsx'),
     'utf8',
@@ -16,10 +16,13 @@ test('blood-test uses shared 21:5 frame and preserves selectable text outside an
   assert.match(source, /data-blood-test-stage/);
   assert.match(source, /data-blood-test-link/);
   assert.match(source, /data-blood-test-live-text/);
-  assert.match(source, /data-selectable-text="true"/);
-  assert.match(source, /userSelect: "text"/);
-  assert.match(source, /WebkitUserSelect: "text"/);
-  assert.match(source, /touchAction: "auto"/);
+  assert.match(source, /data-dashboard-fixed-geometry/);
+  assert.match(source, /data-dashboard-decorative-text/);
+  assert.match(source, /data-selectable-text="false"/);
+  assert.match(source, /userSelect: "none"/);
+  assert.match(source, /WebkitUserSelect: "none"/);
+  assert.match(source, /pointerEvents: "none"/);
+  assert.match(source, /touchAction: "manipulation"/);
 
   const linkClose = source.indexOf('</Link>');
   const firstText = source.indexOf('<HtmlText');

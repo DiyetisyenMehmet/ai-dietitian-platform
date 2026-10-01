@@ -65,10 +65,10 @@ function visibleTextStyle({
     fontWeight,
     lineHeight: 1,
     whiteSpace: "nowrap",
-    pointerEvents: "auto",
-    userSelect: "text",
-    WebkitUserSelect: "text",
-    touchAction: "auto",
+    pointerEvents: "none",
+    userSelect: "none",
+    WebkitUserSelect: "none",
+    touchAction: "manipulation",
   };
 }
 
@@ -91,11 +91,12 @@ function HtmlText({
 }) {
   return (
     <span
-      className={`z-30 cursor-text select-text ${className}`}
+      className={`pointer-events-none z-30 select-none ${className}`}
       style={visibleTextStyle({ kind, x, y, fontSize, fontWeight })}
       aria-hidden="true"
       data-dashboard-live-feature-text
-      data-selectable-text="true"
+      data-selectable-text="false"
+      data-dashboard-decorative-text
       data-text-space="visible-frame"
     >
       {children}
@@ -223,6 +224,7 @@ export function DashboardLiveFeatureCard({
       className="relative block w-full overflow-hidden rounded-[clamp(0.9rem,3.6cqw,1.35rem)] bg-transparent [container-type:inline-size]"
       style={{ aspectRatio: DASHBOARD_FEATURE_CARD_FRAME_ASPECT }}
       data-dashboard-live-feature-card
+      data-dashboard-fixed-geometry
       data-kind={kind}
       data-locale={locale}
       data-theme-geometry="locked"

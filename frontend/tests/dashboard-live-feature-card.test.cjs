@@ -58,7 +58,7 @@ test('food and progress share one fixed chevron overlay across themes', () => {
   assert.match(source, /ThemeArtwork kind=\{kind\} theme="dark"/);
 });
 
-test('selectable HTML text remains locked to the visible frame above artwork', () => {
+test('decorative HTML text remains geometry-locked and non-interactive above artwork', () => {
   const source = fs.readFileSync(
     path.join(
       __dirname,
@@ -69,9 +69,12 @@ test('selectable HTML text remains locked to the visible frame above artwork', (
 
   assert.match(source, /data-text-space="visible-frame"/);
   assert.match(source, /data-text-layer="html-visible-frame"/);
-  assert.match(source, /userSelect: "text"/);
-  assert.match(source, /WebkitUserSelect: "text"/);
-  assert.match(source, /touchAction: "auto"/);
+  assert.match(source, /data-dashboard-fixed-geometry/);
+  assert.match(source, /data-dashboard-decorative-text/);
+  assert.match(source, /userSelect: "none"/);
+  assert.match(source, /WebkitUserSelect: "none"/);
+  assert.match(source, /pointerEvents: "none"/);
+  assert.match(source, /touchAction: "manipulation"/);
   assert.doesNotMatch(source, /<svg|<text|SvgText/);
 });
 
