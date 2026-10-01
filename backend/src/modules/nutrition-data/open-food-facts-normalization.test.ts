@@ -124,3 +124,39 @@ test("Open Food Facts keeps a millilitre source serving as volume, not gram weig
   assert.equal(result.serving?.gramWeight, null);
   assert.equal(result.serving?.description, "200 ml");
 });
+
+
+test("Open Food Facts explicit obsolete flag becomes lifecycle evidence without age guessing", () => {
+  const discontinued = normalizeOpenFoodFactsProduct({
+    product: {
+      code: "8690000000999",
+      product_name: "Eski Paket",
+      obsolete: "on",
+      obsolete_since_date: "2025-05-01",
+      nutriments: {
+        "energy-kcal_100g": 100,
+        "proteins_100g": 1,
+        "carbohydrates_100g": 10,
+        "fat_100g": 5,
+      },
+    },
+  });
+  assert.equal(discontinued?.provenance.lifecycleEvidence?.status, "DISCONTINUED");
+  assert.equal(discontinued?.provenance.lifecycleEvidence?.effectiveAt, "2025-05-01T00:00:00.000Z");
+
+  const noEvidence = normalizeOpenFoodFactsProduct({
+    product: {
+      code: "8690000001002",
+      product_name: "Normal Paket",
+      obsolete: false,
+      last_modified_t: 946684800,
+      nutriments: {
+        "energy-kcal_100g": 100,
+        "proteins_100g": 1,
+        "carbohydrates_100g": 10,
+        "fat_100g": 5,
+      },
+    },
+  });
+  assert.equal(noEvidence?.provenance.lifecycleEvidence, null);
+});

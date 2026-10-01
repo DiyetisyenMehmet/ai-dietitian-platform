@@ -11,6 +11,7 @@ import {
 import type { CanonicalFood } from "./nutrition-data.types";
 import { rankNutritionMatches } from "./nutrition-match";
 import { withProductCatalog } from "./product-catalog";
+import { withProductLifecycle } from "./product-lifecycle";
 import { withProductUsage } from "./product-usage";
 import { expandNutritionProviderQueries } from "./nutrition-query-aliases";
 import { canadianNutrientFileProvider } from "./providers/cnf.provider";
@@ -52,6 +53,15 @@ function ttlHoursFor(food: CanonicalFood): number {
 
 function expiresAt(food: CanonicalFood): Date {
   return new Date(Date.now() + ttlHoursFor(food) * 60 * 60 * 1000);
+}
+
+function enrichProduct(food: CanonicalFood, qualityTier: "STRONG" | "USABLE" | "WEAK" | "REJECT"): CanonicalFood {
+  return withProductLifecycle(
+    withProductCatalog(
+      withProductUsage(food, qualityTier),
+      qualityTier,
+    ),
+  );
 }
 
 function uniqueFoods(foods: CanonicalFood[], limit: number): CanonicalFood[] {
@@ -250,10 +260,7 @@ export class NutritionDataService {
           return assessment.persistable
             ? [{
                 ...match,
-                food: withProductCatalog(
-                  withProductUsage(match.food, assessment.tier),
-                  assessment.tier,
-                ),
+                food: enrichProduct(match.food, assessment.tier),
               }]
             : [];
         });
@@ -298,10 +305,7 @@ export class NutritionDataService {
     const food = await this.persistence.getUserConfirmedBarcode(userId, barcode);
     if (food) {
       const assessment = assessBarcodeFoodQuality(food, barcode);
-      const withUsage = withProductCatalog(
-        withProductUsage(food, assessment.tier),
-        assessment.tier,
-      );
+      const withUsage = enrichProduct(food, assessment.tier);
       logger.info(
         { event: "barcode_user_label_hit", barcodeLength: barcode.length },
         "User-confirmed package label hit",
@@ -334,11 +338,11 @@ export class NutritionDataService {
       if (persisted) {
         const persistedQuality = assessBarcodeFoodQuality(persisted, barcode);
         if (!persistedQuality.shouldCrossCheck && persistedQuality.tier !== "REJECT") {
-          const persistedWithUsage = withProductCatalog(
-            withProductUsage(persisted, persistedQuality.tier),
-            persistedQuality.tier,
-          );
-          if ((!persisted.productUsage || !persisted.productCatalog) && this.persistence) {
+          const persistedWithUsage = enrichProduct(persisted, persistedQuality.tier);
+          if (
+            (!persisted.productUsage || !persisted.productCatalog || !persisted.productLifecycle) &&
+            this.persistence
+          ) {
             await this.persistence.updateProductMetadata(persistedWithUsage);
           }
           logger.info(
@@ -354,10 +358,7 @@ export class NutritionDataService {
           return persistedWithUsage;
         }
         if (persistedQuality.tier !== "REJECT") {
-          persistedCandidate = withProductCatalog(
-            withProductUsage(persisted, persistedQuality.tier),
-            persistedQuality.tier,
-          );
+          persistedCandidate = enrichProduct(persisted, persistedQuality.tier);
         }
         logger.info(
           {
@@ -384,10 +385,7 @@ export class NutritionDataService {
 
     const offQuality = offFood ? assessBarcodeFoodQuality(offFood, barcode) : null;
     if (offFood && offQuality && !offQuality.shouldCrossCheck && offQuality.tier !== "REJECT") {
-      const selectedOff = withProductCatalog(
-        withProductUsage(offFood, offQuality.tier),
-        offQuality.tier,
-      );
+      const selectedOff = enrichProduct(offFood, offQuality.tier);
       const ttlHours = ttlHoursFor(selectedOff);
       this.foodCache.set(key, selectedOff, ttlHours * 60 * 60 * 1000);
       if (this.persistence && offQuality.persistable) {
@@ -438,10 +436,7 @@ export class NutritionDataService {
       barcode,
     );
     if (selection) {
-      const selected = withProductCatalog(
-        withProductUsage(selection.food, selection.assessment.tier),
-        selection.assessment.tier,
-      );
+      const selected = enrichProduct(selection.food, selection.assessment.tier);
       const ttlHours = ttlHoursFor(selected);
       this.foodCache.set(key, selected, ttlHours * 60 * 60 * 1000);
       if (this.persistence && selection.assessment.persistable) {
@@ -467,10 +462,7 @@ export class NutritionDataService {
     if (providerFailed && stale) {
       const staleQuality = assessBarcodeFoodQuality(stale, barcode);
       if (staleQuality.tier !== "REJECT") {
-        const staleWithUsage = withProductCatalog(
-          withProductUsage(stale, staleQuality.tier),
-          staleQuality.tier,
-        );
+        const staleWithUsage = enrichProduct(stale, staleQuality.tier);
         const staleFood: CanonicalFood = {
           ...staleWithUsage,
           provenance: { ...staleWithUsage.provenance, stale: true },
@@ -539,10 +531,7 @@ export class NutritionDataService {
     if (consensus) {
       const consensusQuality = assessBarcodeFoodQuality(consensus, barcode);
       if (consensusQuality.persistable) {
-        const consensusWithUsage = withProductCatalog(
-          withProductUsage(consensus, consensusQuality.tier),
-          consensusQuality.tier,
-        );
+        const consensusWithUsage = enrichProduct(consensus, consensusQuality.tier);
         await this.persistence.upsertFood(consensusWithUsage, expiresAt(consensusWithUsage));
         this.foodCache.set(
           `barcode:${barcode}`,

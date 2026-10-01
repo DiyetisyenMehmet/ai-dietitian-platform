@@ -2,6 +2,7 @@ import { ApiError } from "../../utils/api-error";
 import { calculatePortion } from "./nutrition-calculator";
 import { normalizeBarcode } from "./barcode";
 import { withProductCatalog } from "./product-catalog";
+import { withProductLifecycle } from "./product-lifecycle";
 import { withProductUsage } from "./product-usage";
 import {
   CORE_NUTRIENT_KEYS,
@@ -406,6 +407,7 @@ export function buildUserConfirmedPackageLabelFood(
 
   food = withProductUsage(food, "USABLE");
   food = withProductCatalog(food, "USABLE");
+  food = withProductLifecycle(food);
   food = {
     ...food,
     provenance: {

@@ -166,8 +166,34 @@ function preparationUsageNotice(food: CanonicalFoodDto): string | null {
   }
 }
 
+function productLifecycleLabel(food: CanonicalFoodDto): string {
+  switch (food.productLifecycle?.status ?? "UNKNOWN") {
+    case "ACTIVE": return "Güncel ürün";
+    case "OLD_VERSION": return "Eski sürüm";
+    case "DISCONTINUED": return "Üretimden kaldırılmış";
+    case "REPLACED": return "Yeni sürümü mevcut";
+    default: return "Durum doğrulanamadı";
+  }
+}
+
+function productLifecycleNotice(food: CanonicalFoodDto): string | null {
+  switch (food.productLifecycle?.status) {
+    case "OLD_VERSION":
+      return "Bu ürün eski bir varyant olarak kayıtlı. Besin bilgileri bu varyanta aittir.";
+    case "DISCONTINUED":
+      return "Bu ürün üretimden kaldırılmış olarak kayıtlı. Mevcut besin bilgileri geçmiş ürün kaydı olarak korunur.";
+    case "REPLACED":
+      return food.productLifecycle.replacedBy?.barcode
+        ? `Bu ürünün daha yeni bir sürümü mevcut. Yeni sürüm barkodu: ${food.productLifecycle.replacedBy.barcode}.`
+        : "Bu ürünün daha yeni bir sürümü mevcut.";
+    default:
+      return null;
+  }
+}
+
 function productInfoRows(food: CanonicalFoodDto): Array<[string, string]> {
   return [
+    ["Ürün durumu", productLifecycleLabel(food)],
     ["Kategori", food.productCatalog?.category?.name ?? "Bilgi bulunamadı"],
     ["Alt kategori", food.productCatalog?.subcategory?.name ?? "Bilgi bulunamadı"],
     ["Marka", food.productCatalog?.brand?.name ?? food.brand ?? "Bilgi bulunamadı"],
@@ -630,6 +656,11 @@ export function BarcodeScannerPanel() {
               {preparationUsageNotice(food) && (
                 <p className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
                   {preparationUsageNotice(food)}
+                </p>
+              )}
+              {productLifecycleNotice(food) && (
+                <p className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
+                  {productLifecycleNotice(food)}
                 </p>
               )}
             </CardContent>

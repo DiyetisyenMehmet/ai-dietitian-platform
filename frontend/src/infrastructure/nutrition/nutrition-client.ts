@@ -115,6 +115,16 @@ export interface CanonicalFoodDto {
       evidence: string[];
     };
   };
+  productLifecycle?: {
+    status: "ACTIVE" | "OLD_VERSION" | "DISCONTINUED" | "REPLACED" | "UNKNOWN";
+    replacedBy: { barcode: string; variantKey: string | null } | null;
+    source: {
+      provider: "USDA" | "CNF" | "CIQUAL" | "COFID" | "OPEN_FOOD_FACTS" | "DIEWISH";
+      reference: string;
+      observedAt: string;
+      effectiveAt: string | null;
+    } | null;
+  };
   productUsage?: {
     type: ProductUsageTypeDto;
     basis:

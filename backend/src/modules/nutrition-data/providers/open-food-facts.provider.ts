@@ -107,6 +107,18 @@ function providerUpdatedAt(product: Record<string, unknown>): string | null {
   return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : null;
 }
 
+function explicitTrue(value: unknown): boolean {
+  if (value === true || value === 1) return true;
+  return typeof value === "string" && /^(1|true|yes|on)$/i.test(value.trim());
+}
+
+function lifecycleDate(value: unknown): string | null {
+  const raw = text(value);
+  if (!raw) return null;
+  const parsed = new Date(raw);
+  return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : null;
+}
+
 export function normalizeOpenFoodFactsProduct(raw: unknown, barcodeHint?: string): CanonicalFood | null {
   const root = record(raw);
   const product = "product" in root ? record(root.product) : root;
@@ -135,6 +147,14 @@ export function normalizeOpenFoodFactsProduct(raw: unknown, barcodeHint?: string
   const servingQuantity = num(product.serving_quantity);
   const servingSize = text(product.serving_size);
   const servingUnit = servingUnitFromDescription(servingSize);
+  const sourceReference = `${env.OPEN_FOOD_FACTS_BASE_URL.replace(/\/$/, "")}/product/${code}`;
+  const lifecycleEvidence = explicitTrue(product.obsolete)
+    ? {
+        status: "DISCONTINUED" as const,
+        sourceReference,
+        effectiveAt: lifecycleDate(product.obsolete_since_date),
+      }
+    : null;
   return {
     externalId: code,
     provider: "OPEN_FOOD_FACTS",
@@ -179,10 +199,11 @@ export function normalizeOpenFoodFactsProduct(raw: unknown, barcodeHint?: string
       dataBasis: "PER_100_G",
       preparationState: "PACKAGED_PRODUCT",
       confidence: 0.75,
-      sourceReference: `${env.OPEN_FOOD_FACTS_BASE_URL.replace(/\/$/, "")}/product/${code}`,
+      sourceReference,
       providerUpdatedAt: providerUpdatedAt(product),
       sourceCategories,
       preparationInstructions,
+      lifecycleEvidence,
     },
   };
 }
@@ -199,7 +220,7 @@ export class OpenFoodFactsProvider implements NutritionProvider {
     const fields = [
       "code","product_name","product_name_tr","generic_name","brands","quantity","serving_size","serving_quantity",
       "image_front_url","image_url","ingredients_text","ingredients_text_tr","allergens","allergens_tags","traces","traces_tags","additives_tags","labels_tags",
-      "categories","categories_tags","preparation","preparation_instructions",
+      "categories","categories_tags","preparation","preparation_instructions","obsolete","obsolete_since_date",
       "nutriscore_grade","nutrition_grades","nova_group","last_modified_t","last_modified_datetime","nutriments"
     ].join(",");
     const params = new URLSearchParams({
@@ -234,7 +255,7 @@ export class OpenFoodFactsProvider implements NutritionProvider {
     const fields = [
       "code","product_name","product_name_tr","generic_name","brands","quantity","serving_size","serving_quantity",
       "image_front_url","image_url","ingredients_text","ingredients_text_tr","allergens","allergens_tags","traces","traces_tags","additives_tags","labels_tags",
-      "categories","categories_tags","preparation","preparation_instructions",
+      "categories","categories_tags","preparation","preparation_instructions","obsolete","obsolete_since_date",
       "nutriscore_grade","nutrition_grades","nova_group","last_modified_t","last_modified_datetime","nutriments"
     ].join(",");
     const url = `${env.OPEN_FOOD_FACTS_BASE_URL.replace(/\/$/, "")}/api/v2/product/${barcode}.json?fields=${encodeURIComponent(fields)}`;

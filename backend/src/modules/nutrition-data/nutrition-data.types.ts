@@ -57,6 +57,34 @@ export interface ProductCatalogIdentity {
   };
 }
 
+export type ProductLifecycleStatus =
+  | "ACTIVE"
+  | "OLD_VERSION"
+  | "DISCONTINUED"
+  | "REPLACED"
+  | "UNKNOWN";
+
+export interface ProductLifecycleEvidence {
+  status: Exclude<ProductLifecycleStatus, "UNKNOWN">;
+  sourceReference: string;
+  effectiveAt?: string | null;
+  replacedByBarcode?: string | null;
+}
+
+export interface ProductLifecycle {
+  status: ProductLifecycleStatus;
+  replacedBy: {
+    barcode: string;
+    variantKey: string | null;
+  } | null;
+  source: {
+    provider: NutritionProviderId;
+    reference: string;
+    observedAt: string;
+    effectiveAt: string | null;
+  } | null;
+}
+
 export const CORE_NUTRIENT_KEYS = [
   "energyKcal",
   "proteinG",
@@ -119,6 +147,8 @@ export interface NutritionProvenance {
   sourceCategories?: string[];
   /** Provider-declared preparation directions when the source exposes them. */
   preparationInstructions?: string | null;
+  /** Explicit real-world lifecycle fact from a trusted existing source. */
+  lifecycleEvidence?: ProductLifecycleEvidence | null;
 }
 
 export type AllergenDataPresence = "DECLARED" | "MISSING";
@@ -169,6 +199,8 @@ export interface CanonicalFood {
   productUsage?: ProductUsage;
   /** Normalized catalog identity stored with the same product record. Optional for legacy rows. */
   productCatalog?: ProductCatalogIdentity;
+  /** Real-world variant lifecycle. Independent from cache freshness/staleness. */
+  productLifecycle?: ProductLifecycle;
   provenance: NutritionProvenance;
 }
 
