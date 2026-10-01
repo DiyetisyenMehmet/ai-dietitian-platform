@@ -9,17 +9,24 @@ import {
   type MealSlot,
   type NutritionTotals,
 } from "@/domain/meals/types";
+import {
+  isIsoOnLocalDay,
+  localDayKey,
+  msUntilNextLocalDay,
+  readinessFromCount,
+  startOfLocalDay,
+  type DailyDataReadiness,
+} from "@/application/health/daily-data-readiness";
 import { mealsClient, type MealLog, type MealLogType } from "@/infrastructure/tracking/meals-client";
 
 /**
  * Meals store shared across routes via useSyncExternalStore. The backend is the
  * single source of truth; this cache contains no seeded/demo meals.
  *
- * A backend MealLog containing only `mealType` is reserved as an explicit,
+ * A backend MealLog containing only mealType is reserved as an explicit,
  * reversible "I ate this meal" check-in. It is never rendered as a food and
  * never contributes fake calories/macros.
  */
-
 function emptyMeals(): Meal[] {
   return MEAL_SLOTS.map(({ slot, label, defaultTime }) => ({
     slot,
@@ -69,27 +76,62 @@ function toFoodItem(log: MealLog, quantity = ""): FoodItem {
   };
 }
 
-function startOfToday(): Date {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
 let meals: Meal[] = emptyMeals();
+let cacheDayKey = localDayKey();
+let readiness: DailyDataReadiness = "UNKNOWN";
 const listeners = new Set<() => void>();
+let rolloverTimer: ReturnType<typeof setTimeout> | null = null;
+
+function entryCount(source: Meal[]): number {
+  return source.reduce(
+    (count, meal) => count + meal.foods.length + (meal.checkInId ? 1 : 0),
+    0,
+  );
+}
 
 function emit() {
   meals = [...meals];
-  listeners.forEach((l) => l());
+  listeners.forEach((listener) => listener());
+}
+
+function ensureCurrentDay(): boolean {
+  const current = localDayKey();
+  if (cacheDayKey === current) return false;
+  cacheDayKey = current;
+  readiness = "UNKNOWN";
+  meals = emptyMeals();
+  return true;
+}
+
+function scheduleRollover(): void {
+  if (typeof window === "undefined" || rolloverTimer !== null || listeners.size === 0) return;
+  rolloverTimer = setTimeout(() => {
+    rolloverTimer = null;
+    if (ensureCurrentDay()) emit();
+    scheduleRollover();
+  }, msUntilNextLocalDay());
 }
 
 function subscribe(listener: () => void) {
   listeners.add(listener);
-  return () => listeners.delete(listener);
+  scheduleRollover();
+  return () => {
+    listeners.delete(listener);
+    if (listeners.size === 0 && rolloverTimer !== null) {
+      clearTimeout(rolloverTimer);
+      rolloverTimer = null;
+    }
+  };
 }
 
 function getSnapshot() {
+  ensureCurrentDay();
   return meals;
+}
+
+function getReadinessSnapshot(): DailyDataReadiness {
+  ensureCurrentDay();
+  return readiness;
 }
 
 export interface AddFoodPayload {
@@ -100,10 +142,25 @@ export interface AddFoodPayload {
 
 export const mealsStore = {
   async hydrateMealsFromBackend(): Promise<void> {
+    const targetDay = localDayKey();
+    if (cacheDayKey !== targetDay) {
+      cacheDayKey = targetDay;
+      readiness = "UNKNOWN";
+      meals = emptyMeals();
+      emit();
+    }
+
     try {
-      const { logs } = await mealsClient.listMeals(startOfToday());
+      const { logs } = await mealsClient.listMeals(startOfLocalDay());
+      if (localDayKey() !== targetDay) {
+        ensureCurrentDay();
+        emit();
+        return;
+      }
+
+      const todayLogs = logs.filter((log) => isIsoOnLocalDay(log.loggedAt, targetDay));
       meals = MEAL_SLOTS.map(({ slot, label, defaultTime }) => {
-        const slotLogs = logs.filter((log) => SLOT_BY_MEAL_TYPE[log.mealType] === slot);
+        const slotLogs = todayLogs.filter((log) => SLOT_BY_MEAL_TYPE[log.mealType] === slot);
         const checkIn = slotLogs.find(isMealCheckIn) ?? null;
         return {
           slot,
@@ -114,13 +171,19 @@ export const mealsStore = {
           checkInId: checkIn?.id ?? null,
         };
       });
+      readiness = readinessFromCount(todayLogs.length);
       emit();
     } catch {
-      // Offline/transient failure: keep last known cache and retry later.
+      if (cacheDayKey === targetDay) {
+        readiness = "UNKNOWN";
+        emit();
+      }
     }
   },
 
   async addFood({ slot, time, food }: AddFoodPayload): Promise<void> {
+    ensureCurrentDay();
+    const previousReadiness = readiness;
     const { log } = await mealsClient.logMeal({
       mealType: MEAL_TYPE_BY_SLOT[slot],
       name: food.name,
@@ -129,6 +192,8 @@ export const mealsStore = {
       carbsG: food.carbs,
       fatG: food.fat,
     });
+    if (!isIsoOnLocalDay(log.loggedAt, cacheDayKey)) return;
+
     meals = meals.map((meal) =>
       meal.slot === slot
         ? {
@@ -138,23 +203,28 @@ export const mealsStore = {
           }
         : meal,
     );
+    readiness = previousReadiness === "UNKNOWN" ? "UNKNOWN" : "KNOWN";
     emit();
   },
 
-  /** Persists a bare MealLog as the explicit "I ate this meal" check-in. */
   async markMealEaten(slot: MealSlot): Promise<void> {
+    ensureCurrentDay();
     const current = meals.find((meal) => meal.slot === slot);
     if (current?.isEaten) return;
 
+    const previousReadiness = readiness;
     const { log } = await mealsClient.logMeal({ mealType: MEAL_TYPE_BY_SLOT[slot] });
+    if (!isIsoOnLocalDay(log.loggedAt, cacheDayKey)) return;
+
     meals = meals.map((meal) =>
       meal.slot === slot ? { ...meal, isEaten: true, checkInId: log.id } : meal,
     );
+    readiness = previousReadiness === "UNKNOWN" ? "UNKNOWN" : "KNOWN";
     emit();
   },
 
-  /** Removes only the explicit check-in; food records are left untouched. */
   async unmarkMealEaten(slot: MealSlot): Promise<void> {
+    ensureCurrentDay();
     const current = meals.find((meal) => meal.slot === slot);
     if (!current?.checkInId) return;
 
@@ -162,15 +232,16 @@ export const mealsStore = {
     meals = meals.map((meal) =>
       meal.slot === slot ? { ...meal, isEaten: false, checkInId: null } : meal,
     );
+    if (readiness !== "UNKNOWN") readiness = readinessFromCount(entryCount(meals));
     emit();
   },
 
-  /** Persist-first edit: nutrition/name changes survive refresh. */
   async updateFood(
     slot: MealSlot,
     foodId: string,
     patch: Partial<Omit<FoodItem, "id">>,
   ): Promise<void> {
+    ensureCurrentDay();
     const { log } = await mealsClient.updateMeal(foodId, {
       ...(patch.name !== undefined ? { name: patch.name } : {}),
       ...(patch.calories !== undefined ? { calories: patch.calories } : {}),
@@ -194,16 +265,19 @@ export const mealsStore = {
     emit();
   },
 
-  /** Persist-first deletion prevents removed food from reappearing after refresh. */
   async deleteFood(slot: MealSlot, foodId: string): Promise<void> {
+    ensureCurrentDay();
     await mealsClient.deleteMeal(foodId);
     meals = meals.map((meal) =>
-      meal.slot === slot ? { ...meal, foods: meal.foods.filter((f) => f.id !== foodId) } : meal,
+      meal.slot === slot ? { ...meal, foods: meal.foods.filter((food) => food.id !== foodId) } : meal,
     );
+    if (readiness !== "UNKNOWN") readiness = readinessFromCount(entryCount(meals));
     emit();
   },
 
   reset() {
+    cacheDayKey = localDayKey();
+    readiness = "UNKNOWN";
     meals = emptyMeals();
     emit();
   },
@@ -213,14 +287,18 @@ export function useMeals(): Meal[] {
   return React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
+export function useMealsReadiness(): DailyDataReadiness {
+  return React.useSyncExternalStore(subscribe, getReadinessSnapshot, getReadinessSnapshot);
+}
+
 export function computeTotals(source: Meal[]): NutritionTotals {
   return source.reduce<NutritionTotals>(
     (acc, meal) => {
-      for (const f of meal.foods) {
-        acc.calories += f.calories;
-        acc.protein += f.protein;
-        acc.carbs += f.carbs;
-        acc.fat += f.fat;
+      for (const food of meal.foods) {
+        acc.calories += food.calories;
+        acc.protein += food.protein;
+        acc.carbs += food.carbs;
+        acc.fat += food.fat;
       }
       return acc;
     },

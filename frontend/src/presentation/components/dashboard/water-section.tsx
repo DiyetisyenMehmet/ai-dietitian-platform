@@ -133,7 +133,7 @@ export function WaterSection() {
     if (!latestTodayLog) return;
     setBusy("remove");
     try {
-      await dailyTrackingStore.removeWater(latestTodayLog.id);
+      await dailyTrackingStore.removeWater(latestTodayLog.id, latestTodayLog.amountMl);
       setLogs((current) => current.filter((item) => item.id !== latestTodayLog.id));
       toast.success("Son su kaydı geri alındı", { description: `-${latestTodayLog.amountMl} ml` });
     } catch (error) {

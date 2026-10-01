@@ -3,7 +3,7 @@
 import * as React from "react";
 
 import type { HealthScore, HealthScoreFactor } from "@/domain/health/types";
-import { useMeals } from "@/application/meals/meals-store";
+import { useMeals, useMealsReadiness } from "@/application/meals/meals-store";
 import { useDailyTracking } from "./daily-tracking-store";
 import { useActivity } from "./activity-store";
 
@@ -36,7 +36,7 @@ function bandFor(score: number): string {
 }
 
 export interface HealthScoreInputs {
-  loggedMealSlots: number;
+  loggedMealSlots: number | null;
   waterRatio: number | null;
   activityRatio: number | null;
   // Retained as optional compatibility fields for callers/tests from earlier
@@ -57,16 +57,17 @@ interface CandidateFactor {
 
 /** Pure adherence-score computation from normalized, available daily signals. */
 export function computeHealthScore(inputs: HealthScoreInputs): HealthScore {
-  const candidates: CandidateFactor[] = [
-    {
+  const candidates: CandidateFactor[] = [];
+  if (inputs.loggedMealSlots !== null) {
+    candidates.push({
       key: "meals",
       label: "Öğün kaydı",
       value: Math.round(clamp01(inputs.loggedMealSlots / 3) * 100),
       baseWeight: BASE_WEIGHTS.meals,
       icon: "utensils",
       improvement: { label: "Öğününü kaydet", href: "/meals/add" },
-    },
-  ];
+    });
+  }
 
   if (inputs.waterRatio !== null) {
     candidates.push({
@@ -88,6 +89,18 @@ export function computeHealthScore(inputs: HealthScoreInputs): HealthScore {
       icon: "activity",
       improvement: { label: "Aktivite kaydet", href: "/dashboard" },
     });
+  }
+
+  if (candidates.length === 0) {
+    return {
+      score: 0,
+      band: "Veri bekleniyor",
+      trend: "flat",
+      delta: 0,
+      reason: "Bugünkü takip verileri henüz güvenilir biçimde yüklenmedi.",
+      improvements: [],
+      factors: [],
+    };
   }
 
   const availableWeight = candidates.reduce((sum, factor) => sum + factor.baseWeight, 0);
@@ -131,20 +144,34 @@ export function computeHealthScore(inputs: HealthScoreInputs): HealthScore {
 /** Reactive hook computing today's adherence from persisted session caches. */
 export function useHealthScore(): HealthScore {
   const meals = useMeals();
-  const { waterMl, waterGoalMl } = useDailyTracking();
+  const mealsReadiness = useMealsReadiness();
+  const { waterMl, waterGoalMl, waterReadiness } = useDailyTracking();
   const activity = useActivity();
 
   return React.useMemo(() => {
-    const loggedMealSlots = ["breakfast", "lunch", "dinner"].filter(
-      (slot) => (meals.find((meal) => meal.slot === slot)?.foods.length ?? 0) > 0,
-    ).length;
+    const loggedMealSlots =
+      mealsReadiness === "UNKNOWN"
+        ? null
+        : ["breakfast", "lunch", "dinner"].filter(
+            (slot) => (meals.find((meal) => meal.slot === slot)?.foods.length ?? 0) > 0,
+          ).length;
 
-    const waterRatio = waterGoalMl > 0 ? waterMl / waterGoalMl : null;
+    const waterRatio =
+      waterReadiness !== "UNKNOWN" && waterGoalMl > 0 ? waterMl / waterGoalMl : null;
     const activityRatio =
-      activity.activeMinutesGoal > 0
+      activity.readiness !== "UNKNOWN" && activity.activeMinutesGoal > 0
         ? activity.activeMinutes / activity.activeMinutesGoal
         : null;
 
     return computeHealthScore({ loggedMealSlots, waterRatio, activityRatio });
-  }, [meals, waterMl, waterGoalMl, activity.activeMinutes, activity.activeMinutesGoal]);
+  }, [
+    meals,
+    mealsReadiness,
+    waterMl,
+    waterGoalMl,
+    waterReadiness,
+    activity.readiness,
+    activity.activeMinutes,
+    activity.activeMinutesGoal,
+  ]);
 }

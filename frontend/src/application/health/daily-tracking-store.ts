@@ -3,12 +3,18 @@
 import * as React from "react";
 
 import { trackingClient, type WaterLog } from "@/infrastructure/tracking/tracking-client";
+import {
+  isIsoOnLocalDay,
+  localDayKey,
+  msUntilNextLocalDay,
+  readinessFromCount,
+  startOfLocalDay,
+  type DailyDataReadiness,
+} from "./daily-data-readiness";
 
-/**
- * Daily-tracking store: today's water intake plus lightweight per-day coaching
- * flags. The backend is the single source of truth for water.
- */
 interface DailyTrackingState {
+  dayKey: string;
+  waterReadiness: DailyDataReadiness;
   waterMl: number;
   waterGoalMl: number;
   chattedToday: boolean;
@@ -16,55 +22,113 @@ interface DailyTrackingState {
 
 export const WATER_GLASS_ML = 250;
 
-const EMPTY_STATE: DailyTrackingState = {
-  waterMl: 0,
-  waterGoalMl: 0,
-  chattedToday: false,
-};
-
-let state: DailyTrackingState = { ...EMPTY_STATE };
-
-function startOfToday(): Date {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d;
+function emptyState(): DailyTrackingState {
+  return {
+    dayKey: localDayKey(),
+    waterReadiness: "UNKNOWN",
+    waterMl: 0,
+    waterGoalMl: 0,
+    chattedToday: false,
+  };
 }
 
+let state: DailyTrackingState = emptyState();
 const listeners = new Set<() => void>();
+let rolloverTimer: ReturnType<typeof setTimeout> | null = null;
 
 function setState(next: Partial<DailyTrackingState>) {
   state = { ...state, ...next };
-  listeners.forEach((l) => l());
+  listeners.forEach((listener) => listener());
+}
+
+function ensureCurrentDay(): boolean {
+  const current = localDayKey();
+  if (state.dayKey === current) return false;
+  state = {
+    ...state,
+    dayKey: current,
+    waterReadiness: "UNKNOWN",
+    waterMl: 0,
+    chattedToday: false,
+  };
+  return true;
+}
+
+function scheduleRollover(): void {
+  if (typeof window === "undefined" || rolloverTimer !== null || listeners.size === 0) return;
+  rolloverTimer = setTimeout(() => {
+    rolloverTimer = null;
+    if (ensureCurrentDay()) listeners.forEach((listener) => listener());
+    scheduleRollover();
+  }, msUntilNextLocalDay());
 }
 
 function subscribe(listener: () => void) {
   listeners.add(listener);
-  return () => listeners.delete(listener);
+  scheduleRollover();
+  return () => {
+    listeners.delete(listener);
+    if (listeners.size === 0 && rolloverTimer !== null) {
+      clearTimeout(rolloverTimer);
+      rolloverTimer = null;
+    }
+  };
 }
 
 function getSnapshot() {
+  ensureCurrentDay();
   return state;
 }
 
 export const dailyTrackingStore = {
-  async hydrateWaterFromBackend(): Promise<void> {
+  async hydrateWaterFromBackend(): Promise<boolean> {
+    const targetDay = localDayKey();
+    if (state.dayKey !== targetDay) {
+      ensureCurrentDay();
+      listeners.forEach((listener) => listener());
+    }
+
     try {
-      const { logs } = await trackingClient.listWater(startOfToday());
-      const total = logs.reduce((sum, log) => sum + log.amountMl, 0);
-      setState({ waterMl: Math.max(0, total) });
+      const { logs } = await trackingClient.listWater(startOfLocalDay());
+      if (localDayKey() !== targetDay) {
+        ensureCurrentDay();
+        listeners.forEach((listener) => listener());
+        return false;
+      }
+      const todayLogs = logs.filter((log) => isIsoOnLocalDay(log.loggedAt, targetDay));
+      const total = todayLogs.reduce((sum, log) => sum + log.amountMl, 0);
+      setState({
+        waterMl: Math.max(0, total),
+        waterReadiness: readinessFromCount(todayLogs.length),
+      });
+      return true;
     } catch {
-      setState({ waterMl: 0 });
+      if (state.dayKey === targetDay) setState({ waterReadiness: "UNKNOWN" });
+      return false;
     }
   },
 
   async addWater(amountMl: number = WATER_GLASS_ML): Promise<WaterLog> {
+    ensureCurrentDay();
+    const previousReadiness = state.waterReadiness;
     const { log } = await trackingClient.logWater(amountMl);
-    setState({ waterMl: Math.max(0, state.waterMl + log.amountMl) });
+    if (isIsoOnLocalDay(log.loggedAt, state.dayKey)) {
+      setState({
+        waterMl: Math.max(0, state.waterMl + log.amountMl),
+        waterReadiness: previousReadiness === "UNKNOWN" ? "UNKNOWN" : "KNOWN",
+      });
+    }
     return log;
   },
 
-  async removeWater(logId: string): Promise<void> {
+  async removeWater(logId: string, amountMl?: number): Promise<void> {
+    ensureCurrentDay();
+    const previousReadiness = state.waterReadiness;
     await trackingClient.deleteWater(logId);
+    if (amountMl !== undefined && previousReadiness !== "UNKNOWN") {
+      const waterMl = Math.max(0, state.waterMl - Math.max(0, amountMl));
+      setState({ waterMl, waterReadiness: waterMl === 0 ? "KNOWN_ZERO" : "KNOWN" });
+    }
     await this.hydrateWaterFromBackend();
   },
 
@@ -73,12 +137,13 @@ export const dailyTrackingStore = {
   },
 
   markChatted() {
+    ensureCurrentDay();
     if (!state.chattedToday) setState({ chattedToday: true });
   },
 
   reset() {
-    state = { ...EMPTY_STATE };
-    listeners.forEach((l) => l());
+    state = emptyState();
+    listeners.forEach((listener) => listener());
   },
 };
 
