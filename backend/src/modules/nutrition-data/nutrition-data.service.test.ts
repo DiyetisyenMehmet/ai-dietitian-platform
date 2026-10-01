@@ -819,6 +819,13 @@ test("scan history is served from Diewish persistence without querying barcode p
         calories: null,
         food: snapshot,
         photo: null,
+        resolvedProduct: {
+          displayNameTr: "Kristal Kaya Tuzu",
+          brand: "Kristal",
+          variantKey: "kristal::kaya-tuzu::gtin:4006381333931",
+          lifecycleStatus: "ACTIVE" as const,
+          replacedByBarcode: null,
+        },
         scannedAt: "2026-09-30T12:00:00.000Z",
       }];
     },
@@ -838,6 +845,7 @@ test("scan history is served from Diewish persistence without querying barcode p
   const history = await service.listScanHistory("user-1", 500);
   assert.equal(history.length, 1);
   assert.equal(history[0]?.food?.quantity, "125 g");
+  assert.equal(history[0]?.resolvedProduct?.displayNameTr, "Kristal Kaya Tuzu");
   assert.equal(history[0]?.grams, null);
   assert.equal(history[0]?.calories, null);
   assert.equal(providerCalls, 0);

@@ -243,6 +243,14 @@ export interface PhotoScanHistoryDto {
   disclaimer: string;
 }
 
+export interface ScanHistoryResolvedProductDto {
+  displayNameTr: string;
+  brand: string | null;
+  variantKey: string;
+  lifecycleStatus: "ACTIVE" | "OLD_VERSION" | "DISCONTINUED" | "REPLACED" | "UNKNOWN";
+  replacedByBarcode: string | null;
+}
+
 export interface ScanHistoryItemDto {
   id: string;
   scanType: "PHOTO" | "BARCODE";
@@ -254,6 +262,7 @@ export interface ScanHistoryItemDto {
   calories: number | null;
   food: CanonicalFoodDto | null;
   photo: PhotoScanHistoryDto | null;
+  resolvedProduct: ScanHistoryResolvedProductDto | null;
   scannedAt: string;
   lastViewedAt: string | null;
 }

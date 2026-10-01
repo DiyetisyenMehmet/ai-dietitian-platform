@@ -64,6 +64,55 @@ function compactNumber(value: number): string {
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 }
 
+function genericBarcodeTitle(value: string): boolean {
+  const normalized = value
+    .trim()
+    .toLocaleLowerCase("tr-TR")
+    .replace(/[^a-z0-9çğıöşü]+/gi, " ")
+    .trim();
+  return new Set([
+    "barkodlu ürün",
+    "bilinmeyen ürün",
+    "unknown product",
+    "barcode product",
+    "product",
+    "ürün",
+  ]).has(normalized);
+}
+
+function displayHistoryTitle(item: ScanHistoryItemDto): string {
+  if (
+    item.scanType === "BARCODE" &&
+    item.resolvedProduct &&
+    genericBarcodeTitle(item.title)
+  ) {
+    return item.resolvedProduct.displayNameTr;
+  }
+  return item.title;
+}
+
+function displayHistoryBrand(item: ScanHistoryItemDto): string | null {
+  if (
+    item.scanType === "BARCODE" &&
+    item.resolvedProduct &&
+    genericBarcodeTitle(item.title)
+  ) {
+    return item.resolvedProduct.brand ?? item.brand;
+  }
+  return item.brand;
+}
+
+function lifecycleText(status: ScanHistoryItemDto["resolvedProduct"] extends infer R
+  ? R extends { lifecycleStatus: infer S } ? S : never
+  : never): string | null {
+  switch (status) {
+    case "ACTIVE": return "Güncel ürün";
+    case "OLD_VERSION": return "Eski sürüm";
+    case "DISCONTINUED": return "Üretimden kaldırılmış";
+    case "REPLACED": return "Yeni sürümü mevcut";
+    default: return null;
+  }
+}
 
 function sourceServingLabel(food: CanonicalFoodDto): string {
   if (!food.serving) return "Bilgi bulunamadı";
@@ -92,6 +141,14 @@ function BarcodeSnapshotDetail({
   onBack(): void;
 }) {
   const food = item.food;
+  const resolvedTitle = displayHistoryTitle(item);
+  const resolvedBrand = displayHistoryBrand(item);
+  const identityWasResolved = Boolean(
+    item.resolvedProduct && genericBarcodeTitle(item.title),
+  );
+  const resolvedLifecycle = item.resolvedProduct
+    ? lifecycleText(item.resolvedProduct.lifecycleStatus)
+    : null;
 
   return (
     <div className="space-y-4">
@@ -123,8 +180,8 @@ function BarcodeSnapshotDetail({
               <p className="text-xs font-semibold uppercase tracking-wide text-primary">
                 Barkod taraması · kayıtlı snapshot
               </p>
-              <h2 className="mt-1 break-words text-xl font-extrabold">{item.title}</h2>
-              {item.brand && <p className="mt-1 text-sm text-muted-foreground">{item.brand}</p>}
+              <h2 className="mt-1 break-words text-xl font-extrabold">{resolvedTitle}</h2>
+              {resolvedBrand && <p className="mt-1 text-sm text-muted-foreground">{resolvedBrand}</p>}
               <p className="mt-1 text-xs text-muted-foreground">
                 {dateLabel(item.scannedAt)} · {timeLabel(item.scannedAt)}
               </p>
@@ -152,6 +209,20 @@ function BarcodeSnapshotDetail({
             </div>
           </div>
 
+          {identityWasResolved && (
+            <p className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs leading-relaxed text-muted-foreground">
+              Ürün kimliği daha sonra doğrulandı. Ad ve marka güncel ürün kimliğinden gösterilir;
+              tarama anındaki besin ve kaynak snapshot&apos;ı değiştirilmez.
+            </p>
+          )}
+          {resolvedLifecycle && (
+            <p className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-xs leading-relaxed text-muted-foreground">
+              Ürün durumu: {resolvedLifecycle}
+              {item.resolvedProduct?.lifecycleStatus === "REPLACED" && item.resolvedProduct.replacedByBarcode
+                ? ` · Yeni sürüm barkodu: ${item.resolvedProduct.replacedByBarcode}`
+                : ""}
+            </p>
+          )}
           <p className="rounded-xl bg-muted/50 p-3 text-xs leading-relaxed text-muted-foreground">
             Bu ekran tarama anında Diewish&apos;te saklanan sonucu gösterir. Ürün kaynağı yeniden
             sorgulanmaz ve bu görüntüleme yeni tarama kaydı oluşturmaz.
@@ -481,11 +552,19 @@ export function ScanHistoryView() {
             </h2>
             <div className="space-y-2">
               {group.items.map((scan) => {
+                const displayTitle = displayHistoryTitle(scan);
+                const displayBrand = displayHistoryBrand(scan);
+                const identityWasResolved = Boolean(
+                  scan.scanType === "BARCODE" &&
+                  scan.resolvedProduct &&
+                  genericBarcodeTitle(scan.title),
+                );
                 const meta =
                   scan.scanType === "BARCODE"
                     ? [
-                        scan.brand,
+                        displayBrand,
                         scan.food?.quantity ? `Paket: ${scan.food.quantity}` : null,
+                        identityWasResolved ? "Ürün kimliği daha sonra doğrulandı" : null,
                         "Tarama kaydı · tüketim değil",
                       ].filter((item): item is string => Boolean(item))
                     : [
@@ -513,7 +592,7 @@ export function ScanHistoryView() {
                       </span>
                     )}
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-bold text-foreground">{scan.title}</span>
+                      <span className="block truncate text-sm font-bold text-foreground">{displayTitle}</span>
                       {meta.length > 0 && (
                         <span className="mt-0.5 block truncate text-xs text-muted-foreground">
                           {meta.join(" · ")}
@@ -545,7 +624,7 @@ export function ScanHistoryView() {
                         markViewed(scan);
                         setSelectedBarcodeId(scan.id);
                       }}
-                      aria-label={`${scan.title} geçmiş tarama snapshot'ını aç`}
+                      aria-label={`${displayTitle} geçmiş tarama snapshot'ını aç`}
                       className="flex min-h-[76px] w-full items-center gap-3 rounded-2xl border bg-card p-3 text-left shadow-sm transition hover:bg-muted/30"
                     >
                       {body}
@@ -561,7 +640,7 @@ export function ScanHistoryView() {
                       markViewed(scan);
                       setSelectedPhotoId(scan.id);
                     }}
-                    aria-label={`${scan.title} tarama bilgilerini aç`}
+                    aria-label={`${displayTitle} tarama bilgilerini aç`}
                     className="flex min-h-[76px] w-full items-center gap-3 rounded-2xl border bg-card p-3 text-left shadow-sm transition hover:bg-muted/30"
                   >
                     {body}

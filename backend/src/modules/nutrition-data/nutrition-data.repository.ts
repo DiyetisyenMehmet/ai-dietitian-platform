@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import { prisma } from "../../lib/prisma";
 import { buildPackageLabelConsensus } from "./nutrition-learning";
 import { productStorageExternalId } from "./product-catalog";
+import { resolveStoredScanProductIdentity, type ResolvedScanProductIdentity } from "./scan-history-identity";
 import type { CanonicalFood, NutrientValues } from "./nutrition-data.types";
 
 interface FoodRow {
@@ -46,6 +47,7 @@ interface UnifiedScanRow {
   barcode: string | null;
   product_name: string | null;
   payload: unknown;
+  resolved_payload: unknown | null;
   scanned_at: Date;
   last_viewed_at: Date | null;
 }
@@ -672,11 +674,12 @@ export const nutritionDataRepository = {
     calories: number | null;
     food: CanonicalFood | null;
     photo: PhotoScanHistoryInput | null;
+    resolvedProduct: ResolvedScanProductIdentity | null;
     scannedAt: string;
     lastViewedAt: string | null;
   }>> {
     const rows = await prisma.$queryRaw<UnifiedScanRow[]>`
-      SELECT *
+      SELECT history.*, resolved.payload AS resolved_payload
       FROM (
         SELECT
           ('barcode:' || id::text) AS history_id,
@@ -702,13 +705,44 @@ export const nutritionDataRepository = {
         FROM nutrition_photo_scans
         WHERE user_id = ${userId}
       ) history
-      ORDER BY COALESCE(last_viewed_at, scanned_at) DESC, scanned_at DESC
+      LEFT JOIN LATERAL (
+        SELECT f.payload
+        FROM nutrition_foods f
+        WHERE history.scan_type = 'BARCODE'
+          AND history.barcode IS NOT NULL
+          AND f.barcode = history.barcode
+          AND f.product_variant_key IS NOT NULL
+          AND f.payload->'productCatalog'->'variant'->>'barcode' = history.barcode
+        ORDER BY
+          CASE
+            WHEN f.lifecycle_status = 'ACTIVE' THEN 0
+            WHEN f.lifecycle_status IS NULL OR f.lifecycle_status = 'UNKNOWN' THEN 1
+            WHEN f.lifecycle_status = 'OLD_VERSION' THEN 2
+            WHEN f.lifecycle_status = 'REPLACED' THEN 3
+            WHEN f.lifecycle_status = 'DISCONTINUED' THEN 4
+            ELSE 1
+          END,
+          (f.expires_at > CURRENT_TIMESTAMP) DESC,
+          CASE
+            WHEN f.provider = 'DIEWISH' THEN 0
+            WHEN f.provider = 'OPEN_FOOD_FACTS' THEN 1
+            WHEN f.provider = 'USDA' THEN 2
+            ELSE 3
+          END,
+          COALESCE(f.last_validated_at, f.retrieved_at) DESC
+        LIMIT 1
+      ) resolved ON TRUE
+      ORDER BY COALESCE(history.last_viewed_at, history.scanned_at) DESC, history.scanned_at DESC
       LIMIT ${limit}
     `;
 
     return rows.map((row) => {
       if (row.scan_type === "BARCODE") {
         const food = asFood(row.payload);
+        const resolvedProduct = resolveStoredScanProductIdentity(
+          row.barcode,
+          asFood(row.resolved_payload),
+        );
         return {
           id: row.history_id,
           scanType: "BARCODE" as const,
@@ -721,6 +755,7 @@ export const nutritionDataRepository = {
           calories: null,
           food,
           photo: null,
+          resolvedProduct,
           scannedAt: row.scanned_at.toISOString(),
           lastViewedAt: row.last_viewed_at?.toISOString() ?? null,
         };
@@ -738,6 +773,7 @@ export const nutritionDataRepository = {
         calories: photo?.totals.energyKcal ?? null,
         food: null,
         photo,
+        resolvedProduct: null,
         scannedAt: row.scanned_at.toISOString(),
         lastViewedAt: row.last_viewed_at?.toISOString() ?? null,
       };
