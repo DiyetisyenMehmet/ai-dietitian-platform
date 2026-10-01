@@ -101,6 +101,7 @@ test("stale verified data is reduced but not zeroed or treated as lifecycle", ()
   assert.ok(result.score > 0);
   assert.ok(result.issues.includes("STALE_DATA"));
   assert.notEqual(result.tier, "REJECT");
+  assert.equal(result.trustLevel, "MEDIUM");
 });
 
 test("real zero macros in salt are known values, not missing fields", () => {

@@ -22,6 +22,7 @@ test("normalizes USDA nutrients without changing provider numbers", () => {
   assert.equal(food.nutrientsPer100g.sodiumMg, 74);
   assert.match(food.displayNameTr, /tavuk/i);
   assert.equal(food.provenance.provider, "USDA");
+  assert.equal(food.provenance.confidence, undefined);
 });
 
 test("normalizes USDA micronutrients only from named provider facts with explicit units", () => {
@@ -76,6 +77,7 @@ test("normalizes Open Food Facts package metadata and sodium units", () => {
   assert.deepEqual(food.allergens, ["milk"]);
   assert.equal(food.vegetarian, true);
   assert.equal(food.provenance.provider, "OPEN_FOOD_FACTS");
+  assert.equal(food.provenance.confidence, undefined);
 });
 
 test("source precedence never averages conflicting foods", () => {

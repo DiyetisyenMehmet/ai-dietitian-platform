@@ -318,6 +318,7 @@ function trustLevelFor(
   issues: readonly BarcodeQualityIssue[],
 ): ProductDataTrustLevel {
   if (tier === "REJECT" || tier === "WEAK") return "LOW";
+  if (issues.includes("STALE_DATA") || issues.includes("SOURCE_OLD")) return "MEDIUM";
   if (tier === "STRONG" && score >= 0.84 && !seriousNutritionIssue(issues)) return "HIGH";
   return "MEDIUM";
 }
