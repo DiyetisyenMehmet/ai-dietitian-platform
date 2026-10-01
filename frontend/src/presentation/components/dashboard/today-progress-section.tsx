@@ -9,7 +9,11 @@ import { CircularProgress } from "@/presentation/components/ui/circular-progress
 import { ProgressBar } from "@/presentation/components/ui/progress-bar";
 import { WaterSection } from "@/presentation/components/dashboard/water-section";
 import { formatNumber, toPercent } from "@/shared/lib/format";
-import { useMeals, computeTotals } from "@/application/meals/meals-store";
+import {
+  useMeals,
+  useMealsReadiness,
+  computeTotals,
+} from "@/application/meals/meals-store";
 import { useNutritionPlan } from "@/application/health/nutrition-plan-store";
 
 const MACROS = [
@@ -21,6 +25,7 @@ const MACROS = [
 /** Today's persisted nutrition and water progress. */
 export function TodayProgressSection() {
   const meals = useMeals();
+  const mealsReadiness = useMealsReadiness();
   const { activePlan, hydrated: planHydrated } = useNutritionPlan();
 
   const totals = React.useMemo(() => computeTotals(meals), [meals]);
@@ -38,6 +43,10 @@ export function TodayProgressSection() {
           {!planHydrated ? (
             <p className="py-6 text-center text-sm text-muted-foreground">
               Beslenme hedeflerin yükleniyor…
+            </p>
+          ) : mealsReadiness === "UNKNOWN" ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              Bugünkü öğün verileri doğrulanamadı. Kayıtlar yeniden yüklendiğinde günlük toplamlar gösterilecek.
             </p>
           ) : !activePlan ? (
             <div className="flex items-start gap-3 rounded-xl bg-muted/40 p-4">

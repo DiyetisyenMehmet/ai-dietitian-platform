@@ -19,6 +19,7 @@ import { useHealthScore } from "@/application/health/health-score";
 export function HealthScoreSection() {
   const health = useHealthScore();
   const [open, setOpen] = React.useState(false);
+  const hasReliableFactors = health.factors.length > 0;
 
   return (
     <section className="space-y-3">
@@ -36,9 +37,13 @@ export function HealthScoreSection() {
       <Card className="shadow-soft">
         <CardContent className="space-y-4 p-5">
           <div className="flex items-center gap-4">
-            <CircularProgress value={health.score} size={104} strokeWidth={11}>
-              <span className="text-2xl font-bold tabular-nums">{health.score}</span>
-              <span className="text-[10px] font-medium text-muted-foreground">/ 100</span>
+            <CircularProgress value={hasReliableFactors ? health.score : 0} size={104} strokeWidth={11}>
+              <span className="text-2xl font-bold tabular-nums">
+                {hasReliableFactors ? health.score : "—"}
+              </span>
+              {hasReliableFactors && (
+                <span className="text-[10px] font-medium text-muted-foreground">/ 100</span>
+              )}
             </CircularProgress>
 
             <div className="min-w-0 flex-1">
@@ -72,6 +77,7 @@ export function HealthScoreSection() {
             </div>
           )}
 
+          {hasReliableFactors && (
           <button
             type="button"
             onClick={() => setOpen((value) => !value)}
@@ -84,8 +90,9 @@ export function HealthScoreSection() {
               aria-hidden="true"
             />
           </button>
+          )}
 
-          {open && (
+          {hasReliableFactors && open && (
             <div className="space-y-3 border-t border-border pt-3">
               <p className="text-xs leading-relaxed text-muted-foreground">
                 Yalnızca bugün gerçekten kayıtlı ve hedefi tanımlı olan alanlar hesaba katılır.
