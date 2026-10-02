@@ -173,8 +173,11 @@ test("longitudinal comparison lazy-loads once and presents neutral mathematical 
   await expect(comparison.getByText("Azaldı")).toBeVisible();
   await expect(comparison.getByText("Değişmedi")).toBeVisible();
   await expect(comparison.getByText("+4 mg/dL (+4,55%)")).toBeVisible();
-  await expect(comparison.getByText("Önceki: Yüksek")).toBeVisible();
-  await expect(comparison.getByText("Şimdi: Normal")).toBeVisible();
+  const glucoseComparison = comparison
+    .locator("[data-blood-test-comparison-item]")
+    .filter({ hasText: "Glukoz" });
+  await expect(glucoseComparison.getByText("Önceki: Yüksek")).toBeVisible();
+  await expect(glucoseComparison.getByText("Şimdi: Normal")).toBeVisible();
   await expect(comparison.getByText("Referans değerlendirilemedi").first()).toBeVisible();
   await expect(comparison.getByText("Kritik düşük")).toBeVisible();
   await expect(comparison.getByText("Kritik yüksek")).toBeVisible();
@@ -260,8 +263,8 @@ test("zero baseline keeps the real zero, hides fake percentage, and handles miss
 
   const comparison = page.locator("[data-blood-test-comparison]");
   await expect(comparison).toBeVisible();
-  await expect(comparison.getByText("0 pg/mL")).toBeVisible();
-  await expect(comparison.getByText("+10 pg/mL")).toBeVisible();
+  await expect(comparison.getByText("0 pg/mL", { exact: true })).toBeVisible();
+  await expect(comparison.getByText("+10 pg/mL", { exact: true })).toBeVisible();
   await expect(comparison.getByText("Yüzde değişim gösterilemiyor")).toBeVisible();
   await expect(comparison.getByText("Test tarihi kayıtlı değil")).toHaveCount(2);
   await expect(comparison).not.toContainText("%0");
