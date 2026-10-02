@@ -181,6 +181,7 @@ test("dashboard fixed-geometry surfaces stay stable across mobile viewports and 
 
       await expect(coach).toBeVisible();
       await expect(coach).toHaveAttribute("data-dashboard-fixed-geometry", "");
+      await expect(coach).toHaveCSS("container-type", "inline-size");
       await expect(title).toBeVisible();
       await expect(subtitle).toBeVisible();
       await expect(button).toBeVisible();
@@ -205,13 +206,35 @@ test("dashboard fixed-geometry surfaces stay stable across mobile viewports and 
       expect(subtitleBox).not.toBeNull();
       expect(buttonBox).not.toBeNull();
 
-      expect(titleBox!.x + titleBox!.width).toBeLessThanOrEqual(buttonBox!.x + 1);
-      expect(subtitleBox!.x + subtitleBox!.width).toBeLessThanOrEqual(buttonBox!.x + 1);
+      const titleRight = titleBox!.x + titleBox!.width;
+      const subtitleRight = subtitleBox!.x + subtitleBox!.width;
+      const buttonRight = buttonBox!.x + buttonBox!.width;
+      const coachRight = coachBox!.x + coachBox!.width;
+
+      console.info(
+        "[coach-geometry]",
+        JSON.stringify({
+          viewport,
+          theme,
+          coach: { width: coachBox!.width },
+          title: { x: titleBox!.x, right: titleRight },
+          subtitle: { right: subtitleRight },
+          button: {
+            x: buttonBox!.x,
+            right: buttonRight,
+            width: buttonBox!.width,
+            height: buttonBox!.height,
+          },
+          titleGap: buttonBox!.x - titleRight,
+        }),
+      );
+
+      expect(titleRight).toBeLessThanOrEqual(buttonBox!.x + 1);
+      expect(buttonBox!.x - titleRight).toBeGreaterThanOrEqual(4);
+      expect(subtitleRight).toBeLessThanOrEqual(buttonBox!.x + 1);
       expect(titleBox!.x).toBeGreaterThanOrEqual(coachBox!.x - 1);
       expect(subtitleBox!.x).toBeGreaterThanOrEqual(coachBox!.x - 1);
-      expect(buttonBox!.x + buttonBox!.width).toBeLessThanOrEqual(
-        coachBox!.x + coachBox!.width + 1,
-      );
+      expect(buttonRight).toBeLessThanOrEqual(coachRight + 1);
       expect(buttonBox!.width).toBeGreaterThanOrEqual(80);
       expect(buttonBox!.height).toBeGreaterThanOrEqual(32);
     }
