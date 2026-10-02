@@ -263,8 +263,11 @@ test("zero baseline keeps the real zero, hides fake percentage, and handles miss
 
   const comparison = page.locator("[data-blood-test-comparison]");
   await expect(comparison).toBeVisible();
-  await expect(comparison.getByText("0 pg/mL", { exact: true })).toBeVisible();
-  await expect(comparison.getByText("+10 pg/mL", { exact: true })).toBeVisible();
+  const b12Comparison = comparison
+    .locator("[data-blood-test-comparison-item]")
+    .filter({ hasText: "B12" });
+  await expect(b12Comparison.getByText("0 pg/mL", { exact: true })).toBeVisible();
+  await expect(b12Comparison).toContainText("Değişim: +10 pg/mL");
   await expect(comparison.getByText("Yüzde değişim gösterilemiyor")).toBeVisible();
   await expect(comparison.getByText("Test tarihi kayıtlı değil")).toHaveCount(2);
   await expect(comparison).not.toContainText("%0");
