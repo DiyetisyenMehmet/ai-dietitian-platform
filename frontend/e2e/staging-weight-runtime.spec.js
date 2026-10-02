@@ -233,6 +233,30 @@ test("staging Body & Weight acceptance: chronology, CRUD, isolation, graph and s
   const otherToken = otherRegistration.body.data.tokens.accessToken;
   await grantRequiredConsents(request, otherToken);
 
+  // Cross-account isolation must be tested after B passes the same full-account
+  // onboarding gate; otherwise the root guard correctly returns 403 first.
+  const otherOnboarding = await apiJson(request, "post", "/onboarding", {
+    token: otherToken,
+    data: {
+      fullName: "Stage4 Weight User B",
+      dateOfBirth: "1991-06-15",
+      gender: "PREFER_NOT_TO_SAY",
+      heightCm: 180,
+      currentWeightKg: 85,
+      targetWeightKg: 80,
+      activityLevel: "MODERATE",
+      healthConditions: [],
+      allergies: [],
+      dietaryPreference: "OMNIVORE",
+      dailyWaterGoalMl: 2500,
+      workScheduleType: "REGULAR",
+      usualWakeTime: "07:00",
+      usualSleepTime: "23:00",
+    },
+  });
+  expect(otherOnboarding.response.status()).toBe(200);
+  expect(otherOnboarding.body.success).toBe(true);
+
   const crossGet = await apiJson(request, "get", `/tracking/weight/${latestId}`, {
     token: otherToken,
   });
