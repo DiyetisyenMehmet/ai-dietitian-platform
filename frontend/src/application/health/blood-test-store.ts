@@ -9,6 +9,7 @@ import {
   type BloodTestNormalizedValue,
   type BloodTestNutritionImplication,
   type BloodTestFreshness,
+  type LongitudinalComparison,
 } from "@/infrastructure/tracking/blood-test-client";
 
 export type BloodTestUiStatus = "analyzing" | "analyzed" | "failed";
@@ -107,6 +108,48 @@ function toSummary(
 let tests: BloodTestSummaryView[] = [];
 const listeners = new Set<() => void>();
 
+export type BloodTestComparisonLoadStatus = "idle" | "loading" | "success" | "error";
+
+export interface BloodTestComparisonState {
+  status: BloodTestComparisonLoadStatus;
+  comparison: LongitudinalComparison | null;
+}
+
+const IDLE_COMPARISON_STATE: BloodTestComparisonState = {
+  status: "idle",
+  comparison: null,
+};
+
+let comparisonStates: Readonly<Record<string, BloodTestComparisonState>> = {};
+const comparisonListeners = new Set<() => void>();
+const comparisonRequests = new Map<string, Promise<LongitudinalComparison | null>>();
+
+function emitComparison() {
+  comparisonListeners.forEach((listener) => listener());
+}
+
+function subscribeComparison(listener: () => void) {
+  comparisonListeners.add(listener);
+  return () => comparisonListeners.delete(listener);
+}
+
+function getComparisonSnapshot() {
+  return comparisonStates;
+}
+
+function setComparisonState(uploadId: string, state: BloodTestComparisonState) {
+  comparisonStates = { ...comparisonStates, [uploadId]: state };
+  emitComparison();
+}
+
+function clearComparisonState(uploadId: string) {
+  if (!(uploadId in comparisonStates)) return;
+  const next = { ...comparisonStates };
+  delete next[uploadId];
+  comparisonStates = next;
+  emitComparison();
+}
+
 function emit() {
   tests = [...tests];
   listeners.forEach((listener) => listener());
@@ -131,6 +174,39 @@ function replaceById(id: string, replacement: BloodTestSummaryView) {
 }
 
 export const bloodTestStore = {
+  async loadComparison(
+    uploadId: string,
+    options?: { force?: boolean },
+  ): Promise<LongitudinalComparison | null> {
+    const inFlight = comparisonRequests.get(uploadId);
+    if (inFlight) return inFlight;
+
+    const existing = comparisonStates[uploadId];
+    if (!options?.force && existing?.status === "success") {
+      return existing.comparison;
+    }
+
+    setComparisonState(uploadId, { status: "loading", comparison: null });
+
+    const request = bloodTestClient
+      .getAnalysis(uploadId)
+      .then(({ analysis }) => {
+        const comparison = analysis.longitudinalComparison ?? null;
+        setComparisonState(uploadId, { status: "success", comparison });
+        return comparison;
+      })
+      .catch((error: unknown) => {
+        setComparisonState(uploadId, { status: "error", comparison: null });
+        throw error;
+      })
+      .finally(() => {
+        comparisonRequests.delete(uploadId);
+      });
+
+    comparisonRequests.set(uploadId, request);
+    return request;
+  },
+
   async hydrateBloodTestsFromBackend(): Promise<void> {
     try {
       const { analyses } = await bloodTestClient.listAnalyses();
@@ -199,16 +275,29 @@ export const bloodTestStore = {
     }
     await bloodTestClient.removeUpload(test.uploadId);
     tests = tests.filter((item) => item.id !== test.id);
+    clearComparisonState(test.uploadId);
     emit();
   },
 
   reset() {
     tests = [];
+    comparisonStates = {};
+    comparisonRequests.clear();
     emit();
+    emitComparison();
   },
 };
 
 export function useBloodTests(): BloodTestSummaryView[] {
   const raw = React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
   return React.useMemo(() => sorted(raw), [raw]);
+}
+
+export function useBloodTestComparison(uploadId?: string): BloodTestComparisonState {
+  const states = React.useSyncExternalStore(
+    subscribeComparison,
+    getComparisonSnapshot,
+    getComparisonSnapshot,
+  );
+  return uploadId ? states[uploadId] ?? IDLE_COMPARISON_STATE : IDLE_COMPARISON_STATE;
 }

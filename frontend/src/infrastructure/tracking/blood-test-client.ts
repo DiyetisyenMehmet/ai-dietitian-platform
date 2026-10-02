@@ -13,6 +13,30 @@ export type BloodTestValueStatus =
   | "CRITICALLY_HIGH"
   | "UNKNOWN";
 
+export type ComparisonDirection = "increased" | "decreased" | "unchanged";
+export type ComparisonReferenceStatus = BloodTestValueStatus;
+
+export interface BiomarkerComparison {
+  biomarkerCode: string;
+  biomarkerName: string;
+  unit: string;
+  previousValue: number;
+  currentValue: number;
+  absoluteDifference: number;
+  percentageDifference: number | null;
+  direction: ComparisonDirection;
+  previousReferenceStatus: ComparisonReferenceStatus;
+  currentReferenceStatus: ComparisonReferenceStatus;
+}
+
+export interface LongitudinalComparison {
+  previousAnalysisId: string;
+  previousMeasuredAt: string | null;
+  currentMeasuredAt: string | null;
+  comparedCount: number;
+  comparisons: BiomarkerComparison[];
+}
+
 export interface BloodTestReferenceRange {
   unit: string;
   minValue: number | null;
@@ -77,6 +101,8 @@ export interface BloodTestAnalysis {
   freshnessAgeDays?: number | null;
   personalizationEligible?: boolean;
   freshnessMessage?: string | null;
+  /** Present only on the owner-scoped detail response, not the history list. */
+  longitudinalComparison?: LongitudinalComparison | null;
   createdAt: string;
   updatedAt?: string;
 }
@@ -113,6 +139,14 @@ export const bloodTestClient = {
     return apiRequest<{ analysis: BloodTestAnalysis }>({
       path: `/blood-tests/${encodeURIComponent(uploadId)}/analyze`,
       method: "POST",
+      auth: true,
+    });
+  },
+
+  getAnalysis(uploadId: string) {
+    return apiRequest<{ analysis: BloodTestAnalysis }>({
+      path: `/blood-tests/${encodeURIComponent(uploadId)}/analysis`,
+      method: "GET",
       auth: true,
     });
   },

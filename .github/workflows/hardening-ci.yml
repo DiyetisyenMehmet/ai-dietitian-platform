@@ -313,6 +313,7 @@ jobs:
           e2e/semantic-icon-browser.spec.js
           e2e/dashboard-blood-test-card.spec.ts
           e2e/dashboard-live-feature-card.spec.ts
+          e2e/blood-test-longitudinal-comparison.spec.ts
           e2e/admin-foundation.spec.js
           e2e/admin-shell.spec.js
           e2e/admin-users.spec.js

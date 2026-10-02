@@ -15,15 +15,20 @@ import { getBiomarkerEducation } from "@/presentation/components/health/blood-bi
 import { getBiomarkerDeepEducation } from "@/presentation/components/health/blood-biomarker-deep-education";
 import {
   useBloodTests,
+  useBloodTestComparison,
   bloodTestStore,
+  type BloodTestComparisonState,
   type BloodTestSummaryView,
 } from "@/application/health/blood-test-store";
 import { journeyStore } from "@/application/health/journey-store";
 import { useSubscription } from "@/application/payments/subscription-store";
 import { ApiError } from "@/infrastructure/api/http-client";
 import type {
+  BiomarkerComparison,
   BloodTestNormalizedValue,
   BloodTestValueStatus,
+  ComparisonDirection,
+  LongitudinalComparison,
 } from "@/infrastructure/tracking/blood-test-client";
 
 const STATUS_LABELS: Record<BloodTestValueStatus, string> = {
@@ -34,6 +39,33 @@ const STATUS_LABELS: Record<BloodTestValueStatus, string> = {
   CRITICALLY_HIGH: "Kritik yüksek",
   UNKNOWN: "Referans değerlendirilemedi",
 };
+
+const COMPARISON_DIRECTION_LABELS: Record<ComparisonDirection, string> = {
+  increased: "Arttı",
+  decreased: "Azaldı",
+  unchanged: "Değişmedi",
+};
+
+function formatComparisonNumber(value: number): string {
+  const normalized = Object.is(value, -0) ? 0 : value;
+  return new Intl.NumberFormat("tr-TR", {
+    maximumFractionDigits: 4,
+  }).format(normalized);
+}
+
+function formatSignedComparisonNumber(value: number): string {
+  const normalized = Object.is(value, -0) ? 0 : value;
+  const prefix = normalized > 0 ? "+" : "";
+  return `${prefix}${formatComparisonNumber(normalized)}`;
+}
+
+function formatComparisonDate(value: string | null): string {
+  if (!value) return "Test tarihi kayıtlı değil";
+  const parsed = new Date(`${value}T12:00:00`);
+  return Number.isNaN(parsed.getTime())
+    ? "Test tarihi kayıtlı değil"
+    : formatLongDate(parsed);
+}
 
 function isLabReportReference(value: BloodTestNormalizedValue): boolean {
   return value.referenceRange?.source === "LAB_REPORT";
@@ -346,6 +378,202 @@ function PremiumValueEducation({
   );
 }
 
+
+function ComparisonValue({
+  label,
+  value,
+  unit,
+}: {
+  label: string;
+  value: number;
+  unit: string;
+}) {
+  return (
+    <div className="min-w-0 rounded-lg bg-background/75 px-3 py-2">
+      <dt className="text-[11px] font-medium text-muted-foreground">{label}</dt>
+      <dd className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
+        {formatComparisonNumber(value)}
+        {unit ? ` ${unit}` : ""}
+      </dd>
+    </div>
+  );
+}
+
+function BiomarkerComparisonCard({ item }: { item: BiomarkerComparison }) {
+  const percentageText =
+    item.percentageDifference == null
+      ? null
+      : `${formatSignedComparisonNumber(item.percentageDifference)}%`;
+
+  return (
+    <li
+      className="min-w-0 max-w-full rounded-xl border border-border/70 bg-background/60 p-3 [overflow-wrap:anywhere]"
+      data-blood-test-comparison-item=""
+    >
+      <p className="break-words text-sm font-bold [overflow-wrap:anywhere]">
+        {item.biomarkerName || item.biomarkerCode}
+      </p>
+
+      <dl className="mt-2 grid min-w-0 gap-2 sm:grid-cols-2">
+        <ComparisonValue label="Önceki" value={item.previousValue} unit={item.unit} />
+        <ComparisonValue label="Şimdi" value={item.currentValue} unit={item.unit} />
+      </dl>
+
+      <div className="mt-2 min-w-0 rounded-lg bg-muted/35 px-3 py-2 text-xs">
+        <p className="break-words [overflow-wrap:anywhere]">
+          <span className="font-semibold text-foreground">Değişim:</span>{" "}
+          {formatSignedComparisonNumber(item.absoluteDifference)}
+          {item.unit ? ` ${item.unit}` : ""}
+          {percentageText ? ` (${percentageText})` : ""}
+        </p>
+        {item.percentageDifference == null && (
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Yüzde değişim gösterilemiyor
+          </p>
+        )}
+        <p className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
+          <span className="font-semibold text-foreground">Yön:</span>
+          <span
+            className="inline-flex rounded-full bg-muted px-2 py-0.5 font-medium text-foreground"
+            data-comparison-direction={item.direction}
+          >
+            {COMPARISON_DIRECTION_LABELS[item.direction]}
+          </span>
+        </p>
+      </div>
+
+      <div className="mt-2 min-w-0 rounded-lg bg-muted/20 px-3 py-2 text-xs">
+        <p className="font-semibold text-foreground">Laboratuvar referans konumu</p>
+        <dl className="mt-1.5 grid min-w-0 gap-1 sm:grid-cols-2">
+          <div className="min-w-0">
+            <dt className="inline text-muted-foreground">Önceki: </dt>
+            <dd className="inline break-words font-medium [overflow-wrap:anywhere]">
+              {STATUS_LABELS[item.previousReferenceStatus]}
+            </dd>
+          </div>
+          <div className="min-w-0">
+            <dt className="inline text-muted-foreground">Şimdi: </dt>
+            <dd className="inline break-words font-medium [overflow-wrap:anywhere]">
+              {STATUS_LABELS[item.currentReferenceStatus]}
+            </dd>
+          </div>
+        </dl>
+      </div>
+    </li>
+  );
+}
+
+function LongitudinalComparisonSection({
+  state,
+  onRetry,
+}: {
+  state: BloodTestComparisonState;
+  onRetry: () => void;
+}) {
+  if (state.status === "idle") return null;
+
+  if (state.status === "loading") {
+    return (
+      <section
+        className="min-w-0 rounded-xl border border-border/70 bg-muted/15 p-3"
+        aria-label="Önceki tahlille karşılaştırma yükleniyor"
+        data-blood-test-comparison=""
+      >
+        <div className="flex min-w-0 items-center gap-2 text-sm font-semibold">
+          <Loader2 className="size-4 shrink-0 animate-spin text-primary" aria-hidden="true" />
+          <span className="min-w-0 break-words">Önceki tahlille karşılaştırma yükleniyor</span>
+        </div>
+      </section>
+    );
+  }
+
+  if (state.status === "error") {
+    return (
+      <section
+        className="min-w-0 rounded-xl border border-border/70 bg-muted/15 p-3"
+        aria-label="Önceki tahlille karşılaştırma"
+        data-blood-test-comparison=""
+      >
+        <h4 className="text-sm font-bold">Önceki Tahlille Karşılaştırma</h4>
+        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+          Karşılaştırma şu anda yüklenemedi. Ana kan tahlili analizi etkilenmedi.
+        </p>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="mt-2 inline-flex min-h-9 items-center rounded-lg border border-border bg-background px-3 text-xs font-semibold transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label="Önceki tahlil karşılaştırmasını tekrar yükle"
+        >
+          Tekrar dene
+        </button>
+      </section>
+    );
+  }
+
+  const comparison = state.comparison;
+  if (!comparison) {
+    return (
+      <section
+        className="min-w-0 rounded-xl border border-border/70 bg-muted/15 p-3"
+        aria-label="Önceki tahlille karşılaştırma"
+        data-blood-test-comparison=""
+      >
+        <h4 className="text-sm font-bold">Önceki Tahlille Karşılaştırma</h4>
+        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+          Karşılaştırılabilir önceki tahlil bulunamadı.
+        </p>
+      </section>
+    );
+  }
+
+  return <ComparisonContent comparison={comparison} />;
+}
+
+function ComparisonContent({ comparison }: { comparison: LongitudinalComparison }) {
+  return (
+    <section
+      className="min-w-0 max-w-full rounded-xl border border-border/70 bg-muted/15 p-3 [overflow-wrap:anywhere]"
+      aria-label="Önceki tahlille karşılaştırma"
+      data-blood-test-comparison=""
+    >
+      <div className="min-w-0">
+        <h4 className="break-words text-sm font-bold">Önceki Tahlille Karşılaştırma</h4>
+        <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+          Yön yalnızca ölçümdeki matematiksel değişimi gösterir; tek başına sağlık sonucu anlamına gelmez.
+        </p>
+      </div>
+
+      <dl className="mt-3 grid min-w-0 gap-2 sm:grid-cols-3">
+        <div className="min-w-0 rounded-lg bg-background/75 px-3 py-2">
+          <dt className="text-[11px] font-medium text-muted-foreground">Önceki tahlil tarihi</dt>
+          <dd className="mt-0.5 break-words text-xs font-semibold [overflow-wrap:anywhere]">
+            {formatComparisonDate(comparison.previousMeasuredAt)}
+          </dd>
+        </div>
+        <div className="min-w-0 rounded-lg bg-background/75 px-3 py-2">
+          <dt className="text-[11px] font-medium text-muted-foreground">Mevcut tahlil tarihi</dt>
+          <dd className="mt-0.5 break-words text-xs font-semibold [overflow-wrap:anywhere]">
+            {formatComparisonDate(comparison.currentMeasuredAt)}
+          </dd>
+        </div>
+        <div className="min-w-0 rounded-lg bg-background/75 px-3 py-2">
+          <dt className="text-[11px] font-medium text-muted-foreground">Karşılaştırılan değer</dt>
+          <dd className="mt-0.5 text-xs font-semibold">{comparison.comparedCount}</dd>
+        </div>
+      </dl>
+
+      <ul className="mt-3 min-w-0 space-y-2">
+        {comparison.comparisons.map((item, index) => (
+          <BiomarkerComparisonCard
+            key={`${item.biomarkerCode}-${index}`}
+            item={item}
+          />
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 function AnalysisDetails({
   test,
   premiumDetails,
@@ -353,6 +581,15 @@ function AnalysisDetails({
   test: BloodTestSummaryView;
   premiumDetails: boolean;
 }) {
+  const comparisonState = useBloodTestComparison(test.uploadId);
+  const requestComparison = React.useCallback(
+    (force = false) => {
+      if (!test.uploadId) return;
+      void bloodTestStore.loadComparison(test.uploadId, { force }).catch(() => undefined);
+    },
+    [test.uploadId],
+  );
+
   const safeNutritionImplications = test.nutritionImplications.filter((item) => {
     const value = test.normalizedValues.find(
       (candidate) => candidate.biomarkerCode === item.biomarkerCode,
@@ -384,7 +621,18 @@ function AnalysisDetails({
   );
 
   return (
-    <details className="group min-w-0 max-w-full overflow-hidden rounded-2xl bg-muted/20">
+    <details
+      className="group min-w-0 max-w-full overflow-hidden rounded-2xl bg-muted/20"
+      onToggle={(event) => {
+        if (
+          event.currentTarget.open &&
+          test.uploadId &&
+          comparisonState.status === "idle"
+        ) {
+          requestComparison();
+        }
+      }}
+    >
       <summary className="flex min-w-0 cursor-pointer list-none items-center justify-between gap-3 px-3 py-3 text-sm font-semibold sm:px-4 [&::-webkit-details-marker]:hidden">
         <span className="min-w-0 break-words">Detaylı analizi görüntüle</span>
         <ChevronDown
@@ -394,6 +642,13 @@ function AnalysisDetails({
       </summary>
 
       <div className="min-w-0 space-y-5 border-t px-3 py-4 sm:px-4">
+        {test.uploadId && comparisonState.status !== "idle" && (
+          <LongitudinalComparisonSection
+            state={comparisonState}
+            onRetry={() => requestComparison(true)}
+          />
+        )}
+
         {premiumDetails && test.normalizedValues.length > 0 && (
           <div className="min-w-0 rounded-xl bg-primary/5 px-3 py-2.5 [overflow-wrap:anywhere]">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
