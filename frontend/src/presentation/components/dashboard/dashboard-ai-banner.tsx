@@ -66,7 +66,7 @@ export function DashboardAiBanner() {
           className="pointer-events-none absolute left-[21.5%] right-[28%] top-1/2 min-w-0 -translate-y-1/2 select-none"
           data-dashboard-decorative-text=""
         >
-          <h2 className="whitespace-nowrap text-[clamp(0.72rem,3.2vw,1.12rem)] font-extrabold leading-none tracking-[-0.025em] text-slate-950 dark:text-slate-50">
+          <h2 className="whitespace-nowrap text-[clamp(0.72rem,2.9vw,1.12rem)] font-extrabold leading-none tracking-[-0.025em] text-slate-950 sm:text-[clamp(0.72rem,3.2vw,1.12rem)] dark:text-slate-50">
             Diewish Her Zaman Yanında
           </h2>
           <p className="mt-[clamp(0.16rem,0.7vw,0.32rem)] whitespace-nowrap text-[clamp(0.56rem,2.55vw,0.88rem)] font-medium leading-none tracking-[-0.025em] text-slate-600 dark:text-slate-300">
