@@ -8,6 +8,10 @@ import type {
   NutritionImplication,
 } from "./types";
 
+export type BloodTestAnalysisComparisonRow = Prisma.BloodTestAnalysisGetPayload<{
+  include: { bloodTest: { select: { testDate: true } } };
+}>;
+
 /** Casts a typed value to a Prisma JSON input value. */
 function toJson(value: unknown): Prisma.InputJsonValue {
   return value as unknown as Prisma.InputJsonValue;
@@ -134,6 +138,21 @@ export const bloodTestAnalysisRepository = {
   listByUser(userId: string): Promise<BloodTestAnalysis[]> {
     return prisma.bloodTestAnalysis.findMany({
       where: { userId },
+      orderBy: { createdAt: "desc" },
+    });
+  },
+
+  /**
+   * Owner-scoped completed analyses plus the real laboratory test date used by
+   * deterministic longitudinal comparison. No health data from another owner
+   * can enter the baseline candidate set.
+   */
+  listCompletedForComparisonByUser(
+    userId: string,
+  ): Promise<BloodTestAnalysisComparisonRow[]> {
+    return prisma.bloodTestAnalysis.findMany({
+      where: { userId, status: "COMPLETED" },
+      include: { bloodTest: { select: { testDate: true } } },
       orderBy: { createdAt: "desc" },
     });
   },

@@ -1,116 +1,128 @@
 import { logger } from "../../../lib/logger";
-import { bloodTestAnalysisRepository } from "../blood-test-analysis.repository";
-import type { NormalizedBloodTestValue } from "../types";
+import {
+  bloodTestAnalysisRepository,
+  type BloodTestAnalysisComparisonRow,
+} from "../blood-test-analysis.repository";
+import type {
+  BloodTestValueStatus,
+  NormalizedBloodTestValue,
+} from "../types";
 
 /**
- * Longitudinal Blood-Test Comparison (Sprint 21.1).
- *
- * Prepares a purely numeric, structured comparison between the user's CURRENT
- * normalized biomarker values and those from their most recent PREVIOUS
- * completed analysis. It exists so Medical AI can consume the trend data later —
- * this module itself produces NO medical interpretation, changes no AI prompts,
- * and never touches OCR, extraction, validation or enhancement.
- *
- * Only biomarkers present (with a usable numeric value) in BOTH analyses are
- * compared. When there is no previous analysis or no overlap, the builder
- * returns `null`.
+ * Numeric, owner-scoped longitudinal comparison derived from persisted
+ * normalized blood-test values. This module never infers diagnosis, treatment
+ * effect or causal improvement; direction is mathematical only.
  */
-
-/** The trend direction of a single biomarker between two analyses. */
 export type ComparisonDirection = "increased" | "decreased" | "unchanged";
 
-/** A single biomarker's numeric change between two analyses. */
+export type ComparisonReferenceStatus = BloodTestValueStatus;
+
 export interface BiomarkerComparison {
   readonly biomarkerCode: string;
   readonly biomarkerName: string;
-  /** Canonical unit both values are expressed in. */
   readonly unit: string;
-  /** Value from the previous analysis. */
   readonly previousValue: number;
-  /** Value from the current analysis. */
   readonly currentValue: number;
-  /** `currentValue - previousValue`, rounded to 4 decimals. */
   readonly absoluteDifference: number;
-  /**
-   * Percentage change relative to the previous value, rounded to 2 decimals.
-   * `null` when the previous value is 0 (percentage undefined).
-   */
   readonly percentageDifference: number | null;
-  /** Direction of change. */
   readonly direction: ComparisonDirection;
+  readonly previousReferenceStatus: ComparisonReferenceStatus;
+  readonly currentReferenceStatus: ComparisonReferenceStatus;
 }
 
-/** The full structured comparison object handed downstream. */
 export interface LongitudinalComparison {
-  /** Id of the previous analysis used as the baseline. */
   readonly previousAnalysisId: string;
-  /** ISO timestamp of the previous analysis. */
-  readonly previousAnalysisDate: string;
-  /** Number of biomarkers compared (present in both analyses). */
+  /** Real laboratory test date, never analysis creation time. */
+  readonly previousMeasuredAt: string | null;
+  /** Real laboratory test date, never analysis creation time. */
+  readonly currentMeasuredAt: string | null;
   readonly comparedCount: number;
-  /** The per-biomarker comparisons, in current-analysis order. */
+  /** Comparisons remain in first-seen current-analysis order. */
   readonly comparisons: BiomarkerComparison[];
 }
 
-/** Rounds a number to a fixed number of decimal places. */
 function round(value: number, decimals: number): number {
   const factor = 10 ** decimals;
   return Math.round(value * factor) / factor;
 }
 
-/** True when a normalized value carries a usable, finite numeric reading. */
 function hasNumericValue(
   value: NormalizedBloodTestValue,
 ): value is NormalizedBloodTestValue & { numericValue: number } {
   return typeof value.numericValue === "number" && Number.isFinite(value.numericValue);
 }
 
+function measuredDate(value: Date | null): string | null {
+  return value ? value.toISOString().slice(0, 10) : null;
+}
+
+function safeReferenceStatus(value: NormalizedBloodTestValue): ComparisonReferenceStatus {
+  return value.referenceRange?.source === "LAB_REPORT" ? value.status : "UNKNOWN";
+}
+
+function firstByBiomarkerCode(
+  values: readonly NormalizedBloodTestValue[],
+): Map<string, NormalizedBloodTestValue> {
+  const byCode = new Map<string, NormalizedBloodTestValue>();
+  for (const value of values) {
+    if (!byCode.has(value.biomarkerCode)) {
+      byCode.set(value.biomarkerCode, value);
+    }
+  }
+  return byCode;
+}
+
 /**
- * Computes the structured comparison between two sets of normalized values.
- * Pure and side-effect free. Only biomarkers with a usable numeric value in
- * BOTH sets are compared. Returns `null` when there is no overlap.
- *
- * @param currentValues - Current analysis normalized values.
- * @param previousValues - Previous analysis normalized values.
- * @param previous - Metadata about the previous analysis (id + date).
+ * Pure comparison builder. Matching is exact canonical biomarkerCode only.
+ * No fuzzy/alias matching or unit conversion is performed here.
  */
 export function buildComparison(
   currentValues: readonly NormalizedBloodTestValue[],
   previousValues: readonly NormalizedBloodTestValue[],
-  previous: { id: string; date: string },
+  previous: { id: string; measuredAt: Date | null },
+  current: { measuredAt: Date | null },
 ): LongitudinalComparison | null {
-  const previousByCode = new Map<string, number>();
-  for (const value of previousValues) {
-    if (hasNumericValue(value)) previousByCode.set(value.biomarkerCode, value.numericValue);
-  }
-  if (previousByCode.size === 0) return null;
-
+  const previousByCode = firstByBiomarkerCode(previousValues);
   const comparisons: BiomarkerComparison[] = [];
-  const seen = new Set<string>();
+  const seenCurrent = new Set<string>();
 
-  for (const value of currentValues) {
-    if (!hasNumericValue(value)) continue;
-    if (seen.has(value.biomarkerCode)) continue;
-    const previousValue = previousByCode.get(value.biomarkerCode);
-    if (previousValue === undefined) continue;
-    seen.add(value.biomarkerCode);
+  for (const currentValueRecord of currentValues) {
+    if (seenCurrent.has(currentValueRecord.biomarkerCode)) continue;
+    seenCurrent.add(currentValueRecord.biomarkerCode);
 
-    const currentValue = value.numericValue;
+    const previousValueRecord = previousByCode.get(currentValueRecord.biomarkerCode);
+    if (!previousValueRecord) continue;
+    if (!hasNumericValue(currentValueRecord) || !hasNumericValue(previousValueRecord)) continue;
+
+    // Normalization should already canonicalize units. If persisted records do
+    // not agree, fail closed instead of inventing a medical/unit conversion.
+    if (currentValueRecord.unit.trim() !== previousValueRecord.unit.trim()) continue;
+
+    const previousValue = previousValueRecord.numericValue;
+    const currentValue = currentValueRecord.numericValue;
     const absoluteDifference = round(currentValue - previousValue, 4);
     const percentageDifference =
-      previousValue === 0 ? null : round(((currentValue - previousValue) / previousValue) * 100, 2);
+      previousValue === 0
+        ? null
+        : round(((currentValue - previousValue) / previousValue) * 100, 2);
     const direction: ComparisonDirection =
-      absoluteDifference > 0 ? "increased" : absoluteDifference < 0 ? "decreased" : "unchanged";
+      absoluteDifference > 0
+        ? "increased"
+        : absoluteDifference < 0
+          ? "decreased"
+          : "unchanged";
 
     comparisons.push({
-      biomarkerCode: value.biomarkerCode,
-      biomarkerName: value.biomarkerName,
-      unit: value.unit,
+      biomarkerCode: currentValueRecord.biomarkerCode,
+      biomarkerName: currentValueRecord.biomarkerName,
+      unit: currentValueRecord.unit,
       previousValue,
       currentValue,
       absoluteDifference,
       percentageDifference,
       direction,
+      previousReferenceStatus: safeReferenceStatus(previousValueRecord),
+      currentReferenceStatus: safeReferenceStatus(currentValueRecord),
     });
   }
 
@@ -118,47 +130,91 @@ export function buildComparison(
 
   return {
     previousAnalysisId: previous.id,
-    previousAnalysisDate: previous.date,
+    previousMeasuredAt: measuredDate(previous.measuredAt),
+    currentMeasuredAt: measuredDate(current.measuredAt),
     comparedCount: comparisons.length,
     comparisons,
   };
 }
 
+/**
+ * Selects the previous baseline deterministically.
+ *
+ * When the current test date is known, only dated tests that are not in the
+ * future can be baselines. Same-day tests use analysis creation order as the
+ * tie-breaker. When the current test date is unknown, legacy analysis creation
+ * order is used only for baseline selection; it is never exposed as measuredAt.
+ */
+export function selectPreviousAnalysis(
+  analyses: readonly BloodTestAnalysisComparisonRow[],
+  currentAnalysisId: string,
+  currentMeasuredAt: Date | null,
+  currentCreatedAt: Date,
+): BloodTestAnalysisComparisonRow | null {
+  const candidates = analyses.filter((analysis) => {
+    if (analysis.id === currentAnalysisId) return false;
+
+    if (currentMeasuredAt) {
+      const testDate = analysis.bloodTest.testDate;
+      if (!testDate) return false;
+      const delta = testDate.getTime() - currentMeasuredAt.getTime();
+      if (delta < 0) return true;
+      return delta === 0 && analysis.createdAt.getTime() < currentCreatedAt.getTime();
+    }
+
+    return analysis.createdAt.getTime() < currentCreatedAt.getTime();
+  });
+
+  candidates.sort((left, right) => {
+    if (currentMeasuredAt) {
+      const dateDelta =
+        (right.bloodTest.testDate?.getTime() ?? 0) -
+        (left.bloodTest.testDate?.getTime() ?? 0);
+      if (dateDelta !== 0) return dateDelta;
+    }
+
+    const createdDelta = right.createdAt.getTime() - left.createdAt.getTime();
+    if (createdDelta !== 0) return createdDelta;
+    return left.id.localeCompare(right.id);
+  });
+
+  return candidates[0] ?? null;
+}
+
 export const longitudinalComparisonService = {
-  /**
-   * Builds the longitudinal comparison for a user by locating their most recent
-   * previous COMPLETED analysis (excluding the current one) and comparing its
-   * stored normalized values against the supplied current values.
-   *
-   * @param userId - Owner id.
-   * @param currentAnalysisId - The analysis currently being processed (excluded
-   *   from the baseline search).
-   * @param currentValues - The current analysis normalized values.
-   * @returns The structured comparison, or `null` when no prior analysis exists
-   *   or there are no matching biomarkers.
-   */
   async buildForUser(
     userId: string,
     currentAnalysisId: string,
     currentValues: readonly NormalizedBloodTestValue[],
+    currentMeasuredAt: Date | null,
+    currentCreatedAt: Date,
   ): Promise<LongitudinalComparison | null> {
     try {
-      const analyses = await bloodTestAnalysisRepository.listByUser(userId);
-      const previous = analyses.find(
-        (a) => a.id !== currentAnalysisId && a.status === "COMPLETED",
+      const analyses =
+        await bloodTestAnalysisRepository.listCompletedForComparisonByUser(userId);
+      const previous = selectPreviousAnalysis(
+        analyses,
+        currentAnalysisId,
+        currentMeasuredAt,
+        currentCreatedAt,
       );
       if (!previous) return null;
 
-      const previousValues = (previous.normalizedValues ??
-        []) as unknown as NormalizedBloodTestValue[];
+      const previousValues = previous.normalizedValues;
       if (!Array.isArray(previousValues) || previousValues.length === 0) return null;
 
-      return buildComparison(currentValues, previousValues, {
-        id: previous.id,
-        date: previous.createdAt.toISOString(),
-      });
+      return buildComparison(
+        currentValues,
+        previousValues as unknown as NormalizedBloodTestValue[],
+        {
+          id: previous.id,
+          measuredAt: previous.bloodTest.testDate,
+        },
+        { measuredAt: currentMeasuredAt },
+      );
     } catch (error) {
-      // Advisory-only data prep — never fail the analysis over it.
+      // Comparison is advisory. Failure must not convert a valid analysis into
+      // FAILED, and returning null avoids silent partial/corrupt trend data.
       logger.warn({ err: error, userId }, "Longitudinal comparison preparation failed");
       return null;
     }

@@ -25,7 +25,10 @@ import { extractionService } from "./extraction/extraction.service";
 import { documentEnhancementService } from "./enhancement/document-enhancement.service";
 import { documentQualityAssessmentService } from "./enhancement/document-quality-assessment.service";
 import { documentValidationService } from "./validation/document-validation.service";
-import { longitudinalComparisonService } from "./comparison/longitudinal-comparison.service";
+import {
+  longitudinalComparisonService,
+  type LongitudinalComparison,
+} from "./comparison/longitudinal-comparison.service";
 import { matchBiomarkerCode } from "./normalization/biomarker-aliases.map";
 import { normalizationService } from "./normalization/normalization.service";
 import { referenceRangesService } from "./reference-ranges/reference-ranges.service";
@@ -38,6 +41,47 @@ import type {
   NormalizedBloodTestValue,
   NutritionImplication,
 } from "./types";
+
+export interface PublicBloodTestAnalysisDetail extends PublicBloodTestAnalysis {
+  longitudinalComparison: LongitudinalComparison | null;
+}
+
+function normalizedValuesFromAnalysis(
+  analysis: PublicBloodTestAnalysis,
+): NormalizedBloodTestValue[] {
+  return Array.isArray(analysis.normalizedValues)
+    ? (analysis.normalizedValues as unknown as NormalizedBloodTestValue[])
+    : [];
+}
+
+function measuredAtFromPublicTestDate(testDate: string | null): Date | null {
+  return testDate ? new Date(`${testDate}T00:00:00.000Z`) : null;
+}
+
+async function withLongitudinalComparison(
+  userId: string,
+  analysis: PublicBloodTestAnalysis,
+): Promise<PublicBloodTestAnalysisDetail> {
+  const comparison =
+    analysis.status === "COMPLETED"
+      ? await longitudinalComparisonService.buildForUser(
+          userId,
+          analysis.id,
+          normalizedValuesFromAnalysis(analysis),
+          measuredAtFromPublicTestDate(analysis.testDate),
+          analysis.createdAt,
+        )
+      : null;
+
+  if (comparison) {
+    logger.info(
+      { comparedCount: comparison.comparedCount, analysisId: analysis.id },
+      "Longitudinal blood-test comparison prepared",
+    );
+  }
+
+  return { ...analysis, longitudinalComparison: comparison };
+}
 
 function assertLooksLikeBloodTest(
   extraction: ExtractionResult,
@@ -265,7 +309,7 @@ function reconcileNutritionImplications(
 }
 
 export const bloodTestAnalysisService = {
-  async analyze(userId: string, bloodTestId: string): Promise<PublicBloodTestAnalysis> {
+  async analyze(userId: string, bloodTestId: string): Promise<PublicBloodTestAnalysisDetail> {
     const upload = await bloodTestRepository.findByIdForUser(bloodTestId, userId);
     if (!upload) {
       throw ApiError.notFound("Blood test upload not found.");
@@ -323,18 +367,6 @@ export const bloodTestAnalysisService = {
         isReportClassifiedAbnormal(value),
       );
 
-      const longitudinalComparison = await longitudinalComparisonService.buildForUser(
-        userId,
-        analysis.id,
-        normalized,
-      );
-      if (longitudinalComparison) {
-        logger.info(
-          { comparedCount: longitudinalComparison.comparedCount },
-          "Longitudinal blood-test comparison prepared",
-        );
-      }
-
       const adapter = getAIAdapter();
       const aiResult = await adapter.analyzeBloodTestValues(normalized, context);
       const explanations = reconcileExplanations(normalized, aiResult.explanations);
@@ -371,7 +403,10 @@ export const bloodTestAnalysisService = {
         model: adapter.info.model,
       });
 
-      return toPublicBloodTestAnalysis(completed, upload.testDate);
+      return withLongitudinalComparison(
+        userId,
+        toPublicBloodTestAnalysis(completed, upload.testDate),
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : "Analysis failed.";
       logger.error({ err: error, bloodTestId, userId }, "Blood test analysis failed");
@@ -406,7 +441,7 @@ export const bloodTestAnalysisService = {
   async getByBloodTestId(
     userId: string,
     bloodTestId: string,
-  ): Promise<PublicBloodTestAnalysis> {
+  ): Promise<PublicBloodTestAnalysisDetail> {
     const analysis = await bloodTestFreshnessService.getByBloodTestIdForHistory(
       userId,
       bloodTestId,
@@ -414,7 +449,7 @@ export const bloodTestAnalysisService = {
     if (!analysis) {
       throw ApiError.notFound("No analysis found for this blood test.");
     }
-    return analysis;
+    return withLongitudinalComparison(userId, analysis);
   },
 
   list(userId: string): Promise<PublicBloodTestAnalysis[]> {
