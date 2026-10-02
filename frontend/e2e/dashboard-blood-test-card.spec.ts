@@ -92,7 +92,9 @@ test("blood-test fixed geometry remains aligned at 412x915 and its route stays c
     }
   }
 
+  await setDashboardTheme(page, "light");
   const card = page.locator('[data-blood-test-card][data-theme="light"]:visible');
+  await expect(card).toHaveCount(1);
   await card.locator("[data-blood-test-link]").click();
   await expect(page).toHaveURL(/\/profile\/blood-tests(?:$|\?)/);
 });

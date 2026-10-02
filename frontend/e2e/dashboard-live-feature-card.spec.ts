@@ -149,7 +149,23 @@ test("dashboard fixed-geometry surfaces stay stable at 412x915 and coach CTA rem
       const box = await card.boundingBox();
       expect(box).not.toBeNull();
       expect(box!.height).toBeCloseTo(box!.width / 4.2, 1);
-      await expect(card.locator("[data-dashboard-live-feature-text]")).toHaveCSS("user-select", "none");
+      const textInteraction = await card
+        .locator("[data-dashboard-live-feature-text]")
+        .evaluateAll((nodes) =>
+          nodes.map((node) => ({
+            userSelect: getComputedStyle(node).userSelect,
+            pointerEvents: getComputedStyle(node).pointerEvents,
+            textSizeAdjust:
+              getComputedStyle(node).getPropertyValue("-webkit-text-size-adjust")
+              || getComputedStyle(node).getPropertyValue("text-size-adjust"),
+          })),
+        );
+      expect(textInteraction).toHaveLength(3);
+      for (const item of textInteraction) {
+        expect(item.userSelect).toBe("none");
+        expect(item.pointerEvents).toBe("none");
+        expect(item.textSizeAdjust.trim()).toBe("100%");
+      }
     }
 
     const coach = page.locator("[data-dashboard-coach-banner]");
