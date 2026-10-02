@@ -70,7 +70,7 @@ test("staging Body & Weight acceptance: chronology, CRUD, isolation, graph and s
   const otherEmail = `stage4-weight-b.${runId}@example.com`;
   const password = "Stage4WeightPass123";
 
-  // TEST A — a registered account has a safe empty history before onboarding.
+  // TEST A — a registered but not-onboarded full account is gated from weight tracking.
   await page.goto(`${WEB_BASE_URL}/register`);
   await expect(page.getByRole("heading", { name: "Hesap oluşturun" })).toBeVisible();
   await page.getByLabel("Ad Soyad").fill("Stage4 Weight User A");
@@ -81,7 +81,13 @@ test("staging Body & Weight acceptance: chronology, CRUD, isolation, graph and s
   await expect(page).toHaveURL(/\/consent$/);
 
   let token = await loginForToken(request, email, password);
-  expect(await getHistory(request, token)).toEqual([]);
+  const preOnboardingHistory = await apiJson(request, "get", "/tracking/weight", { token });
+  expect(preOnboardingHistory.response.status()).toBe(403);
+  expect(preOnboardingHistory.body.success).toBe(false);
+  expect(preOnboardingHistory.body.error.code).toBe("ONBOARDING_REQUIRED");
+  expect(preOnboardingHistory.body.error.message).toBe(
+    "Complete onboarding before using this feature.",
+  );
 
   // Consent + onboarding creates exactly one canonical starting-weight entry.
   const consentCheckboxes = page.getByRole("checkbox");
