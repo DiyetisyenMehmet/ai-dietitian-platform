@@ -178,6 +178,8 @@ test("dashboard fixed-geometry surfaces stay stable across mobile viewports and 
       const title = coach.getByText("Diewish Her Zaman Yanında");
       const subtitle = coach.getByText("Daha sağlıklı bir sen için buradayım.");
       const button = coach.getByRole("link", { name: /Hemen Sor/i });
+      const buttonText = button.getByText("Hemen Sor", { exact: true });
+      const buttonIcon = button.locator("svg");
 
       await expect(coach).toBeVisible();
       await expect(coach).toHaveAttribute("data-dashboard-fixed-geometry", "");
@@ -185,6 +187,8 @@ test("dashboard fixed-geometry surfaces stay stable across mobile viewports and 
       await expect(title).toBeVisible();
       await expect(subtitle).toBeVisible();
       await expect(button).toBeVisible();
+      await expect(buttonText).toBeVisible();
+      await expect(buttonIcon).toBeVisible();
 
       const decorativeInteraction = await decorativeText.evaluate((node) => ({
         userSelect: getComputedStyle(node).userSelect,
@@ -201,14 +205,20 @@ test("dashboard fixed-geometry surfaces stay stable across mobile viewports and 
       const titleBox = await title.boundingBox();
       const subtitleBox = await subtitle.boundingBox();
       const buttonBox = await button.boundingBox();
+      const buttonTextBox = await buttonText.boundingBox();
+      const buttonIconBox = await buttonIcon.boundingBox();
       expect(coachBox).not.toBeNull();
       expect(titleBox).not.toBeNull();
       expect(subtitleBox).not.toBeNull();
       expect(buttonBox).not.toBeNull();
+      expect(buttonTextBox).not.toBeNull();
+      expect(buttonIconBox).not.toBeNull();
 
       const titleRight = titleBox!.x + titleBox!.width;
       const subtitleRight = subtitleBox!.x + subtitleBox!.width;
       const buttonRight = buttonBox!.x + buttonBox!.width;
+      const buttonTextRight = buttonTextBox!.x + buttonTextBox!.width;
+      const buttonIconRight = buttonIconBox!.x + buttonIconBox!.width;
       const coachRight = coachBox!.x + coachBox!.width;
 
       console.info(
@@ -225,18 +235,32 @@ test("dashboard fixed-geometry surfaces stay stable across mobile viewports and 
             width: buttonBox!.width,
             height: buttonBox!.height,
           },
+          buttonText: {
+            x: buttonTextBox!.x,
+            right: buttonTextRight,
+            width: buttonTextBox!.width,
+          },
+          buttonIcon: {
+            x: buttonIconBox!.x,
+            right: buttonIconRight,
+            width: buttonIconBox!.width,
+          },
           titleGap: buttonBox!.x - titleRight,
         }),
       );
 
-      expect(titleRight).toBeLessThanOrEqual(buttonBox!.x + 1);
+      expect(titleRight).toBeLessThanOrEqual(buttonBox!.x);
       expect(buttonBox!.x - titleRight).toBeGreaterThanOrEqual(4);
-      expect(subtitleRight).toBeLessThanOrEqual(buttonBox!.x + 1);
+      expect(subtitleRight).toBeLessThanOrEqual(buttonBox!.x);
       expect(titleBox!.x).toBeGreaterThanOrEqual(coachBox!.x - 1);
       expect(subtitleBox!.x).toBeGreaterThanOrEqual(coachBox!.x - 1);
       expect(buttonRight).toBeLessThanOrEqual(coachRight + 1);
       expect(buttonBox!.width).toBeGreaterThanOrEqual(80);
       expect(buttonBox!.height).toBeGreaterThanOrEqual(32);
+      expect(buttonTextBox!.x).toBeGreaterThanOrEqual(buttonBox!.x);
+      expect(buttonTextRight).toBeLessThanOrEqual(buttonRight);
+      expect(buttonIconBox!.x).toBeGreaterThanOrEqual(buttonBox!.x);
+      expect(buttonIconRight).toBeLessThanOrEqual(buttonRight);
     }
   }
 
