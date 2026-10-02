@@ -8,7 +8,7 @@ import { cn } from "@/shared/lib/utils";
 import { Card, CardContent } from "@/presentation/components/ui/card";
 import { ProgressBar } from "@/presentation/components/ui/progress-bar";
 import { healthIcon } from "@/presentation/components/health/health-icon";
-import { useDailyTasks, summarizeTasks } from "@/application/health/daily-tasks";
+import { useDailyTasksResult, summarizeTasks } from "@/application/health/daily-tasks";
 import type { DailyTask } from "@/domain/health/types";
 
 function TaskRow({ task }: { task: DailyTask }) {
@@ -59,9 +59,8 @@ function TaskRow({ task }: { task: DailyTask }) {
 
 /** Dynamic "Today's Tasks" checklist derived from the user's real activity. */
 export function TodayTasksSection() {
-  const tasks = useDailyTasks();
+  const { tasks, allDone } = useDailyTasksResult();
   const { done, total, percent } = summarizeTasks(tasks);
-  const allDone = done === total;
 
   return (
     <section className="space-y-3">

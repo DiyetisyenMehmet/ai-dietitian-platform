@@ -43,6 +43,8 @@ function emptyState(): ActivityState {
 }
 
 let state: ActivityState = emptyState();
+let sessionVersion = 0;
+let writeVersion = 0;
 const listeners = new Set<() => void>();
 let rolloverTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -101,6 +103,8 @@ function getSnapshot() {
 
 export const activityStore = {
   async hydrateFromBackend(): Promise<boolean> {
+    const session = sessionVersion;
+    const revision = writeVersion;
     const targetDay = localDayKey();
     if (state.dayKey !== targetDay) {
       ensureCurrentDay();
@@ -109,6 +113,7 @@ export const activityStore = {
 
     try {
       const { activities } = await activityClient.listActivities(startOfLocalDay());
+      if (session !== sessionVersion || revision !== writeVersion) return false;
       if (localDayKey() !== targetDay) {
         ensureCurrentDay();
         listeners.forEach((listener) => listener());
@@ -122,6 +127,7 @@ export const activityStore = {
       });
       return true;
     } catch {
+      if (session !== sessionVersion || revision !== writeVersion) return false;
       if (state.dayKey === targetDay) setState({ readiness: "UNKNOWN" });
       return false;
     }
@@ -136,14 +142,17 @@ export const activityStore = {
     caloriesBurned?: number;
     note?: string;
   }): Promise<Activity> {
+    const session = sessionVersion;
     ensureCurrentDay();
-    const previousReadiness = state.readiness;
     const { activity } = await activityClient.logActivity(input);
+    if (session !== sessionVersion) return activity;
+    ensureCurrentDay();
+    writeVersion++;
     if (isIsoOnLocalDay(activity.loggedAt, state.dayKey)) {
       const activities = [activity, ...state.activities.filter((item) => item.id !== activity.id)];
       setState({
         activities,
-        readiness: previousReadiness === "UNKNOWN" ? "UNKNOWN" : "KNOWN",
+        readiness: state.readiness === "UNKNOWN" ? "UNKNOWN" : "KNOWN",
         ...summarize(activities),
       });
     }
@@ -151,13 +160,16 @@ export const activityStore = {
   },
 
   async deleteActivity(activityId: string): Promise<void> {
+    const session = sessionVersion;
     ensureCurrentDay();
-    const previousReadiness = state.readiness;
     await activityClient.deleteActivity(activityId);
+    if (session !== sessionVersion) return;
+    ensureCurrentDay();
+    writeVersion++;
     const activities = state.activities.filter((item) => item.id !== activityId);
     setState({
       activities,
-      readiness: previousReadiness === "UNKNOWN" ? "UNKNOWN" : readinessFromCount(activities.length),
+      readiness: state.readiness === "UNKNOWN" ? "UNKNOWN" : readinessFromCount(activities.length),
       ...summarize(activities),
     });
   },
@@ -174,6 +186,8 @@ export const activityStore = {
     setState({ activeMinutesGoal: Math.max(0, goal) });
   },
   reset() {
+    sessionVersion++;
+    writeVersion++;
     state = emptyState();
     listeners.forEach((listener) => listener());
   },

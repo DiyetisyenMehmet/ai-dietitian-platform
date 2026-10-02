@@ -79,6 +79,8 @@ function toFoodItem(log: MealLog, quantity = ""): FoodItem {
 let meals: Meal[] = emptyMeals();
 let cacheDayKey = localDayKey();
 let readiness: DailyDataReadiness = "UNKNOWN";
+let sessionVersion = 0;
+let writeVersion = 0;
 const listeners = new Set<() => void>();
 let rolloverTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -142,6 +144,8 @@ export interface AddFoodPayload {
 
 export const mealsStore = {
   async hydrateMealsFromBackend(): Promise<void> {
+    const session = sessionVersion;
+    const revision = writeVersion;
     const targetDay = localDayKey();
     if (cacheDayKey !== targetDay) {
       cacheDayKey = targetDay;
@@ -152,6 +156,7 @@ export const mealsStore = {
 
     try {
       const { logs } = await mealsClient.listMeals(startOfLocalDay());
+      if (session !== sessionVersion || revision !== writeVersion) return;
       if (localDayKey() !== targetDay) {
         ensureCurrentDay();
         emit();
@@ -174,6 +179,7 @@ export const mealsStore = {
       readiness = readinessFromCount(todayLogs.length);
       emit();
     } catch {
+      if (session !== sessionVersion || revision !== writeVersion) return;
       if (cacheDayKey === targetDay) {
         readiness = "UNKNOWN";
         emit();
@@ -182,8 +188,8 @@ export const mealsStore = {
   },
 
   async addFood({ slot, time, food }: AddFoodPayload): Promise<void> {
+    const session = sessionVersion;
     ensureCurrentDay();
-    const previousReadiness = readiness;
     const { log } = await mealsClient.logMeal({
       mealType: MEAL_TYPE_BY_SLOT[slot],
       name: food.name,
@@ -192,6 +198,9 @@ export const mealsStore = {
       carbsG: food.carbs,
       fatG: food.fat,
     });
+    if (session !== sessionVersion) return;
+    ensureCurrentDay();
+    writeVersion++;
     if (!isIsoOnLocalDay(log.loggedAt, cacheDayKey)) return;
 
     meals = meals.map((meal) =>
@@ -203,34 +212,42 @@ export const mealsStore = {
           }
         : meal,
     );
-    readiness = previousReadiness === "UNKNOWN" ? "UNKNOWN" : "KNOWN";
+    readiness = readiness === "UNKNOWN" ? "UNKNOWN" : "KNOWN";
     emit();
   },
 
   async markMealEaten(slot: MealSlot): Promise<void> {
+    const session = sessionVersion;
     ensureCurrentDay();
     const current = meals.find((meal) => meal.slot === slot);
     if (current?.isEaten) return;
 
-    const previousReadiness = readiness;
     const { log } = await mealsClient.logMeal({ mealType: MEAL_TYPE_BY_SLOT[slot] });
+    if (session !== sessionVersion) return;
+    ensureCurrentDay();
+    writeVersion++;
     if (!isIsoOnLocalDay(log.loggedAt, cacheDayKey)) return;
 
     meals = meals.map((meal) =>
       meal.slot === slot ? { ...meal, isEaten: true, checkInId: log.id } : meal,
     );
-    readiness = previousReadiness === "UNKNOWN" ? "UNKNOWN" : "KNOWN";
+    readiness = readiness === "UNKNOWN" ? "UNKNOWN" : "KNOWN";
     emit();
   },
 
   async unmarkMealEaten(slot: MealSlot): Promise<void> {
+    const session = sessionVersion;
     ensureCurrentDay();
     const current = meals.find((meal) => meal.slot === slot);
     if (!current?.checkInId) return;
 
     await mealsClient.deleteMeal(current.checkInId);
+    if (session !== sessionVersion) return;
+    ensureCurrentDay();
+    writeVersion++;
     meals = meals.map((meal) =>
-      meal.slot === slot ? { ...meal, isEaten: false, checkInId: null } : meal,
+      meal.slot === slot && meal.checkInId === current.checkInId
+        ? { ...meal, isEaten: false, checkInId: null } : meal,
     );
     if (readiness !== "UNKNOWN") readiness = readinessFromCount(entryCount(meals));
     emit();
@@ -241,6 +258,7 @@ export const mealsStore = {
     foodId: string,
     patch: Partial<Omit<FoodItem, "id">>,
   ): Promise<void> {
+    const session = sessionVersion;
     ensureCurrentDay();
     const { log } = await mealsClient.updateMeal(foodId, {
       ...(patch.name !== undefined ? { name: patch.name } : {}),
@@ -249,6 +267,9 @@ export const mealsStore = {
       ...(patch.carbs !== undefined ? { carbsG: patch.carbs } : {}),
       ...(patch.fat !== undefined ? { fatG: patch.fat } : {}),
     });
+    if (session !== sessionVersion) return;
+    ensureCurrentDay();
+    writeVersion++;
 
     meals = meals.map((meal) =>
       meal.slot === slot
@@ -266,8 +287,12 @@ export const mealsStore = {
   },
 
   async deleteFood(slot: MealSlot, foodId: string): Promise<void> {
+    const session = sessionVersion;
     ensureCurrentDay();
     await mealsClient.deleteMeal(foodId);
+    if (session !== sessionVersion) return;
+    ensureCurrentDay();
+    writeVersion++;
     meals = meals.map((meal) =>
       meal.slot === slot ? { ...meal, foods: meal.foods.filter((food) => food.id !== foodId) } : meal,
     );
@@ -276,6 +301,8 @@ export const mealsStore = {
   },
 
   reset() {
+    sessionVersion++;
+    writeVersion++;
     cacheDayKey = localDayKey();
     readiness = "UNKNOWN";
     meals = emptyMeals();

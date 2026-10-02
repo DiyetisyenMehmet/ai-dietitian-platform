@@ -364,7 +364,7 @@ export function ActivityView() {
             </p>
           )}
         </div>
-        {readiness === "UNKNOWN" ? (
+        {readiness === "UNKNOWN" && activities.length === 0 ? (
           <Card>
             <CardContent className="p-5 text-center text-sm text-muted-foreground">
               Bugünkü hareket kayıtları doğrulanamadı.

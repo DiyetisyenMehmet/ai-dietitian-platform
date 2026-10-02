@@ -17,6 +17,7 @@ import { goalsStore } from "@/application/goals/goals-store";
 
 /** Last authenticated account whose client caches were hydrated. */
 let cacheOwnerUserId: string | null = null;
+let hydrationVersion = 0;
 
 /**
  * Clears all user-specific browser caches before switching accounts. Billing is
@@ -61,6 +62,7 @@ export function hydrateStoresFromProfile(profile: OnboardingProfile, fullName: s
 
 /** Fetches authoritative profile + tracking data and hydrates session caches. */
 export async function hydrateProfileFromBackend(userId: string, fullName: string): Promise<void> {
+  const version = ++hydrationVersion;
   const ownerChanged = cacheOwnerUserId !== userId;
   if (ownerChanged) {
     resetUserCaches();
@@ -72,12 +74,14 @@ export async function hydrateProfileFromBackend(userId: string, fullName: string
   let profile: OnboardingProfile | null = null;
   try {
     const response = await onboardingClient.getProfile();
+    if (version !== hydrationVersion) return;
     profile = response.profile;
     if (profile) hydrateStoresFromProfile(profile, fullName);
   } catch {
     // Keep neutral caches + authenticated name; do not fall back to demo values.
   }
 
+  if (version !== hydrationVersion) return;
   const nutritionPlanPromise = nutritionPlanStore.hydrateFromBackend();
 
   const [, , , , , , , activePlan] = await Promise.all([
@@ -91,11 +95,13 @@ export async function hydrateProfileFromBackend(userId: string, fullName: string
     nutritionPlanPromise,
   ]);
 
+  if (version !== hydrationVersion) return;
   healthProfileStore.update({ dailyCalorieGoal: activePlan?.dailyCalories ?? 0 });
 }
 
 /** Explicitly clears all user health/chat/billing caches when the session ends. */
 export function clearHydratedProfileCaches(): void {
+  hydrationVersion++;
   cacheOwnerUserId = null;
   resetUserCaches();
 }

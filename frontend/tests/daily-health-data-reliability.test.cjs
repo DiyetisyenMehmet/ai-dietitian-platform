@@ -103,11 +103,13 @@ test("account switch and logout cache reset includes every audited daily source"
   }
 });
 
-test("daily weight task uses local calendar semantics instead of UTC date shortcut", () => {
-  const source = read("src/application/health/daily-tasks.ts");
-  assert.match(source, /const today = localDayKey\(\)/);
-  assert.match(source, /localCalendarDayDistance\(latest\.date, today\)/);
-  assert.doesNotMatch(source, /new Date\(\)\.toISOString\(\)\.slice\(0, 10\)/);
+test("daily weight task uses authoritative status and the local day", () => {
+  const { harness } = require("./helpers/daily-harness.cjs");
+  const h = harness();
+  h.setCheckIn({ active: false, required: true, lastLoggedAt: null, nextDueAt: null });
+  assert.equal(h.load("application/health/daily-tasks.ts").useDailyTasks().some(t => t.kind === "weight"), false);
+  h.setCheckIn({ active: true, required: false, lastLoggedAt: h.iso(), nextDueAt: null });
+  assert.equal(h.load("application/health/daily-tasks.ts").useDailyTasks().find(t => t.kind === "weight").done, true);
 });
 
 test("backdated weight cannot replace currentWeightKg merely because it was written later", () => {

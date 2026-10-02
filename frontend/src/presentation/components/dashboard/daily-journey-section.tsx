@@ -8,7 +8,7 @@ import { cn } from "@/shared/lib/utils";
 import { Card, CardContent } from "@/presentation/components/ui/card";
 import { ProgressBar } from "@/presentation/components/ui/progress-bar";
 import { healthIcon } from "@/presentation/components/health/health-icon";
-import { useDailyJourney, summarizeJourney } from "@/application/health/daily-journey";
+import { useDailyJourneyResult, summarizeJourney } from "@/application/health/daily-journey";
 import type { JourneyStep, JourneyStepState } from "@/domain/health/types";
 
 const STATE_META: Record<
@@ -114,9 +114,8 @@ function StepRow({ step, last }: { step: JourneyStep; last: boolean }) {
  * what is pending, what is recommended next, and what was skipped.
  */
 export function DailyJourneySection() {
-  const steps = useDailyJourney();
+  const { steps, allDone } = useDailyJourneyResult();
   const { completed, total, percent } = summarizeJourney(steps);
-  const allDone = completed === total;
 
   return (
     <section className="space-y-3">

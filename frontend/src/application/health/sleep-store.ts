@@ -21,6 +21,7 @@ let state: SleepDailyState = {
   readiness: "UNKNOWN",
   assessment: null,
 };
+let sessionVersion = 0;
 const listeners = new Set<() => void>();
 let rolloverTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -67,12 +68,14 @@ function getSnapshot(): SleepDailyState {
 
 export const sleepStore = {
   async hydrateTodayFromBackend(dayKey = localDayKey()): Promise<boolean> {
+    const session = sessionVersion;
     if (state.dayKey !== dayKey) {
       resetForDay(dayKey);
       emit();
     }
     try {
       const { assessment } = await sleepClient.dailyAssessment(dayKey);
+      if (session !== sessionVersion) return false;
       if (localDayKey() !== dayKey) {
         resetForDay();
         emit();
@@ -82,6 +85,7 @@ export const sleepStore = {
       emit();
       return true;
     } catch {
+      if (session !== sessionVersion) return false;
       if (state.dayKey === dayKey) {
         state = { ...state, readiness: "UNKNOWN" };
         emit();
@@ -107,6 +111,7 @@ export const sleepStore = {
   },
 
   reset(): void {
+    sessionVersion++;
     resetForDay();
     emit();
   },

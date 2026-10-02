@@ -67,7 +67,7 @@ function buildTrend(logs: WaterLog[], days: number): TrendPoint[] {
 
 /** Complete persisted FR-010 water experience. */
 export function WaterSection() {
-  const { waterMl, waterGoalMl, waterReadiness } = useDailyTracking();
+  const { waterMl, waterGoalMl, waterReadiness, confirmedWaterMl } = useDailyTracking();
   const [logs, setLogs] = React.useState<WaterLog[]>([]);
   const [goalDraft, setGoalDraft] = React.useState("");
   const [trendDays, setTrendDays] = React.useState<7 | 30>(7);
@@ -209,13 +209,15 @@ export function WaterSection() {
             <div>
               <p className="text-sm font-semibold">Su Takibi</p>
               <p className="text-xs text-muted-foreground">
-                {loading
-                  ? "Yükleniyor…"
-                  : waterReadiness === "UNKNOWN"
-                    ? "Bugünkü su verisi doğrulanamadı"
-                    : waterGoalMl > 0
-                      ? `${formatNumber(waterMl)} / ${formatNumber(waterGoalMl)} ml`
-                      : `${formatNumber(waterMl)} ml`}
+                {waterReadiness === "UNKNOWN" && confirmedWaterMl > 0
+                  ? `${formatNumber(confirmedWaterMl)} ml kaydın eklendi; günlük toplam doğrulanamadı`
+                  : loading
+                    ? "Yükleniyor…"
+                    : waterReadiness === "UNKNOWN"
+                      ? "Bugünkü su verisi doğrulanamadı"
+                      : waterGoalMl > 0
+                        ? `${formatNumber(waterMl)} / ${formatNumber(waterGoalMl)} ml`
+                        : `${formatNumber(waterMl)} ml`}
               </p>
             </div>
           </div>

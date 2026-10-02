@@ -16,6 +16,8 @@ interface DailyTrackingState {
   dayKey: string;
   waterReadiness: DailyDataReadiness;
   waterMl: number;
+  /** Persisted writes confirmed this session; not the full daily aggregate. */
+  confirmedWaterMl: number;
   waterGoalMl: number;
   chattedToday: boolean;
 }
@@ -27,12 +29,16 @@ function emptyState(): DailyTrackingState {
     dayKey: localDayKey(),
     waterReadiness: "UNKNOWN",
     waterMl: 0,
+    confirmedWaterMl: 0,
     waterGoalMl: 0,
     chattedToday: false,
   };
 }
 
 let state: DailyTrackingState = emptyState();
+const confirmedWater = new Map<string, WaterLog>();
+let sessionVersion = 0;
+let writeVersion = 0;
 const listeners = new Set<() => void>();
 let rolloverTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -44,11 +50,13 @@ function setState(next: Partial<DailyTrackingState>) {
 function ensureCurrentDay(): boolean {
   const current = localDayKey();
   if (state.dayKey === current) return false;
+  confirmedWater.clear();
   state = {
     ...state,
     dayKey: current,
     waterReadiness: "UNKNOWN",
     waterMl: 0,
+    confirmedWaterMl: 0,
     chattedToday: false,
   };
   return true;
@@ -82,6 +90,8 @@ function getSnapshot() {
 
 export const dailyTrackingStore = {
   async hydrateWaterFromBackend(): Promise<boolean> {
+    const session = sessionVersion;
+    const revision = writeVersion;
     const targetDay = localDayKey();
     if (state.dayKey !== targetDay) {
       ensureCurrentDay();
@@ -90,6 +100,7 @@ export const dailyTrackingStore = {
 
     try {
       const { logs } = await trackingClient.listWater(startOfLocalDay());
+      if (session !== sessionVersion || revision !== writeVersion) return false;
       if (localDayKey() !== targetDay) {
         ensureCurrentDay();
         listeners.forEach((listener) => listener());
@@ -103,29 +114,42 @@ export const dailyTrackingStore = {
       });
       return true;
     } catch {
+      if (session !== sessionVersion || revision !== writeVersion) return false;
       if (state.dayKey === targetDay) setState({ waterReadiness: "UNKNOWN" });
       return false;
     }
   },
 
   async addWater(amountMl: number = WATER_GLASS_ML): Promise<WaterLog> {
+    const session = sessionVersion;
     ensureCurrentDay();
-    const previousReadiness = state.waterReadiness;
     const { log } = await trackingClient.logWater(amountMl);
+    if (session !== sessionVersion) return log;
+    ensureCurrentDay();
+    writeVersion++;
     if (isIsoOnLocalDay(log.loggedAt, state.dayKey)) {
+      confirmedWater.set(log.id, log);
       setState({
+        confirmedWaterMl: [...confirmedWater.values()].reduce((sum, entry) => sum + entry.amountMl, 0),
         waterMl: Math.max(0, state.waterMl + log.amountMl),
-        waterReadiness: previousReadiness === "UNKNOWN" ? "UNKNOWN" : "KNOWN",
+        waterReadiness: state.waterReadiness === "UNKNOWN" ? "UNKNOWN" : "KNOWN",
       });
     }
+    if (state.waterReadiness === "UNKNOWN") await this.hydrateWaterFromBackend();
     return log;
   },
 
   async removeWater(logId: string, amountMl?: number): Promise<void> {
+    const session = sessionVersion;
     ensureCurrentDay();
-    const previousReadiness = state.waterReadiness;
+    const targetDay = state.dayKey;
     await trackingClient.deleteWater(logId);
-    if (amountMl !== undefined && previousReadiness !== "UNKNOWN") {
+    if (session !== sessionVersion) return;
+    ensureCurrentDay();
+    writeVersion++;
+    confirmedWater.delete(logId);
+    setState({ confirmedWaterMl: [...confirmedWater.values()].reduce((sum, entry) => sum + entry.amountMl, 0) });
+    if (targetDay === state.dayKey && amountMl !== undefined && state.waterReadiness !== "UNKNOWN") {
       const waterMl = Math.max(0, state.waterMl - Math.max(0, amountMl));
       setState({ waterMl, waterReadiness: waterMl === 0 ? "KNOWN_ZERO" : "KNOWN" });
     }
@@ -142,6 +166,9 @@ export const dailyTrackingStore = {
   },
 
   reset() {
+    confirmedWater.clear();
+    sessionVersion++;
+    writeVersion++;
     state = emptyState();
     listeners.forEach((listener) => listener());
   },
