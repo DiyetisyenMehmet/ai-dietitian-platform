@@ -55,6 +55,7 @@ test("longitudinal analysis detail is owner-scoped and uses real test dates", as
         email: `${prefix}-${label}@example.com`,
         passwordHash: "LONGITUDINAL-TEST",
         fullName: `Longitudinal ${label}`,
+        onboardingCompleted: true,
       },
     });
     userIds.push(user.id);
