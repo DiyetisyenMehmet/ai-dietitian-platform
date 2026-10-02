@@ -86,7 +86,7 @@ test("sleep daily readiness is backed by the real daily-assessment endpoint", ()
   assert.match(store, /readinessFromCount\(assessment\.entries\)/);
   assert.match(store, /readiness: "UNKNOWN"/);
   assert.match(view, /Promise\.allSettled/);
-  assert.match(view, /sleepStore\.markUnknown\(today\)/);
+  assert.match(view, /sleepStore\.hydrateTodayFromBackend\(today\)/);
   assert.match(view, /Günlük uyku verisi doğrulanamadı/);
 });
 

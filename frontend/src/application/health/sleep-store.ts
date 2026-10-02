@@ -94,22 +94,6 @@ export const sleepStore = {
     }
   },
 
-  setDailyAssessment(assessment: DailySleepAssessment): void {
-    if (assessment.date !== localDayKey()) return;
-    state = {
-      dayKey: assessment.date,
-      readiness: readinessFromCount(assessment.entries),
-      assessment,
-    };
-    emit();
-  },
-
-  markUnknown(dayKey = localDayKey()): void {
-    if (state.dayKey !== dayKey) resetForDay(dayKey);
-    else state = { ...state, readiness: "UNKNOWN" };
-    emit();
-  },
-
   reset(): void {
     sessionVersion++;
     resetForDay();

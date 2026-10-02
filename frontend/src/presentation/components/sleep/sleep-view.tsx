@@ -73,7 +73,7 @@ export function SleepView() {
     const since = new Date(Date.now() - 14 * DAY_MS);
     const [logResult, dailyResult, weeklyResult] = await Promise.allSettled([
       sleepClient.list(since),
-      sleepClient.dailyAssessment(today),
+      sleepStore.hydrateTodayFromBackend(today),
       sleepClient.weeklyAnalysis(today),
     ]);
 
@@ -81,12 +81,7 @@ export function SleepView() {
     if (logResult.status === "fulfilled") setLogs(logResult.value.sleeps);
     else failed = true;
 
-    if (dailyResult.status === "fulfilled") {
-      sleepStore.setDailyAssessment(dailyResult.value.assessment);
-    } else {
-      sleepStore.markUnknown(today);
-      failed = true;
-    }
+    if (dailyResult.status === "rejected" || !dailyResult.value) failed = true;
 
     if (weeklyResult.status === "fulfilled") setWeekly(weeklyResult.value.analysis);
     else failed = true;
