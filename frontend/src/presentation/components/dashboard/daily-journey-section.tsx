@@ -34,7 +34,7 @@ const STATE_META: Record<
     row: "border-border bg-card hover:bg-accent/40",
   },
   skipped: {
-    badge: "Atlandı",
+    badge: "Kayıt zamanı geçti",
     badgeClass: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
     iconWrap: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
     row: "border-border/60 bg-card hover:bg-accent/40",
@@ -99,7 +99,10 @@ function StepRow({ step, last }: { step: JourneyStep; last: boolean }) {
   if (clickable && step.href) {
     return (
       <li>
-        <Link href={step.href} className="block focus-visible:outline-none">
+        <Link
+          href={step.href}
+          className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        >
           {inner}
         </Link>
       </li>
@@ -114,28 +117,47 @@ function StepRow({ step, last }: { step: JourneyStep; last: boolean }) {
  * what is pending, what is recommended next, and what was skipped.
  */
 export function DailyJourneySection() {
-  const { steps, allDone } = useDailyJourneyResult();
+  const { steps, status } = useDailyJourneyResult();
   const { completed, total, percent } = summarizeJourney(steps);
+  const allDone = status === "all-done";
+  const insufficientData = status === "insufficient-data";
+  const noActionableStep = status === "no-actionable-step";
 
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between">
         <h3 className="text-base font-semibold">Bugünkü Yolculuğun</h3>
         <span className="text-xs font-medium text-muted-foreground">
-          {completed}/{total} adım
+          {insufficientData ? "Veri bekleniyor" : `${completed}/${total} adım`}
         </span>
       </div>
       <Card>
         <CardContent className="space-y-4 p-4">
-          <div>
-            <div className="mb-1.5 flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">
-                {allDone ? "Bugünün yolculuğunu tamamladın! 🎉" : "Günlük yolculuğun"}
-              </span>
-              <span className="font-semibold">%{percent}</span>
+          {insufficientData ? (
+            <div className="rounded-xl bg-muted/40 p-3">
+              <p className="text-sm font-medium">
+                Bugünkü öneriyi netleştirmek için bazı takip verileri henüz hazır değil.
+              </p>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                Verilerin geldikçe yolculuğun otomatik güncellenecek.
+              </p>
             </div>
-            <ProgressBar value={percent} />
-          </div>
+          ) : (
+            <div>
+              <div className="mb-1.5 flex items-center justify-between gap-3 text-xs">
+                <span className="text-muted-foreground">
+                  {allDone ? "Bugünün yolculuğunu tamamladın! 🎉" : "Günlük yolculuğun"}
+                </span>
+                <span className="shrink-0 font-semibold">%{percent}</span>
+              </div>
+              {noActionableStep && (
+                <p className="mb-2 text-xs leading-relaxed text-muted-foreground">
+                  Şu an açılacak yeni bir adım yok. Günlük ilerlemeni burada takip edebilirsin.
+                </p>
+              )}
+              <ProgressBar value={percent} />
+            </div>
+          )}
           <ul className="space-y-2">
             {steps.map((step, i) => (
               <StepRow key={step.kind} step={step} last={i === steps.length - 1} />

@@ -12,7 +12,7 @@ import { DashboardFeatureLinks } from "@/presentation/components/dashboard/dashb
 import { DashboardHomeHeader } from "@/presentation/components/dashboard/dashboard-home-header";
 import { DashboardMetricsSection } from "@/presentation/components/dashboard/dashboard-metrics-section";
 import { DashboardQuickActions } from "@/presentation/components/dashboard/dashboard-quick-actions";
-import { CoachHeroSection } from "@/presentation/components/dashboard/coach-hero-section";
+import { DailyJourneySection } from "@/presentation/components/dashboard/daily-journey-section";
 import { TodayProgressSection } from "@/presentation/components/dashboard/today-progress-section";
 import { CoachInsightCard } from "@/presentation/components/health/coach-insight-card";
 
@@ -31,6 +31,7 @@ export function DashboardView() {
   return (
     <div className="animate-fade-in space-y-5">
       <DashboardHomeHeader userName={displayName} />
+      <DailyJourneySection />
       <DashboardMetricsSection />
       <DashboardQuickActions />
       <DashboardFeatureLinks />
@@ -49,7 +50,6 @@ export function DashboardView() {
 
         {showDetails && (
           <div className="animate-fade-in space-y-6 pt-4">
-            <CoachHeroSection />
             <TodayProgressSection />
 
             {secondaryInsights.length > 0 && (

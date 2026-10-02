@@ -114,6 +114,16 @@ jobs:
         run: node --test tests/dashboard-blood-test-card.test.cjs
       - name: Test Food and Progress card coordinate contract
         run: node --test tests/dashboard-live-feature-card.test.cjs
+      - name: Test Journey dashboard activation and daily source reliability
+        env:
+          TZ: Europe/Istanbul
+        run: >-
+          node --test
+          tests/journey-engine.test.cjs
+          tests/journey-sources.test.cjs
+          tests/daily-health-data-reliability.test.cjs
+          tests/sleep-account-isolation.test.cjs
+          tests/journey-dashboard-activation.test.cjs
       - name: Validate staging History runtime spec syntax
         run: node --check e2e/staging-history-runtime.spec.js
       - name: Lint frontend
