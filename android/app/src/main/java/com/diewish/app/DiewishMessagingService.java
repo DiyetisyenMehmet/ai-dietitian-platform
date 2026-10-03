@@ -80,7 +80,17 @@ public final class DiewishMessagingService extends FirebaseMessagingService {
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build();
         manager.notify(id.hashCode(), notification);
-        DiewishNotificationUnreadStore.markUnread(getApplicationContext(), unreadId);
+        Context appContext = getApplicationContext();
+        DiewishNotificationInboxStore.record(
+            appContext,
+            unreadId,
+            id,
+            title,
+            body,
+            path,
+            System.currentTimeMillis()
+        );
+        DiewishNotificationUnreadStore.markUnread(appContext, unreadId);
         remember(id);
     }
 

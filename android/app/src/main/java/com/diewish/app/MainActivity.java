@@ -257,7 +257,7 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
             "diewish:notification-state",
             jsonObject(
                 "unreadCount",
-                DiewishNotificationUnreadStore.count(getApplicationContext())
+                DiewishNotificationInboxStore.unreadCount(getApplicationContext())
             )
         );
     }

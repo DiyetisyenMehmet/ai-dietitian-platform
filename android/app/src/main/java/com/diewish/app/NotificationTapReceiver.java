@@ -17,10 +17,9 @@ public final class NotificationTapReceiver extends BroadcastReceiver {
         if (intent == null) return;
         String action = intent.getAction();
         String notificationId = intent.getStringExtra(EXTRA_NOTIFICATION_ID);
-        DiewishNotificationUnreadStore.markRead(
-            context.getApplicationContext(),
-            notificationId
-        );
+        Context appContext = context.getApplicationContext();
+        DiewishNotificationUnreadStore.markRead(appContext, notificationId);
+        DiewishNotificationInboxStore.markRead(appContext, notificationId);
 
         if (ACTION_DISMISS.equals(action)) return;
         if (!ACTION_OPEN.equals(action)) return;

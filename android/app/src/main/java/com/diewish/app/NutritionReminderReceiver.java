@@ -71,6 +71,16 @@ public final class NutritionReminderReceiver extends BroadcastReceiver {
             .build();
 
         manager.notify(id == null ? 41 : id.hashCode(), notification);
-        DiewishNotificationUnreadStore.markUnread(context.getApplicationContext(), unreadId);
+        Context appContext = context.getApplicationContext();
+        DiewishNotificationInboxStore.record(
+            appContext,
+            unreadId,
+            null,
+            "Diewish",
+            "Öğün saatin geldi. Planını kontrol edebilirsin.",
+            NotificationRoutes.MEALS,
+            System.currentTimeMillis()
+        );
+        DiewishNotificationUnreadStore.markUnread(appContext, unreadId);
     }
 }

@@ -79,7 +79,17 @@ public final class WellnessReminderReceiver extends BroadcastReceiver {
             .setAutoCancel(true)
             .build();
         manager.notify(requestCode, notification);
-        DiewishNotificationUnreadStore.markUnread(context.getApplicationContext(), unreadId);
+        Context appContext = context.getApplicationContext();
+        DiewishNotificationInboxStore.record(
+            appContext,
+            unreadId,
+            null,
+            title,
+            body,
+            NotificationRoutes.forWellnessType(type),
+            System.currentTimeMillis()
+        );
+        DiewishNotificationUnreadStore.markUnread(appContext, unreadId);
         return true;
     }
 }
