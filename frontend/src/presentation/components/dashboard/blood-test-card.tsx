@@ -58,23 +58,32 @@ export function BloodTestCard({
             {copy.example}
           </span>
         </div>
-        <div className="dashboard-blood-preview" data-blood-test-preview>
-          <div className="dashboard-blood-heading">
-            <span className="font-semibold" data-blood-test-live-text>
-              {copy.panelTitle}
-            </span>
-            <span className="dashboard-blood-status" data-blood-test-live-text>
-              {copy.status}
-            </span>
+        <div className="dashboard-blood-summary" data-blood-test-summary>
+          <div className="dashboard-blood-preview" data-blood-test-preview>
+            <div className="dashboard-blood-heading">
+              <span className="font-semibold" data-blood-test-live-text>
+                {copy.panelTitle}
+              </span>
+              <span className="dashboard-blood-status" data-blood-test-live-text>
+                {copy.status}
+              </span>
+            </div>
+            <dl className="dashboard-blood-rows">
+              {copy.labels.map((label, index) => (
+                <div className="dashboard-blood-row" key={label} data-blood-test-row={index + 1}>
+                  <dt data-blood-test-live-text>{label}</dt>
+                  <dd data-blood-test-live-text>{BLOOD_TEST_CARD_VALUES[index]}</dd>
+                </div>
+              ))}
+            </dl>
           </div>
-          <dl className="dashboard-blood-rows">
-            {copy.labels.map((label, index) => (
-              <div className="dashboard-blood-row" key={label} data-blood-test-row={index + 1}>
-                <dt data-blood-test-live-text>{label}</dt>
-                <dd data-blood-test-live-text>{BLOOD_TEST_CARD_VALUES[index]}</dd>
-              </div>
-            ))}
-          </dl>
+          <div className="dashboard-blood-tube" data-blood-test-tube aria-hidden="true">
+            <DashboardCardArtwork
+              src={BLOOD_TEST_CARD_BASE[theme]}
+              source={BLOOD_TEST_CARD_VIEWBOX}
+              region={BLOOD_TEST_CARD_REGIONS.tube}
+            />
+          </div>
         </div>
       </div>
       <DashboardFeatureChevron />

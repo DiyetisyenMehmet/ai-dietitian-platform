@@ -41,4 +41,5 @@ export const BLOOD_TEST_CARD_COPY = {
 /** Only the decorative icon uses source-image coordinates. */
 export const BLOOD_TEST_CARD_REGIONS = {
   icon: { x: 34, y: 106, width: 180, height: 175 },
+  tube: { x: 1212, y: 35, width: 155, height: 330 },
 } as const;

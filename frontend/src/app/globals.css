@@ -187,10 +187,13 @@
   }
   .dashboard-card-illustration {
     /* Reserve an actual illustration column, not 30% of the leftover body. */
-    flex: 0 1 7.75rem;
-    width: 7.75rem;
+    flex: 0 1 8.25rem;
+    width: 8.25rem;
     max-width: 100%;
     margin-left: auto;
+  }
+  [data-kind="food"] .dashboard-card-illustration svg {
+    border-radius: 0;
   }
   [data-kind="progress"] .dashboard-card-illustration {
     flex-basis: 7.25rem;
@@ -250,22 +253,43 @@
   .dashboard-blood-body > .dashboard-card-copy {
     flex: 1 1 5.75rem;
   }
-  .dashboard-blood-preview {
-    /* The unwrapped label/value pairs determine the preferred width. Enlarged
-       text increases this width, so flex wrapping responds to text, not a phone
-       model breakpoint. On its own line the panel may wrap inside the card. */
+  .dashboard-blood-summary {
+    display: flex;
     flex: 0 1 auto;
+    align-items: center;
+    gap: 0.25rem;
     width: max-content;
     max-width: 100%;
+    min-width: 0;
+    margin-left: auto;
+  }
+  .dashboard-blood-preview {
+    /* Preview + tube form one compact summary. Enlarged text grows the preview,
+       then the whole summary wraps below the copy when the row no longer fits. */
+    flex: 0 1 auto;
+    width: max-content;
+    max-width: calc(100% - 2rem);
     min-width: 0;
     padding: 0.25rem;
     border: 1px solid #e2e8f0;
     border-radius: 0.75rem;
     background: rgb(255 255 255 / 85%);
-    font-size: 0.75rem;
+    font-size: 0.625rem;
     line-height: 1.25;
     color: #475569;
     overflow-wrap: anywhere;
+  }
+  .dashboard-blood-tube {
+    flex: 0 0 1.75rem;
+    width: 1.75rem;
+    min-width: 1.75rem;
+    pointer-events: none;
+  }
+  .dashboard-blood-tube svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    overflow: visible;
   }
   .dark .dashboard-blood-preview {
     background: #0c292e;

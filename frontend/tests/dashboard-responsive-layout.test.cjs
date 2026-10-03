@@ -84,6 +84,7 @@ async function assertLayout(page) {
       ".dashboard-feature-card",
       ".dashboard-feature-body",
       ".dashboard-blood-body",
+      ".dashboard-blood-summary",
       ".dashboard-blood-heading",
       ".dashboard-blood-row",
       ".dashboard-coach-banner",
@@ -144,13 +145,18 @@ async function fixturePage({ width, height, locale, theme, mobile = true }) {
 
 const screens = [
   [320, 568],
+  [360, 640],
   [360, 800],
+  [375, 667],
   [390, 844],
   [412, 915],
   [430, 932],
   [480, 960],
+  [600, 960],
   [768, 1024],
+  [800, 1280],
   [1024, 768],
+  [1024, 1366],
   [1440, 900],
 ];
 for (const [width, height] of screens) {
@@ -199,6 +205,8 @@ async function cardGeometry(page) {
             ".dashboard-card-illustration, .dashboard-blood-preview",
           );
           const action = node.querySelector(".dashboard-coach-action");
+          const bloodSummary = node.querySelector(".dashboard-blood-summary");
+          const bloodTube = node.querySelector(".dashboard-blood-tube");
           return [
             kind,
             {
@@ -206,6 +214,8 @@ async function cardGeometry(page) {
               copy: box(node.querySelector(".dashboard-card-copy, .dashboard-coach-copy")),
               artwork: artwork ? box(artwork) : null,
               action: action ? box(action) : null,
+              bloodSummary: bloodSummary ? box(bloodSummary) : null,
+              bloodTube: bloodTube ? box(bloodTube) : null,
               rowFonts: [...node.querySelectorAll(".dashboard-blood-row > *")].map((cell) =>
                 parseFloat(getComputedStyle(cell).fontSize),
               ),
@@ -248,22 +258,27 @@ for (const width of [390, 412, 430]) {
               assert.ok(cards[kind].height >= 44, `${kind} touch target height`);
             }
             const { food, blood, progress, coach } = cards;
-            assert.ok(food.artwork.width >= 124 && food.artwork.width <= 144);
-            assert.ok(food.artwork.width * food.artwork.height >= 8500);
+            assert.ok(food.artwork.width >= 130 && food.artwork.width <= 144);
+            assert.ok(food.artwork.width * food.artwork.height >= 9000);
             assert.ok(food.artwork.x >= food.copy.right + 4, "Food artwork stays beside the copy");
             assert.ok(progress.artwork.width >= 112 && progress.artwork.width <= 132);
             assert.ok(
               blood.rowFonts.length === 10 &&
-                blood.rowFonts.every((size) => Math.abs(size - 12 * scale) < 0.01),
-              "Blood labels and values retain 12px and respect the requested text enlargement",
+                blood.rowFonts.every((size) => Math.abs(size - 10 * scale) < 0.01),
+              "Blood labels and values stay compact at 10px and respect text enlargement",
             );
             if (scale === 1) {
               assert.ok(
-                blood.artwork.x >= blood.copy.right + 4,
-                "Normal phones keep the Blood preview on the right",
+                blood.bloodSummary.x >= blood.copy.right + 4,
+                "Normal phones keep the Blood summary on the right",
               );
-              assert.ok(blood.artwork.width >= 150 && blood.artwork.width <= 180);
-              assert.ok(blood.artwork.width <= blood.width * 0.51);
+              assert.ok(blood.artwork.width >= 112 && blood.artwork.width <= 155);
+              assert.ok(blood.bloodTube.width >= 26 && blood.bloodTube.width <= 30);
+              assert.ok(
+                blood.bloodTube.x >= blood.artwork.right + 3,
+                "Blood tube stays beside the compact preview",
+              );
+              assert.ok(blood.bloodSummary.width <= blood.width * 0.58);
               assert.ok(
                 coach.action.x >= coach.copy.right + 4,
                 "Normal phones keep the Coach action beside the copy",
@@ -292,8 +307,9 @@ test("320px / 130% uses the fallback without hiding or shrinking Blood rows", as
     await assertLayout(page);
     const { food, blood } = await cardGeometry(page);
     assert.ok(food.artwork.y >= food.copy.bottom + 4);
-    assert.ok(blood.artwork.y >= blood.copy.bottom + 4);
-    assert.ok(blood.rowFonts.every((size) => Math.abs(size - 15.6) < 0.01));
+    assert.ok(blood.bloodSummary.y >= blood.copy.bottom + 4);
+    assert.ok(blood.bloodTube.y >= blood.copy.bottom + 4);
+    assert.ok(blood.rowFonts.every((size) => Math.abs(size - 13) < 0.01));
     assert.equal(
       await page.locator("[data-blood-test-card]:visible [data-blood-test-row]").count(),
       5,
@@ -317,6 +333,15 @@ test("320px / 130% uses the fallback without hiding or shrinking Blood rows", as
     await context.close();
   }
 });
+
+async function expectBloodTubeGeometry(page) {
+  const card = page.locator("[data-blood-test-card]:visible");
+  const preview = (await card.locator("[data-blood-test-preview]").boundingBox());
+  const tube = (await card.locator("[data-blood-test-tube]").boundingBox());
+  assert.ok(preview && tube);
+  assert.ok(tube.width >= 26 && tube.width <= 30);
+  assert.ok(tube.x >= preview.x + preview.width + 3);
+}
 
 test("theme geometry, artwork loading, focus, touch hit targets and destinations", async () => {
   const { context, page } = await fixturePage({
@@ -351,6 +376,13 @@ test("theme geometry, artwork loading, focus, touch hit targets and destinations
       ),
     );
     assert.ok(assets.length > 0 && assets.every(Boolean));
+    assert.equal(
+      await page.locator('[data-kind="food"] .dashboard-card-illustration svg').first().evaluate(
+        (node) => getComputedStyle(node).borderRadius,
+      ),
+      "0px",
+    );
+    await expectBloodTubeGeometry(page);
     for (const [selector, destination] of [
       ['[data-kind="food"] [data-dashboard-live-feature-link]', "/meals/scan"],
       ['[data-blood-test-card][data-theme="light"] [data-blood-test-link]', "/profile/blood-tests"],

@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const { renderFixture } = require("./helpers/dashboard-layout-fixture.cjs");
 const {
   BLOOD_TEST_CARD_COPY,
+  BLOOD_TEST_CARD_REGIONS,
   BLOOD_TEST_CARD_VALUES,
 } = require("../src/presentation/components/dashboard/blood-test-card-contract.ts");
 
@@ -31,4 +32,12 @@ test("sample blood values are visibly labelled and excluded from navigation acce
     assert.match(html, new RegExp(BLOOD_TEST_CARD_COPY[locale].example));
     assert.equal((html.match(/data-blood-test-row="/g) || []).length, 10);
   }
+});
+
+
+test("blood card preserves the compact tube artwork beside the sample preview", async () => {
+  assert.ok(BLOOD_TEST_CARD_REGIONS.tube.width > 0);
+  assert.ok(BLOOD_TEST_CARD_REGIONS.tube.height > BLOOD_TEST_CARD_REGIONS.tube.width);
+  const html = await renderFixture("tr");
+  assert.equal((html.match(/data-blood-test-tube/g) || []).length, 2);
 });

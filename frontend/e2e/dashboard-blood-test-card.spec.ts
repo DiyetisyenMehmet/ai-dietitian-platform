@@ -16,13 +16,19 @@ test("blood preview reflows inside the real dashboard theme slot and navigates",
       await expect(card).toHaveCount(1);
       await expect(card).toHaveAttribute("data-theme", theme);
       await expect(card.getByText("Örnek görünüm")).toBeVisible();
+      await expect(card.locator("[data-blood-test-tube]")).toBeVisible();
       const slotBox = await page.locator("[data-blood-test-theme-slot]").boundingBox();
       const cardBox = await card.boundingBox();
       expect(slotBox!.height).toBeCloseTo(cardBox!.height, 1);
       if ([390, 412, 430].includes(width)) {
         const copy = (await card.locator(".dashboard-card-copy").boundingBox())!;
+        const summary = (await card.locator("[data-blood-test-summary]").boundingBox())!;
         const preview = (await card.locator("[data-blood-test-preview]").boundingBox())!;
-        expect(preview.x).toBeGreaterThanOrEqual(copy.x + copy.width);
+        const tube = (await card.locator("[data-blood-test-tube]").boundingBox())!;
+        expect(summary.x).toBeGreaterThanOrEqual(copy.x + copy.width);
+        expect(tube.x).toBeGreaterThanOrEqual(preview.x + preview.width + 3);
+        expect(tube.width).toBeGreaterThanOrEqual(26);
+        expect(tube.width).toBeLessThanOrEqual(30);
         expect(cardBox!.height).toBeLessThanOrEqual(118);
       }
       for (const row of await card.locator("[data-blood-test-row]").all()) {

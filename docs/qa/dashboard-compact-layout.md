@@ -63,3 +63,14 @@ DASHBOARD_PRODUCTION_FONTS=1 DASHBOARD_LAYOUT_ARTIFACTS=test-results/compact-fin
 ```
 
 Gerekirse `DASHBOARD_CHROMIUM_PATH` test tarayıcısını seçer. Test otomatik olarak `dashboard-390-text-100.png`, `dashboard-320-text-130.png` ve tam sayfa/tema/stres eklerini üretir. Üretim font testini `.next` dosyalarını yeniden yazan build işlemiyle eşzamanlı çalıştırmayın.
+
+
+## Visual regression correction follow-up
+
+The compact baseline keeps the responsive reflow architecture, with two visual corrections from the approved dashboard reference:
+
+- Food reserves 132 px for the right artwork at ordinary phone widths and removes the rounded inner-artwork frame so the meal image reads as part of the card rather than a sticker.
+- Blood Test restores the source-art blood tube beside the compact preview. The preview and tube form one responsive summary group: they stay on the right at 390/412/430 px and 100% text, then move below the copy when intrinsic width no longer fits.
+- Blood preview rows use a smaller 10 px baseline than the main description while still participating in text enlargement.
+- The layout matrix includes 320×568, 360×640, 360×800, 375×667, 390×844, 412×915, 430×932, 480×960, 600×960, 768×1024, 800×1280, 1024×1366 and the existing desktop checks.
+- No Journey business logic, Android native code, global text scaling, production configuration or deployment marker is changed.
