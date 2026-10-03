@@ -277,6 +277,63 @@ export const notificationService = {
     });
   },
 
+  async listInbox(userId: string, now: Date = new Date()) {
+    const where = {
+      userId,
+      scheduledFor: { lte: now },
+      deliveredAt: { not: null },
+    } as const;
+
+    const [notifications, unreadCount] = await prisma.$transaction([
+      prisma.notification.findMany({
+        where,
+        orderBy: [{ scheduledFor: "desc" }, { createdAt: "desc" }],
+        take: 100,
+        select: {
+          id: true,
+          type: true,
+          title: true,
+          body: true,
+          scheduledFor: true,
+          deliveredAt: true,
+          readAt: true,
+        },
+      }),
+      prisma.notification.count({
+        where: { ...where, readAt: null },
+      }),
+    ]);
+
+    return { notifications, unreadCount };
+  },
+
+  async markRead(userId: string, notificationId: string, now: Date = new Date()) {
+    const visible = {
+      id: notificationId,
+      userId,
+      scheduledFor: { lte: now },
+      deliveredAt: { not: null },
+    } as const;
+
+    const existing = await prisma.notification.findFirst({
+      where: visible,
+      select: { id: true, readAt: true },
+    });
+    if (!existing) return null;
+    if (existing.readAt) return existing;
+
+    const updated = await prisma.notification.updateMany({
+      where: { ...visible, readAt: null },
+      data: { readAt: now },
+    });
+    if (updated.count === 1) return { id: notificationId, readAt: now };
+
+    return prisma.notification.findFirst({
+      where: visible,
+      select: { id: true, readAt: true },
+    });
+  },
+
   getScheduledNotifications(userId: string): Promise<Notification[]> {
     return prisma.notification.findMany({
       where: { userId, deliveredAt: null },

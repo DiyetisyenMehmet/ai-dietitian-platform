@@ -5,6 +5,7 @@ import { requireConsent } from "../../middleware/require-consent";
 import { validate } from "../../middleware/validate";
 import { notificationController } from "./notification.controller";
 import {
+  notificationIdParamsSchema,
   registerNotificationDeviceSchema,
   unregisterNotificationDeviceSchema,
   updateNotificationPreferencesSchema,
@@ -12,6 +13,14 @@ import {
 
 /** Notifications router (mounted at /api/notifications). */
 export const notificationRouter = Router();
+
+notificationRouter.get("/", authenticate, notificationController.listInbox);
+notificationRouter.patch(
+  "/:id/read",
+  authenticate,
+  validate({ params: notificationIdParamsSchema }),
+  notificationController.markRead,
+);
 
 notificationRouter.get("/preferences", authenticate, notificationController.getPreferences);
 notificationRouter.patch(

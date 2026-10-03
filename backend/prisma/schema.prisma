@@ -783,10 +783,12 @@ model Notification {
   body         String           @db.Text
   scheduledFor DateTime
   deliveredAt  DateTime?
+  readAt       DateTime?
   metadata     Json?
   createdAt    DateTime         @default(now())
 
   @@index([userId, scheduledFor])
+  @@index([userId, readAt, scheduledFor])
   @@index([deliveredAt])
   @@map("notifications")
 }

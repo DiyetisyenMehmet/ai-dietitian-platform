@@ -37,6 +37,10 @@ export const unregisterNotificationDeviceSchema = z.object({
   token: pushToken,
 });
 
+export const notificationIdParamsSchema = z.object({
+  id: z.string().uuid(),
+});
+
 export type UpdateNotificationPreferencesInput = z.infer<
   typeof updateNotificationPreferencesSchema
 >;

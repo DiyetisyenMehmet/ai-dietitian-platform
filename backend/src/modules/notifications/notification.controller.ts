@@ -26,6 +26,22 @@ function requireUserId(req: Request): string {
 
 /** Controller for the notifications surface. */
 export const notificationController = {
+  listInbox: asyncHandler(async (req: Request, res: Response) => {
+    const result = await notificationService.listInbox(requireUserId(req));
+    sendSuccess(res, result);
+  }),
+
+  markRead: asyncHandler(async (req: Request, res: Response) => {
+    const notification = await notificationService.markRead(
+      requireUserId(req),
+      req.params.id,
+    );
+    if (!notification) {
+      throw ApiError.notFound("Notification not found.");
+    }
+    sendSuccess(res, { notification });
+  }),
+
   getPreferences: asyncHandler(async (req: Request, res: Response) => {
     const preferences = await notificationService.getPreferences(requireUserId(req));
     sendSuccess(res, { preferences });
@@ -74,6 +90,7 @@ export const notificationController = {
       body: "Bildirim bağlantısı güvenli şekilde çalışıyor.",
       scheduledFor: now,
       deliveredAt: null,
+      readAt: null,
       metadata: null,
       createdAt: now,
     };

@@ -95,6 +95,65 @@ test("notification preferences are opt-in, validated and isolated by owner", asy
   assert.equal(other.activityReminders, false);
 });
 
+test("notification center lists only the owner and persists read state", async (t) => {
+  const [firstUser, secondUser] = await Promise.all([
+    createUser("notification-center-a"),
+    createUser("notification-center-b"),
+  ]);
+
+  t.after(async () => {
+    await prisma.user.deleteMany({ where: { id: { in: [firstUser.id, secondUser.id] } } });
+  });
+
+  const now = new Date();
+  const first = await prisma.notification.create({
+    data: {
+      userId: firstUser.id,
+      type: "WATER_REMINDER",
+      title: "Su zamanı",
+      body: "Hatırlatma",
+      scheduledFor: new Date(now.getTime() - 2_000),
+      deliveredAt: new Date(now.getTime() - 1_000),
+    },
+  });
+  await prisma.notification.create({
+    data: {
+      userId: secondUser.id,
+      type: "WATER_REMINDER",
+      title: "Başka kullanıcı",
+      body: "Görünmemeli",
+      scheduledFor: new Date(now.getTime() - 2_000),
+      deliveredAt: new Date(now.getTime() - 1_000),
+    },
+  });
+  await prisma.notification.create({
+    data: {
+      userId: firstUser.id,
+      type: "GOAL_REMINDER",
+      title: "Gelecek",
+      body: "Henüz görünmemeli",
+      scheduledFor: new Date(now.getTime() + 60_000),
+      deliveredAt: new Date(now.getTime() - 1_000),
+    },
+  });
+
+  const before = await notificationService.listInbox(firstUser.id, now);
+  assert.equal(before.notifications.length, 1);
+  assert.equal(before.notifications[0]?.id, first.id);
+  assert.equal(before.unreadCount, 1);
+  assert.equal(before.notifications[0]?.readAt, null);
+
+  assert.equal(await notificationService.markRead(secondUser.id, first.id, now), null);
+
+  const marked = await notificationService.markRead(firstUser.id, first.id, now);
+  assert.equal(marked?.id, first.id);
+  assert.ok(marked?.readAt instanceof Date);
+
+  const after = await notificationService.listInbox(firstUser.id, now);
+  assert.equal(after.unreadCount, 0);
+  assert.ok(after.notifications[0]?.readAt instanceof Date);
+});
+
 test("disabled notification preference suppresses provider delivery", async (t) => {
   const user = await createUser("notification-disabled");
   const originalProvider = getNotificationProvider();
@@ -259,6 +318,7 @@ test("FCM envelopes stay data-only and apply platform-specific transport config"
     body: "Test",
     scheduledFor: now,
     deliveredAt: null,
+    readAt: null,
     metadata: null,
     createdAt: now,
   } as Notification;
