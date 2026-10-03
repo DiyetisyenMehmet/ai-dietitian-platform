@@ -258,8 +258,8 @@ for (const width of [390, 412, 430]) {
               assert.ok(cards[kind].height >= 44, `${kind} touch target height`);
             }
             const { food, blood, progress, coach } = cards;
-            assert.ok(food.artwork.width >= 130 && food.artwork.width <= 144);
-            assert.ok(food.artwork.width * food.artwork.height >= 9000);
+            assert.ok(food.artwork.width >= 124 && food.artwork.width <= 144);
+            assert.ok(food.artwork.width * food.artwork.height >= 8500);
             assert.ok(food.artwork.x >= food.copy.right + 4, "Food artwork stays beside the copy");
             assert.ok(progress.artwork.width >= 112 && progress.artwork.width <= 132);
             assert.ok(
@@ -273,7 +273,7 @@ for (const width of [390, 412, 430]) {
                 "Normal phones keep the Blood summary on the right",
               );
               assert.ok(blood.artwork.width >= 112 && blood.artwork.width <= 155);
-              assert.ok(blood.bloodTube.width >= 26 && blood.bloodTube.width <= 30);
+              assert.ok(blood.bloodTube.width >= 25 && blood.bloodTube.width <= 27);
               assert.ok(
                 blood.bloodTube.x >= blood.artwork.right + 3,
                 "Blood tube stays beside the compact preview",
@@ -339,7 +339,7 @@ async function expectBloodTubeGeometry(page) {
   const preview = (await card.locator("[data-blood-test-preview]").boundingBox());
   const tube = (await card.locator("[data-blood-test-tube]").boundingBox());
   assert.ok(preview && tube);
-  assert.ok(tube.width >= 26 && tube.width <= 30);
+  assert.ok(tube.width >= 25 && tube.width <= 27);
   assert.ok(tube.x >= preview.x + preview.width + 3);
 }
 

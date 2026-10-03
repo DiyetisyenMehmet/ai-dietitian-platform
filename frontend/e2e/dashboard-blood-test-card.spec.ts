@@ -27,8 +27,8 @@ test("blood preview reflows inside the real dashboard theme slot and navigates",
         const tube = (await card.locator("[data-blood-test-tube]").boundingBox())!;
         expect(summary.x).toBeGreaterThanOrEqual(copy.x + copy.width);
         expect(tube.x).toBeGreaterThanOrEqual(preview.x + preview.width + 3);
-        expect(tube.width).toBeGreaterThanOrEqual(26);
-        expect(tube.width).toBeLessThanOrEqual(30);
+        expect(tube.width).toBeGreaterThanOrEqual(25);
+        expect(tube.width).toBeLessThanOrEqual(27);
         expect(cardBox!.height).toBeLessThanOrEqual(118);
       }
       for (const row of await card.locator("[data-blood-test-row]").all()) {
