@@ -26,9 +26,10 @@ test("blood preview reflows inside the real dashboard theme slot and navigates",
         const preview = (await card.locator("[data-blood-test-preview]").boundingBox())!;
         const tube = (await card.locator("[data-blood-test-tube]").boundingBox())!;
         expect(summary.x).toBeGreaterThanOrEqual(copy.x + copy.width);
-        expect(tube.x).toBeGreaterThanOrEqual(preview.x + preview.width + 3);
-        expect(tube.width).toBeGreaterThanOrEqual(25);
-        expect(tube.width).toBeLessThanOrEqual(27);
+        expect(tube.x).toBeGreaterThanOrEqual(preview.x + preview.width + 2);
+        expect(tube.width).toBeGreaterThanOrEqual(23);
+        expect(tube.width).toBeLessThanOrEqual(25);
+        await expect(card.locator("[data-blood-test-tube] svg")).toHaveCSS("overflow", "hidden");
         expect(cardBox!.height).toBeLessThanOrEqual(118);
       }
       for (const row of await card.locator("[data-blood-test-row]").all()) {
@@ -37,6 +38,13 @@ test("blood preview reflows inside the real dashboard theme slot and navigates",
         const beside = label.x + label.width <= value.x + 1;
         const below = label.y + label.height <= value.y + 1;
         expect(beside || below).toBe(true);
+        const labelFont = await row.locator("dt").evaluate((node) =>
+          Number.parseFloat(getComputedStyle(node).fontSize),
+        );
+        const valueFont = await row.locator("dd").evaluate((node) =>
+          Number.parseFloat(getComputedStyle(node).fontSize),
+        );
+        expect(valueFont).toBeLessThan(labelFont);
       }
     }
   }

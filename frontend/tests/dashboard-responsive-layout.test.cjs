@@ -216,7 +216,10 @@ async function cardGeometry(page) {
               action: action ? box(action) : null,
               bloodSummary: bloodSummary ? box(bloodSummary) : null,
               bloodTube: bloodTube ? box(bloodTube) : null,
-              rowFonts: [...node.querySelectorAll(".dashboard-blood-row > *")].map((cell) =>
+              labelFonts: [...node.querySelectorAll(".dashboard-blood-row dt")].map((cell) =>
+                parseFloat(getComputedStyle(cell).fontSize),
+              ),
+              valueFonts: [...node.querySelectorAll(".dashboard-blood-row dd")].map((cell) =>
                 parseFloat(getComputedStyle(cell).fontSize),
               ),
             },
@@ -263,9 +266,18 @@ for (const width of [390, 412, 430]) {
             assert.ok(food.artwork.x >= food.copy.right + 4, "Food artwork stays beside the copy");
             assert.ok(progress.artwork.width >= 112 && progress.artwork.width <= 132);
             assert.ok(
-              blood.rowFonts.length === 10 &&
-                blood.rowFonts.every((size) => Math.abs(size - 10 * scale) < 0.01),
-              "Blood labels and values stay compact at 10px and respect text enlargement",
+              blood.labelFonts.length === 5 &&
+                blood.labelFonts.every((size) => Math.abs(size - 9 * scale) < 0.01),
+              "Blood labels stay compact at 9px and respect text enlargement",
+            );
+            assert.ok(
+              blood.valueFonts.length === 5 &&
+                blood.valueFonts.every((size) => Math.abs(size - 8.5 * scale) < 0.01),
+              "Blood values stay smaller than labels and respect text enlargement",
+            );
+            assert.ok(
+              blood.valueFonts.every((size, index) => size < blood.labelFonts[index]),
+              "Blood values remain visually subordinate to their labels",
             );
             if (scale === 1) {
               assert.ok(
@@ -273,7 +285,7 @@ for (const width of [390, 412, 430]) {
                 "Normal phones keep the Blood summary on the right",
               );
               assert.ok(blood.artwork.width >= 112 && blood.artwork.width <= 155);
-              assert.ok(blood.bloodTube.width >= 25 && blood.bloodTube.width <= 27);
+              assert.ok(blood.bloodTube.width >= 23 && blood.bloodTube.width <= 25);
               assert.ok(
                 blood.bloodTube.x >= blood.artwork.right + 3,
                 "Blood tube stays beside the compact preview",
@@ -309,7 +321,8 @@ test("320px / 130% uses the fallback without hiding or shrinking Blood rows", as
     assert.ok(food.artwork.y >= food.copy.bottom + 4);
     assert.ok(blood.bloodSummary.y >= blood.copy.bottom + 4);
     assert.ok(blood.bloodTube.y >= blood.copy.bottom + 4);
-    assert.ok(blood.rowFonts.every((size) => Math.abs(size - 13) < 0.01));
+    assert.ok(blood.labelFonts.every((size) => Math.abs(size - 11.7) < 0.01));
+    assert.ok(blood.valueFonts.every((size) => Math.abs(size - 11.05) < 0.01));
     assert.equal(
       await page.locator("[data-blood-test-card]:visible [data-blood-test-row]").count(),
       5,
@@ -339,8 +352,12 @@ async function expectBloodTubeGeometry(page) {
   const preview = (await card.locator("[data-blood-test-preview]").boundingBox());
   const tube = (await card.locator("[data-blood-test-tube]").boundingBox());
   assert.ok(preview && tube);
-  assert.ok(tube.width >= 25 && tube.width <= 27);
-  assert.ok(tube.x >= preview.x + preview.width + 3);
+  assert.ok(tube.width >= 23 && tube.width <= 25);
+  assert.ok(tube.x >= preview.x + preview.width + 2);
+  assert.equal(
+    await card.locator("[data-blood-test-tube] svg").evaluate((node) => getComputedStyle(node).overflow),
+    "hidden",
+  );
 }
 
 test("theme geometry, artwork loading, focus, touch hit targets and destinations", async () => {
