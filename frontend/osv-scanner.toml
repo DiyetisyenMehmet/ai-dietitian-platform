@@ -1,0 +1,4 @@
+[[IgnoredVulns]]
+id = "GHSA-vfj7-8cjw-p6xm"
+ignoreUntil = 2026-10-10
+reason = "Time-bounded risk acceptance: braces@3.0.3 has no patched npm release as of 2026-10-03. In Diewish it is reachable only from repository-controlled build/development tooling, not from user-controlled production runtime paths. Re-evaluate immediately when upstream ships a patched release."
