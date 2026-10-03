@@ -29,7 +29,7 @@ test("approved semantic icon binaries are exact and unmodified", () => {
   }
 });
 
-test("semantic icon usage map is explicit while bottom navigation stays unchanged", () => {
+test("semantic icon usage map keeps the approved Coach navigation vector in the shared color system", () => {
   const avatar = source("src/presentation/components/chat/ai-avatar.tsx");
   const input = source("src/presentation/components/chat/chat-input.tsx");
   const sheet = source("src/presentation/components/chat/quick-prompts-sheet.tsx");
@@ -38,6 +38,8 @@ test("semantic icon usage map is explicit while bottom navigation stays unchange
   const progress = source("src/presentation/components/progress/progress-view.tsx");
   const stats = source("src/presentation/components/progress/progress-stats-section.tsx");
   const navigation = source("src/shared/constants/navigation.ts");
+  const coachNavIcon = source("src/shared/icons/coach-nav-icon.tsx");
+  const bottomNavigation = source("src/presentation/components/layout/bottom-navigation.tsx");
 
   expect(avatar).toContain("diewish-coach-avatar.png");
   expect(avatar).toContain('data-diewish-semantic-icon="coach-avatar"');
@@ -53,8 +55,20 @@ test("semantic icon usage map is explicit while bottom navigation stays unchange
   expect(stats).toContain("diewish-evaluation.png");
   expect(stats).toContain("diewish-weight-analysis.png");
 
-  expect(navigation).toMatch(/id:\s*"ai"[\s\S]*?label:\s*"Koç"[\s\S]*?icon:\s*Leaf/u);
+  expect(navigation).toMatch(/id:\s*"ai"[\s\S]*?label:\s*"Koç"[\s\S]*?icon:\s*CoachNavIcon/u);
+  expect(navigation).not.toMatch(/\bLeaf\b/u);
   expect(navigation).not.toContain("diewish-coach-avatar");
+
+  expect(coachNavIcon).toContain('data-coach-nav-icon=""');
+  expect(coachNavIcon).toContain('viewBox="0 0 24 24"');
+  expect(coachNavIcon).toContain('fill="currentColor"');
+  expect(coachNavIcon).toContain('fillRule="evenodd"');
+  expect(coachNavIcon).not.toMatch(/#[0-9a-f]{3,8}|rgb\(|hsl\(/iu);
+
+  expect(bottomNavigation).toContain(
+    'active ? "text-primary" : "text-muted-foreground hover:text-foreground"',
+  );
+  expect(bottomNavigation).toContain('<Icon className="size-5" aria-hidden="true" />');
 });
 
 test("root metadata keeps product language free of generic AI marketing terms", () => {

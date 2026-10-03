@@ -102,6 +102,75 @@ async function checkViewports(page) {
   }
 }
 
+async function checkCoachNavigation(page, { active }) {
+  const nav = page.getByRole("navigation", { name: "Ana gezinme" });
+  const coach = nav.getByRole("link", { name: "Koç", exact: true });
+  const icon = coach.locator("svg[data-coach-nav-icon]");
+  const navHeights = [];
+
+  for (const viewport of [
+    { width: 320, height: 700 },
+    { width: 390, height: 844 },
+    { width: 430, height: 932 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await expectNoOverflow(page);
+    await expect(coach).toBeVisible();
+    await expect(icon).toHaveCount(1);
+    await expect(icon).toBeVisible();
+
+    if (active) {
+      await expect(coach).toHaveAttribute("aria-current", "page");
+      await expect(coach).toHaveClass(/text-primary/);
+    } else {
+      await expect(coach).not.toHaveAttribute("aria-current", "page");
+      await expect(coach).toHaveClass(/text-muted-foreground/);
+    }
+
+    const [iconBox, navBox] = await Promise.all([icon.boundingBox(), nav.boundingBox()]);
+    expect(iconBox).not.toBeNull();
+    expect(navBox).not.toBeNull();
+    expect(iconBox.width).toBeCloseTo(20, 1);
+    expect(iconBox.height).toBeCloseTo(20, 1);
+    navHeights.push(navBox.height);
+
+    const geometry = await icon.evaluate((svg) => {
+      const path = svg.querySelector("path");
+      const link = svg.closest("a");
+      if (!(path instanceof SVGGraphicsElement) || !(link instanceof HTMLElement)) {
+        return null;
+      }
+      const mark = path.getBBox();
+      return {
+        linkColor: getComputedStyle(link).color,
+        fill: getComputedStyle(path).fill,
+        markWidth: mark.width,
+        markHeight: mark.height,
+      };
+    });
+    expect(geometry).not.toBeNull();
+    expect(geometry.fill).toBe(geometry.linkColor);
+    expect(geometry.markWidth).toBeGreaterThan(16);
+    expect(geometry.markWidth).toBeLessThan(19);
+    expect(geometry.markHeight).toBeGreaterThan(19);
+    expect(geometry.markHeight).toBeLessThanOrEqual(21);
+
+    const iconBoxes = await nav.locator("svg").evaluateAll((icons) =>
+      icons.map((item) => {
+        const rect = item.getBoundingClientRect();
+        return { width: rect.width, height: rect.height };
+      }),
+    );
+    expect(iconBoxes).toHaveLength(5);
+    for (const box of iconBoxes) {
+      expect(box.width).toBeCloseTo(20, 1);
+      expect(box.height).toBeCloseTo(20, 1);
+    }
+  }
+
+  expect(Math.max(...navHeights) - Math.min(...navHeights)).toBeLessThanOrEqual(1);
+}
+
 test("semantic Diewish icons keep coach, History and progress meanings distinct", async ({ page }) => {
   test.setTimeout(180_000);
   const { email } = await onboard(page);
@@ -154,16 +223,20 @@ test("semantic Diewish icons keep coach, History and progress meanings distinct"
   await expect(quickDialog.locator('img[data-diewish-semantic-icon="quick-suggestions"]')).toBeVisible();
 
   const coachNav = page.getByRole("link", { name: "Koç", exact: true });
-  await expect(coachNav.locator("svg.lucide-leaf")).toHaveCount(1);
+  await expect(coachNav.locator("svg[data-coach-nav-icon]")).toHaveCount(1);
+  await expect(coachNav.locator("svg.lucide-leaf")).toHaveCount(0);
   await expect(coachNav.locator('img[data-diewish-semantic-icon="coach-avatar"]')).toHaveCount(0);
+  await checkCoachNavigation(page, { active: true });
   await quickDialog.getByRole("button", { name: "Kapat" }).click();
   await checkViewports(page);
 
   await page.getByRole("button", { name: "Koyu temaya geç" }).click();
   await expect(page.locator("html")).toHaveClass(/dark/);
   await checkViewports(page);
+  await checkCoachNavigation(page, { active: true });
 
   await page.goto(`${WEB_BASE_URL}/progress`);
+  await checkCoachNavigation(page, { active: false });
   const dates = await page.evaluate(() => {
     const today = new Date();
     const yesterday = new Date(today);
@@ -199,6 +272,9 @@ test("semantic Diewish icons keep coach, History and progress meanings distinct"
   await page.goto(`${WEB_BASE_URL}/ai`);
   await page.getByRole("button", { name: "Açık temaya geç" }).click();
   await expect(page.locator("html")).not.toHaveClass(/dark/);
+  await checkCoachNavigation(page, { active: true });
+  await page.goto(`${WEB_BASE_URL}/dashboard`);
+  await checkCoachNavigation(page, { active: false });
 
   await page.route("**/api/history/insight", async (route) => {
     const payload = route.request().postDataJSON();
