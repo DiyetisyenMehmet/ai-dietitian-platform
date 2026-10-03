@@ -7,16 +7,26 @@ test("dashboard cards reserve separate copy/artwork regions and navigate", async
 }) => {
   test.setTimeout(120_000);
   await createDashboardSession(page, request);
-  for (const width of [320, 390, 412, 768]) {
+  for (const width of [320, 390, 412, 430, 768]) {
     await page.setViewportSize({ width, height: 915 });
     for (const theme of ["light", "dark"] as const) {
       await setDashboardTheme(page, theme);
+      await page.evaluate(() => document.fonts.ready);
       for (const kind of ["food", "progress"]) {
         const card = page.locator(`[data-kind="${kind}"][data-dashboard-live-feature-card]`);
         await expect(card).toHaveCount(1);
         const copy = await card.locator(".dashboard-card-copy").boundingBox();
         const artwork = await card.locator(".dashboard-card-illustration").boundingBox();
-        expect(copy!.x + copy!.width).toBeLessThanOrEqual(artwork!.x);
+        const beside = copy!.x + copy!.width <= artwork!.x;
+        const below = copy!.y + copy!.height <= artwork!.y;
+        expect(beside || below).toBe(true);
+        if ([390, 412, 430].includes(width)) {
+          expect(beside).toBe(true);
+          expect((await card.boundingBox())!.height).toBeLessThanOrEqual(
+            kind === "food" ? 108 : 94,
+          );
+          expect(artwork!.width).toBeGreaterThanOrEqual(kind === "food" ? 124 : 112);
+        }
         await expect(card.locator("[data-dashboard-live-feature-link]")).toHaveCount(1);
         await expect(card.locator(".dashboard-card-copy")).toHaveCSS("user-select", "none");
       }
@@ -24,6 +34,8 @@ test("dashboard cards reserve separate copy/artwork regions and navigate", async
       const action = coach.getByRole("link", { name: /Hemen Sor/ });
       await expect(action).toBeVisible();
       expect((await action.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      if ([390, 412, 430].includes(width))
+        expect((await coach.boundingBox())!.height).toBeLessThanOrEqual(88);
     }
   }
   await page

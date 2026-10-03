@@ -54,11 +54,11 @@ export function BloodTestCard({
           <p className="dashboard-card-description" data-blood-test-live-text>
             {copy.description.join(" ")}
           </p>
-        </div>
-        <div className="dashboard-blood-preview" data-blood-test-preview>
           <span className="dashboard-blood-example" data-blood-test-live-text>
             {copy.example}
           </span>
+        </div>
+        <div className="dashboard-blood-preview" data-blood-test-preview>
           <div className="dashboard-blood-heading">
             <span className="font-semibold" data-blood-test-live-text>
               {copy.panelTitle}

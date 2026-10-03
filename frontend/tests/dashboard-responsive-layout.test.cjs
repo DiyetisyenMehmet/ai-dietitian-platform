@@ -147,6 +147,7 @@ const screens = [
   [360, 800],
   [390, 844],
   [412, 915],
+  [430, 932],
   [480, 960],
   [768, 1024],
   [1024, 768],
@@ -155,7 +156,7 @@ const screens = [
 for (const [width, height] of screens) {
   for (const locale of ["tr", "en"]) {
     for (const theme of ["light", "dark"]) {
-      test(`${width}x${height} ${locale} ${theme}: 100/130/150/200% text and 200% root font`, async () => {
+      test(`${width}x${height} ${locale} ${theme}: 100/120/130/150/200% text and 200% root font`, async () => {
         const { context, page } = await fixturePage({
           width,
           height,
@@ -164,7 +165,7 @@ for (const [width, height] of screens) {
           mobile: width < 1024,
         });
         try {
-          for (const scale of [1, 1.3, 1.5, 2]) {
+          for (const scale of [1, 1.2, 1.3, 1.5, 2]) {
             if (scale !== 1) await page.reload();
             await page.evaluate(() => document.fonts.ready);
             await scaleText(page, scale);
@@ -181,6 +182,141 @@ for (const [width, height] of screens) {
     }
   }
 }
+
+async function cardGeometry(page) {
+  return page.evaluate(() => {
+    const box = (node) => {
+      const { x, y, width, height, right, bottom } = node.getBoundingClientRect();
+      return { x, y, width, height, right, bottom };
+    };
+    return Object.fromEntries(
+      [...document.querySelectorAll("[data-dashboard-responsive-surface]")]
+        .filter((node) => node.getBoundingClientRect().width > 0)
+        .map((node) => {
+          const kind =
+            node.dataset.kind || (node.hasAttribute("data-blood-test-card") ? "blood" : "coach");
+          const artwork = node.querySelector(
+            ".dashboard-card-illustration, .dashboard-blood-preview",
+          );
+          const action = node.querySelector(".dashboard-coach-action");
+          return [
+            kind,
+            {
+              ...box(node),
+              copy: box(node.querySelector(".dashboard-card-copy, .dashboard-coach-copy")),
+              artwork: artwork ? box(artwork) : null,
+              action: action ? box(action) : null,
+              rowFonts: [...node.querySelectorAll(".dashboard-blood-row > *")].map((cell) =>
+                parseFloat(getComputedStyle(cell).fontSize),
+              ),
+            },
+          ];
+        }),
+    );
+  });
+}
+
+// These are visual acceptance budgets, separate from the 200% safety test.
+// A layout can avoid overflow and still regress into huge cards / tiny artwork.
+for (const width of [390, 412, 430]) {
+  for (const locale of ["tr", "en"]) {
+    for (const theme of ["light", "dark"]) {
+      test(`${width}px ${locale} ${theme}: normal scale visual compactness`, async () => {
+        const { context, page } = await fixturePage({ width, height: 844, locale, theme });
+        try {
+          for (const scale of [1, 1.2, 1.3]) {
+            if (scale !== 1) await page.reload();
+            await page.evaluate(() => document.fonts.ready);
+            await scaleText(page, scale);
+            await assertLayout(page);
+            const cards = await cardGeometry(page);
+            // Production Inter defines the visual baseline. The no-build mode
+            // uses the host's substitute font, whose wider glyphs may require
+            // additional lines; keep it bounded without clipping or shrinking.
+            const productionFonts = process.env.DASHBOARD_PRODUCTION_FONTS === "1";
+            const heights =
+              scale === 1
+                ? { food: 108, blood: productionFonts ? 118 : 128, progress: 94, coach: 88 }
+                : scale === 1.2
+                  ? { food: 138, blood: 235, progress: 120, coach: 112 }
+                  : { food: productionFonts ? 155 : 192, blood: 250, progress: 125, coach: 122 };
+            for (const [kind, maximum] of Object.entries(heights)) {
+              assert.ok(
+                cards[kind].height <= maximum + 1, // subpixel line-box rounding
+                `${kind} at ${scale * 100}%: ${cards[kind].height}px exceeds ${maximum}px`,
+              );
+              assert.ok(cards[kind].height >= 44, `${kind} touch target height`);
+            }
+            const { food, blood, progress, coach } = cards;
+            assert.ok(food.artwork.width >= 124 && food.artwork.width <= 144);
+            assert.ok(food.artwork.width * food.artwork.height >= 8500);
+            assert.ok(food.artwork.x >= food.copy.right + 4, "Food artwork stays beside the copy");
+            assert.ok(progress.artwork.width >= 112 && progress.artwork.width <= 132);
+            assert.ok(
+              blood.rowFonts.length === 10 &&
+                blood.rowFonts.every((size) => Math.abs(size - 12 * scale) < 0.01),
+              "Blood labels and values retain 12px and respect the requested text enlargement",
+            );
+            if (scale === 1) {
+              assert.ok(
+                blood.artwork.x >= blood.copy.right + 4,
+                "Normal phones keep the Blood preview on the right",
+              );
+              assert.ok(blood.artwork.width >= 150 && blood.artwork.width <= 180);
+              assert.ok(blood.artwork.width <= blood.width * 0.51);
+              assert.ok(
+                coach.action.x >= coach.copy.right + 4,
+                "Normal phones keep the Coach action beside the copy",
+              );
+            }
+            if (width === 390 && locale === "tr" && theme === "light")
+              console.log(`Compactness ${scale * 100}%: ${JSON.stringify(cards)}`);
+          }
+        } finally {
+          await context.close();
+        }
+      });
+    }
+  }
+}
+
+test("320px / 130% uses the fallback without hiding or shrinking Blood rows", async () => {
+  const { context, page } = await fixturePage({
+    width: 320,
+    height: 844,
+    locale: "tr",
+    theme: "light",
+  });
+  try {
+    await scaleText(page, 1.3);
+    await assertLayout(page);
+    const { food, blood } = await cardGeometry(page);
+    assert.ok(food.artwork.y >= food.copy.bottom + 4);
+    assert.ok(blood.artwork.y >= blood.copy.bottom + 4);
+    assert.ok(blood.rowFonts.every((size) => Math.abs(size - 15.6) < 0.01));
+    assert.equal(
+      await page.locator("[data-blood-test-card]:visible [data-blood-test-row]").count(),
+      5,
+    );
+    if (process.env.DASHBOARD_LAYOUT_ARTIFACTS) {
+      const directory = process.env.DASHBOARD_LAYOUT_ARTIFACTS;
+      fs.mkdirSync(directory, { recursive: true });
+      await page.screenshot({
+        path: path.join(directory, "dashboard-320-text-130.png"),
+        animations: "disabled",
+        scale: "css",
+      });
+      await page.screenshot({
+        path: path.join(directory, "dashboard-320-text-130-full.png"),
+        fullPage: true,
+        animations: "disabled",
+        scale: "css",
+      });
+    }
+  } finally {
+    await context.close();
+  }
+});
 
 test("theme geometry, artwork loading, focus, touch hit targets and destinations", async () => {
   const { context, page } = await fixturePage({
@@ -233,6 +369,12 @@ test("theme geometry, artwork loading, focus, touch hit targets and destinations
     if (process.env.DASHBOARD_LAYOUT_ARTIFACTS) {
       const directory = process.env.DASHBOARD_LAYOUT_ARTIFACTS;
       fs.mkdirSync(directory, { recursive: true });
+      await page.evaluate(() => document.fonts.ready);
+      await page.screenshot({
+        path: path.join(directory, "dashboard-390-text-100.png"),
+        animations: "disabled",
+        scale: "css",
+      });
       await page.screenshot({
         path: path.join(directory, "dashboard-390-light.png"),
         fullPage: true,

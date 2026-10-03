@@ -17,7 +17,7 @@ interface DashboardLiveFeatureCardProps {
   locale?: DashboardLiveFeatureCardLocale;
 }
 
-/** The content sets card height. Artwork has its own cell and cannot cover copy. */
+/** Compact copy/artwork columns wrap only when their preferred widths do not fit. */
 export function DashboardLiveFeatureCard({
   kind,
   href,

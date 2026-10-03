@@ -7,10 +7,11 @@ test("blood preview reflows inside the real dashboard theme slot and navigates",
 }) => {
   test.setTimeout(120_000);
   await createDashboardSession(page, request);
-  for (const width of [320, 390, 412, 768]) {
+  for (const width of [320, 390, 412, 430, 768]) {
     await page.setViewportSize({ width, height: 915 });
     for (const theme of ["light", "dark"] as const) {
       await setDashboardTheme(page, theme);
+      await page.evaluate(() => document.fonts.ready);
       const card = page.locator("[data-blood-test-card]:visible");
       await expect(card).toHaveCount(1);
       await expect(card).toHaveAttribute("data-theme", theme);
@@ -18,6 +19,12 @@ test("blood preview reflows inside the real dashboard theme slot and navigates",
       const slotBox = await page.locator("[data-blood-test-theme-slot]").boundingBox();
       const cardBox = await card.boundingBox();
       expect(slotBox!.height).toBeCloseTo(cardBox!.height, 1);
+      if ([390, 412, 430].includes(width)) {
+        const copy = (await card.locator(".dashboard-card-copy").boundingBox())!;
+        const preview = (await card.locator("[data-blood-test-preview]").boundingBox())!;
+        expect(preview.x).toBeGreaterThanOrEqual(copy.x + copy.width);
+        expect(cardBox!.height).toBeLessThanOrEqual(118);
+      }
       for (const row of await card.locator("[data-blood-test-row]").all()) {
         const label = (await row.locator("dt").boundingBox())!;
         const value = (await row.locator("dd").boundingBox())!;
