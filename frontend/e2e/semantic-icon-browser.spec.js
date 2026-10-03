@@ -106,7 +106,6 @@ async function checkCoachNavigation(page, { active }) {
   const nav = page.getByRole("navigation", { name: "Ana gezinme" });
   const coach = nav.getByRole("link", { name: "Koç", exact: true });
   const icon = coach.locator("svg[data-coach-nav-icon]");
-  const navHeights = [];
 
   for (const viewport of [
     { width: 320, height: 700 },
@@ -127,12 +126,11 @@ async function checkCoachNavigation(page, { active }) {
       await expect(coach).toHaveClass(/text-muted-foreground/);
     }
 
-    const [iconBox, navBox] = await Promise.all([icon.boundingBox(), nav.boundingBox()]);
+    const iconBox = await icon.boundingBox();
     expect(iconBox).not.toBeNull();
-    expect(navBox).not.toBeNull();
     expect(iconBox.width).toBeCloseTo(20, 1);
     expect(iconBox.height).toBeCloseTo(20, 1);
-    navHeights.push(navBox.height);
+    await expect(coach.getByText("Koç", { exact: true })).toBeVisible();
 
     const geometry = await icon.evaluate((svg) => {
       const path = svg.querySelector("path");
@@ -158,7 +156,7 @@ async function checkCoachNavigation(page, { active }) {
     const iconBoxes = await nav.locator("svg").evaluateAll((icons) =>
       icons.map((item) => {
         const rect = item.getBoundingClientRect();
-        return { width: rect.width, height: rect.height };
+        return { width: rect.width, height: rect.height, top: rect.top };
       }),
     );
     expect(iconBoxes).toHaveLength(5);
@@ -166,9 +164,9 @@ async function checkCoachNavigation(page, { active }) {
       expect(box.width).toBeCloseTo(20, 1);
       expect(box.height).toBeCloseTo(20, 1);
     }
+    const iconTops = iconBoxes.map((box) => box.top);
+    expect(Math.max(...iconTops) - Math.min(...iconTops)).toBeLessThanOrEqual(1);
   }
-
-  expect(Math.max(...navHeights) - Math.min(...navHeights)).toBeLessThanOrEqual(1);
 }
 
 test("semantic Diewish icons keep coach, History and progress meanings distinct", async ({ page }) => {
