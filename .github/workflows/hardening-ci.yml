@@ -231,7 +231,10 @@ jobs:
           retention-days: 14
 
   browser-e2e:
-    needs: [dependency-audit, backend, frontend]
+    # Keep browser regression coverage running even when the independent
+    # dependency vulnerability gate is red. Hardening CI still remains failed,
+    # so staging deploy continues to fail closed until every required gate passes.
+    needs: [backend, frontend]
     runs-on: ubuntu-latest
     services:
       postgres:
