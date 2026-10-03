@@ -7,11 +7,6 @@ export const DASHBOARD_LIVE_FEATURE_CARD_VIEWBOX = {
   height: 512,
 } as const;
 
-export const DASHBOARD_LIVE_FEATURE_CARD_ASPECT =
-  `${DASHBOARD_LIVE_FEATURE_CARD_VIEWBOX.width} / ${DASHBOARD_LIVE_FEATURE_CARD_VIEWBOX.height}`;
-
-export const DASHBOARD_FEATURE_CARD_FRAME_ASPECT = "21 / 5";
-
 export const DASHBOARD_LIVE_FEATURE_CARD_BASE = {
   food: {
     light: "/images/dashboard/food-card-base-light.png",
@@ -23,23 +18,27 @@ export const DASHBOARD_LIVE_FEATURE_CARD_BASE = {
   },
 } as const;
 
-/**
- * Theme-specific crop contracts align the artwork inside the SAME visible 21:5
- * frame. The outer card and all live HTML text coordinates never move.
- *
- * Progress light intentionally crops 20 source pixels farther from the left so
- * its icon/chart align with the approved dark artwork and the cards above.
- */
-export const DASHBOARD_LIVE_FEATURE_CARD_CROP = {
+/** Crops isolate the existing illustration and icon; no text is positioned here. */
+export const DASHBOARD_LIVE_FEATURE_CARD_REGIONS = {
   food: {
-    light: { left: 60, top: 88, width: 1416, height: 337 },
-    dark: { left: 60, top: 88, width: 1416, height: 337 },
+    light: {
+      icon: { x: 100, y: 170, width: 180, height: 176 },
+      illustration: { x: 840, y: 106, width: 536, height: 302 },
+    },
+    dark: {
+      icon: { x: 100, y: 170, width: 180, height: 176 },
+      illustration: { x: 840, y: 106, width: 536, height: 302 },
+    },
   },
   progress: {
-    light: { left: 75, top: 86, width: 1426, height: 340 },
-    // Normalized from the approved dark source so the visible progress icon
-    // tile matches Food: same left/top alignment and same displayed footprint.
-    dark: { left: 49, top: 88, width: 1432, height: 341 },
+    light: {
+      icon: { x: 105, y: 166, width: 193, height: 192 },
+      illustration: { x: 900, y: 107, width: 483, height: 300 },
+    },
+    dark: {
+      icon: { x: 90, y: 170, width: 182, height: 182 },
+      illustration: { x: 900, y: 107, width: 483, height: 300 },
+    },
   },
 } as const;
 
@@ -63,41 +62,5 @@ export const DASHBOARD_LIVE_FEATURE_CARD_COPY = {
       title: "View My Progress",
       description: ["Review your weight, nutrition,", "water and activity data."],
     },
-  },
-} as const;
-
-export const DASHBOARD_LIVE_FEATURE_CARD_LAYOUT = {
-  food: {
-    x: 310,
-    titleY: 201,
-    descriptionFirstY: 267,
-    descriptionSecondY: 313,
-    titleFontSize: { tr: 46, en: 44 },
-    descriptionFontSize: 38,
-    titleWeight: 800,
-    descriptionWeight: 500,
-    safeTextRight: 850,
-  },
-  progress: {
-    x: 305,
-    titleY: 191,
-    descriptionFirstY: 259,
-    descriptionSecondY: 303,
-    titleFontSize: { tr: 52, en: 48 },
-    descriptionFontSize: 39,
-    titleWeight: 800,
-    descriptionWeight: 500,
-    safeTextRight: 850,
-  },
-} as const;
-
-export const DASHBOARD_LIVE_FEATURE_CARD_COLORS = {
-  light: {
-    title: "#111b3b",
-    description: "#667895",
-  },
-  dark: {
-    title: "#f7fbfa",
-    description: "#b8cedf",
   },
 } as const;

@@ -110,10 +110,10 @@ jobs:
         run: node --test tests/identity.test.cjs
       - name: Test notification lifecycle and web push guards
         run: node --test tests/notification-lifecycle.test.cjs tests/web-push-service-worker.test.cjs
-      - name: Test Blood Test card coordinate contract
+      - name: Test Blood Test card content contract
         run: node --test tests/dashboard-blood-test-card.test.cjs
-      - name: Test Food and Progress card coordinate contract
-        run: node --test tests/dashboard-live-feature-card.test.cjs
+      - name: Test Food and Progress card content contract
+        run: node --test tests/dashboard-live-feature-card.test.cjs tests/dashboard-webview-parity.test.cjs
       - name: Test Journey dashboard activation and daily source reliability
         env:
           TZ: Europe/Istanbul
@@ -147,6 +147,21 @@ jobs:
         env:
           NEXT_PUBLIC_API_BASE_URL: https://example.invalid/api
           NEXT_PUBLIC_SITE_URL: https://example.invalid
+      - name: Install Chromium for standalone dashboard layout checks
+        run: npx playwright install --with-deps chromium
+      - name: Test dashboard text scaling and responsive layout without backend state
+        env:
+          DASHBOARD_PRODUCTION_FONTS: "1"
+          DASHBOARD_LAYOUT_ARTIFACTS: test-results/dashboard-layout
+        run: npm run test:dashboard-layout
+      - name: Upload responsive dashboard layout evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dashboard-responsive-layout-${{ github.run_number }}
+          path: frontend/test-results/dashboard-layout/
+          if-no-files-found: warn
+          retention-days: 7
 
   android-native:
     runs-on: ubuntu-latest

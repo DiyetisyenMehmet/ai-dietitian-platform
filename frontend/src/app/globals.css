@@ -89,19 +89,11 @@
     display: none !important;
   }
 
-  /*
-   * Fixed-geometry dashboard artwork uses author-sized HTML text positioned
-   * against immutable card coordinates. Lock text inflation only on these
-   * surfaces so Android WebView cannot autosize the copy away from its artwork.
-   * Normal application content keeps the browser/OS text scaling behavior.
-   */
-  [data-dashboard-fixed-geometry],
-  [data-dashboard-fixed-geometry] * {
+  /* Suppress heuristic inflation on dashboard controls, not Android's user
+     text zoom. These surfaces must reflow at the user's preferred font size. */
+  [data-dashboard-responsive-surface] {
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
-  }
-
-  [data-dashboard-fixed-geometry] {
     -webkit-user-select: none;
     user-select: none;
     -webkit-touch-callout: none;
@@ -134,5 +126,231 @@
   }
   .safe-bottom {
     padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+@layer components {
+  /* Live copy is normal flow. Only decorative pixels and the hit target may be
+     absolute. No aspect ratio, cqw font size or fixed text coordinates. */
+  .dashboard-feature-card {
+    position: relative;
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr) 28px;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 6.5rem;
+    padding: 12px;
+    border: 1px solid #e2eeeb;
+    border-radius: 1.125rem;
+    background: linear-gradient(110deg, #fff, #f2fcf8);
+    box-shadow: 0 2px 5px rgb(15 23 42 / 5%);
+  }
+  .dark .dashboard-feature-card {
+    background: linear-gradient(110deg, #05181b, #092e30);
+    border-color: #173f44;
+    box-shadow: none;
+  }
+  .dashboard-card-link {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    border-radius: inherit;
+    touch-action: manipulation;
+  }
+  .dashboard-card-link:focus-visible,
+  .dashboard-coach-action:focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+  .dashboard-card-icon,
+  .dashboard-card-illustration {
+    min-width: 0;
+    pointer-events: none;
+  }
+  .dashboard-card-icon svg,
+  .dashboard-card-illustration svg {
+    width: 100%;
+    height: auto;
+    overflow: hidden;
+    border-radius: 0.65rem;
+  }
+  .dashboard-feature-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 30%;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 0;
+  }
+  .dashboard-card-copy,
+  .dashboard-coach-copy {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .dashboard-card-title {
+    font-size: 1rem;
+    font-weight: 800;
+    line-height: 1.3;
+    color: #111b3b;
+  }
+  .dashboard-card-description {
+    margin-top: 0.25rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    line-height: 1.45;
+    color: #667895;
+  }
+  .dark .dashboard-card-title {
+    color: #f7fbfa;
+  }
+  .dark .dashboard-card-description {
+    color: #b8cedf;
+  }
+  .dashboard-card-chevron {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: #fff;
+    color: #223552;
+    box-shadow: 0 1px 4px rgb(15 23 42 / 12%);
+    pointer-events: none;
+  }
+  .dark .dashboard-card-chevron {
+    background: #06283c;
+    color: #effbff;
+  }
+  .dashboard-blood-card {
+    background: linear-gradient(125deg, #fff8f8, #f2faff);
+  }
+  .dashboard-blood-body {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.875rem;
+    min-width: 0;
+  }
+  .dashboard-blood-body > .dashboard-card-copy {
+    flex: 1 1 10rem;
+  }
+  .dashboard-blood-preview {
+    flex: 1 1 13rem;
+    min-width: 0;
+    padding: 0.625rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.75rem;
+    background: rgb(255 255 255 / 85%);
+    font-size: 0.75rem;
+    line-height: 1.4;
+    color: #475569;
+    overflow-wrap: anywhere;
+  }
+  .dark .dashboard-blood-preview {
+    background: #0c292e;
+    border-color: #25464b;
+    color: #c3d8d4;
+  }
+  .dashboard-blood-example {
+    display: block;
+    margin-bottom: 0.25rem;
+  }
+  .dashboard-blood-heading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.375rem;
+    margin-bottom: 0.375rem;
+  }
+  .dashboard-blood-heading > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+  .dashboard-blood-status {
+    border-radius: 0.5rem;
+    padding: 0.125rem 0.375rem;
+    background: #d5f5e9;
+    color: #08745f;
+  }
+  .dark .dashboard-blood-status {
+    background: #165042;
+    color: #effff9;
+  }
+  .dashboard-blood-rows {
+    display: grid;
+    gap: 0.25rem;
+  }
+  .dashboard-blood-row {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: baseline;
+    column-gap: 0.625rem;
+    padding: 0.2rem 0.375rem;
+    border-radius: 0.25rem;
+    background: rgb(148 163 184 / 8%);
+  }
+  .dashboard-blood-row > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+  .dashboard-blood-row dd {
+    margin-left: auto;
+    font-weight: 600;
+    color: #172033;
+  }
+  .dark .dashboard-blood-row dd {
+    color: #f7fbfa;
+  }
+  .dashboard-coach-banner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.875rem;
+    padding: 1rem;
+    border: 1px solid #d5edf0;
+    border-radius: 1.125rem;
+    background: linear-gradient(100deg, #f7fbff, #ebfff8);
+  }
+  .dark .dashboard-coach-banner {
+    background: linear-gradient(100deg, #10333e, #0b382d);
+    border-color: #194750;
+  }
+  .dashboard-coach-body {
+    display: flex;
+    flex: 1 1 12rem;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 0;
+  }
+  .dashboard-coach-copy {
+    flex: 1 1 12rem;
+  }
+  .dashboard-coach-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    min-height: 44px;
+    max-width: 100%;
+    padding: 0.5rem 0.75rem;
+    border-radius: 1.5rem;
+    background: #d5fae8;
+    color: #098662;
+    font-size: 0.875rem;
+    font-weight: 800;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+    touch-action: manipulation;
+  }
+  .dashboard-coach-action span {
+    min-width: 0;
+  }
+  .dark .dashboard-coach-action {
+    background: #164d3c;
+    color: #8cedc1;
   }
 }

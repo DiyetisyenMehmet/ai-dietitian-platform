@@ -41,15 +41,21 @@ const STATE_META: Record<
   },
 };
 
-function StepRow({ step, last }: { step: JourneyStep; last: boolean }) {
+export function StepRow({ step, last }: { step: JourneyStep; last: boolean }) {
   const meta = STATE_META[step.state];
   const Icon = healthIcon(step.icon);
   const clickable = Boolean(step.href) && step.state !== "completed";
 
   const inner = (
-    <div className={cn("flex items-center gap-3 rounded-xl border p-3 transition-colors", meta.row)}>
+    <div
+      data-journey-row
+      className={cn(
+        "flex min-w-0 items-center gap-3 rounded-xl border p-3 transition-colors",
+        meta.row,
+      )}
+    >
       {/* Timeline node */}
-      <div className="relative flex flex-col items-center self-stretch">
+      <div className="relative flex shrink-0 flex-col items-center self-stretch">
         <span
           className={cn(
             "flex size-9 shrink-0 items-center justify-center rounded-lg",
@@ -68,21 +74,28 @@ function StepRow({ step, last }: { step: JourneyStep; last: boolean }) {
       </div>
 
       <div className="min-w-0 flex-1">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
           <span
             className={cn(
-              "truncate text-sm font-medium",
+              "min-w-0 break-words text-sm font-medium leading-normal [overflow-wrap:anywhere]",
               step.state === "completed" && "text-muted-foreground",
               step.state === "skipped" && "text-muted-foreground",
             )}
           >
             {step.label}
           </span>
-          <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold", meta.badgeClass)}>
+          <span
+            className={cn(
+              "max-w-full break-words rounded-full px-2 py-0.5 text-[10px] font-semibold [overflow-wrap:anywhere]",
+              meta.badgeClass,
+            )}
+          >
             {meta.badge}
           </span>
         </div>
-        <p className="mt-0.5 truncate text-xs text-muted-foreground">{step.hint}</p>
+        <p className="mt-0.5 break-words text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
+          {step.hint}
+        </p>
         {typeof step.progress === "number" && step.state !== "completed" && (
           <div className="mt-1.5">
             <ProgressBar value={Math.round(step.progress * 100)} />
@@ -125,7 +138,7 @@ export function DailyJourneySection() {
 
   return (
     <section className="space-y-3">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-base font-semibold">Bugünkü Yolculuğun</h3>
         <span className="text-xs font-medium text-muted-foreground">
           {insufficientData ? "Veri bekleniyor" : `${completed}/${total} adım`}

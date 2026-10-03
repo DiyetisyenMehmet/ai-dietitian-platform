@@ -2,7 +2,6 @@ import { BloodTestCard } from "@/presentation/components/dashboard/blood-test-ca
 import type { BloodTestCardLocale } from "@/presentation/components/dashboard/blood-test-card-contract";
 import { DashboardLiveFeatureCard } from "@/presentation/components/dashboard/dashboard-live-feature-card";
 import {
-  DASHBOARD_FEATURE_CARD_FRAME_ASPECT,
   type DashboardLiveFeatureCardKind,
   type DashboardLiveFeatureCardLocale,
 } from "@/presentation/components/dashboard/dashboard-live-feature-card-contract";
@@ -19,24 +18,13 @@ function isLiveFeatureKind(
   return kind === "food" || kind === "progress";
 }
 
-function BloodTestThemeSlot({
-  href,
-  locale,
-}: {
-  href: string;
-  locale: BloodTestCardLocale;
-}) {
+function BloodTestThemeSlot({ href, locale }: { href: string; locale: BloodTestCardLocale }) {
   return (
-    <div
-      className="relative w-full overflow-hidden"
-      style={{ aspectRatio: DASHBOARD_FEATURE_CARD_FRAME_ASPECT }}
-      data-blood-test-theme-slot
-      data-frame-aspect="21:5"
-    >
-      <div className="absolute inset-0 dark:hidden">
+    <div className="w-full" data-blood-test-theme-slot>
+      <div className="dark:hidden">
         <BloodTestCard href={href} locale={locale} theme="light" />
       </div>
-      <div className="absolute inset-0 hidden dark:block">
+      <div className="hidden dark:block">
         <BloodTestCard href={href} locale={locale} theme="dark" />
       </div>
     </div>
@@ -50,19 +38,14 @@ export function DashboardFeatureLinks({
   bloodTestLocale?: BloodTestCardLocale;
   featureLocale?: DashboardLiveFeatureCardLocale;
 } = {}) {
-  const resolvedFeatureLocale =
-    featureLocale ?? (bloodTestLocale === "en" ? "en" : "tr");
+  const resolvedFeatureLocale = featureLocale ?? (bloodTestLocale === "en" ? "en" : "tr");
 
   return (
     <section id="diewish-tools" className="w-full" aria-label="Diewish araçları">
       <div className="space-y-[clamp(0.65rem,2.2vw,0.95rem)]">
         {FEATURES.map((feature) =>
           feature.kind === "blood" ? (
-            <BloodTestThemeSlot
-              key={feature.href}
-              href={feature.href}
-              locale={bloodTestLocale}
-            />
+            <BloodTestThemeSlot key={feature.href} href={feature.href} locale={bloodTestLocale} />
           ) : isLiveFeatureKind(feature.kind) ? (
             <DashboardLiveFeatureCard
               key={feature.href}
