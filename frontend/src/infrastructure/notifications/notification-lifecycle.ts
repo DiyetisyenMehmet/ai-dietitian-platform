@@ -28,6 +28,83 @@ export function resolveNotificationTypeTarget(type: string | null | undefined): 
   }
 }
 
+export interface NotificationCenterServerRecord {
+  id: string;
+  type: string;
+  title: string;
+  body: string;
+  scheduledFor: string;
+  deliveredAt: string | null;
+  readAt: string | null;
+}
+
+export interface NotificationCenterNativeRecord {
+  id: string;
+  serverId?: string | null;
+  title: string;
+  body: string;
+  target: string;
+  occurredAt: number;
+  readAt?: number | null;
+}
+
+export interface NotificationCenterItem {
+  key: string;
+  serverId?: string;
+  nativeId?: string;
+  title: string;
+  body: string;
+  target: string;
+  occurredAt: string;
+  read: boolean;
+}
+
+export function mergeNotificationCenterItems(
+  serverRecords: NotificationCenterServerRecord[],
+  nativeRecords: NotificationCenterNativeRecord[],
+): NotificationCenterItem[] {
+  const items: NotificationCenterItem[] = serverRecords.map((record) => ({
+    key: `server:${record.id}`,
+    serverId: record.id,
+    title: record.title,
+    body: record.body,
+    target: resolveNotificationTypeTarget(record.type),
+    occurredAt: record.deliveredAt ?? record.scheduledFor,
+    read: Boolean(record.readAt),
+  }));
+  const byServerId = new Map(
+    items
+      .filter((item): item is NotificationCenterItem & { serverId: string } => Boolean(item.serverId))
+      .map((item) => [item.serverId, item]),
+  );
+
+  for (const record of nativeRecords) {
+    const target = resolvePendingNotificationTarget(record.target, true) ?? "/dashboard";
+    const duplicate = record.serverId ? byServerId.get(record.serverId) : undefined;
+    if (duplicate) {
+      duplicate.nativeId = record.id;
+      duplicate.read = duplicate.read || Boolean(record.readAt);
+      continue;
+    }
+
+    items.push({
+      key: `native:${record.id}`,
+      nativeId: record.id,
+      serverId: record.serverId || undefined,
+      title: record.title,
+      body: record.body,
+      target,
+      occurredAt: new Date(record.occurredAt).toISOString(),
+      read: Boolean(record.readAt),
+    });
+  }
+
+  return items.sort(
+    (left, right) =>
+      new Date(right.occurredAt).getTime() - new Date(left.occurredAt).getTime(),
+  );
+}
+
 export interface WellnessPreferenceLike {
   waterReminders: boolean;
   activityReminders: boolean;

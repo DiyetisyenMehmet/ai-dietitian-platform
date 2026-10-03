@@ -45,6 +45,7 @@ export const SLEEP_ENDPOINTS = {
 } as const;
 
 export const NOTIFICATION_ENDPOINTS = {
+  center: "/notifications",
   preferences: "/notifications/preferences",
   scheduled: "/notifications/scheduled",
   devices: "/notifications/devices",

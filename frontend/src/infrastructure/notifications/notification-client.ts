@@ -4,7 +4,33 @@ import { NOTIFICATION_ENDPOINTS } from "@/infrastructure/auth/endpoints";
 
 export type UpdateNotificationPreferences = Partial<Omit<NotificationPreferences, "id" | "userId">>;
 
+export interface NotificationCenterApiItem {
+  id: string;
+  type: string;
+  title: string;
+  body: string;
+  scheduledFor: string;
+  deliveredAt: string | null;
+  readAt: string | null;
+}
+
 export const notificationClient = {
+  getCenter() {
+    return apiRequest<{ notifications: NotificationCenterApiItem[]; unreadCount: number }>({
+      path: NOTIFICATION_ENDPOINTS.center,
+      method: "GET",
+      auth: true,
+    });
+  },
+
+  markRead(id: string) {
+    return apiRequest<{ notification: { id: string; readAt: string } }>({
+      path: `/notifications/${encodeURIComponent(id)}/read`,
+      method: "PATCH",
+      auth: true,
+    });
+  },
+
   getPreferences() {
     return apiRequest<{ preferences: NotificationPreferences }>({
       path: NOTIFICATION_ENDPOINTS.preferences,

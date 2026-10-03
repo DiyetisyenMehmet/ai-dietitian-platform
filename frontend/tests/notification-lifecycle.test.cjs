@@ -100,3 +100,58 @@ test('logout cleanup awaits asynchronous device cleanup', async () => {
   );
   assert.deepEqual(events, ['async-cleanup']);
 });
+
+
+test('notification center merges remote/native duplicates and keeps safe targets', () => {
+  const { mergeNotificationCenterItems } = load();
+  const items = mergeNotificationCenterItems(
+    [{
+      id: 'server-1',
+      type: 'PROACTIVE_MESSAGE',
+      title: 'Koç',
+      body: 'Yeni mesaj',
+      scheduledFor: '2026-10-04T10:00:00.000Z',
+      deliveredAt: '2026-10-04T10:00:01.000Z',
+      readAt: null,
+    }],
+    [{
+      id: 'remote:server-1',
+      serverId: 'server-1',
+      title: 'Koç',
+      body: 'Yeni mesaj',
+      target: '/ai',
+      occurredAt: Date.parse('2026-10-04T10:00:01.000Z'),
+      readAt: Date.parse('2026-10-04T10:02:00.000Z'),
+    }, {
+      id: 'wellness:water-1',
+      title: 'Su zamanı',
+      body: 'Hatırlatma',
+      target: 'https://evil.invalid',
+      occurredAt: Date.parse('2026-10-04T09:00:00.000Z'),
+      readAt: null,
+    }],
+  );
+
+  assert.equal(items.length, 2);
+  assert.equal(items[0].serverId, 'server-1');
+  assert.equal(items[0].nativeId, 'remote:server-1');
+  assert.equal(items[0].target, '/ai');
+  assert.equal(items[0].read, true);
+  assert.equal(items[1].target, '/dashboard');
+  assert.equal(items[1].read, false);
+});
+
+test('dashboard bell opens the center and the center reuses existing preferences route', () => {
+  const dashboard = fs.readFileSync(
+    path.join(__dirname, '../src/presentation/components/dashboard/dashboard-home-header.tsx'),
+    'utf8',
+  );
+  const centerPage = fs.readFileSync(
+    path.join(__dirname, '../src/app/notifications/page.tsx'),
+    'utf8',
+  );
+  assert.match(dashboard, /href="\/notifications"/);
+  assert.doesNotMatch(dashboard, /href="\/profile\/notifications"/);
+  assert.match(centerPage, /href="\/profile\/notifications"/);
+  assert.match(centerPage, /Bildirim Merkezi/);
+});

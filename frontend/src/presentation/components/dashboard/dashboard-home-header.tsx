@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { Bell, UserRound } from "lucide-react";
 
+import { getNotificationCenterSnapshot } from "@/infrastructure/notifications/notification-center";
 import { ThemeToggle } from "@/presentation/components/layout/theme-toggle";
 import { formatLongDate, getGreeting } from "@/shared/lib/format";
 
@@ -12,26 +13,6 @@ interface DashboardHomeHeaderProps {
 }
 
 /** Dashboard-owned top bar so the home screen can stay personal without changing the shared app header. */
-interface NativeNotificationBadgeBridge {
-  unreadNotificationCount?(): number;
-}
-
-function nativeUnreadCount(): number {
-  if (typeof window === "undefined") return 0;
-  try {
-    const bridge = (
-      window as typeof window & {
-        DiewishReminders?: NativeNotificationBadgeBridge;
-      }
-    ).DiewishReminders;
-    if (!bridge || typeof bridge.unreadNotificationCount !== "function") return 0;
-    const count = Number(bridge.unreadNotificationCount());
-    return Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0;
-  } catch {
-    return 0;
-  }
-}
-
 function formatBuildStamp(raw: string | undefined): string {
   if (!raw) return "bekleniyor";
   const date = new Date(raw);
@@ -60,7 +41,14 @@ export function DashboardHomeHeader({ userName }: DashboardHomeHeaderProps) {
   React.useEffect(() => setNow(new Date()), []);
 
   React.useEffect(() => {
-    const sync = () => setUnreadCount(nativeUnreadCount());
+    let active = true;
+    const sync = () => {
+      void getNotificationCenterSnapshot()
+        .then((snapshot) => {
+          if (active) setUnreadCount(snapshot.unreadCount);
+        })
+        .catch(() => undefined);
+    };
     const onState = (event: Event) => {
       const detail = (event as CustomEvent<{ unreadCount?: number }>).detail;
       if (typeof detail?.unreadCount === "number") {
@@ -72,8 +60,9 @@ export function DashboardHomeHeader({ userName }: DashboardHomeHeaderProps) {
     sync();
     window.addEventListener("focus", sync);
     window.addEventListener("diewish:notification-state", onState);
-    const timer = window.setInterval(sync, 5000);
+    const timer = window.setInterval(sync, 30_000);
     return () => {
+      active = false;
       window.removeEventListener("focus", sync);
       window.removeEventListener("diewish:notification-state", onState);
       window.clearInterval(timer);
@@ -105,8 +94,8 @@ export function DashboardHomeHeader({ userName }: DashboardHomeHeaderProps) {
           <ThemeToggle />
         </div>
         <Link
-          href="/profile/notifications"
-          aria-label={unreadCount > 0 ? `Bildirimler, ${unreadCount} okunmamış` : "Bildirim ayarları"}
+          href="/notifications"
+          aria-label={unreadCount > 0 ? `Bildirim Merkezi, ${unreadCount} okunmamış` : "Bildirim Merkezi"}
           className="relative flex size-10 items-center justify-center rounded-2xl border border-border bg-card text-foreground shadow-sm transition hover:border-primary/30 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:size-11"
         >
           <Bell className="size-5" aria-hidden="true" />

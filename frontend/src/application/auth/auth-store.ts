@@ -47,9 +47,15 @@ function removeLegacyPersistedSession(): void {
 function cancelNativeNutritionReminders(): void {
   if (typeof window === "undefined") return;
   try {
-    const bridge = (window as typeof window & { DiewishReminders?: { cancelAll(): void } })
-      .DiewishReminders;
-    if (bridge) bridge.cancelAll();
+    const bridge = (
+      window as typeof window & {
+        DiewishReminders?: { cancelAll(): void; clearNotificationInbox?(): void };
+      }
+    ).DiewishReminders;
+    if (bridge) {
+      bridge.cancelAll();
+      bridge.clearNotificationInbox?.();
+    }
   } catch {
     // Logout must never be blocked by an optional native capability.
   }
