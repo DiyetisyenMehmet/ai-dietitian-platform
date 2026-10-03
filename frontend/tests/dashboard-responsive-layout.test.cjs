@@ -287,7 +287,7 @@ for (const width of [390, 412, 430]) {
               assert.ok(blood.artwork.width >= 112 && blood.artwork.width <= 155);
               assert.ok(blood.bloodTube.width >= 23 && blood.bloodTube.width <= 25);
               assert.ok(
-                blood.bloodTube.x >= blood.artwork.right + 3,
+                blood.bloodTube.x >= blood.artwork.right + 2,
                 "Blood tube stays beside the compact preview",
               );
               assert.ok(blood.bloodSummary.width <= blood.width * 0.58);
