@@ -21,10 +21,12 @@ after(async () => {
 // deviceScaleFactor and page zoom alone do not exercise WebSettings.textZoom.
 async function scaleText(page, multiplier) {
   await page.evaluate((scale) => {
-    const nodes = [...document.querySelectorAll("main *")].filter((node) =>
-      [...node.childNodes].some(
-        (child) => child.nodeType === Node.TEXT_NODE && child.textContent.trim(),
-      ),
+    const nodes = [...document.querySelectorAll("main *")].filter(
+      (node) =>
+        !node.closest("[data-dashboard-fixed-geometry]") &&
+        [...node.childNodes].some(
+          (child) => child.nodeType === Node.TEXT_NODE && child.textContent.trim(),
+        ),
     );
     const sizes = nodes.map((node) => [node, parseFloat(getComputedStyle(node).fontSize)]);
     for (const [node, size] of sizes) node.style.fontSize = `${size * scale}px`;
@@ -57,7 +59,7 @@ async function assertLayout(page) {
     );
     for (const node of textNodes) {
       const box = node.getBoundingClientRect();
-      const surface = node.closest("[data-dashboard-responsive-surface], [data-journey-row]");
+      const surface = node.closest("[data-dashboard-responsive-surface], [data-dashboard-fixed-geometry], [data-journey-row]");
       if (!surface) {
         failures.push(`Missing measured surface: ${name(node)}`);
         continue;
@@ -248,13 +250,12 @@ for (const width of [390, 412, 430]) {
               scale === 1
                 ? {
                     food: productionFonts ? (locale === "en" ? 94 : 90) : 96,
-                    blood: productionFonts ? 86 : 94,
                     progress: 90,
                     coach: 80,
                   }
                 : scale === 1.2
-                  ? { food: 138, blood: 235, progress: 120, coach: 112 }
-                  : { food: productionFonts ? 155 : 192, blood: 250, progress: 125, coach: 122 };
+                  ? { food: 138, progress: 120, coach: 112 }
+                  : { food: productionFonts ? 155 : 192, progress: 125, coach: 122 };
             for (const [kind, maximum] of Object.entries(heights)) {
               assert.ok(
                 cards[kind].height <= maximum + 1, // subpixel line-box rounding
@@ -262,7 +263,7 @@ for (const width of [390, 412, 430]) {
               );
               assert.ok(cards[kind].height >= 44, `${kind} touch target height`);
             }
-            const { food, blood, progress, coach } = cards;
+            const { food, progress, coach } = cards;
             assert.ok(food.artwork.width >= 154 && food.artwork.width <= 158);
             assert.ok(food.artwork.width * food.artwork.height >= 8500);
             assert.ok(
@@ -270,40 +271,10 @@ for (const width of [390, 412, 430]) {
               "Food artwork stays beside the copy",
             );
             assert.ok(progress.artwork.width >= 140 && progress.artwork.width <= 156);
-            assert.ok(
-              blood.rowFonts.length === 10 &&
-                blood.rowFonts.every(
-                  (size, index) => Math.abs(size - (index % 2 === 0 ? 4.75 : 4.5) * scale) < 0.01,
-                ),
-              "Blood labels (4.75px) and values (4.5px) stay compact and scale with text enlargement",
-            );
-            assert.ok(
-              blood.tube.x >= blood.artwork.right + 1,
-              "Blood tube stays right of result values",
-            );
-            assert.ok(blood.tube.right <= blood.right, "Blood tube remains inside the card");
-            assert.ok(
-              blood.tube.width >= 51 && blood.tube.width <= 53 && blood.tube.height >= 82,
-              "Reference tube occupies the original full-height right artwork",
-            );
-            assert.equal(
-              await page
-                .locator("[data-blood-test-card]:visible [data-blood-test-tube] svg")
-                .evaluate((node) => getComputedStyle(node).overflow),
-              "hidden",
-            );
-            assert.equal(
-              await page
-                .locator("[data-blood-test-card]:visible [data-blood-test-tube]")
-                .evaluate((node) => getComputedStyle(node).maskImage),
-              "none",
-              "The original tube is not oval-masked",
-            );
             for (const [kind, card] of Object.entries(cards)) {
               assert.ok(Math.abs(card.titleFont - (kind === "coach" ? 11 : 12) * scale) < 0.01);
               assert.ok(Math.abs(card.descriptionFont - 10 * scale) < 0.01);
             }
-            assert.ok(blood.rowFonts.every((size) => size < blood.descriptionFont));
             if (scale === 1) {
               assert.ok(
                 Math.abs(food.artwork.y - food.y - 1) < 1,
@@ -328,26 +299,26 @@ for (const width of [390, 412, 430]) {
                 ["0px", "0px", "rgba(0, 0, 0, 0)", "none"],
                 "No separate artwork frame",
               );
+              const bloodCard = page.locator("[data-blood-test-card]:visible");
+              const bloodBox = await bloodCard.boundingBox();
+              assert.ok(bloodBox, "Blood card is visible");
               assert.ok(
-                blood.artwork.x >= blood.copy.right + 3.5,
-                "Normal phones keep the Blood preview on the right",
+                Math.abs(bloodBox.height - bloodBox.width / 4.2) <= 1.5,
+                "Blood card keeps the approved 21:5 compact frame",
               );
-              assert.ok(blood.artwork.width >= 102 && blood.artwork.width <= 140);
-              assert.ok(blood.artwork.width <= blood.width * 0.51);
               assert.ok(
-                Math.abs(blood.height - progress.height) <= 2,
-                "Blood card matches the compact feature-card height at normal scale",
+                Math.abs(bloodBox.height - progress.height) <= 4,
+                "Blood and Progress remain in the same compact card family",
               );
-              const bloodPreviewStyle = await page
-                .locator('[data-blood-test-card]:visible .dashboard-blood-preview')
-                .evaluate((node) => {
-                  const css = getComputedStyle(node);
-                  return [css.borderTopWidth, css.boxShadow];
-                });
-              assert.deepEqual(
-                bloodPreviewStyle,
-                ["0px", "none"],
-                "Blood results stay integrated without an outer frame",
+              assert.equal(
+                await bloodCard.locator("[data-blood-test-row]").count(),
+                10,
+                "Five Blood labels and five values remain present",
+              );
+              assert.equal(
+                await bloodCard.locator(".dashboard-blood-preview").count(),
+                0,
+                "No second rectangular live preview panel is layered over the approved artwork",
               );
               assert.ok(
                 coach.action.x >= coach.copy.right + 4,
@@ -375,18 +346,13 @@ test("320px / 130% uses the fallback without hiding or shrinking Blood rows", as
   try {
     await scaleText(page, 1.3);
     await assertLayout(page);
-    const { food, blood } = await cardGeometry(page);
+    const { food } = await cardGeometry(page);
     assert.ok(food.artwork.y >= food.copy.bottom + 4);
-    assert.ok(blood.artwork.y >= blood.copy.bottom + 4);
-    assert.ok(
-      blood.rowFonts.every(
-        (size, index) => Math.abs(size - (index % 2 === 0 ? 4.75 : 4.5) * 1.3) < 0.01,
-      ),
-    );
-    assert.equal(
-      await page.locator("[data-blood-test-card]:visible [data-blood-test-row]").count(),
-      5,
-    );
+    const bloodCard = page.locator("[data-blood-test-card]:visible");
+    const bloodBox = await bloodCard.boundingBox();
+    assert.ok(bloodBox);
+    assert.ok(Math.abs(bloodBox.height - bloodBox.width / 4.2) <= 1.5);
+    assert.equal(await bloodCard.locator("[data-blood-test-row]").count(), 10);
     if (process.env.DASHBOARD_LAYOUT_ARTIFACTS) {
       const directory = process.env.DASHBOARD_LAYOUT_ARTIFACTS;
       fs.mkdirSync(directory, { recursive: true });

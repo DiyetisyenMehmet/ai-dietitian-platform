@@ -99,6 +99,21 @@
     -webkit-touch-callout: none;
   }
 
+  /* Blood Test uses the approved fixed 21:5 visual geometry. Keep Android
+     WebView from inflating only this decorative card text; app content elsewhere
+     keeps the normal accessibility scaling path. */
+  [data-dashboard-fixed-geometry],
+  [data-dashboard-fixed-geometry] * {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  [data-dashboard-fixed-geometry] {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+
   [data-dashboard-decorative-text] {
     pointer-events: none;
     -webkit-user-select: none;
