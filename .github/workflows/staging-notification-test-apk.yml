@@ -1,4 +1,5 @@
 name: Staging Notification Test APK
+# APK rebuild trigger: dashboard rollback validation
 
 on:
   push:
