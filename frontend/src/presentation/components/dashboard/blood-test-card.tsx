@@ -1,7 +1,7 @@
 import Link from "next/link";
+import { useId } from "react";
 
 import { DashboardCardArtwork } from "./dashboard-card-artwork";
-import { DashboardFeatureChevron } from "./dashboard-feature-chevron";
 import {
   BLOOD_TEST_CARD_BASE,
   BLOOD_TEST_CARD_COPY,
@@ -25,6 +25,7 @@ export function BloodTestCard({
   theme,
 }: BloodTestCardProps) {
   const copy = BLOOD_TEST_CARD_COPY[locale];
+  const backgroundClipId = `blood-background-${useId()}`;
   return (
     <div
       className="dashboard-feature-card dashboard-blood-card"
@@ -33,6 +34,34 @@ export function BloodTestCard({
       data-locale={locale}
       data-theme={theme}
     >
+      <svg
+        className="dashboard-blood-background"
+        viewBox="4 28 1428 358"
+        preserveAspectRatio="none"
+        aria-hidden="true"
+        focusable="false"
+        data-blood-test-background
+      >
+        <defs>
+          <clipPath id={backgroundClipId} clipPathUnits="userSpaceOnUse">
+            {/* Copy only the bottom waves. The source icon, panel and tube must
+                never appear behind the live content when the summary wraps. */}
+            <path
+              d={
+                theme === "dark"
+                  ? "M4 300C185 298 325 325 449 365C536 408 623 302 768 298V386H4Z"
+                  : "M4 299C112 299 172 363 267 386H4Z M510 386C605 355 668 299 768 296V386Z"
+              }
+            />
+          </clipPath>
+        </defs>
+        <image
+          href={BLOOD_TEST_CARD_BASE[theme]}
+          width={BLOOD_TEST_CARD_VIEWBOX.width}
+          height={BLOOD_TEST_CARD_VIEWBOX.height}
+          clipPath={`url(#${backgroundClipId})`}
+        />
+      </svg>
       <Link
         href={href}
         className="dashboard-card-link"
@@ -82,11 +111,11 @@ export function BloodTestCard({
               src={BLOOD_TEST_CARD_BASE[theme]}
               source={BLOOD_TEST_CARD_VIEWBOX}
               region={BLOOD_TEST_CARD_REGIONS.tube}
+              preserveAspectRatio="none"
             />
           </div>
         </div>
       </div>
-      <DashboardFeatureChevron />
     </div>
   );
 }

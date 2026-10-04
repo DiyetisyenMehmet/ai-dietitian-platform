@@ -38,8 +38,8 @@ export const BLOOD_TEST_CARD_COPY = {
   },
 } as const;
 
-/** Only the decorative icon uses source-image coordinates. */
+/** Source-image coordinates affect decorative pixels only, never live text. */
 export const BLOOD_TEST_CARD_REGIONS = {
   icon: { x: 34, y: 106, width: 180, height: 175 },
-  tube: { x: 1212, y: 35, width: 155, height: 330 },
+  tube: { x: 1208, y: 28, width: 224, height: 358 },
 } as const;

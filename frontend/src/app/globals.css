@@ -135,12 +135,12 @@
   .dashboard-feature-card {
     position: relative;
     display: grid;
-    grid-template-columns: 32px minmax(0, 1fr) 20px;
+    grid-template-columns: 40px minmax(0, 1fr);
     align-items: center;
     gap: 4px;
     width: 100%;
     min-height: 5.25rem;
-    padding: 8px;
+    padding: 0;
     border: 1px solid #e2eeeb;
     border-radius: 1.125rem;
     background: linear-gradient(110deg, #fff, #f2fcf8);
@@ -168,8 +168,11 @@
     min-width: 0;
     pointer-events: none;
   }
-  .dashboard-card-icon svg,
-  .dashboard-card-illustration svg {
+  .dashboard-card-icon {
+    width: 32px;
+    margin-left: 8px;
+  }
+  .dashboard-card-icon svg {
     width: 100%;
     height: auto;
     overflow: hidden;
@@ -178,26 +181,34 @@
   .dashboard-feature-body {
     display: flex;
     flex-wrap: wrap;
-    align-items: center;
-    gap: 0.375rem;
+    align-items: stretch;
+    gap: 4px;
     min-width: 0;
+    align-self: stretch;
   }
   .dashboard-feature-body > .dashboard-card-copy {
-    flex: 1 1 7rem;
+    flex: 1 1 8rem;
+    align-self: center;
+    padding-block: 8px;
   }
   .dashboard-card-illustration {
-    /* Reserve an actual illustration column, not 30% of the leftover body. */
-    flex: 0 1 7.75rem;
-    width: 7.75rem;
+    /* The original artwork reaches the surface edges. Only decorative pixels
+       stretch; live copy keeps its own intrinsic, wrapping layout column. */
+    position: relative;
+    flex: 0 0 9rem;
+    width: 9rem;
     max-width: 100%;
+    min-height: 82px;
     margin-left: auto;
+    border-radius: 0 1.0625rem 1.0625rem 0;
+    overflow: hidden;
+    mask-image: linear-gradient(to right, transparent, #000 12%);
   }
-  [data-kind="food"] .dashboard-card-illustration svg {
-    border-radius: 0;
-  }
-  [data-kind="progress"] .dashboard-card-illustration {
-    flex-basis: 7.25rem;
-    width: 7.25rem;
+  .dashboard-card-illustration svg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
   }
   .dashboard-card-copy,
   .dashboard-coach-copy {
@@ -205,14 +216,14 @@
     overflow-wrap: anywhere;
   }
   .dashboard-card-title {
-    font-size: 0.8125rem;
-    font-weight: 800;
+    font-size: 0.75rem;
+    font-weight: 700;
     line-height: 1.3;
     color: #111b3b;
   }
   .dashboard-card-description {
     margin-top: 0.1875rem;
-    font-size: 0.71875rem;
+    font-size: 0.625rem;
     font-weight: 500;
     line-height: 1.35;
     color: #667895;
@@ -224,6 +235,10 @@
     color: #b8cedf;
   }
   .dashboard-card-chevron {
+    position: absolute;
+    right: 8px;
+    top: calc(50% - 10px);
+    z-index: 2;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -240,10 +255,24 @@
     color: #effbff;
   }
   .dashboard-blood-card {
-    grid-template-columns: 28px minmax(0, 1fr) 18px;
-    gap: 3px;
     background: linear-gradient(125deg, #fff8f8, #f2faff);
-    padding-block: 4px;
+    padding-block: 0;
+    padding-right: 0;
+  }
+  .dashboard-blood-background {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: inherit;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  .dashboard-blood-card .dashboard-card-icon,
+  .dashboard-blood-card .dashboard-blood-body {
+    position: relative;
+    z-index: 1;
   }
   .dashboard-blood-card .dashboard-card-chevron {
     width: 18px;
@@ -253,7 +282,7 @@
     font-size: 0.75rem;
   }
   .dashboard-blood-card .dashboard-card-description {
-    font-size: 0.65625rem;
+    font-size: 0.625rem;
     line-height: 1.3;
   }
   .dashboard-blood-body {
@@ -262,9 +291,10 @@
     align-items: center;
     gap: 0.25rem;
     min-width: 0;
+    align-self: stretch;
   }
   .dashboard-blood-body > .dashboard-card-copy {
-    flex: 1 1 5.25rem;
+    flex: 1 1 7rem;
   }
   .dashboard-blood-summary {
     display: flex;
@@ -275,33 +305,42 @@
     max-width: 100%;
     min-width: 0;
     margin-left: auto;
+    align-self: stretch;
   }
   .dashboard-blood-preview {
     /* Preview + tube form one compact summary. Enlarged text grows the preview,
        then the whole summary wraps below the copy when the row no longer fits. */
     flex: 0 1 auto;
-    width: max-content;
-    max-width: calc(100% - 1.625rem);
+    width: 6.875rem;
+    max-width: calc(100% - 3.375rem);
     min-width: 0;
+    margin-block: 4px;
     padding: 0.1875rem;
     border: 1px solid #e2e8f0;
     border-radius: 0.75rem;
     background: rgb(255 255 255 / 85%);
-    font-size: 0.5625rem;
-    line-height: 1.2;
+    font-size: 0.34375rem;
+    line-height: 1.4;
     color: #475569;
     overflow-wrap: anywhere;
   }
   .dashboard-blood-tube {
-    flex: 0 0 1.5rem;
-    width: 1.5rem;
-    min-width: 1.5rem;
+    position: relative;
+    flex: 0 0 3.25rem;
+    width: 3.25rem;
+    min-width: 3.25rem;
+    min-height: 82px;
+    align-self: stretch;
+    border-radius: 0 1.0625rem 1.0625rem 0;
+    overflow: hidden;
     pointer-events: none;
   }
   .dashboard-blood-tube svg {
+    position: absolute;
+    inset: 0;
     display: block;
     width: 100%;
-    height: auto;
+    height: 100%;
     overflow: hidden;
   }
   .dark .dashboard-blood-preview {
@@ -326,7 +365,7 @@
     justify-content: space-between;
     gap: 0.1875rem;
     margin-bottom: 0.0625rem;
-    font-size: 0.5625rem;
+    font-size: 0.375rem;
     line-height: 1.2;
   }
   .dashboard-blood-heading > * {
@@ -334,6 +373,7 @@
     max-width: 100%;
   }
   .dashboard-blood-status {
+    font-size: 0.34375rem;
     border-radius: 0.5rem;
     padding: 0 0.25rem;
     background: #d5f5e9;
@@ -353,7 +393,7 @@
     justify-content: space-between;
     align-items: baseline;
     column-gap: 0.25rem;
-    padding: 0 0.0625rem;
+    padding: 0.125rem 0.0625rem;
     border-radius: 0.25rem;
     background: rgb(148 163 184 / 8%);
   }
@@ -363,8 +403,8 @@
   }
   .dashboard-blood-row dd {
     margin-left: auto;
-    font-size: 0.53125rem;
-    font-weight: 600;
+    font-size: 0.328125rem;
+    font-weight: 500;
     color: #172033;
   }
   .dark .dashboard-blood-row dd {
@@ -375,7 +415,7 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 0.5rem;
-    padding: 0.5rem;
+    padding: 0.375rem 0.5rem;
     border: 1px solid #d5edf0;
     border-radius: 1.125rem;
     background: linear-gradient(100deg, #f7fbff, #ebfff8);
@@ -396,10 +436,10 @@
     flex: 1 1 8rem;
   }
   .dashboard-coach-copy .dashboard-card-title {
-    font-size: 0.75rem;
+    font-size: 0.6875rem;
   }
   .dashboard-coach-copy .dashboard-card-description {
-    font-size: 0.6875rem;
+    font-size: 0.625rem;
   }
   .dashboard-coach-action {
     display: inline-flex;
@@ -412,8 +452,8 @@
     border-radius: 1.5rem;
     background: #d5fae8;
     color: #098662;
-    font-size: 0.75rem;
-    font-weight: 800;
+    font-size: 0.625rem;
+    font-weight: 700;
     line-height: 1.4;
     overflow-wrap: anywhere;
     touch-action: manipulation;

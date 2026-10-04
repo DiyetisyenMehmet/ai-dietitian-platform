@@ -22,9 +22,7 @@ test("dashboard cards reserve separate copy/artwork regions and navigate", async
         expect(beside || below).toBe(true);
         if ([390, 412, 430].includes(width)) {
           expect(beside).toBe(true);
-          expect((await card.boundingBox())!.height).toBeLessThanOrEqual(
-            kind === "food" ? 108 : 94,
-          );
+          expect((await card.boundingBox())!.height).toBeLessThanOrEqual(90);
           expect(artwork!.width).toBeGreaterThanOrEqual(kind === "food" ? 124 : 112);
         }
         await expect(card.locator("[data-dashboard-live-feature-link]")).toHaveCount(1);

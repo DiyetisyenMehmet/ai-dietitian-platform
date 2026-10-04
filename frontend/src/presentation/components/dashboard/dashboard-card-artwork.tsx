@@ -14,18 +14,21 @@ export function DashboardCardArtwork({
   region,
   className,
   style,
+  preserveAspectRatio,
 }: {
   src: string;
   source: { width: number; height: number };
   region: DashboardArtworkRegion;
   className?: string;
   style?: CSSProperties;
+  preserveAspectRatio?: string;
 }) {
   return (
     <svg
       viewBox={`${region.x} ${region.y} ${region.width} ${region.height}`}
       className={className}
       style={style}
+      preserveAspectRatio={preserveAspectRatio}
       aria-hidden="true"
       focusable="false"
       data-dashboard-artwork

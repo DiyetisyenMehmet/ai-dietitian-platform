@@ -1,7 +1,6 @@
 import Link from "next/link";
 
 import { DashboardCardArtwork } from "./dashboard-card-artwork";
-import { DashboardFeatureChevron } from "./dashboard-feature-chevron";
 import {
   DASHBOARD_LIVE_FEATURE_CARD_BASE,
   DASHBOARD_LIVE_FEATURE_CARD_COPY,
@@ -65,12 +64,12 @@ export function DashboardLiveFeatureCard({
               src={DASHBOARD_LIVE_FEATURE_CARD_BASE[kind][theme]}
               source={DASHBOARD_LIVE_FEATURE_CARD_VIEWBOX}
               region={DASHBOARD_LIVE_FEATURE_CARD_REGIONS[kind][theme].illustration}
+              preserveAspectRatio="none"
               className={theme === "light" ? "block dark:hidden" : "hidden dark:block"}
             />
           ))}
         </div>
       </div>
-      <DashboardFeatureChevron />
     </div>
   );
 }
