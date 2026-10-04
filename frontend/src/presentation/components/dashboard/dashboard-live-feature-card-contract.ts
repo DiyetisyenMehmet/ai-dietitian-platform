@@ -7,6 +7,8 @@ export const DASHBOARD_LIVE_FEATURE_CARD_VIEWBOX = {
   height: 512,
 } as const;
 
+export const DASHBOARD_FEATURE_CARD_FRAME_ASPECT = "21 / 5";
+
 export const DASHBOARD_LIVE_FEATURE_CARD_BASE = {
   food: {
     light: "/images/dashboard/food-card-base-light.png",

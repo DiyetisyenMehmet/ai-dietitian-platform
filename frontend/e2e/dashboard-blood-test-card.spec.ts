@@ -33,7 +33,7 @@ test("real dashboard blood-test card keeps its 21:5 frame and non-interactive te
     await expect(card).toHaveAttribute("data-frame-aspect", "21:5");
     await expect(card).toHaveAttribute("data-dashboard-fixed-geometry", "");
     await expect(card.locator("[data-blood-test-link]")).toHaveCount(1);
-    await expect(texts).toHaveCount(15);
+    await expect(texts).toHaveCount(16);
     await expect(card.locator("[data-dashboard-feature-chevron]")).toHaveCount(1);
 
     const box = await card.boundingBox();

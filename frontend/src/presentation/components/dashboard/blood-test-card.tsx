@@ -136,6 +136,7 @@ export function BloodTestCard({
   const accessibleName = [
     copy.title,
     copy.description.join(" "),
+    copy.example,
     copy.panelTitle,
     copy.status,
     ...copy.labels.map((label, index) => `${label}: ${BLOOD_TEST_CARD_VALUES[index]}`),
@@ -205,6 +206,16 @@ export function BloodTestCard({
           fontWeight={layout.description.fontWeight}
         >
           {copy.description[1]}
+        </HtmlText>
+
+        <HtmlText
+          x={layout.example.x}
+          y={layout.example.y}
+          color={colors.description}
+          fontSize={layout.example.fontSize}
+          fontWeight={layout.example.fontWeight}
+        >
+          {copy.example}
         </HtmlText>
 
         <HtmlText

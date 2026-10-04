@@ -64,12 +64,13 @@ test('blood-test description is larger and moved lower while keeping its x align
   const source = fs.readFileSync(file, 'utf8');
 
   assert.match(source, /x: 258/);
-  assert.match(source, /firstY: 214/);
-  assert.match(source, /secondY: 250/);
-  assert.match(source, /title: \{ x: 258, y: 158, fontSize: 52/);
-  assert.match(source, /fontSize: 36/);
-  assert.match(source, /labelFontSize: 26/);
-  assert.match(source, /valueFontSize: 25/);
+  assert.match(source, /firstY: 204/);
+  assert.match(source, /secondY: 239/);
+  assert.match(source, /title: \{ x: 258, y: 150, fontSize: 50/);
+  assert.match(source, /example: \{ x: 258, y: 278, fontSize: 27/);
+  assert.match(source, /fontSize: 34/);
+  assert.match(source, /labelFontSize: 22/);
+  assert.match(source, /valueFontSize: 21/);
 });
 
 
@@ -96,6 +97,8 @@ test('blood-test copy contract remains complete in Turkish and English', () => {
     assert.ok(copy.title.length > 0);
     assert.equal(copy.description.length, 2);
     assert.ok(copy.description.every((line) => typeof line === 'string' && line.length > 0));
+    assert.equal(typeof copy.example, 'string');
+    assert.ok(copy.example.length > 0);
     assert.equal(typeof copy.panelTitle, 'string');
     assert.equal(copy.labels.length, 5);
   }

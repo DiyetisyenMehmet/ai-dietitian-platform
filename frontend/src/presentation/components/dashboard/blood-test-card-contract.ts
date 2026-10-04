@@ -25,6 +25,7 @@ export const BLOOD_TEST_CARD_COPY = {
   tr: {
     title: "Kan Tahlili Analizi",
     description: ["Tahlil sonuçlarını yükle,", "anlaşılır şekilde değerlendir."],
+    example: "Örnek görünüm",
     panelTitle: "Tahlil Sonuçları",
     status: "Normal",
     labels: ["Kolesterol", "Trigliserid", "Kan Şekeri", "Vitamin D", "B12 Vitamini"],
@@ -32,6 +33,7 @@ export const BLOOD_TEST_CARD_COPY = {
   en: {
     title: "Blood Test Analysis",
     description: ["Upload your test results", "and review them clearly."],
+    example: "Example view",
     panelTitle: "Test Results",
     status: "Normal",
     labels: ["Cholesterol", "Triglycerides", "Blood Glucose", "Vitamin D", "Vitamin B12"],
@@ -43,22 +45,23 @@ export const BLOOD_TEST_CARD_COPY = {
  * HTML text uses these exact design coordinates and scales with the card width.
  */
 export const BLOOD_TEST_CARD_LAYOUT = {
-  title: { x: 258, y: 158, fontSize: 52, fontWeight: 700 },
+  title: { x: 258, y: 150, fontSize: 50, fontWeight: 700 },
   description: {
     x: 258,
-    firstY: 214,
-    secondY: 250,
-    fontSize: 36,
+    firstY: 204,
+    secondY: 239,
+    fontSize: 34,
     fontWeight: 500,
   },
-  panelTitle: { x: 818, y: 88, fontSize: 27, fontWeight: 700 },
-  status: { x: 1117, y: 86, fontSize: 25, fontWeight: 700 },
+  example: { x: 258, y: 278, fontSize: 27, fontWeight: 500 },
+  panelTitle: { x: 818, y: 82, fontSize: 23, fontWeight: 700 },
+  status: { x: 1117, y: 82, fontSize: 21, fontWeight: 700 },
   rows: {
     labelX: 806,
     valueX: 1174,
-    y: [140, 185, 230, 276, 322],
-    labelFontSize: 26,
-    valueFontSize: 25,
+    y: [133, 176, 219, 262, 305],
+    labelFontSize: 22,
+    valueFontSize: 21,
     labelWeight: 500,
     valueWeight: 600,
   },
