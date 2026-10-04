@@ -155,7 +155,7 @@
     align-items: center;
     gap: 0;
     width: 100%;
-    height: 5.25rem;
+    height: auto;
     min-height: 5.25rem;
     padding: 0;
     overflow: hidden;
@@ -221,7 +221,7 @@
   .dashboard-feature-body > .dashboard-card-copy {
     flex: 1 1 8rem;
     align-self: center;
-    padding-block: 8px;
+    padding-block: 6px;
   }
   .dashboard-card-illustration {
     /* The original artwork reaches the surface edges. Only decorative pixels
@@ -258,16 +258,16 @@
     overflow-wrap: anywhere;
   }
   .dashboard-card-title {
-    font-size: 0.75rem;
+    font-size: 0.6875rem;
     font-weight: 700;
-    line-height: 1.3;
+    line-height: 1.25;
     color: #111b3b;
   }
   .dashboard-card-description {
-    margin-top: 0.1875rem;
-    font-size: 0.625rem;
+    margin-top: 0.125rem;
+    font-size: 0.59375rem;
     font-weight: 500;
-    line-height: 1.35;
+    line-height: 1.25;
     color: #667895;
   }
   .dark .dashboard-card-title {

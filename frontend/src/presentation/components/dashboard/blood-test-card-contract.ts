@@ -46,23 +46,23 @@ export const BLOOD_TEST_CARD_COPY = {
  */
 export const BLOOD_TEST_CARD_LAYOUT = {
   light: {
-    title: { x: 276, y: 116, fontSize: 50, fontWeight: 700 },
+    title: { x: 276, y: 98, fontSize: 48, fontWeight: 700 },
     description: {
       x: 276,
-      firstY: 165,
-      secondY: 202,
-      fontSize: 42,
+      firstY: 170,
+      secondY: 226,
+      fontSize: 41,
       fontWeight: 500,
     },
-    example: { x: 276, y: 244, fontSize: 27, fontWeight: 500 },
-    panelTitle: { x: 846, y: 76, fontSize: 26, fontWeight: 700 },
-    status: { x: 1193, y: 75, fontSize: 22, fontWeight: 700 },
+    example: { x: 276, y: 292, fontSize: 34, fontWeight: 500 },
+    panelTitle: { x: 846, y: 76, fontSize: 30, fontWeight: 700 },
+    status: { x: 1193, y: 75, fontSize: 24, fontWeight: 700 },
     rows: {
       labelX: 846,
       valueX: 1265,
       y: [121, 162, 204, 246, 288],
-      labelFontSize: 20,
-      valueFontSize: 19,
+      labelFontSize: 22,
+      valueFontSize: 21,
       labelWeight: 500,
       valueWeight: 600,
     },

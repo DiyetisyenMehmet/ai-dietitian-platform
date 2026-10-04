@@ -199,7 +199,7 @@ async function cardGeometry(page) {
           const kind =
             node.dataset.kind || (node.hasAttribute("data-blood-test-card") ? "blood" : "coach");
           const artwork = node.querySelector(
-            ".dashboard-card-illustration, .dashboard-blood-preview",
+            ".dashboard-card-base-visual, .dashboard-blood-preview",
           );
           const action = node.querySelector(".dashboard-coach-action");
           return [
@@ -264,32 +264,37 @@ for (const width of [390, 412, 430]) {
               assert.ok(cards[kind].height >= 44, `${kind} touch target height`);
             }
             const { food, progress, coach } = cards;
-            assert.ok(food.artwork.width >= 154 && food.artwork.width <= 158);
-            assert.ok(food.artwork.width * food.artwork.height >= 8500);
-            assert.ok(
-              food.artwork.x >= food.copy.right + 3.5,
-              "Food artwork stays beside the copy",
-            );
-            assert.ok(progress.artwork.width >= 140 && progress.artwork.width <= 156);
+            assert.ok(Math.abs(food.artwork.width - food.width) <= 1);
+            assert.ok(Math.abs(progress.artwork.width - progress.width) <= 1);
+            assert.ok(Math.abs(food.artwork.height - food.height) <= 1);
+            assert.ok(Math.abs(progress.artwork.height - progress.height) <= 1);
             for (const [kind, card] of Object.entries(cards)) {
               assert.ok(Math.abs(card.titleFont - (kind === "coach" ? 11 : 12) * scale) < 0.01);
               assert.ok(Math.abs(card.descriptionFont - 10 * scale) < 0.01);
             }
             if (scale === 1) {
               assert.ok(
-                Math.abs(food.artwork.y - food.y - 1) < 1,
-                "Food artwork reaches the top edge",
+                Math.abs(food.artwork.y - food.y) <= 1,
+                "Food base visual reaches the top edge",
               );
               assert.ok(
-                Math.abs(food.artwork.bottom - food.bottom + 1) < 1,
-                "Food artwork reaches the bottom edge",
+                Math.abs(food.artwork.bottom - food.bottom) <= 1,
+                "Food base visual reaches the bottom edge",
               );
               assert.ok(
-                Math.abs(food.artwork.right - food.right + 1) < 1,
-                "Food artwork reaches the right edge",
+                Math.abs(food.artwork.right - food.right) <= 1,
+                "Food base visual reaches the right edge",
+              );
+              assert.ok(
+                Math.abs(food.height - progress.height) <= 1,
+                "Food and Progress share the same normal compact height",
+              );
+              assert.ok(
+                Math.abs(food.height - 84) <= 1,
+                "Food keeps the approved 84px normal height",
               );
               const artworkStyle = await page
-                .locator('[data-kind="food"] .dashboard-card-illustration')
+                .locator('[data-kind="food"] .dashboard-card-base-visual')
                 .evaluate((node) => {
                   const css = getComputedStyle(node);
                   return [css.borderWidth, css.padding, css.backgroundColor, css.boxShadow];
@@ -347,7 +352,8 @@ test("320px / 130% uses the fallback without hiding or shrinking Blood rows", as
     await scaleText(page, 1.3);
     await assertLayout(page);
     const { food } = await cardGeometry(page);
-    assert.ok(food.artwork.y >= food.copy.bottom + 4);
+    assert.ok(food.height >= 84);
+    assert.ok(Math.abs(food.artwork.width - food.width) <= 1);
     const bloodCard = page.locator("[data-blood-test-card]:visible");
     const bloodBox = await bloodCard.boundingBox();
     assert.ok(bloodBox);
