@@ -23,11 +23,11 @@ export const DASHBOARD_LIVE_FEATURE_CARD_REGIONS = {
   food: {
     light: {
       icon: { x: 100, y: 170, width: 180, height: 176 },
-      illustration: { x: 790, y: 102, width: 670, height: 306 },
+      illustration: { x: 650, y: 88, width: 826, height: 337 },
     },
     dark: {
       icon: { x: 100, y: 170, width: 180, height: 176 },
-      illustration: { x: 790, y: 102, width: 670, height: 306 },
+      illustration: { x: 650, y: 88, width: 826, height: 337 },
     },
   },
   progress: {
