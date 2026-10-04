@@ -247,7 +247,7 @@ for (const width of [390, 412, 430]) {
             const heights =
               scale === 1
                 ? {
-                    food: productionFonts ? 90 : 96,
+                    food: productionFonts ? (locale === "en" ? 94 : 90) : 96,
                     blood: productionFonts ? 96 : 104,
                     progress: 90,
                     coach: 80,
