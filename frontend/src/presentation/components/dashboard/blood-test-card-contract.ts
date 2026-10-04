@@ -2,14 +2,14 @@ export type BloodTestCardLocale = "tr" | "en";
 export type BloodTestCardTheme = "light" | "dark";
 
 export const BLOOD_TEST_CARD_VIEWBOX = {
-  light: { width: 1438, height: 413 },
+  light: { width: 1536, height: 366 },
   dark: { width: 1438, height: 413 },
 } as const;
 
 export const BLOOD_TEST_CARD_ASPECT = "21 / 5";
 
 export const BLOOD_TEST_CARD_BASE = {
-  light: "/images/dashboard/blood-test-card-base-light.png",
+  light: "/images/dashboard/blood-test-card-clean-light-21x5.webp",
   dark: "/images/dashboard/blood-test-card-base-dark.png",
 } as const;
 
@@ -46,19 +46,19 @@ export const BLOOD_TEST_CARD_COPY = {
  */
 export const BLOOD_TEST_CARD_LAYOUT = {
   light: {
-    title: { x: 258, y: 150, fontSize: 44, fontWeight: 700 },
+    title: { x: 258, y: 145, fontSize: 45, fontWeight: 700 },
     description: {
       x: 258,
-      firstY: 204,
+      firstY: 198,
       secondY: 239,
-      fontSize: 40,
+      fontSize: 42,
       fontWeight: 500,
     },
     panelTitle: { x: 818, y: 82, fontSize: 28, fontWeight: 700 },
     status: { x: 1117, y: 82, fontSize: 24, fontWeight: 700 },
     rows: {
       labelX: 806,
-      valueX: 1174,
+      valueX: 1265,
       y: [133, 176, 219, 262, 305],
       labelFontSize: 22,
       valueFontSize: 21,
@@ -67,7 +67,7 @@ export const BLOOD_TEST_CARD_LAYOUT = {
     },
   },
   dark: {
-    title: { x: 258, y: 150, fontSize: 44, fontWeight: 700 },
+    title: { x: 258, y: 150, fontSize: 45, fontWeight: 700 },
     description: {
       x: 258,
       firstY: 204,

@@ -11,7 +11,7 @@ test('blood-test uses one compact base visual with non-interactive decorative te
     'utf8',
   );
 
-  assert.match(source, /data-frame-height="84px"/);
+  assert.match(source, /data-frame-aspect="1536:366"/);
   assert.match(source, /data-blood-test-link/);
   assert.match(source, /data-blood-test-live-text/);
   assert.match(source, /data-dashboard-fixed-geometry/);
@@ -40,7 +40,7 @@ test('blood-test artwork is rendered once and no second live preview container i
   );
 
   assert.match(source, /data-blood-test-base-visual/);
-  assert.match(contractSource, /blood-test-card-base-light\.png/);
+  assert.match(contractSource, /blood-test-card-clean-light-21x5\.webp/);
   assert.doesNotMatch(source, /dashboard-blood-preview/);
   assert.doesNotMatch(source, /DashboardFeatureChevron/);
   assert.doesNotMatch(source, /DashboardCardNightBorder/);
@@ -48,7 +48,7 @@ test('blood-test artwork is rendered once and no second live preview container i
 });
 
 
-test('blood-test light layout aligns live copy to the approved reference artwork', () => {
+test('blood-test light layout aligns live copy to the approved clean reference artwork', () => {
   const file = path.join(
     __dirname,
     '../src/presentation/components/dashboard/blood-test-card-contract.ts',
@@ -56,14 +56,14 @@ test('blood-test light layout aligns live copy to the approved reference artwork
   const source = fs.readFileSync(file, 'utf8');
 
   assert.match(source, /light: \{/);
-  assert.match(source, /title: \{ x: 258, y: 150, fontSize: 44/);
-  assert.match(source, /firstY: 204/);
+  assert.match(source, /title: \{ x: 258, y: 145, fontSize: 45/);
+  assert.match(source, /firstY: 198/);
   assert.match(source, /secondY: 239/);
-  assert.match(source, /fontSize: 40/);
+  assert.match(source, /fontSize: 42/);
   assert.match(source, /panelTitle: \{ x: 818, y: 82, fontSize: 28/);
   assert.match(source, /status: \{ x: 1117, y: 82, fontSize: 24/);
   assert.match(source, /labelX: 806/);
-  assert.match(source, /valueX: 1174/);
+  assert.match(source, /valueX: 1265/);
   assert.match(source, /y: \[133, 176, 219, 262, 305\]/);
   assert.match(source, /labelFontSize: 22/);
   assert.match(source, /valueFontSize: 21/);

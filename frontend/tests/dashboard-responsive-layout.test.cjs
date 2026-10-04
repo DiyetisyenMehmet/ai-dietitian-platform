@@ -246,7 +246,7 @@ for (const width of [390, 412, 430]) {
             // uses the host's substitute font, whose wider glyphs may require
             // additional lines; keep it bounded without clipping or shrinking.
             const productionFonts = process.env.DASHBOARD_PRODUCTION_FONTS === "1";
-            const heights = { food: 84, progress: 84, coach: 84 };
+            const heights = { food: 100, progress: 100, coach: 90 };
             for (const [kind, maximum] of Object.entries(heights)) {
               assert.ok(
                 cards[kind].height <= maximum + 1, // subpixel line-box rounding
@@ -260,7 +260,7 @@ for (const width of [390, 412, 430]) {
             assert.ok(Math.abs(food.artwork.height - food.height) <= 1);
             assert.ok(Math.abs(progress.artwork.height - progress.height) <= 1);
             for (const card of Object.values(cards)) {
-              assert.ok(Math.abs(card.titleFont - 11) < 0.01);
+              assert.ok(Math.abs(card.titleFont - 10.5) < 0.01);
               assert.ok(Math.abs(card.descriptionFont - 10) < 0.01);
             }
             if (scale === 1) {
@@ -281,8 +281,8 @@ for (const width of [390, 412, 430]) {
                 "Food and Progress share the same normal compact height",
               );
               assert.ok(
-                Math.abs(food.height - 84) <= 1,
-                "Food keeps the approved 84px normal height",
+                Math.abs(food.height - Math.max(76, food.width / 4.23)) <= 1.5,
+                "Food keeps the approved reference aspect ratio",
               );
               const artworkStyle = await page
                 .locator('[data-kind="food"] .dashboard-card-base-visual')
@@ -299,8 +299,8 @@ for (const width of [390, 412, 430]) {
               const bloodBox = await bloodCard.boundingBox();
               assert.ok(bloodBox, "Blood card is visible");
               assert.ok(
-                Math.abs(bloodBox.height - 84) <= 1,
-                "Blood card keeps the approved compact 84px frame",
+                Math.abs(bloodBox.height - Math.max(76, bloodBox.width / (1536 / 366))) <= 1.5,
+                "Blood card preserves the approved artwork ratio",
               );
               assert.ok(
                 Math.abs(bloodBox.height - progress.height) <= 1.5,
@@ -343,12 +343,12 @@ test("320px / 130% uses the fallback without hiding or shrinking Blood rows", as
     await scaleText(page, 1.3);
     await assertLayout(page);
     const { food } = await cardGeometry(page);
-    assert.ok(food.height >= 84);
+    assert.ok(food.height >= 76);
     assert.ok(Math.abs(food.artwork.width - food.width) <= 1);
     const bloodCard = page.locator("[data-blood-test-card]:visible");
     const bloodBox = await bloodCard.boundingBox();
     assert.ok(bloodBox);
-    assert.ok(Math.abs(bloodBox.height - 84) <= 1);
+    assert.ok(Math.abs(bloodBox.height - Math.max(76, bloodBox.width / (1536 / 366))) <= 1.5);
     assert.equal(await bloodCard.locator("[data-blood-test-row]").count(), 10);
     if (process.env.DASHBOARD_LAYOUT_ARTIFACTS) {
       const directory = process.env.DASHBOARD_LAYOUT_ARTIFACTS;

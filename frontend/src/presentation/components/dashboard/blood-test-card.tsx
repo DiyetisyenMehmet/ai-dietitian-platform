@@ -24,12 +24,14 @@ interface BloodTestCardProps {
 type Anchor = "start" | "middle" | "end";
 
 const BLOOD_TEST_VISIBLE_CROP = {
-  light: { top: 35, height: 342 },
   dark: { top: 35, height: 342 },
 } as const;
 
 function visibleTop(y: number, theme: BloodTestCardTheme) {
-  const crop = BLOOD_TEST_VISIBLE_CROP[theme];
+  if (theme === "light") {
+    return (y / BLOOD_TEST_CARD_VIEWBOX.light.height) * 100;
+  }
+  const crop = BLOOD_TEST_VISIBLE_CROP.dark;
   return ((y - crop.top) / crop.height) * 100;
 }
 
@@ -149,31 +151,43 @@ export function BloodTestCard({
 
   return (
     <div
-      className="relative block h-[5.25rem] w-full overflow-hidden rounded-[1.125rem] bg-transparent [container-type:inline-size]"
+      className="relative block w-full overflow-hidden rounded-[1.125rem] bg-transparent [container-type:inline-size]"
       data-blood-test-card
       data-dashboard-fixed-geometry=""
       data-locale={locale}
       data-theme={theme}
       data-theme-geometry="locked"
-      data-frame-height="84px"
+      data-frame-aspect="1536:366"
       data-text-layer="html"
+      style={{ aspectRatio: theme === "light" ? "1536 / 366" : "1438 / 342", minHeight: "4.75rem" }}
     >
       <div
         className="pointer-events-none absolute inset-0 select-none"
         aria-hidden="true"
         data-blood-test-base-visual
+        style={
+          theme === "light"
+            ? {
+                backgroundImage: `url("${BLOOD_TEST_CARD_BASE.light}")`,
+                backgroundSize: "100% 100%",
+                backgroundRepeat: "no-repeat",
+              }
+            : undefined
+        }
       >
-        <DashboardCardArtwork
-          src={BLOOD_TEST_CARD_BASE[theme]}
-          source={BLOOD_TEST_CARD_VIEWBOX[theme]}
-          region={{
-            x: 0,
-            y: BLOOD_TEST_VISIBLE_CROP[theme].top,
-            width: BLOOD_TEST_CARD_VIEWBOX[theme].width,
-            height: BLOOD_TEST_VISIBLE_CROP[theme].height,
-          }}
-          preserveAspectRatio="none"
-        />
+        {theme === "dark" ? (
+          <DashboardCardArtwork
+            src={BLOOD_TEST_CARD_BASE.dark}
+            source={BLOOD_TEST_CARD_VIEWBOX.dark}
+            region={{
+              x: 0,
+              y: BLOOD_TEST_VISIBLE_CROP.dark.top,
+              width: BLOOD_TEST_CARD_VIEWBOX.dark.width,
+              height: BLOOD_TEST_VISIBLE_CROP.dark.height,
+            }}
+            preserveAspectRatio="none"
+          />
+        ) : null}
       </div>
 
       <Link

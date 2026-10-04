@@ -46,12 +46,12 @@ export const DASHBOARD_LIVE_FEATURE_CARD_REGIONS = {
 
 export const DASHBOARD_LIVE_FEATURE_CARD_FULL_REGIONS = {
   food: {
-    light: { x: 72, y: 70, width: 1392, height: 342 },
-    dark: { x: 60, y: 84, width: 1416, height: 329 },
+    light: { x: 72, y: 76, width: 1392, height: 329 },
+    dark: { x: 60, y: 80, width: 1416, height: 335 },
   },
   progress: {
-    light: { x: 60, y: 94, width: 1426, height: 326 },
-    dark: { x: 59, y: 82, width: 1418, height: 332 },
+    light: { x: 60, y: 87, width: 1426, height: 337 },
+    dark: { x: 59, y: 80, width: 1418, height: 335 },
   },
 } as const;
 

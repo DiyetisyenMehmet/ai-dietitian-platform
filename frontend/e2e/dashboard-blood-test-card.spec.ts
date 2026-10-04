@@ -30,20 +30,20 @@ test("real dashboard blood-test card keeps the compact shared height and non-int
 
     await expect(card).toHaveCount(1);
     await expect(card).toHaveAttribute("data-locale", "tr");
-    await expect(card).toHaveAttribute("data-frame-height", "84px");
+    await expect(card).toHaveAttribute("data-frame-aspect", "1536:366");
     await expect(card).toHaveAttribute("data-dashboard-fixed-geometry", "");
     await expect(card.locator("[data-blood-test-link]")).toHaveCount(1);
     if (theme === "light") {
-      const href = await card
-        .locator("[data-blood-test-base-visual] image")
-        .getAttribute("href");
-      expect(href).toContain("blood-test-card-base-light.png");
+      await expect(card.locator("[data-blood-test-base-visual]")).toHaveCSS(
+        "background-image",
+        /blood-test-card-clean-light-21x5\.webp/,
+      );
     }
     await expect(texts).toHaveCount(15);
 
     const box = await card.boundingBox();
     expect(box).not.toBeNull();
-    expect(box!.height).toBeCloseTo(84, 1);
+    expect(box!.height).toBeCloseTo(Math.max(76, box!.width / (1536 / 366)), 1);
 
     const state = await texts.evaluateAll((nodes) =>
       nodes.map((node) => ({
