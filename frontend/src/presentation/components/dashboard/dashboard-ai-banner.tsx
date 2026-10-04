@@ -4,7 +4,7 @@ import { ChevronRight } from "lucide-react";
 function DiewishMascot({ gradientId }: { gradientId: string }) {
   return (
     <span
-      className="relative flex size-14 shrink-0 items-center justify-center overflow-visible"
+      className="relative flex size-[4.25rem] shrink-0 items-center justify-center overflow-visible"
       aria-hidden="true"
     >
       <span
@@ -77,8 +77,8 @@ function DiewishMascot({ gradientId }: { gradientId: string }) {
       <span className="absolute -left-1 top-1/2 h-7 w-2 -translate-y-1/2 rounded-l-full bg-slate-300 shadow-sm" />
       <span className="absolute -right-1 top-1/2 h-7 w-2 -translate-y-1/2 rounded-r-full bg-slate-300 shadow-sm" />
 
-      <span className="relative z-20 flex h-12 w-12 items-center justify-center rounded-[18px] bg-gradient-to-br from-white via-sky-50 to-emerald-50 shadow-md ring-1 ring-slate-200/70">
-        <span className="relative flex h-8 w-10 items-center justify-center rounded-xl bg-slate-950 shadow-inner">
+      <span className="relative z-20 flex h-14 w-14 items-center justify-center rounded-[20px] bg-gradient-to-br from-white via-sky-50 to-emerald-50 shadow-md ring-1 ring-slate-200/70">
+        <span className="relative flex h-9 w-11 items-center justify-center rounded-xl bg-slate-950 shadow-inner">
           <span className="absolute left-2.5 top-2 h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.75)]" />
           <span className="absolute right-2.5 top-2 h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.75)]" />
           <span className="absolute bottom-2 h-1.5 w-4 rounded-b-full border-b-2 border-emerald-400" />

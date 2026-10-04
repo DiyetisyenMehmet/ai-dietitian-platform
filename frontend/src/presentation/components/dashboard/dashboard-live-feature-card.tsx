@@ -50,17 +50,17 @@ export function DashboardLiveFeatureCard({
           />
         ))}
       </div>
-      <div className="dashboard-card-icon" aria-hidden="true" />
-      <div className="dashboard-feature-body">
-        <div className="dashboard-card-copy" data-dashboard-decorative-text="" aria-hidden="true">
-          <h3 className="dashboard-card-title" data-dashboard-live-feature-text>
-            {copy.title}
-          </h3>
-          <p className="dashboard-card-description" data-dashboard-live-feature-text>
-            {copy.description.join(" ")}
-          </p>
-        </div>
-        <div className="dashboard-card-illustration" aria-hidden="true" />
+      <div
+        className="dashboard-card-copy"
+        data-dashboard-decorative-text=""
+        aria-hidden="true"
+      >
+        <h3 className="dashboard-card-title" data-dashboard-live-feature-text>
+          {copy.title}
+        </h3>
+        <p className="dashboard-card-description" data-dashboard-live-feature-text>
+          {copy.description.join(" ")}
+        </p>
       </div>
       <DashboardFeatureChevron />
     </div>

@@ -150,14 +150,9 @@
      No fixed height, cqw font size or absolute live-text coordinates. */
   .dashboard-feature-card {
     position: relative;
-    display: grid;
-    grid-template-columns: 4rem minmax(0, 1fr);
-    align-items: center;
-    gap: 0;
     width: 100%;
-    height: auto;
+    height: 5.25rem;
     min-height: 5.25rem;
-    padding: 0;
     overflow: hidden;
     border: 0;
     border-radius: 1.125rem;
@@ -197,78 +192,41 @@
     outline: 2px solid hsl(var(--ring));
     outline-offset: 2px;
   }
-  .dashboard-card-icon,
-  .dashboard-card-illustration {
-    position: relative;
-    z-index: 1;
+  .dashboard-card-copy {
+    position: absolute;
+    left: 17.7%;
+    top: 50%;
+    z-index: 2;
+    width: 43%;
     min-width: 0;
+    transform: translateY(-50%);
     pointer-events: none;
   }
-  .dashboard-card-icon {
-    width: 3.75rem;
-    height: 100%;
-  }
-  .dashboard-feature-body {
-    position: relative;
-    z-index: 1;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: stretch;
-    gap: 4px;
-    min-width: 0;
-    align-self: stretch;
-  }
-  .dashboard-feature-body > .dashboard-card-copy {
-    flex: 1 1 8rem;
-    align-self: center;
-    padding-block: 6px;
-  }
-  .dashboard-card-illustration {
-    /* The original artwork reaches the surface edges. Only decorative pixels
-       stretch; live copy keeps its own intrinsic, wrapping layout column. */
-    position: relative;
-    flex: 0 0 9rem;
-    width: 9rem;
-    max-width: 100%;
-    min-height: 82px;
-    margin-left: auto;
-    border-radius: 0 1.0625rem 1.0625rem 0;
-    overflow: hidden;
-    mask-image: linear-gradient(to right, transparent, #000 12%);
-  }
-  .dashboard-card-illustration svg {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-  }
-
-  /* Image-backed feature cards share one fixed visual frame on browser and WebView. */
-  [data-kind="food"] .dashboard-card-illustration {
-    flex: 0 0 9.75rem;
-    width: 9.75rem;
-    mask-image: none;
-  }
-  [data-kind="food"] .dashboard-card-title {
-    letter-spacing: -0.01em;
-  }
-  .dashboard-card-copy,
-  .dashboard-coach-copy {
-    min-width: 0;
-    overflow-wrap: anywhere;
-  }
   .dashboard-card-title {
-    font-size: 0.75rem;
+    margin: 0;
+    font-size: 0.6875rem;
     font-weight: 700;
-    line-height: 1.25;
+    line-height: 1.2;
+    letter-spacing: -0.012em;
     color: #111b3b;
   }
   .dashboard-card-description {
-    margin-top: 0.125rem;
+    margin-top: 0.2rem;
     font-size: 0.625rem;
     font-weight: 500;
     line-height: 1.25;
     color: #667895;
+  }
+  [data-kind="food"] .dashboard-card-title {
+    white-space: nowrap;
+    font-size: 0.6875rem;
+    letter-spacing: -0.02em;
+  }
+  [data-kind="food"] .dashboard-card-copy {
+    width: 44%;
+  }
+  [data-kind="progress"] .dashboard-card-copy {
+    width: 43%;
   }
   .dark .dashboard-card-title {
     color: #f7fbfa;
@@ -297,6 +255,7 @@
     background: #06283c;
     color: #effbff;
   }
+
   .dashboard-blood-card {
     background: linear-gradient(125deg, #fff8f8, #f2faff);
     padding-block: 0;
@@ -459,50 +418,60 @@
   }
   .dashboard-coach-banner {
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
     gap: 0.5rem;
-    padding: 0.375rem 0.5rem;
+    width: 100%;
+    height: 5.25rem;
+    padding: 0.375rem 0.75rem;
+    overflow: hidden;
     border: 1px solid #d5edf0;
     border-radius: 1.125rem;
-    background: linear-gradient(100deg, #f7fbff, #ebfff8);
+    background: linear-gradient(100deg, #f7fbff 0%, #effcff 48%, #ebfff8 100%);
+    box-shadow: 0 2px 5px rgb(15 23 42 / 4%);
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
   }
   .dark .dashboard-coach-banner {
     background: linear-gradient(100deg, #10333e, #0b382d);
     border-color: #194750;
+    box-shadow: none;
   }
   .dashboard-coach-body {
     display: flex;
-    flex: 1 1 12rem;
-    flex-wrap: wrap;
+    flex: 1 1 auto;
     align-items: center;
     gap: 0.5rem;
     min-width: 0;
   }
   .dashboard-coach-copy {
-    flex: 1 1 8rem;
+    flex: 1 1 auto;
+    min-width: 0;
   }
   .dashboard-coach-copy .dashboard-card-title {
     font-size: 0.6875rem;
+    white-space: nowrap;
   }
   .dashboard-coach-copy .dashboard-card-description {
+    margin-top: 0.125rem;
     font-size: 0.625rem;
+    white-space: nowrap;
   }
   .dashboard-coach-action {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 0.25rem;
-    min-height: 44px;
-    max-width: 100%;
-    padding: 0.375rem 0.5rem;
-    border-radius: 1.5rem;
-    background: #d5fae8;
+    flex: 0 0 auto;
+    min-height: 2.75rem;
+    padding: 0.375rem 0.875rem;
+    border: 1px solid #a7ebce;
+    border-radius: 9999px;
+    background: rgb(213 250 232 / 72%);
     color: #098662;
-    font-size: 0.625rem;
+    font-size: 0.6875rem;
     font-weight: 700;
-    line-height: 1.4;
-    overflow-wrap: anywhere;
+    line-height: 1.2;
+    white-space: nowrap;
     touch-action: manipulation;
   }
   .dashboard-coach-action span {
@@ -510,6 +479,7 @@
   }
   .dark .dashboard-coach-action {
     background: #164d3c;
+    border-color: #2b735a;
     color: #8cedc1;
   }
 }

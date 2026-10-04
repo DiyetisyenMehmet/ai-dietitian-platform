@@ -2,6 +2,8 @@ import type { CSSProperties } from "react";
 
 import Link from "next/link";
 
+import { DashboardCardArtwork } from "@/presentation/components/dashboard/dashboard-card-artwork";
+
 import {
   BLOOD_TEST_CARD_BASE,
   BLOOD_TEST_CARD_COLORS,
@@ -22,14 +24,12 @@ interface BloodTestCardProps {
 type Anchor = "start" | "middle" | "end";
 
 const BLOOD_TEST_VISIBLE_CROP = {
+  light: { top: 35, height: 342 },
   dark: { top: 35, height: 342 },
 } as const;
 
 function visibleTop(y: number, theme: BloodTestCardTheme) {
-  if (theme === "light") {
-    return (y / BLOOD_TEST_CARD_VIEWBOX.light.height) * 100;
-  }
-  const crop = BLOOD_TEST_VISIBLE_CROP.dark;
+  const crop = BLOOD_TEST_VISIBLE_CROP[theme];
   return ((y - crop.top) / crop.height) * 100;
 }
 
@@ -142,7 +142,6 @@ export function BloodTestCard({
   const accessibleName = [
     copy.title,
     copy.description.join(" "),
-    copy.example,
     copy.panelTitle,
     copy.status,
     ...copy.labels.map((label, index) => `${label}: ${BLOOD_TEST_CARD_VALUES[index]}`),
@@ -160,11 +159,22 @@ export function BloodTestCard({
       data-text-layer="html"
     >
       <div
-        className="pointer-events-none absolute inset-0 select-none bg-[length:100%_100%] bg-no-repeat"
-        style={{ backgroundImage: `url("${BLOOD_TEST_CARD_BASE[theme]}")` }}
+        className="pointer-events-none absolute inset-0 select-none"
         aria-hidden="true"
         data-blood-test-base-visual
-      />
+      >
+        <DashboardCardArtwork
+          src={BLOOD_TEST_CARD_BASE[theme]}
+          source={BLOOD_TEST_CARD_VIEWBOX[theme]}
+          region={{
+            x: 0,
+            y: BLOOD_TEST_VISIBLE_CROP[theme].top,
+            width: BLOOD_TEST_CARD_VIEWBOX[theme].width,
+            height: BLOOD_TEST_VISIBLE_CROP[theme].height,
+          }}
+          preserveAspectRatio="none"
+        />
+      </div>
 
       <Link
         href={href}
@@ -204,17 +214,6 @@ export function BloodTestCard({
         theme={theme}
       >
         {copy.description[1]}
-      </HtmlText>
-
-      <HtmlText
-        x={layout.example.x}
-        y={layout.example.y}
-        color={colors.description}
-        fontSize={layout.example.fontSize}
-        fontWeight={layout.example.fontWeight}
-        theme={theme}
-      >
-        {copy.example}
       </HtmlText>
 
       <HtmlText

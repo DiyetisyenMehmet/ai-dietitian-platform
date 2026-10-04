@@ -2,14 +2,14 @@ export type BloodTestCardLocale = "tr" | "en";
 export type BloodTestCardTheme = "light" | "dark";
 
 export const BLOOD_TEST_CARD_VIEWBOX = {
-  light: { width: 1536, height: 366 },
+  light: { width: 1438, height: 413 },
   dark: { width: 1438, height: 413 },
 } as const;
 
 export const BLOOD_TEST_CARD_ASPECT = "21 / 5";
 
 export const BLOOD_TEST_CARD_BASE = {
-  light: "/images/dashboard/blood-test-card-clean-light-21x5.webp",
+  light: "/images/dashboard/blood-test-card-base-light.png",
   dark: "/images/dashboard/blood-test-card-base-dark.png",
 } as const;
 
@@ -46,21 +46,20 @@ export const BLOOD_TEST_CARD_COPY = {
  */
 export const BLOOD_TEST_CARD_LAYOUT = {
   light: {
-    title: { x: 276, y: 98, fontSize: 48, fontWeight: 700 },
+    title: { x: 258, y: 150, fontSize: 44, fontWeight: 700 },
     description: {
-      x: 276,
-      firstY: 170,
-      secondY: 226,
-      fontSize: 41,
+      x: 258,
+      firstY: 204,
+      secondY: 239,
+      fontSize: 40,
       fontWeight: 500,
     },
-    example: { x: 276, y: 292, fontSize: 34, fontWeight: 500 },
-    panelTitle: { x: 846, y: 76, fontSize: 30, fontWeight: 700 },
-    status: { x: 1193, y: 75, fontSize: 24, fontWeight: 700 },
+    panelTitle: { x: 818, y: 82, fontSize: 28, fontWeight: 700 },
+    status: { x: 1117, y: 82, fontSize: 24, fontWeight: 700 },
     rows: {
-      labelX: 846,
-      valueX: 1265,
-      y: [121, 162, 204, 246, 288],
+      labelX: 806,
+      valueX: 1174,
+      y: [133, 176, 219, 262, 305],
       labelFontSize: 22,
       valueFontSize: 21,
       labelWeight: 500,
@@ -68,17 +67,16 @@ export const BLOOD_TEST_CARD_LAYOUT = {
     },
   },
   dark: {
-    title: { x: 258, y: 150, fontSize: 50, fontWeight: 700 },
+    title: { x: 258, y: 150, fontSize: 44, fontWeight: 700 },
     description: {
       x: 258,
       firstY: 204,
       secondY: 239,
-      fontSize: 34,
+      fontSize: 40,
       fontWeight: 500,
     },
-    example: { x: 258, y: 278, fontSize: 27, fontWeight: 500 },
-    panelTitle: { x: 818, y: 82, fontSize: 23, fontWeight: 700 },
-    status: { x: 1117, y: 82, fontSize: 21, fontWeight: 700 },
+    panelTitle: { x: 818, y: 82, fontSize: 28, fontWeight: 700 },
+    status: { x: 1117, y: 82, fontSize: 24, fontWeight: 700 },
     rows: {
       labelX: 806,
       valueX: 1174,
