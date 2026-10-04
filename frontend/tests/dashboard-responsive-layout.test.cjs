@@ -248,7 +248,7 @@ for (const width of [390, 412, 430]) {
               scale === 1
                 ? {
                     food: productionFonts ? (locale === "en" ? 94 : 90) : 96,
-                    blood: productionFonts ? 96 : 104,
+                    blood: productionFonts ? 86 : 94,
                     progress: 90,
                     coach: 80,
                   }
@@ -273,9 +273,9 @@ for (const width of [390, 412, 430]) {
             assert.ok(
               blood.rowFonts.length === 10 &&
                 blood.rowFonts.every(
-                  (size, index) => Math.abs(size - (index % 2 === 0 ? 5.5 : 5.25) * scale) < 0.01,
+                  (size, index) => Math.abs(size - (index % 2 === 0 ? 4.75 : 4.5) * scale) < 0.01,
                 ),
-              "Blood labels (5.5px) and values (5.25px) stay secondary and scale with text enlargement",
+              "Blood labels (4.75px) and values (4.5px) stay compact and scale with text enlargement",
             );
             assert.ok(
               blood.tube.x >= blood.artwork.right + 1,
@@ -334,6 +334,10 @@ for (const width of [390, 412, 430]) {
               );
               assert.ok(blood.artwork.width >= 102 && blood.artwork.width <= 140);
               assert.ok(blood.artwork.width <= blood.width * 0.51);
+              assert.ok(
+                Math.abs(blood.height - progress.height) <= 2,
+                "Blood card matches the compact feature-card height at normal scale",
+              );
               const bloodPreviewStyle = await page
                 .locator('[data-blood-test-card]:visible .dashboard-blood-preview')
                 .evaluate((node) => {
@@ -376,7 +380,7 @@ test("320px / 130% uses the fallback without hiding or shrinking Blood rows", as
     assert.ok(blood.artwork.y >= blood.copy.bottom + 4);
     assert.ok(
       blood.rowFonts.every(
-        (size, index) => Math.abs(size - (index % 2 === 0 ? 5.5 : 5.25) * 1.3) < 0.01,
+        (size, index) => Math.abs(size - (index % 2 === 0 ? 4.75 : 4.5) * 1.3) < 0.01,
       ),
     );
     assert.equal(
