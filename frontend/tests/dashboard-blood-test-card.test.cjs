@@ -5,13 +5,15 @@ const path = require('node:path');
 const vm = require('node:vm');
 const ts = require('typescript');
 
-test('blood-test uses one compact base visual with non-interactive decorative text outside anchor', () => {
+test('blood-test uses shared 21:5 frame with non-interactive decorative text outside anchor', () => {
   const source = fs.readFileSync(
     path.join(__dirname, '../src/presentation/components/dashboard/blood-test-card.tsx'),
     'utf8',
   );
 
-  assert.match(source, /data-frame-aspect="1536:366"/);
+  assert.match(source, /DASHBOARD_FEATURE_CARD_FRAME_ASPECT/);
+  assert.match(source, /data-frame-aspect="21:5"/);
+  assert.match(source, /data-blood-test-stage/);
   assert.match(source, /data-blood-test-link/);
   assert.match(source, /data-blood-test-live-text/);
   assert.match(source, /data-dashboard-fixed-geometry/);
@@ -22,51 +24,52 @@ test('blood-test uses one compact base visual with non-interactive decorative te
   assert.match(source, /pointerEvents: "none"/);
   assert.match(source, /touchAction: "manipulation"/);
 
-  const linkMarker = source.indexOf('data-blood-test-link');
-  const firstRenderedText = source.indexOf('<HtmlText', linkMarker);
-  assert.ok(linkMarker >= 0 && firstRenderedText > linkMarker);
+  const linkClose = source.indexOf('</Link>');
+  const firstText = source.indexOf('<HtmlText');
+  assert.ok(linkClose >= 0 && firstText > linkClose);
   assert.doesNotMatch(source, /<svg|<text|SvgText/);
 });
 
 
-test('blood-test artwork is rendered once and no second live preview container is introduced', () => {
+test('blood-test dark card uses the same normalized perimeter overlay', () => {
   const source = fs.readFileSync(
     path.join(__dirname, '../src/presentation/components/dashboard/blood-test-card.tsx'),
     'utf8',
   );
-  const contractSource = fs.readFileSync(
-    path.join(__dirname, '../src/presentation/components/dashboard/blood-test-card-contract.ts'),
-    'utf8',
-  );
 
-  assert.match(source, /data-blood-test-base-visual/);
-  assert.match(contractSource, /blood-test-card-clean-light-21x5\.webp/);
-  assert.doesNotMatch(source, /dashboard-blood-preview/);
-  assert.doesNotMatch(source, /DashboardFeatureChevron/);
-  assert.doesNotMatch(source, /DashboardCardNightBorder/);
-  assert.match(source, /\[container-type:inline-size\]/);
+  assert.match(source, /DashboardCardNightBorder/);
 });
 
 
-test('blood-test light layout aligns live copy to the approved clean reference artwork', () => {
+test('blood-test uses the same outer-frame chevron and dark perimeter as other cards', () => {
+  const source = fs.readFileSync(
+    path.join(__dirname, '../src/presentation/components/dashboard/blood-test-card.tsx'),
+    'utf8',
+  );
+
+  assert.match(source, /DashboardFeatureChevron/);
+  assert.match(source, /DashboardCardNightBorder/);
+  assert.match(source, /\[container-type:inline-size\]/);
+
+  const stageClose = source.indexOf('</div>\n\n      <DashboardFeatureChevron');
+  assert.ok(stageClose >= 0, 'shared chevron should be outside the cropped blood stage');
+});
+
+
+test('blood-test description is larger and moved lower while keeping its x alignment', () => {
   const file = path.join(
     __dirname,
     '../src/presentation/components/dashboard/blood-test-card-contract.ts',
   );
   const source = fs.readFileSync(file, 'utf8');
 
-  assert.match(source, /light: \{/);
-  assert.match(source, /title: \{ x: 258, y: 145, fontSize: 45/);
-  assert.match(source, /firstY: 198/);
-  assert.match(source, /secondY: 239/);
-  assert.match(source, /fontSize: 42/);
-  assert.match(source, /panelTitle: \{ x: 818, y: 82, fontSize: 28/);
-  assert.match(source, /status: \{ x: 1117, y: 82, fontSize: 24/);
-  assert.match(source, /labelX: 806/);
-  assert.match(source, /valueX: 1265/);
-  assert.match(source, /y: \[133, 176, 219, 262, 305\]/);
-  assert.match(source, /labelFontSize: 22/);
-  assert.match(source, /valueFontSize: 21/);
+  assert.match(source, /x: 258/);
+  assert.match(source, /firstY: 214/);
+  assert.match(source, /secondY: 250/);
+  assert.match(source, /title: \{ x: 258, y: 158, fontSize: 52/);
+  assert.match(source, /fontSize: 36/);
+  assert.match(source, /labelFontSize: 26/);
+  assert.match(source, /valueFontSize: 25/);
 });
 
 
@@ -93,8 +96,6 @@ test('blood-test copy contract remains complete in Turkish and English', () => {
     assert.ok(copy.title.length > 0);
     assert.equal(copy.description.length, 2);
     assert.ok(copy.description.every((line) => typeof line === 'string' && line.length > 0));
-    assert.equal(typeof copy.example, 'string');
-    assert.ok(copy.example.length > 0);
     assert.equal(typeof copy.panelTitle, 'string');
     assert.equal(copy.labels.length, 5);
   }

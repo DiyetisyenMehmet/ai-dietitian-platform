@@ -10,7 +10,7 @@ test.use({
   colorScheme: "light",
 });
 
-test("real dashboard blood-test card keeps the compact shared height and non-interactive text in light and dark themes", async ({
+test("real dashboard blood-test card keeps its 21:5 frame and non-interactive text in light and dark themes", async ({
   page,
   request,
 }) => {
@@ -30,20 +30,15 @@ test("real dashboard blood-test card keeps the compact shared height and non-int
 
     await expect(card).toHaveCount(1);
     await expect(card).toHaveAttribute("data-locale", "tr");
-    await expect(card).toHaveAttribute("data-frame-aspect", "1536:366");
+    await expect(card).toHaveAttribute("data-frame-aspect", "21:5");
     await expect(card).toHaveAttribute("data-dashboard-fixed-geometry", "");
     await expect(card.locator("[data-blood-test-link]")).toHaveCount(1);
-    if (theme === "light") {
-      await expect(card.locator("[data-blood-test-base-visual]")).toHaveCSS(
-        "background-image",
-        /blood-test-card-clean-light-21x5\.webp/,
-      );
-    }
     await expect(texts).toHaveCount(15);
+    await expect(card.locator("[data-dashboard-feature-chevron]")).toHaveCount(1);
 
     const box = await card.boundingBox();
     expect(box).not.toBeNull();
-    expect(box!.height).toBeCloseTo(Math.max(76, box!.width / (1536 / 366)), 1);
+    expect(box!.height).toBeCloseTo(box!.width / 4.2, 1);
 
     const state = await texts.evaluateAll((nodes) =>
       nodes.map((node) => ({
@@ -66,7 +61,7 @@ test("real dashboard blood-test card keeps the compact shared height and non-int
 });
 
 
-test("blood-test compact geometry remains aligned at 412x915 and its route stays clickable", async ({
+test("blood-test fixed geometry remains aligned at 412x915 and its route stays clickable", async ({
   page,
   request,
 }) => {
@@ -79,7 +74,7 @@ test("blood-test compact geometry remains aligned at 412x915 and its route stays
     const card = page.locator(`[data-blood-test-card][data-theme="${theme}"]:visible`);
     const box = await card.boundingBox();
     expect(box).not.toBeNull();
-    expect(box!.height).toBeCloseTo(84, 1);
+    expect(box!.height).toBeCloseTo(box!.width / 4.2, 1);
 
     const rows = card.locator("[data-blood-test-row]");
     const rowBoxes = await rows.evaluateAll((nodes) =>
