@@ -55,8 +55,8 @@ export const BLOOD_TEST_CARD_LAYOUT = {
       fontWeight: 500,
     },
     example: { x: 276, y: 244, fontSize: 27, fontWeight: 500 },
-    panelTitle: { x: 846, y: 76, fontSize: 23, fontWeight: 700 },
-    status: { x: 1193, y: 75, fontSize: 21, fontWeight: 700 },
+    panelTitle: { x: 846, y: 76, fontSize: 30, fontWeight: 700 },
+    status: { x: 1193, y: 75, fontSize: 26, fontWeight: 700 },
     rows: {
       labelX: 846,
       valueX: 1265,
