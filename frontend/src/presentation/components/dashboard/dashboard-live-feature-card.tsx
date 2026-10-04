@@ -1,10 +1,11 @@
 import Link from "next/link";
 
 import { DashboardCardArtwork } from "./dashboard-card-artwork";
+import { DashboardFeatureChevron } from "./dashboard-feature-chevron";
 import {
   DASHBOARD_LIVE_FEATURE_CARD_BASE,
   DASHBOARD_LIVE_FEATURE_CARD_COPY,
-  DASHBOARD_LIVE_FEATURE_CARD_REGIONS,
+  DASHBOARD_LIVE_FEATURE_CARD_FULL_REGIONS,
   DASHBOARD_LIVE_FEATURE_CARD_VIEWBOX,
   type DashboardLiveFeatureCardKind,
   type DashboardLiveFeatureCardLocale,
@@ -37,17 +38,19 @@ export function DashboardLiveFeatureCard({
         aria-label={`${copy.title}. ${copy.description.join(" ")}`}
         data-dashboard-live-feature-link
       />
-      <div className="dashboard-card-icon" aria-hidden="true">
+      <div className="dashboard-card-base-visual" aria-hidden="true">
         {(["light", "dark"] as const).map((theme) => (
           <DashboardCardArtwork
             key={theme}
             src={DASHBOARD_LIVE_FEATURE_CARD_BASE[kind][theme]}
             source={DASHBOARD_LIVE_FEATURE_CARD_VIEWBOX}
-            region={DASHBOARD_LIVE_FEATURE_CARD_REGIONS[kind][theme].icon}
+            region={DASHBOARD_LIVE_FEATURE_CARD_FULL_REGIONS[kind][theme]}
+            preserveAspectRatio="none"
             className={theme === "light" ? "block dark:hidden" : "hidden dark:block"}
           />
         ))}
       </div>
+      <div className="dashboard-card-icon" aria-hidden="true" />
       <div className="dashboard-feature-body">
         <div className="dashboard-card-copy" data-dashboard-decorative-text="" aria-hidden="true">
           <h3 className="dashboard-card-title" data-dashboard-live-feature-text>
@@ -57,19 +60,9 @@ export function DashboardLiveFeatureCard({
             {copy.description.join(" ")}
           </p>
         </div>
-        <div className="dashboard-card-illustration" aria-hidden="true">
-          {(["light", "dark"] as const).map((theme) => (
-            <DashboardCardArtwork
-              key={theme}
-              src={DASHBOARD_LIVE_FEATURE_CARD_BASE[kind][theme]}
-              source={DASHBOARD_LIVE_FEATURE_CARD_VIEWBOX}
-              region={DASHBOARD_LIVE_FEATURE_CARD_REGIONS[kind][theme].illustration}
-              preserveAspectRatio="none"
-              className={theme === "light" ? "block dark:hidden" : "hidden dark:block"}
-            />
-          ))}
-        </div>
+        <div className="dashboard-card-illustration" aria-hidden="true" />
       </div>
+      <DashboardFeatureChevron />
     </div>
   );
 }

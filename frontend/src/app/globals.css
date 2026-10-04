@@ -151,21 +151,39 @@
   .dashboard-feature-card {
     position: relative;
     display: grid;
-    grid-template-columns: 40px minmax(0, 1fr);
+    grid-template-columns: 4rem minmax(0, 1fr);
     align-items: center;
-    gap: 4px;
+    gap: 0;
     width: 100%;
+    height: 5.25rem;
     min-height: 5.25rem;
     padding: 0;
-    border: 1px solid #e2eeeb;
+    overflow: hidden;
+    border: 0;
     border-radius: 1.125rem;
-    background: linear-gradient(110deg, #fff, #f2fcf8);
-    box-shadow: 0 2px 5px rgb(15 23 42 / 5%);
+    background: transparent;
+    box-shadow: none;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
   }
   .dark .dashboard-feature-card {
-    background: linear-gradient(110deg, #05181b, #092e30);
-    border-color: #173f44;
+    background: transparent;
+    border-color: transparent;
     box-shadow: none;
+  }
+  .dashboard-card-base-visual {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+    border-radius: inherit;
+    pointer-events: none;
+  }
+  .dashboard-card-base-visual svg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
   }
   .dashboard-card-link {
     position: absolute;
@@ -181,20 +199,18 @@
   }
   .dashboard-card-icon,
   .dashboard-card-illustration {
+    position: relative;
+    z-index: 1;
     min-width: 0;
     pointer-events: none;
   }
   .dashboard-card-icon {
-    width: 32px;
-    margin-left: 8px;
-  }
-  .dashboard-card-icon svg {
-    width: 100%;
-    height: auto;
-    overflow: hidden;
-    border-radius: 0.65rem;
+    width: 3.75rem;
+    height: 100%;
   }
   .dashboard-feature-body {
+    position: relative;
+    z-index: 1;
     display: flex;
     flex-wrap: wrap;
     align-items: stretch;
@@ -227,12 +243,7 @@
     height: 100%;
   }
 
-  /* Food card visual source-of-truth: keep the original leafy artwork visible
-     and preserve the same compact title geometry in browser and Android WebView. */
-  [data-kind="food"].dashboard-feature-card {
-    -webkit-text-size-adjust: none;
-    text-size-adjust: none;
-  }
+  /* Image-backed feature cards share one fixed visual frame on browser and WebView. */
   [data-kind="food"] .dashboard-card-illustration {
     flex: 0 0 9.75rem;
     width: 9.75rem;
@@ -267,14 +278,15 @@
   }
   .dashboard-card-chevron {
     position: absolute;
-    right: 8px;
-    top: calc(50% - 10px);
+    right: 0.5rem;
+    top: 50%;
     z-index: 2;
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 20px;
-    height: 20px;
+    width: 1.875rem;
+    height: 1.875rem;
+    transform: translateY(-50%);
     border-radius: 50%;
     background: #fff;
     color: #223552;
