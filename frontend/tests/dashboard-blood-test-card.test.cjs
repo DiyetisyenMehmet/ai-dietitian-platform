@@ -59,14 +59,15 @@ test('blood-test light layout aligns live copy to the approved clean 21:5 artwor
   assert.match(source, /title: \{ x: 276, y: 116, fontSize: 50/);
   assert.match(source, /firstY: 165/);
   assert.match(source, /secondY: 202/);
+  assert.match(source, /fontSize: 42/);
   assert.match(source, /example: \{ x: 276, y: 244, fontSize: 27/);
-  assert.match(source, /panelTitle: \{ x: 846, y: 76, fontSize: 30/);
-  assert.match(source, /status: \{ x: 1193, y: 75, fontSize: 26/);
+  assert.match(source, /panelTitle: \{ x: 846, y: 76, fontSize: 26/);
+  assert.match(source, /status: \{ x: 1193, y: 75, fontSize: 22/);
   assert.match(source, /labelX: 846/);
   assert.match(source, /valueX: 1265/);
   assert.match(source, /y: \[121, 162, 204, 246, 288\]/);
-  assert.match(source, /labelFontSize: 22/);
-  assert.match(source, /valueFontSize: 21/);
+  assert.match(source, /labelFontSize: 20/);
+  assert.match(source, /valueFontSize: 19/);
 });
 
 
