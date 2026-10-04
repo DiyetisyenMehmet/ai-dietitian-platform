@@ -34,9 +34,13 @@ test('blood-test artwork is rendered once and no second live preview container i
     path.join(__dirname, '../src/presentation/components/dashboard/blood-test-card.tsx'),
     'utf8',
   );
+  const contractSource = fs.readFileSync(
+    path.join(__dirname, '../src/presentation/components/dashboard/blood-test-card-contract.ts'),
+    'utf8',
+  );
 
   assert.match(source, /data-blood-test-base-visual/);
-  assert.match(source, /blood-test-card-clean-light-21x5\.webp/);
+  assert.match(contractSource, /blood-test-card-clean-light-21x5\.webp/);
   assert.doesNotMatch(source, /dashboard-blood-preview/);
   assert.doesNotMatch(source, /DashboardFeatureChevron/);
   assert.doesNotMatch(source, /DashboardCardNightBorder/);
