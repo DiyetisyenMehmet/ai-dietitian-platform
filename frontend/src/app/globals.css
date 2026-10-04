@@ -457,7 +457,8 @@
   .dashboard-coach-copy .dashboard-card-description {
     margin-top: 0.125rem;
     font-size: 0.59375rem;
-    white-space: nowrap;
+    white-space: normal;
+    text-wrap: pretty;
   }
   .dashboard-coach-action {
     display: inline-flex;
@@ -465,7 +466,7 @@
     justify-content: center;
     gap: 0.25rem;
     flex: 0 0 auto;
-    min-height: 2.5rem;
+    min-height: 2.75rem;
     padding: 0.3125rem 0.5rem;
     border: 1px solid #a7ebce;
     border-radius: 9999px;
