@@ -39,7 +39,7 @@ async function expectResponsivePreferences(page: Page, width: number) {
     const toggleBox = await toggle.boundingBox();
     expect(cardBox).not.toBeNull();
     expect(toggleBox).not.toBeNull();
-    expect(toggleBox!.height).toBeGreaterThanOrEqual(44);
+    expect(toggleBox!.height).toBeGreaterThanOrEqual(43.9); // 44px CSS target with subpixel rounding
     expect(toggleBox!.x).toBeGreaterThanOrEqual(cardBox!.x);
     expect(toggleBox!.x + toggleBox!.width).toBeLessThanOrEqual(cardBox!.x + cardBox!.width + 1);
     expect(cardBox!.height).toBeLessThanOrEqual(width === 320 ? 205 : 180);
