@@ -104,8 +104,9 @@
      keeps the normal accessibility scaling path. */
   [data-dashboard-fixed-geometry],
   [data-dashboard-fixed-geometry] * {
-    -webkit-text-size-adjust: none;
-    text-size-adjust: none;
+    /* 100% suppresses WebView font boosting while preserving user zoom/accessibility. */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
   }
 
   [data-dashboard-fixed-geometry] {

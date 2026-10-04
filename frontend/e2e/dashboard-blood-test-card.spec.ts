@@ -54,7 +54,7 @@ test("real dashboard blood-test card keeps the compact shared height and non-int
       expect(item.inAnchor).toBe(false);
       expect(item.userSelect).toBe("none");
       expect(item.pointerEvents).toBe("none");
-      expect(item.textSizeAdjust.trim()).toBe("none");
+      expect(item.textSizeAdjust.trim()).toBe("100%");
     }
   }
 });

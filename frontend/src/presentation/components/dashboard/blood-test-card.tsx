@@ -62,8 +62,6 @@ function designTextStyle({
     pointerEvents: "none",
     userSelect: "none",
     WebkitUserSelect: "none",
-    WebkitTextSizeAdjust: "none",
-    textSizeAdjust: "none",
     touchAction: "manipulation",
   };
 
