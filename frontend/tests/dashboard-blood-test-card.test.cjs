@@ -22,9 +22,9 @@ test('blood-test uses one compact base visual with non-interactive decorative te
   assert.match(source, /pointerEvents: "none"/);
   assert.match(source, /touchAction: "manipulation"/);
 
-  const linkClose = source.indexOf('</Link>');
-  const firstRenderedText = source.indexOf('<HtmlText', linkClose);
-  assert.ok(linkClose >= 0 && firstRenderedText > linkClose);
+  const linkMarker = source.indexOf('data-blood-test-link');
+  const firstRenderedText = source.indexOf('<HtmlText', linkMarker);
+  assert.ok(linkMarker >= 0 && firstRenderedText > linkMarker);
   assert.doesNotMatch(source, /<svg|<text|SvgText/);
 });
 
