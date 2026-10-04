@@ -73,7 +73,7 @@ test("notification preferences A1 is compact, persistent and route-safe", async 
     page.locator('[data-notification-preference-card="coachTips"]'),
   ).toContainText("Özel saat ayarı yok");
 
-  for (const width of [320, 390, 430]) {
+  for (const width of [320, 360, 390, 412, 430, 768]) {
     for (const theme of ["light", "dark"] as const) {
       await setDashboardTheme(page, theme);
       await expectResponsivePreferences(page, width);
