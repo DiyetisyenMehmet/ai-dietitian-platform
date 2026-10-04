@@ -138,7 +138,7 @@ export function BloodTestCard({
 }: BloodTestCardProps) {
   const copy = BLOOD_TEST_CARD_COPY[locale];
   const colors = BLOOD_TEST_CARD_COLORS[theme];
-  const layout = BLOOD_TEST_CARD_LAYOUT;
+  const layout = BLOOD_TEST_CARD_LAYOUT[theme];
   const accessibleName = [
     copy.title,
     copy.description.join(" "),

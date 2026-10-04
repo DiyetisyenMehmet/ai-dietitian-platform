@@ -45,25 +45,49 @@ export const BLOOD_TEST_CARD_COPY = {
  * Dark mode retains the legacy base geometry until its clean asset is replaced.
  */
 export const BLOOD_TEST_CARD_LAYOUT = {
-  title: { x: 258, y: 150, fontSize: 50, fontWeight: 700 },
-  description: {
-    x: 258,
-    firstY: 204,
-    secondY: 239,
-    fontSize: 34,
-    fontWeight: 500,
+  light: {
+    title: { x: 276, y: 116, fontSize: 50, fontWeight: 700 },
+    description: {
+      x: 276,
+      firstY: 165,
+      secondY: 202,
+      fontSize: 34,
+      fontWeight: 500,
+    },
+    example: { x: 276, y: 244, fontSize: 27, fontWeight: 500 },
+    panelTitle: { x: 846, y: 76, fontSize: 23, fontWeight: 700 },
+    status: { x: 1193, y: 75, fontSize: 21, fontWeight: 700 },
+    rows: {
+      labelX: 846,
+      valueX: 1265,
+      y: [121, 162, 204, 246, 288],
+      labelFontSize: 22,
+      valueFontSize: 21,
+      labelWeight: 500,
+      valueWeight: 600,
+    },
   },
-  example: { x: 258, y: 278, fontSize: 27, fontWeight: 500 },
-  panelTitle: { x: 818, y: 82, fontSize: 23, fontWeight: 700 },
-  status: { x: 1117, y: 82, fontSize: 21, fontWeight: 700 },
-  rows: {
-    labelX: 806,
-    valueX: 1174,
-    y: [133, 176, 219, 262, 305],
-    labelFontSize: 22,
-    valueFontSize: 21,
-    labelWeight: 500,
-    valueWeight: 600,
+  dark: {
+    title: { x: 258, y: 150, fontSize: 50, fontWeight: 700 },
+    description: {
+      x: 258,
+      firstY: 204,
+      secondY: 239,
+      fontSize: 34,
+      fontWeight: 500,
+    },
+    example: { x: 258, y: 278, fontSize: 27, fontWeight: 500 },
+    panelTitle: { x: 818, y: 82, fontSize: 23, fontWeight: 700 },
+    status: { x: 1117, y: 82, fontSize: 21, fontWeight: 700 },
+    rows: {
+      labelX: 806,
+      valueX: 1174,
+      y: [133, 176, 219, 262, 305],
+      labelFontSize: 22,
+      valueFontSize: 21,
+      labelWeight: 500,
+      valueWeight: 600,
+    },
   },
 } as const;
 

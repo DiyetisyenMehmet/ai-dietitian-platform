@@ -48,19 +48,23 @@ test('blood-test artwork is rendered once and no second live preview container i
 });
 
 
-test('blood-test description is larger and moved lower while keeping its x alignment', () => {
+test('blood-test light layout aligns live copy to the approved clean 21:5 artwork', () => {
   const file = path.join(
     __dirname,
     '../src/presentation/components/dashboard/blood-test-card-contract.ts',
   );
   const source = fs.readFileSync(file, 'utf8');
 
-  assert.match(source, /x: 258/);
-  assert.match(source, /firstY: 204/);
-  assert.match(source, /secondY: 239/);
-  assert.match(source, /title: \{ x: 258, y: 150, fontSize: 50/);
-  assert.match(source, /example: \{ x: 258, y: 278, fontSize: 27/);
-  assert.match(source, /fontSize: 34/);
+  assert.match(source, /light: \{/);
+  assert.match(source, /title: \{ x: 276, y: 116, fontSize: 50/);
+  assert.match(source, /firstY: 165/);
+  assert.match(source, /secondY: 202/);
+  assert.match(source, /example: \{ x: 276, y: 244, fontSize: 27/);
+  assert.match(source, /panelTitle: \{ x: 846, y: 76, fontSize: 23/);
+  assert.match(source, /status: \{ x: 1193, y: 75, fontSize: 21/);
+  assert.match(source, /labelX: 846/);
+  assert.match(source, /valueX: 1265/);
+  assert.match(source, /y: \[121, 162, 204, 246, 288\]/);
   assert.match(source, /labelFontSize: 22/);
   assert.match(source, /valueFontSize: 21/);
 });
