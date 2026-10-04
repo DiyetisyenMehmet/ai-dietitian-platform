@@ -2,14 +2,14 @@ export type BloodTestCardLocale = "tr" | "en";
 export type BloodTestCardTheme = "light" | "dark";
 
 export const BLOOD_TEST_CARD_VIEWBOX = {
-  width: 1438,
-  height: 413,
+  light: { width: 1536, height: 366 },
+  dark: { width: 1438, height: 413 },
 } as const;
 
-export const BLOOD_TEST_CARD_ASPECT = `${BLOOD_TEST_CARD_VIEWBOX.width} / ${BLOOD_TEST_CARD_VIEWBOX.height}`;
+export const BLOOD_TEST_CARD_ASPECT = "21 / 5";
 
 export const BLOOD_TEST_CARD_BASE = {
-  light: "/images/dashboard/blood-test-card-base-light.png",
+  light: "/images/dashboard/blood-test-card-clean-light-21x5.webp",
   dark: "/images/dashboard/blood-test-card-base-dark.png",
 } as const;
 
@@ -41,8 +41,8 @@ export const BLOOD_TEST_CARD_COPY = {
 } as const;
 
 /**
- * Coordinates are measured against the approved 1438 x 413 visual.
- * HTML text uses these exact design coordinates and scales with the card width.
+ * Coordinates are measured against the approved clean 1536 x 366 light visual.
+ * Dark mode retains the legacy base geometry until its clean asset is replaced.
  */
 export const BLOOD_TEST_CARD_LAYOUT = {
   title: { x: 258, y: 150, fontSize: 50, fontWeight: 700 },

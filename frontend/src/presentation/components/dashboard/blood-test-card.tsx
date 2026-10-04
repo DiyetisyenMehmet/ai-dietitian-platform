@@ -22,16 +22,20 @@ interface BloodTestCardProps {
 type Anchor = "start" | "middle" | "end";
 
 const BLOOD_TEST_VISIBLE_CROP = {
-  top: 35,
-  height: 342,
+  dark: { top: 35, height: 342 },
 } as const;
 
-function visibleTop(y: number) {
-  return ((y - BLOOD_TEST_VISIBLE_CROP.top) / BLOOD_TEST_VISIBLE_CROP.height) * 100;
+function visibleTop(y: number, theme: BloodTestCardTheme) {
+  if (theme === "light") {
+    return (y / BLOOD_TEST_CARD_VIEWBOX.light.height) * 100;
+  }
+  const crop = BLOOD_TEST_VISIBLE_CROP.dark;
+  return ((y - crop.top) / crop.height) * 100;
 }
 
-function clampFont(fontSize: number) {
-  const preferred = (fontSize / BLOOD_TEST_CARD_VIEWBOX.width) * 100;
+function clampFont(fontSize: number, theme: BloodTestCardTheme) {
+  const width = BLOOD_TEST_CARD_VIEWBOX[theme].width;
+  const preferred = (fontSize / width) * 100;
   const minimum = Math.max(4.5, fontSize * 0.19);
   const maximum = Math.max(minimum, fontSize * 0.25);
   return `clamp(${minimum.toFixed(2)}px, ${preferred.toFixed(4)}cqw, ${maximum.toFixed(2)}px)`;
@@ -43,19 +47,22 @@ function designTextStyle({
   fontSize,
   fontWeight,
   anchor = "start",
+  theme,
 }: {
   x: number;
   y: number;
   fontSize: number;
   fontWeight: number;
   anchor?: Anchor;
+  theme: BloodTestCardTheme;
 }): CSSProperties {
+  const viewbox = BLOOD_TEST_CARD_VIEWBOX[theme];
   const style: CSSProperties = {
     position: "absolute",
-    top: `${visibleTop(y)}%`,
+    top: `${visibleTop(y, theme)}%`,
     display: "block",
     fontFamily: "var(--font-sans), Inter, sans-serif",
-    fontSize: clampFont(fontSize),
+    fontSize: clampFont(fontSize, theme),
     fontWeight,
     lineHeight: 1.25,
     whiteSpace: "nowrap",
@@ -66,13 +73,13 @@ function designTextStyle({
   };
 
   if (anchor === "end") {
-    style.right = `${((BLOOD_TEST_CARD_VIEWBOX.width - x) / BLOOD_TEST_CARD_VIEWBOX.width) * 100}%`;
+    style.right = `${((viewbox.width - x) / viewbox.width) * 100}%`;
     style.transform = "translateY(-50%)";
   } else if (anchor === "middle") {
-    style.left = `${(x / BLOOD_TEST_CARD_VIEWBOX.width) * 100}%`;
+    style.left = `${(x / viewbox.width) * 100}%`;
     style.transform = "translate(-50%, -50%)";
   } else {
-    style.left = `${(x / BLOOD_TEST_CARD_VIEWBOX.width) * 100}%`;
+    style.left = `${(x / viewbox.width) * 100}%`;
     style.transform = "translateY(-50%)";
   }
 
@@ -88,6 +95,7 @@ function HtmlText({
   fontWeight,
   anchor = "start",
   row,
+  theme,
 }: {
   x: number;
   y: number;
@@ -97,12 +105,13 @@ function HtmlText({
   fontWeight: number;
   anchor?: Anchor;
   row?: number;
+  theme: BloodTestCardTheme;
 }) {
   return (
     <span
       className="pointer-events-none z-20 select-none"
       style={{
-        ...designTextStyle({ x, y, fontSize, fontWeight, anchor }),
+        ...designTextStyle({ x, y, fontSize, fontWeight, anchor, theme }),
         color,
       }}
       aria-hidden="true"
@@ -170,6 +179,7 @@ export function BloodTestCard({
         color={colors.title}
         fontSize={layout.title.fontSize}
         fontWeight={layout.title.fontWeight}
+        theme={theme}
       >
         {copy.title}
       </HtmlText>
@@ -180,6 +190,7 @@ export function BloodTestCard({
         color={colors.description}
         fontSize={layout.description.fontSize}
         fontWeight={layout.description.fontWeight}
+        theme={theme}
       >
         {copy.description[0]}
       </HtmlText>
@@ -190,6 +201,7 @@ export function BloodTestCard({
         color={colors.description}
         fontSize={layout.description.fontSize}
         fontWeight={layout.description.fontWeight}
+        theme={theme}
       >
         {copy.description[1]}
       </HtmlText>
@@ -200,6 +212,7 @@ export function BloodTestCard({
         color={colors.description}
         fontSize={layout.example.fontSize}
         fontWeight={layout.example.fontWeight}
+        theme={theme}
       >
         {copy.example}
       </HtmlText>
@@ -210,6 +223,7 @@ export function BloodTestCard({
         color={colors.panelTitle}
         fontSize={layout.panelTitle.fontSize}
         fontWeight={layout.panelTitle.fontWeight}
+        theme={theme}
       >
         {copy.panelTitle}
       </HtmlText>
@@ -221,6 +235,7 @@ export function BloodTestCard({
         fontSize={layout.status.fontSize}
         fontWeight={layout.status.fontWeight}
         anchor="middle"
+        theme={theme}
       >
         {copy.status}
       </HtmlText>
@@ -234,6 +249,7 @@ export function BloodTestCard({
             fontSize={layout.rows.labelFontSize}
             fontWeight={layout.rows.labelWeight}
             row={index + 1}
+            theme={theme}
           >
             {label}
           </HtmlText>
@@ -245,6 +261,7 @@ export function BloodTestCard({
             fontWeight={layout.rows.valueWeight}
             anchor="end"
             row={index + 1}
+            theme={theme}
           >
             {BLOOD_TEST_CARD_VALUES[index]}
           </HtmlText>

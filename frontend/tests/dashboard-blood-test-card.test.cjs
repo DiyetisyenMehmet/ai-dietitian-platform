@@ -36,6 +36,7 @@ test('blood-test artwork is rendered once and no second live preview container i
   );
 
   assert.match(source, /data-blood-test-base-visual/);
+  assert.match(source, /blood-test-card-clean-light-21x5\.webp/);
   assert.doesNotMatch(source, /dashboard-blood-preview/);
   assert.doesNotMatch(source, /DashboardFeatureChevron/);
   assert.doesNotMatch(source, /DashboardCardNightBorder/);
