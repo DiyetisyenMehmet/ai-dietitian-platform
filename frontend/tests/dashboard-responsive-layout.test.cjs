@@ -334,6 +334,17 @@ for (const width of [390, 412, 430]) {
               );
               assert.ok(blood.artwork.width >= 102 && blood.artwork.width <= 140);
               assert.ok(blood.artwork.width <= blood.width * 0.51);
+              const bloodPreviewStyle = await page
+                .locator('[data-blood-test-card]:visible .dashboard-blood-preview')
+                .evaluate((node) => {
+                  const css = getComputedStyle(node);
+                  return [css.borderTopWidth, css.boxShadow];
+                });
+              assert.deepEqual(
+                bloodPreviewStyle,
+                ["0px", "none"],
+                "Blood results stay integrated without an outer frame",
+              );
               assert.ok(
                 coach.action.x >= coach.copy.right + 4,
                 "Normal phones keep the Coach action beside the copy",

@@ -273,6 +273,9 @@
     background: linear-gradient(125deg, #fff8f8, #f2faff);
     padding-block: 0;
     padding-right: 0;
+    /* Keep browser and Android WebView typography on the same compact baseline. */
+    -webkit-text-size-adjust: none;
+    text-size-adjust: none;
   }
   .dashboard-blood-background {
     position: absolute;
@@ -323,17 +326,18 @@
     align-self: stretch;
   }
   .dashboard-blood-preview {
-    /* Preview + tube form one compact summary. Enlarged text grows the preview,
-       then the whole summary wraps below the copy when the row no longer fits. */
+    /* The approved reference has a soft integrated results surface, not a
+       separately framed mini-card. Keep the rows readable without an outline. */
     flex: 0 1 auto;
     width: 6.875rem;
     max-width: calc(100% - 3.375rem);
     min-width: 0;
     margin-block: 4px;
     padding: 0.1875rem;
-    border: 1px solid #e2e8f0;
-    border-radius: 0.75rem;
-    background: rgb(255 255 255 / 85%);
+    border: 0;
+    border-radius: 0.625rem;
+    background: rgb(255 255 255 / 58%);
+    box-shadow: none;
     font-size: 0.34375rem;
     line-height: 1.4;
     color: #475569;
@@ -359,8 +363,8 @@
     overflow: hidden;
   }
   .dark .dashboard-blood-preview {
-    background: #0c292e;
-    border-color: #25464b;
+    background: rgb(12 41 46 / 58%);
+    border-color: transparent;
     color: #c3d8d4;
   }
   .dashboard-blood-example {
