@@ -21,9 +21,10 @@ after(async () => {
 // deviceScaleFactor and page zoom alone do not exercise WebSettings.textZoom.
 async function scaleText(page, multiplier) {
   await page.evaluate((scale) => {
+    const protectFixedGeometry = scale > 1.3;
     const nodes = [...document.querySelectorAll("main *")].filter(
       (node) =>
-        !node.closest("[data-dashboard-fixed-geometry]") &&
+        (!protectFixedGeometry || !node.closest("[data-dashboard-fixed-geometry]")) &&
         [...node.childNodes].some(
           (child) => child.nodeType === Node.TEXT_NODE && child.textContent.trim(),
         ),
@@ -303,11 +304,11 @@ for (const width of [390, 412, 430]) {
               const bloodBox = await bloodCard.boundingBox();
               assert.ok(bloodBox, "Blood card is visible");
               assert.ok(
-                Math.abs(bloodBox.height - bloodBox.width / 4.2) <= 1.5,
-                "Blood card keeps the approved 21:5 compact frame",
+                Math.abs(bloodBox.height - 84) <= 1,
+                "Blood card keeps the approved compact 84px frame",
               );
               assert.ok(
-                Math.abs(bloodBox.height - progress.height) <= 4,
+                Math.abs(bloodBox.height - progress.height) <= 1.5,
                 "Blood and Progress remain in the same compact card family",
               );
               assert.equal(
@@ -351,7 +352,7 @@ test("320px / 130% uses the fallback without hiding or shrinking Blood rows", as
     const bloodCard = page.locator("[data-blood-test-card]:visible");
     const bloodBox = await bloodCard.boundingBox();
     assert.ok(bloodBox);
-    assert.ok(Math.abs(bloodBox.height - bloodBox.width / 4.2) <= 1.5);
+    assert.ok(Math.abs(bloodBox.height - 84) <= 1);
     assert.equal(await bloodCard.locator("[data-blood-test-row]").count(), 10);
     if (process.env.DASHBOARD_LAYOUT_ARTIFACTS) {
       const directory = process.env.DASHBOARD_LAYOUT_ARTIFACTS;

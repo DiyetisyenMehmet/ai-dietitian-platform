@@ -10,7 +10,7 @@ test.use({
   colorScheme: "light",
 });
 
-test("real dashboard blood-test card keeps its 21:5 frame and non-interactive text in light and dark themes", async ({
+test("real dashboard blood-test card keeps the compact shared height and non-interactive text in light and dark themes", async ({
   page,
   request,
 }) => {
@@ -30,15 +30,14 @@ test("real dashboard blood-test card keeps its 21:5 frame and non-interactive te
 
     await expect(card).toHaveCount(1);
     await expect(card).toHaveAttribute("data-locale", "tr");
-    await expect(card).toHaveAttribute("data-frame-aspect", "21:5");
+    await expect(card).toHaveAttribute("data-frame-height", "84px");
     await expect(card).toHaveAttribute("data-dashboard-fixed-geometry", "");
     await expect(card.locator("[data-blood-test-link]")).toHaveCount(1);
     await expect(texts).toHaveCount(16);
-    await expect(card.locator("[data-dashboard-feature-chevron]")).toHaveCount(1);
 
     const box = await card.boundingBox();
     expect(box).not.toBeNull();
-    expect(box!.height).toBeCloseTo(box!.width / 4.2, 1);
+    expect(box!.height).toBeCloseTo(84, 1);
 
     const state = await texts.evaluateAll((nodes) =>
       nodes.map((node) => ({
@@ -61,7 +60,7 @@ test("real dashboard blood-test card keeps its 21:5 frame and non-interactive te
 });
 
 
-test("blood-test fixed geometry remains aligned at 412x915 and its route stays clickable", async ({
+test("blood-test compact geometry remains aligned at 412x915 and its route stays clickable", async ({
   page,
   request,
 }) => {
@@ -74,7 +73,7 @@ test("blood-test fixed geometry remains aligned at 412x915 and its route stays c
     const card = page.locator(`[data-blood-test-card][data-theme="${theme}"]:visible`);
     const box = await card.boundingBox();
     expect(box).not.toBeNull();
-    expect(box!.height).toBeCloseTo(box!.width / 4.2, 1);
+    expect(box!.height).toBeCloseTo(84, 1);
 
     const rows = card.locator("[data-blood-test-row]");
     const rowBoxes = await rows.evaluateAll((nodes) =>

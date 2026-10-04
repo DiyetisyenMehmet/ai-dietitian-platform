@@ -5,15 +5,13 @@ const path = require('node:path');
 const vm = require('node:vm');
 const ts = require('typescript');
 
-test('blood-test uses shared 21:5 frame with non-interactive decorative text outside anchor', () => {
+test('blood-test uses one compact base visual with non-interactive decorative text outside anchor', () => {
   const source = fs.readFileSync(
     path.join(__dirname, '../src/presentation/components/dashboard/blood-test-card.tsx'),
     'utf8',
   );
 
-  assert.match(source, /DASHBOARD_FEATURE_CARD_FRAME_ASPECT/);
-  assert.match(source, /data-frame-aspect="21:5"/);
-  assert.match(source, /data-blood-test-stage/);
+  assert.match(source, /data-frame-height="84px"/);
   assert.match(source, /data-blood-test-link/);
   assert.match(source, /data-blood-test-live-text/);
   assert.match(source, /data-dashboard-fixed-geometry/);
@@ -31,28 +29,17 @@ test('blood-test uses shared 21:5 frame with non-interactive decorative text out
 });
 
 
-test('blood-test dark card uses the same normalized perimeter overlay', () => {
+test('blood-test artwork is rendered once and no second live preview container is introduced', () => {
   const source = fs.readFileSync(
     path.join(__dirname, '../src/presentation/components/dashboard/blood-test-card.tsx'),
     'utf8',
   );
 
-  assert.match(source, /DashboardCardNightBorder/);
-});
-
-
-test('blood-test uses the same outer-frame chevron and dark perimeter as other cards', () => {
-  const source = fs.readFileSync(
-    path.join(__dirname, '../src/presentation/components/dashboard/blood-test-card.tsx'),
-    'utf8',
-  );
-
-  assert.match(source, /DashboardFeatureChevron/);
-  assert.match(source, /DashboardCardNightBorder/);
+  assert.match(source, /data-blood-test-base-visual/);
+  assert.doesNotMatch(source, /dashboard-blood-preview/);
+  assert.doesNotMatch(source, /DashboardFeatureChevron/);
+  assert.doesNotMatch(source, /DashboardCardNightBorder/);
   assert.match(source, /\[container-type:inline-size\]/);
-
-  const stageClose = source.indexOf('</div>\n\n      <DashboardFeatureChevron');
-  assert.ok(stageClose >= 0, 'shared chevron should be outside the cropped blood stage');
 });
 
 
