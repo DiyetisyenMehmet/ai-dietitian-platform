@@ -104,8 +104,8 @@
      keeps the normal accessibility scaling path. */
   [data-dashboard-fixed-geometry],
   [data-dashboard-fixed-geometry] * {
-    -webkit-text-size-adjust: 100%;
-    text-size-adjust: 100%;
+    -webkit-text-size-adjust: none;
+    text-size-adjust: none;
   }
 
   [data-dashboard-fixed-geometry] {

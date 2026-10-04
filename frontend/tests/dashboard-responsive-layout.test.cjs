@@ -21,10 +21,9 @@ after(async () => {
 // deviceScaleFactor and page zoom alone do not exercise WebSettings.textZoom.
 async function scaleText(page, multiplier) {
   await page.evaluate((scale) => {
-    const protectFixedGeometry = scale > 1.3;
     const nodes = [...document.querySelectorAll("main *")].filter(
       (node) =>
-        (!protectFixedGeometry || !node.closest("[data-dashboard-fixed-geometry]")) &&
+        !node.closest("[data-dashboard-fixed-geometry]") &&
         [...node.childNodes].some(
           (child) => child.nodeType === Node.TEXT_NODE && child.textContent.trim(),
         ),
