@@ -263,7 +263,7 @@ for (const width of [390, 412, 430]) {
               assert.ok(cards[kind].height >= 44, `${kind} touch target height`);
             }
             const { food, blood, progress, coach } = cards;
-            assert.ok(food.artwork.width >= 156 && food.artwork.width <= 164);
+            assert.ok(food.artwork.width >= 154 && food.artwork.width <= 158);
             assert.ok(food.artwork.width * food.artwork.height >= 8500);
             assert.ok(
               food.artwork.x >= food.copy.right + 3.5,
