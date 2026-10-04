@@ -356,15 +356,10 @@ export function NotificationsView() {
                 </span>
 
                 <div className="min-w-0 flex-1">
-                  <div className="flex min-w-0 items-start gap-2">
-                    <div className="min-w-0 flex-1">
-                      <h2 className="break-words text-[15px] font-semibold leading-5 text-foreground">
-                        {item.label}
-                      </h2>
-                      <p className="mt-1 break-words text-xs leading-[1.55] text-muted-foreground">
-                        {item.description}
-                      </p>
-                    </div>
+                  <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2">
+                    <h2 className="min-w-0 break-words text-[15px] font-semibold leading-5 text-foreground">
+                      {item.label}
+                    </h2>
 
                     <PreferenceSwitch
                       label={item.label}
@@ -372,6 +367,10 @@ export function NotificationsView() {
                       disabled={savingKey !== null}
                       onToggle={() => void toggle(item.key)}
                     />
+
+                    <p className="col-span-2 mt-1 min-w-0 break-words text-xs leading-[1.55] text-muted-foreground">
+                      {item.description}
+                    </p>
                   </div>
 
                   <div className="mt-3 flex min-w-0 items-start gap-2 rounded-xl bg-muted/60 px-3 py-2">
