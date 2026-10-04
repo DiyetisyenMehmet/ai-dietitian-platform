@@ -9,8 +9,7 @@
     "lint": "next lint",
     "type-check": "tsc --noEmit",
     "format": "prettier --write .",
-    "format:check": "prettier --check .",
-    "test:dashboard-layout": "node --test tests/dashboard-responsive-layout.test.cjs"
+    "format:check": "prettier --check ."
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

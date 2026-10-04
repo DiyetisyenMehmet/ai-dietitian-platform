@@ -1,10 +1,13 @@
 import type { CSSProperties } from "react";
 
+import Image from "next/image";
 import Link from "next/link";
 
-import { DashboardCardArtwork } from "@/presentation/components/dashboard/dashboard-card-artwork";
+import { DashboardCardNightBorder } from "@/presentation/components/dashboard/dashboard-card-night-border";
+import { DashboardFeatureChevron } from "@/presentation/components/dashboard/dashboard-feature-chevron";
 
 import {
+  BLOOD_TEST_CARD_ASPECT,
   BLOOD_TEST_CARD_BASE,
   BLOOD_TEST_CARD_COLORS,
   BLOOD_TEST_CARD_COPY,
@@ -14,6 +17,7 @@ import {
   type BloodTestCardLocale,
   type BloodTestCardTheme,
 } from "@/presentation/components/dashboard/blood-test-card-contract";
+import { DASHBOARD_FEATURE_CARD_FRAME_ASPECT } from "@/presentation/components/dashboard/dashboard-live-feature-card-contract";
 
 interface BloodTestCardProps {
   href?: string;
@@ -24,23 +28,18 @@ interface BloodTestCardProps {
 type Anchor = "start" | "middle" | "end";
 
 const BLOOD_TEST_VISIBLE_CROP = {
-  dark: { top: 35, height: 342 },
+  top: 35,
+  height: 342,
 } as const;
 
-function visibleTop(y: number, theme: BloodTestCardTheme) {
-  if (theme === "light") {
-    return (y / BLOOD_TEST_CARD_VIEWBOX.light.height) * 100;
-  }
-  const crop = BLOOD_TEST_VISIBLE_CROP.dark;
-  return ((y - crop.top) / crop.height) * 100;
-}
-
-function clampFont(fontSize: number, theme: BloodTestCardTheme) {
-  const width = BLOOD_TEST_CARD_VIEWBOX[theme].width;
-  const preferred = (fontSize / width) * 100;
-  const minimum = Math.max(4.5, fontSize * 0.19);
-  const maximum = Math.max(minimum, fontSize * 0.25);
-  return `clamp(${minimum.toFixed(2)}px, ${preferred.toFixed(4)}cqw, ${maximum.toFixed(2)}px)`;
+function bloodStageStyle(): CSSProperties {
+  return {
+    position: "absolute",
+    left: 0,
+    top: `${-(BLOOD_TEST_VISIBLE_CROP.top / BLOOD_TEST_VISIBLE_CROP.height) * 100}%`,
+    width: "100%",
+    aspectRatio: BLOOD_TEST_CARD_ASPECT,
+  };
 }
 
 function designTextStyle({
@@ -49,24 +48,20 @@ function designTextStyle({
   fontSize,
   fontWeight,
   anchor = "start",
-  theme,
 }: {
   x: number;
   y: number;
   fontSize: number;
   fontWeight: number;
   anchor?: Anchor;
-  theme: BloodTestCardTheme;
 }): CSSProperties {
-  const viewbox = BLOOD_TEST_CARD_VIEWBOX[theme];
   const style: CSSProperties = {
     position: "absolute",
-    top: `${visibleTop(y, theme)}%`,
-    display: "block",
+    top: `${(y / BLOOD_TEST_CARD_VIEWBOX.height) * 100}%`,
     fontFamily: "var(--font-sans), Inter, sans-serif",
-    fontSize: clampFont(fontSize, theme),
+    fontSize: `${(fontSize / BLOOD_TEST_CARD_VIEWBOX.width) * 100}cqw`,
     fontWeight,
-    lineHeight: 1.25,
+    lineHeight: 1,
     whiteSpace: "nowrap",
     pointerEvents: "none",
     userSelect: "none",
@@ -75,13 +70,13 @@ function designTextStyle({
   };
 
   if (anchor === "end") {
-    style.right = `${((viewbox.width - x) / viewbox.width) * 100}%`;
+    style.right = `${((BLOOD_TEST_CARD_VIEWBOX.width - x) / BLOOD_TEST_CARD_VIEWBOX.width) * 100}%`;
     style.transform = "translateY(-50%)";
   } else if (anchor === "middle") {
-    style.left = `${(x / viewbox.width) * 100}%`;
+    style.left = `${(x / BLOOD_TEST_CARD_VIEWBOX.width) * 100}%`;
     style.transform = "translate(-50%, -50%)";
   } else {
-    style.left = `${(x / viewbox.width) * 100}%`;
+    style.left = `${(x / BLOOD_TEST_CARD_VIEWBOX.width) * 100}%`;
     style.transform = "translateY(-50%)";
   }
 
@@ -97,7 +92,6 @@ function HtmlText({
   fontWeight,
   anchor = "start",
   row,
-  theme,
 }: {
   x: number;
   y: number;
@@ -107,13 +101,12 @@ function HtmlText({
   fontWeight: number;
   anchor?: Anchor;
   row?: number;
-  theme: BloodTestCardTheme;
 }) {
   return (
     <span
       className="pointer-events-none z-20 select-none"
       style={{
-        ...designTextStyle({ x, y, fontSize, fontWeight, anchor, theme }),
+        ...designTextStyle({ x, y, fontSize, fontWeight, anchor }),
         color,
       }}
       aria-hidden="true"
@@ -128,10 +121,9 @@ function HtmlText({
 }
 
 /**
- * Blood Test intentionally uses one base visual only: background, rounded
- * results surface, tube and chevron live in the approved artwork. HTML adds
- * only localized text. This prevents a second rectangular preview layer from
- * appearing in browser or Android WebView.
+ * Blood Test keeps its native 1438 x 413 artwork and text coordinates while
+ * sharing the same visible 21:5 outer frame as Food and Progress. The source
+ * stage is uniformly scaled and only surplus vertical canvas is clipped.
  */
 export function BloodTestCard({
   href = "/profile/blood-tests",
@@ -140,7 +132,7 @@ export function BloodTestCard({
 }: BloodTestCardProps) {
   const copy = BLOOD_TEST_CARD_COPY[locale];
   const colors = BLOOD_TEST_CARD_COLORS[theme];
-  const layout = BLOOD_TEST_CARD_LAYOUT[theme];
+  const layout = BLOOD_TEST_CARD_LAYOUT;
   const accessibleName = [
     copy.title,
     copy.description.join(" "),
@@ -151,135 +143,121 @@ export function BloodTestCard({
 
   return (
     <div
-      className="relative block w-full overflow-hidden rounded-[1.125rem] bg-transparent [container-type:inline-size]"
+      className="relative block w-full overflow-hidden rounded-[clamp(0.9rem,3.6cqw,1.35rem)] bg-transparent [container-type:inline-size]"
+      style={{ aspectRatio: DASHBOARD_FEATURE_CARD_FRAME_ASPECT }}
       data-blood-test-card
       data-dashboard-fixed-geometry=""
       data-locale={locale}
       data-theme={theme}
       data-theme-geometry="locked"
-      data-frame-aspect="1536:366"
+      data-frame-aspect="21:5"
       data-text-layer="html"
-      style={{ aspectRatio: theme === "light" ? "1536 / 366" : "1438 / 342", minHeight: "4.75rem" }}
     >
       <div
-        className="pointer-events-none absolute inset-0 select-none"
-        aria-hidden="true"
-        data-blood-test-base-visual
-        style={
-          theme === "light"
-            ? {
-                backgroundImage: `url("${BLOOD_TEST_CARD_BASE.light}")`,
-                backgroundSize: "100% 100%",
-                backgroundRepeat: "no-repeat",
-              }
-            : undefined
-        }
+        className="absolute [container-type:inline-size]"
+        style={bloodStageStyle()}
+        data-blood-test-stage
       >
-        {theme === "dark" ? (
-          <DashboardCardArtwork
-            src={BLOOD_TEST_CARD_BASE.dark}
-            source={BLOOD_TEST_CARD_VIEWBOX.dark}
-            region={{
-              x: 0,
-              y: BLOOD_TEST_VISIBLE_CROP.dark.top,
-              width: BLOOD_TEST_CARD_VIEWBOX.dark.width,
-              height: BLOOD_TEST_VISIBLE_CROP.dark.height,
-            }}
-            preserveAspectRatio="none"
+        <Link
+          href={href}
+          className="absolute inset-0 z-10 block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+          aria-label={accessibleName}
+          data-blood-test-link
+        >
+          <Image
+            src={BLOOD_TEST_CARD_BASE[theme]}
+            alt=""
+            fill
+            unoptimized
+            draggable={false}
+            sizes="(max-width: 768px) 100vw, 672px"
+            className="pointer-events-none select-none object-fill"
+            aria-hidden="true"
+            data-blood-test-base-visual
           />
-        ) : null}
+        </Link>
+
+        <HtmlText
+          x={layout.title.x}
+          y={layout.title.y}
+          color={colors.title}
+          fontSize={layout.title.fontSize}
+          fontWeight={layout.title.fontWeight}
+        >
+          {copy.title}
+        </HtmlText>
+
+        <HtmlText
+          x={layout.description.x}
+          y={layout.description.firstY}
+          color={colors.description}
+          fontSize={layout.description.fontSize}
+          fontWeight={layout.description.fontWeight}
+        >
+          {copy.description[0]}
+        </HtmlText>
+
+        <HtmlText
+          x={layout.description.x}
+          y={layout.description.secondY}
+          color={colors.description}
+          fontSize={layout.description.fontSize}
+          fontWeight={layout.description.fontWeight}
+        >
+          {copy.description[1]}
+        </HtmlText>
+
+        <HtmlText
+          x={layout.panelTitle.x}
+          y={layout.panelTitle.y}
+          color={colors.panelTitle}
+          fontSize={layout.panelTitle.fontSize}
+          fontWeight={layout.panelTitle.fontWeight}
+        >
+          {copy.panelTitle}
+        </HtmlText>
+
+        <HtmlText
+          x={layout.status.x}
+          y={layout.status.y}
+          color={colors.status}
+          fontSize={layout.status.fontSize}
+          fontWeight={layout.status.fontWeight}
+          anchor="middle"
+        >
+          {copy.status}
+        </HtmlText>
+
+
+        {copy.labels.map((label, index) => (
+          <span key={label}>
+            <HtmlText
+              x={layout.rows.labelX}
+              y={layout.rows.y[index]}
+              color={colors.label}
+              fontSize={layout.rows.labelFontSize}
+              fontWeight={layout.rows.labelWeight}
+              row={index + 1}
+            >
+              {label}
+            </HtmlText>
+            <HtmlText
+              x={layout.rows.valueX}
+              y={layout.rows.y[index]}
+              color={colors.value}
+              fontSize={layout.rows.valueFontSize}
+              fontWeight={layout.rows.valueWeight}
+              anchor="end"
+              row={index + 1}
+            >
+              {BLOOD_TEST_CARD_VALUES[index]}
+            </HtmlText>
+          </span>
+        ))}
       </div>
 
-      <Link
-        href={href}
-        className="absolute inset-0 z-10 block rounded-[inherit] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-        aria-label={accessibleName}
-        data-blood-test-link
-      />
-
-      <HtmlText
-        x={layout.title.x}
-        y={layout.title.y}
-        color={colors.title}
-        fontSize={layout.title.fontSize}
-        fontWeight={layout.title.fontWeight}
-        theme={theme}
-      >
-        {copy.title}
-      </HtmlText>
-
-      <HtmlText
-        x={layout.description.x}
-        y={layout.description.firstY}
-        color={colors.description}
-        fontSize={layout.description.fontSize}
-        fontWeight={layout.description.fontWeight}
-        theme={theme}
-      >
-        {copy.description[0]}
-      </HtmlText>
-
-      <HtmlText
-        x={layout.description.x}
-        y={layout.description.secondY}
-        color={colors.description}
-        fontSize={layout.description.fontSize}
-        fontWeight={layout.description.fontWeight}
-        theme={theme}
-      >
-        {copy.description[1]}
-      </HtmlText>
-
-      <HtmlText
-        x={layout.panelTitle.x}
-        y={layout.panelTitle.y}
-        color={colors.panelTitle}
-        fontSize={layout.panelTitle.fontSize}
-        fontWeight={layout.panelTitle.fontWeight}
-        theme={theme}
-      >
-        {copy.panelTitle}
-      </HtmlText>
-
-      <HtmlText
-        x={layout.status.x}
-        y={layout.status.y}
-        color={colors.status}
-        fontSize={layout.status.fontSize}
-        fontWeight={layout.status.fontWeight}
-        anchor="middle"
-        theme={theme}
-      >
-        {copy.status}
-      </HtmlText>
-
-      {copy.labels.map((label, index) => (
-        <span key={label}>
-          <HtmlText
-            x={layout.rows.labelX}
-            y={layout.rows.y[index]}
-            color={colors.label}
-            fontSize={layout.rows.labelFontSize}
-            fontWeight={layout.rows.labelWeight}
-            row={index + 1}
-            theme={theme}
-          >
-            {label}
-          </HtmlText>
-          <HtmlText
-            x={layout.rows.valueX}
-            y={layout.rows.y[index]}
-            color={colors.value}
-            fontSize={layout.rows.valueFontSize}
-            fontWeight={layout.rows.valueWeight}
-            anchor="end"
-            row={index + 1}
-            theme={theme}
-          >
-            {BLOOD_TEST_CARD_VALUES[index]}
-          </HtmlText>
-        </span>
-      ))}
+      <DashboardFeatureChevron />
+      <DashboardCardNightBorder />
     </div>
   );
 }
