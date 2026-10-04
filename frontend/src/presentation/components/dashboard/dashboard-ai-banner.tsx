@@ -4,7 +4,7 @@ import { ChevronRight } from "lucide-react";
 function DiewishMascot({ gradientId }: { gradientId: string }) {
   return (
     <span
-      className="relative flex size-[4.25rem] shrink-0 items-center justify-center overflow-visible"
+      className="relative flex size-16 shrink-0 items-center justify-center overflow-visible"
       aria-hidden="true"
     >
       <span

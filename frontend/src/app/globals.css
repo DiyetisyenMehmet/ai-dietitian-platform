@@ -456,7 +456,7 @@
   }
   .dashboard-coach-copy .dashboard-card-description {
     margin-top: 0.125rem;
-    font-size: 0.625rem;
+    font-size: 0.59375rem;
     white-space: nowrap;
   }
   .dashboard-coach-action {
@@ -465,13 +465,13 @@
     justify-content: center;
     gap: 0.25rem;
     flex: 0 0 auto;
-    min-height: 2.75rem;
-    padding: 0.375rem 0.875rem;
+    min-height: 2.5rem;
+    padding: 0.3125rem 0.5rem;
     border: 1px solid #a7ebce;
     border-radius: 9999px;
     background: rgb(213 250 232 / 72%);
     color: #098662;
-    font-size: 0.6875rem;
+    font-size: 0.65625rem;
     font-weight: 700;
     line-height: 1.2;
     white-space: nowrap;
@@ -484,5 +484,22 @@
     background: #164d3c;
     border-color: #2b735a;
     color: #8cedc1;
+  }
+}
+
+@media (max-width: 22.5rem) {
+  .dashboard-coach-copy .dashboard-card-title,
+  .dashboard-coach-copy .dashboard-card-description {
+    white-space: normal;
+  }
+  .dashboard-coach-copy .dashboard-card-title {
+    line-height: 1.12;
+  }
+  .dashboard-coach-copy .dashboard-card-description {
+    line-height: 1.15;
+  }
+  .dashboard-coach-action {
+    min-height: 2.25rem;
+    padding-inline: 0.375rem;
   }
 }

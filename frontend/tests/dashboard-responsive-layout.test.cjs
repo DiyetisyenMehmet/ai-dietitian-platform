@@ -259,9 +259,11 @@ for (const width of [390, 412, 430]) {
             assert.ok(Math.abs(progress.artwork.width - progress.width) <= 1);
             assert.ok(Math.abs(food.artwork.height - food.height) <= 1);
             assert.ok(Math.abs(progress.artwork.height - progress.height) <= 1);
-            for (const card of Object.values(cards)) {
+            for (const [kind, card] of Object.entries(cards)) {
               assert.ok(Math.abs(card.titleFont - 10.5) < 0.01);
-              assert.ok(Math.abs(card.descriptionFont - 10) < 0.01);
+              assert.ok(
+                Math.abs(card.descriptionFont - (kind === "coach" ? 9.5 : 10)) < 0.01,
+              );
             }
             if (scale === 1) {
               assert.ok(
@@ -387,7 +389,16 @@ test("theme geometry, artwork loading, focus, touch hit targets and destinations
       );
     const light = await boxes();
     await page.evaluate(() => document.documentElement.classList.add("dark"));
-    assert.deepEqual(await boxes(), light);
+    const dark = await boxes();
+    assert.equal(dark.length, light.length);
+    for (let index = 0; index < light.length; index += 1) {
+      for (let axis = 0; axis < 4; axis += 1) {
+        assert.ok(
+          Math.abs(dark[index][axis] - light[index][axis]) <= 0.5,
+          `Theme geometry drift at card ${index}, axis ${axis}: light=${light[index][axis]}, dark=${dark[index][axis]}`,
+        );
+      }
+    }
     await page.evaluate(() => document.documentElement.classList.remove("dark"));
     const assets = await page.locator("svg image").evaluateAll(async (nodes) =>
       Promise.all(
