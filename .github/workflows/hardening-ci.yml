@@ -6,6 +6,7 @@ on:
       - fix/production-hardening
       - feature/android-native-scanner
       - feature/staging-preview
+      - feature/notification-preferences-ui-a1
   workflow_dispatch:
 
 permissions:
