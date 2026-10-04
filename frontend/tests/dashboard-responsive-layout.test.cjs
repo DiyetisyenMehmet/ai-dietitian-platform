@@ -246,16 +246,7 @@ for (const width of [390, 412, 430]) {
             // uses the host's substitute font, whose wider glyphs may require
             // additional lines; keep it bounded without clipping or shrinking.
             const productionFonts = process.env.DASHBOARD_PRODUCTION_FONTS === "1";
-            const heights =
-              scale === 1
-                ? {
-                    food: productionFonts ? (locale === "en" ? 94 : 90) : 96,
-                    progress: 90,
-                    coach: 80,
-                  }
-                : scale === 1.2
-                  ? { food: 138, progress: 120, coach: 112 }
-                  : { food: productionFonts ? 155 : 192, progress: 125, coach: 122 };
+            const heights = { food: 84, progress: 84, coach: 84 };
             for (const [kind, maximum] of Object.entries(heights)) {
               assert.ok(
                 cards[kind].height <= maximum + 1, // subpixel line-box rounding
@@ -268,9 +259,9 @@ for (const width of [390, 412, 430]) {
             assert.ok(Math.abs(progress.artwork.width - progress.width) <= 1);
             assert.ok(Math.abs(food.artwork.height - food.height) <= 1);
             assert.ok(Math.abs(progress.artwork.height - progress.height) <= 1);
-            for (const [kind, card] of Object.entries(cards)) {
-              assert.ok(Math.abs(card.titleFont - (kind === "coach" ? 11 : 12) * scale) < 0.01);
-              assert.ok(Math.abs(card.descriptionFont - 10 * scale) < 0.01);
+            for (const card of Object.values(cards)) {
+              assert.ok(Math.abs(card.titleFont - 11) < 0.01);
+              assert.ok(Math.abs(card.descriptionFont - 10) < 0.01);
             }
             if (scale === 1) {
               assert.ok(

@@ -110,6 +110,7 @@ export function DashboardAiBanner({ locale = "tr" }: { locale?: "tr" | "en" } = 
         className="dashboard-coach-banner"
         data-dashboard-coach-banner
         data-dashboard-responsive-surface=""
+        data-dashboard-fixed-geometry=""
       >
         <DiewishMascot gradientId="dashboard-ai" />
         <div className="dashboard-coach-body">

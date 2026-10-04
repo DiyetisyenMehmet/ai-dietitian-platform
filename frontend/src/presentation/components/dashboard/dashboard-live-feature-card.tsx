@@ -29,6 +29,7 @@ export function DashboardLiveFeatureCard({
       className="dashboard-feature-card"
       data-dashboard-live-feature-card
       data-dashboard-responsive-surface=""
+      data-dashboard-fixed-geometry=""
       data-kind={kind}
       data-locale={locale}
     >
