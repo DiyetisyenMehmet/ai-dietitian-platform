@@ -155,3 +155,95 @@ test('dashboard bell opens the center and the center reuses existing preferences
   assert.match(centerPage, /href="\/profile\/notifications"/);
   assert.match(centerPage, /Bildirim Merkezi/);
 });
+
+
+function loadNotificationPreferencePresentation() {
+  const source = fs.readFileSync(
+    path.join(
+      __dirname,
+      '../src/presentation/components/profile/notification-preference-presentation.ts',
+    ),
+    'utf8',
+  );
+  const code = ts.transpileModule(source, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+  }).outputText;
+  const exports = {};
+  vm.runInNewContext(code, { exports, console, require });
+  return exports;
+}
+
+test('notification preferences A1 exposes only real supported preference cards', () => {
+  const { DISPLAY_NOTIFICATION_PREFERENCE_KEYS } = loadNotificationPreferencePresentation();
+  assert.deepEqual(
+    Array.from(DISPLAY_NOTIFICATION_PREFERENCE_KEYS),
+    [
+      'mealReminders',
+      'waterReminders',
+      'activityReminders',
+      'sleepReminders',
+      'weeklySummary',
+      'coachTips',
+    ],
+  );
+  assert.equal(DISPLAY_NOTIFICATION_PREFERENCE_KEYS.includes('bloodTestReminders'), false);
+  assert.equal(DISPLAY_NOTIFICATION_PREFERENCE_KEYS.includes('productUpdates'), false);
+});
+
+test('notification preference program summaries use persisted data without invented schedules', () => {
+  const { notificationProgramSummary } = loadNotificationPreferencePresentation();
+  const preferences = {
+    mealReminders: true,
+    waterReminders: true,
+    activityReminders: true,
+    sleepReminders: true,
+    weeklySummary: true,
+    coachTips: true,
+    bloodTestReminders: false,
+    productUpdates: false,
+    waterReminderTime: '13:55',
+    activityReminderTime: '18:30',
+    sleepReminderTime: '23:00',
+    weeklySummaryDay: 6,
+    weeklySummaryTime: '10:00',
+    timezoneOffsetMinutes: -180,
+  };
+
+  assert.equal(
+    notificationProgramSummary('mealReminders', preferences),
+    'Öğün planındaki saatlere göre',
+  );
+  assert.equal(notificationProgramSummary('waterReminders', preferences), 'Her gün · 13:55');
+  assert.equal(notificationProgramSummary('activityReminders', preferences), 'Her gün · 18:30');
+  assert.equal(notificationProgramSummary('sleepReminders', preferences), 'Her gün · 23:00');
+  assert.equal(notificationProgramSummary('weeklySummary', preferences), 'Cumartesi · 10:00');
+  assert.equal(notificationProgramSummary('coachTips', preferences), 'Özel saat ayarı yok');
+});
+
+test('notification preferences A1 keeps switches accessible and does not invent detail routes', () => {
+  const source = fs.readFileSync(
+    path.join(__dirname, '../src/presentation/components/profile/notifications-view.tsx'),
+    'utf8',
+  );
+  assert.match(source, /role="switch"/);
+  assert.match(source, /aria-checked=/);
+  assert.match(source, /min-h-11 min-w-14/);
+  assert.match(source, /data-notification-preference-card=/);
+  assert.match(source, /min-w-0/);
+  assert.doesNotMatch(source, /ChevronRight/);
+  assert.doesNotMatch(source, /href=/);
+  assert.doesNotMatch(source, /type="time"/);
+});
+
+test('notification preferences route remains the existing profile route', () => {
+  const page = fs.readFileSync(
+    path.join(__dirname, '../src/app/profile/notifications/page.tsx'),
+    'utf8',
+  );
+  const center = fs.readFileSync(
+    path.join(__dirname, '../src/app/notifications/page.tsx'),
+    'utf8',
+  );
+  assert.match(page, /Bildirim Tercihleri/);
+  assert.match(center, /href="\/profile\/notifications"/);
+});
