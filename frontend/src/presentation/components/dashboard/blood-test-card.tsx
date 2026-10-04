@@ -1,6 +1,5 @@
 import type { CSSProperties } from "react";
 
-import Image from "next/image";
 import Link from "next/link";
 
 import {
@@ -151,14 +150,9 @@ export function BloodTestCard({
       data-frame-height="84px"
       data-text-layer="html"
     >
-      <Image
-        src={BLOOD_TEST_CARD_BASE[theme]}
-        alt=""
-        fill
-        unoptimized
-        draggable={false}
-        sizes="(max-width: 768px) 100vw, 672px"
-        className="pointer-events-none select-none object-fill"
+      <div
+        className="pointer-events-none absolute inset-0 select-none bg-[length:100%_100%] bg-no-repeat"
+        style={{ backgroundImage: `url("${BLOOD_TEST_CARD_BASE[theme]}")` }}
         aria-hidden="true"
         data-blood-test-base-visual
       />
