@@ -57,27 +57,64 @@ async function waitForSaved(page: Page) {
   );
 }
 
+async function preparePointerDrag(
+  page: Page,
+  handleSelector: string,
+  targetSelector: string,
+) {
+  const handle = page.locator(handleSelector);
+  const target = page.locator(targetSelector);
+
+  await target.scrollIntoViewIfNeeded();
+  await handle.scrollIntoViewIfNeeded();
+  await expect(handle).toBeEnabled();
+
+  await expect
+    .poll(async () =>
+      handle.evaluate((node) => {
+        const rect = node.getBoundingClientRect();
+        const x = rect.left + rect.width / 2;
+        const y = rect.top + rect.height / 2;
+        const top = document.elementFromPoint(x, y);
+        return (
+          x >= 0 &&
+          y >= 0 &&
+          x <= window.innerWidth &&
+          y <= window.innerHeight &&
+          !!top &&
+          (top === node || node.contains(top))
+        );
+      }),
+    )
+    .toBe(true);
+
+  const handleBox = await handle.boundingBox();
+  const targetBox = await target.boundingBox();
+  expect(handleBox).not.toBeNull();
+  expect(targetBox).not.toBeNull();
+  return { handle, target, handleBox: handleBox!, targetBox: targetBox! };
+}
+
 async function dragBefore(
   page: Page,
   handleSelector: string,
   targetSelector: string,
   axis: "x" | "y",
 ) {
-  const handle = page.locator(handleSelector);
-  const target = page.locator(targetSelector);
-  const handleBox = await handle.boundingBox();
-  const targetBox = await target.boundingBox();
-  expect(handleBox).not.toBeNull();
-  expect(targetBox).not.toBeNull();
+  const { handleBox, targetBox } = await preparePointerDrag(
+    page,
+    handleSelector,
+    targetSelector,
+  );
 
   await page.mouse.move(
-    handleBox!.x + handleBox!.width / 2,
-    handleBox!.y + handleBox!.height / 2,
+    handleBox.x + handleBox.width / 2,
+    handleBox.y + handleBox.height / 2,
   );
   await page.mouse.down();
   await page.mouse.move(
-    axis === "x" ? targetBox!.x + targetBox!.width * 0.2 : targetBox!.x + targetBox!.width / 2,
-    axis === "y" ? targetBox!.y + targetBox!.height * 0.2 : targetBox!.y + targetBox!.height / 2,
+    axis === "x" ? targetBox.x + targetBox.width * 0.2 : targetBox.x + targetBox.width / 2,
+    axis === "y" ? targetBox.y + targetBox.height * 0.2 : targetBox.y + targetBox.height / 2,
     { steps: 10 },
   );
   await page.mouse.up();
