@@ -212,6 +212,8 @@ export const nutritionPlanClient = {
       path: "/nutrition-plans/generate",
       method: "POST",
       auth: true,
+      // Bound loading even when the browser loses an upstream response.
+      signal: AbortSignal.timeout(180_000),
       body: JSON.stringify({
         duration,
         startDate: localDateYmd(),

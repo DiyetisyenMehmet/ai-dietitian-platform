@@ -43,6 +43,31 @@ function deferred() {
   });
   return { promise, resolve, reject };
 }
+
+test("generation request keeps its payload and has a finite cancellable loading window", async () => {
+  let request;
+  const { nutritionPlanClient } = load(
+    "infrastructure/nutrition/nutrition-plan-client.ts",
+    {
+      "@/infrastructure/api/http-client": {
+        apiRequest: async (options) => {
+          request = options;
+          return { plan: {} };
+        },
+      },
+    },
+    { AbortSignal },
+  );
+  await nutritionPlanClient.generate("FOURTEEN_DAY", "  mercimek  ");
+  assert.equal(request.path, "/nutrition-plans/generate");
+  assert.equal(request.method, "POST");
+  assert.equal(request.auth, true);
+  assert.equal(request.signal instanceof AbortSignal, true);
+  const body = JSON.parse(request.body);
+  assert.equal(body.duration, "FOURTEEN_DAY");
+  assert.equal(body.pantryText, "mercimek");
+  assert.match(body.startDate, /^\d{4}-\d{2}-\d{2}$/);
+});
 function store(client) {
   return load("application/health/nutrition-plan-store.ts", {
     react: { useSyncExternalStore: (_subscribe, snapshot) => snapshot() },
