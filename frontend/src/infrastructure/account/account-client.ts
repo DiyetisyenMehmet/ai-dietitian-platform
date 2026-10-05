@@ -1,3 +1,4 @@
+import type { RawDashboardCardPreferences } from "@/domain/account/dashboard-card-preferences";
 import { apiRequest } from "@/infrastructure/api/http-client";
 
 export interface ChangePasswordInput {
@@ -21,4 +22,29 @@ export async function changePassword(input: ChangePasswordInput): Promise<void> 
     retryOnUnauthorized: false,
     body: JSON.stringify(input),
   });
+}
+
+
+export async function getDashboardCardPreferences(): Promise<RawDashboardCardPreferences> {
+  const result = await apiRequest<{ preferences: RawDashboardCardPreferences }>({
+    path: "/account/dashboard-cards",
+    method: "GET",
+    auth: true,
+  });
+  return result.preferences;
+}
+
+export async function updateDashboardCardPreferences(
+  preferences: RawDashboardCardPreferences,
+): Promise<RawDashboardCardPreferences> {
+  const result = await apiRequest<{ preferences: RawDashboardCardPreferences }>({
+    path: "/account/dashboard-cards",
+    method: "PUT",
+    auth: true,
+    body: JSON.stringify({
+      order: preferences.order ?? [],
+      hidden: preferences.hidden ?? [],
+    }),
+  });
+  return result.preferences;
 }

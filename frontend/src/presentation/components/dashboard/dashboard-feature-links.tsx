@@ -7,14 +7,16 @@ import {
   type DashboardLiveFeatureCardLocale,
 } from "@/presentation/components/dashboard/dashboard-live-feature-card-contract";
 
-const FEATURES = [
+export const DASHBOARD_FEATURES = [
   { kind: "food", href: "/meals/scan" },
   { kind: "blood", href: "/profile/blood-tests" },
   { kind: "progress", href: "/progress" },
 ] as const;
 
+export type DashboardFeatureLinkKind = (typeof DASHBOARD_FEATURES)[number]["kind"];
+
 function isLiveFeatureKind(
-  kind: (typeof FEATURES)[number]["kind"],
+  kind: (typeof DASHBOARD_FEATURES)[number]["kind"],
 ): kind is DashboardLiveFeatureCardKind {
   return kind === "food" || kind === "progress";
 }
@@ -43,6 +45,35 @@ function BloodTestThemeSlot({
   );
 }
 
+export function DashboardFeatureCard({
+  kind,
+  bloodTestLocale = "tr",
+  featureLocale,
+}: {
+  kind: DashboardFeatureLinkKind;
+  bloodTestLocale?: BloodTestCardLocale;
+  featureLocale?: DashboardLiveFeatureCardLocale;
+}) {
+  const feature = DASHBOARD_FEATURES.find((candidate) => candidate.kind === kind);
+  if (!feature) return null;
+  const resolvedFeatureLocale =
+    featureLocale ?? (bloodTestLocale === "en" ? "en" : "tr");
+
+  if (feature.kind === "blood") {
+    return <BloodTestThemeSlot href={feature.href} locale={bloodTestLocale} />;
+  }
+  if (isLiveFeatureKind(feature.kind)) {
+    return (
+      <DashboardLiveFeatureCard
+        kind={feature.kind}
+        href={feature.href}
+        locale={resolvedFeatureLocale}
+      />
+    );
+  }
+  return null;
+}
+
 export function DashboardFeatureLinks({
   bloodTestLocale = "tr",
   featureLocale,
@@ -50,28 +81,17 @@ export function DashboardFeatureLinks({
   bloodTestLocale?: BloodTestCardLocale;
   featureLocale?: DashboardLiveFeatureCardLocale;
 } = {}) {
-  const resolvedFeatureLocale =
-    featureLocale ?? (bloodTestLocale === "en" ? "en" : "tr");
-
   return (
     <section id="diewish-tools" className="w-full" aria-label="Diewish araçları">
       <div className="space-y-[clamp(0.65rem,2.2vw,0.95rem)]">
-        {FEATURES.map((feature) =>
-          feature.kind === "blood" ? (
-            <BloodTestThemeSlot
-              key={feature.href}
-              href={feature.href}
-              locale={bloodTestLocale}
-            />
-          ) : isLiveFeatureKind(feature.kind) ? (
-            <DashboardLiveFeatureCard
-              key={feature.href}
-              kind={feature.kind}
-              href={feature.href}
-              locale={resolvedFeatureLocale}
-            />
-          ) : null,
-        )}
+        {DASHBOARD_FEATURES.map((feature) => (
+          <DashboardFeatureCard
+            key={feature.kind}
+            kind={feature.kind}
+            bloodTestLocale={bloodTestLocale}
+            featureLocale={featureLocale}
+          />
+        ))}
       </div>
     </section>
   );

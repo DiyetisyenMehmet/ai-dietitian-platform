@@ -62,10 +62,12 @@ const dashboardCardIdSchema = z
   .max(64)
   .regex(/^[a-z0-9_-]+$/, "Invalid dashboard card id");
 
-export const dashboardCardPreferencesSchema = z.object({
-  order: z.array(dashboardCardIdSchema).max(32),
-  hidden: z.array(dashboardCardIdSchema).max(32),
-});
+export const dashboardCardPreferencesSchema = z
+  .object({
+    order: z.array(dashboardCardIdSchema).max(32),
+    hidden: z.array(dashboardCardIdSchema).max(32),
+  })
+  .strict();
 
 export type VerifyEmailInput = z.infer<typeof verifyEmailSchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
