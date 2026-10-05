@@ -6,6 +6,7 @@ on:
       - fix/production-hardening
       - feature/android-native-scanner
       - feature/staging-preview
+      - feature/app3-journey-compact-a1
   workflow_dispatch:
 
 permissions:
@@ -124,6 +125,7 @@ jobs:
           tests/daily-health-data-reliability.test.cjs
           tests/sleep-account-isolation.test.cjs
           tests/journey-dashboard-activation.test.cjs
+          tests/journey-compact-ui.test.cjs
       - name: Validate staging History runtime spec syntax
         run: node --check e2e/staging-history-runtime.spec.js
       - name: Lint frontend
@@ -296,6 +298,11 @@ jobs:
           sudo find /etc/apt/sources.list.d -maxdepth 1 -type f -iname '*google*chrome*' -delete
           npx playwright install --with-deps chromium
           npm run build
+      - name: Test compact Journey responsive layout
+        working-directory: frontend
+        env:
+          JOURNEY_PRODUCTION_FONTS: "1"
+        run: node --test tests/journey-compact-responsive.test.cjs
       - name: Start frontend
         working-directory: frontend
         run: |
@@ -326,6 +333,7 @@ jobs:
           e2e/semantic-icon-browser.spec.js
           e2e/dashboard-blood-test-card.spec.ts
           e2e/dashboard-live-feature-card.spec.ts
+          e2e/journey-compact.spec.ts
           e2e/blood-test-longitudinal-comparison.spec.ts
           e2e/admin-foundation.spec.js
           e2e/admin-shell.spec.js
