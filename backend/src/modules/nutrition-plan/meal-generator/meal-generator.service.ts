@@ -53,11 +53,12 @@ function relabelDays(cycle: DailyPlan[], startDayNumber: number): DailyPlan[] {
 
 function daySignature(day: DailyPlan): string {
   return day.meals
-    .map((meal) =>
-      `${meal.name}:${meal.foods
-        .map((food) => food.name.trim().toLocaleLowerCase("tr-TR"))
-        .filter(Boolean)
-        .join("+")}`,
+    .map(
+      (meal) =>
+        `${meal.name}:${meal.foods
+          .map((food) => food.name.trim().toLocaleLowerCase("tr-TR"))
+          .filter(Boolean)
+          .join("+")}`,
     )
     .join("|");
 }
@@ -122,7 +123,37 @@ async function generateValidatedBatch(
 ): Promise<NutritionPlanAIOutput> {
   const adapter = getAIAdapter();
 
-  let output = await adapter.generateNutritionPlan(input);
+  let retried = false;
+  const requestOutput = async () => {
+    try {
+      return await adapter.generateNutritionPlan(input);
+    } catch (error) {
+      // Some compatible providers throw a native JSON parser error. Keep the
+      // retry bounded to this batch and expose a stable domain error instead.
+      if (error instanceof SyntaxError) {
+        throw new ApiError(502, "The nutrition-plan provider returned malformed output.", {
+          code: "AI_PROVIDER_MALFORMED",
+          isOperational: false,
+        });
+      }
+      throw error;
+    }
+  };
+  let output: NutritionPlanAIOutput;
+  try {
+    output = await requestOutput();
+  } catch (error) {
+    const recoverable =
+      error instanceof ApiError &&
+      ["AI_PROVIDER_MALFORMED", "AI_PROVIDER_EMPTY", "AI_PROVIDER_INCOMPLETE"].includes(error.code);
+    if (!recoverable) throw error;
+    retried = true;
+    logger.warn(
+      { code: error.code, startDayNumber: input.startDayNumber ?? 1 },
+      "Nutrition-plan provider output could not be parsed; retrying batch once",
+    );
+    output = await requestOutput();
+  }
   let allergenViolations = findAllergenViolations(output.cycle, input.allergies);
   let nutritionViolations = findNutritionTargetViolations(output.cycle, input);
   let realismViolations = findRealLifePlanViolations(
@@ -135,11 +166,12 @@ async function generateValidatedBatch(
   let invalidMealStructure = hasInvalidMealStructure(output.cycle, input.mealTiming);
 
   if (
-    wrongDayCount ||
-    invalidMealStructure ||
-    allergenViolations.length > 0 ||
-    nutritionViolations.length > 0 ||
-    realismViolations.length > 0
+    !retried &&
+    (wrongDayCount ||
+      invalidMealStructure ||
+      allergenViolations.length > 0 ||
+      nutritionViolations.length > 0 ||
+      realismViolations.length > 0)
   ) {
     logger.warn(
       {
@@ -155,7 +187,7 @@ async function generateValidatedBatch(
       },
       "Nutrition-plan batch failed deterministic validation; retrying once",
     );
-    output = await adapter.generateNutritionPlan(input);
+    output = await requestOutput();
     allergenViolations = findAllergenViolations(output.cycle, input.allergies);
     nutritionViolations = findNutritionTargetViolations(output.cycle, input);
     realismViolations = findRealLifePlanViolations(
@@ -259,10 +291,7 @@ async function generateBatch(
 
   try {
     const realLifeInsights = buildRealLifeProviderInsights(input.realLifePlanning);
-    const providerInsights = [
-      ...realLifeInsights,
-      ...(input.behaviorInsights ?? []),
-    ].slice(0, 6);
+    const providerInsights = [...realLifeInsights, ...(input.behaviorInsights ?? [])].slice(0, 6);
     const output = await generateValidatedBatch(
       {
         goal: input.goal,
@@ -319,10 +348,7 @@ async function generateRangeInternal(
   const adapter = getAIAdapter();
   const generated: GeneratedBatch[] = [];
   const specs = buildBatchSpecs(startDayNumber, daysToGenerate);
-  const seedSignatures = priorDays
-    .slice(-MAX_AVOID_SIGNATURES)
-    .map(daySignature)
-    .filter(Boolean);
+  const seedSignatures = priorDays.slice(-MAX_AVOID_SIGNATURES).map(daySignature).filter(Boolean);
   // Real-life frequency rules are rolling constraints. Serializing these bounded
   // batches prevents two simultaneous batches from independently spending the
   // same remaining 14-day meat/fish budget.

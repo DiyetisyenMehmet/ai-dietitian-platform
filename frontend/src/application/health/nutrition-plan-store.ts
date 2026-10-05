@@ -113,9 +113,15 @@ function requireSupportedSource(planId: string): SupportedNutritionPlanRecord {
 
 export const nutritionPlanStore = {
   async hydrateFromBackend(): Promise<NutritionPlanRecord | null> {
+    const previousActiveId = state.activePlan?.id;
     patch({ loading: true });
     try {
       const { plans } = await nutritionPlanClient.list();
+      // An older list response must not replace a plan generated meanwhile.
+      if (state.activePlan?.id !== previousActiveId) {
+        patch({ loading: false, hydrated: true });
+        return state.activePlan;
+      }
       const activePlan = chooseActive(plans);
       emit({
         ...state,
@@ -127,8 +133,9 @@ export const nutritionPlanStore = {
       });
       return activePlan;
     } catch {
-      emit({ ...EMPTY_STATE, pantryDraft: state.pantryDraft, hydrated: true });
-      return null;
+      // A failed concurrent read must not unlock an ongoing generation.
+      patch({ loading: false, hydrated: true });
+      return state.activePlan;
     }
   },
 
