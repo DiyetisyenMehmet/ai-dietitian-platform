@@ -25,11 +25,14 @@ test('coach dashboard banner participates in fixed geometry without disabling it
   assert.match(source, /href="\/ai"/);
 });
 
-test('Android WebView consumes native long-click without changing global text zoom', () => {
+test('Android WebView consumes native long-click and fixes text zoom at 100%', () => {
   const source = read('../android/app/src/main/java/com/diewish/app/MainActivity.java');
   assert.match(source, /setOnLongClickListener\(view -> true\)/);
   assert.match(source, /setHapticFeedbackEnabled\(false\)/);
-  assert.doesNotMatch(source, /setTextZoom\s*\(/);
+  assert.match(source, /\bsettings\.setTextZoom\s*\(\s*100\s*\)/);
+  const textZoomValues = [...source.matchAll(/\bsetTextZoom\s*\(([^)]*)\)/g)]
+    .map(([, value]) => value.trim());
+  assert.deepEqual(textZoomValues, ['100']);
 });
 
 test('normal content is not globally marked as unselectable', () => {
