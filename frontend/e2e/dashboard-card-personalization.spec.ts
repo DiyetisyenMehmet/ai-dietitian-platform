@@ -66,7 +66,9 @@ async function preparePointerDrag(
   const target = page.locator(targetSelector);
 
   await target.scrollIntoViewIfNeeded();
-  await handle.scrollIntoViewIfNeeded();
+  await handle.evaluate((node) => {
+    node.scrollIntoView({ block: "center", inline: "center" });
+  });
   await expect(handle).toBeEnabled();
 
   await expect

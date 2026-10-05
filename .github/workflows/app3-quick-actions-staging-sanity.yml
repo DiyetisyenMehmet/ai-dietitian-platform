@@ -6,6 +6,7 @@ on:
       - feature/app3-dashboard-quick-actions-a1
     paths:
       - .github/workflows/app3-quick-actions-staging-sanity.yml
+      - frontend/e2e/dashboard-card-personalization.spec.ts
 
 permissions:
   contents: read
