@@ -68,7 +68,10 @@ test("semantic icon usage map keeps the approved Coach navigation vector in the 
   expect(bottomNavigation).toContain(
     'active ? "text-primary" : "text-muted-foreground hover:text-foreground"',
   );
-  expect(bottomNavigation).toContain('<Icon className="size-5" aria-hidden="true" />');
+  expect(bottomNavigation).toContain('item.id === "ai" ? "size-6 fill-current" : "size-5"');
+  expect(bottomNavigation).toContain('item.id !== "ai" && "rounded-full"');
+  expect(bottomNavigation).toContain('active && item.id !== "ai" && "bg-accent"');
+  expect(coachNavIcon).not.toContain("scale(");
 });
 
 test("root metadata keeps product language free of generic AI marketing terms", () => {
