@@ -766,6 +766,18 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
                         + JSONObject.quote(BuildConfig.BUILD_REVISION)
                         + ";document.documentElement.classList.add('diewish-android');"
                         + "(function(){"
+                        + "var id='diewish-android-blood-result-scale';"
+                        + "var style=document.getElementById(id);"
+                        + "if(!style){style=document.createElement('style');style.id=id;"
+                        + "style.textContent="
+                        + JSONObject.quote(
+                            "html.diewish-android [data-blood-test-stage] > [data-blood-test-live-text]:nth-of-type(4){font-size:1.50cqw!important;}"
+                                + "html.diewish-android [data-blood-test-stage] > [data-blood-test-live-text]:nth-of-type(5){font-size:1.42cqw!important;}"
+                                + "html.diewish-android [data-blood-test-row]{font-size:1.42cqw!important;}"
+                        )
+                        + ";(document.head||document.documentElement).appendChild(style);}"
+                        + "})();"
+                        + "(function(){"
                         + "if(window.__diewishThemeObserver)window.__diewishThemeObserver.disconnect();"
                         + "function sync(){window.DiewishSystemUi.setDarkTheme("
                         + "document.documentElement.classList.contains('dark'));}"
