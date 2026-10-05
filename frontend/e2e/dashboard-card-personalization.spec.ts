@@ -93,7 +93,7 @@ test("Dashboard card personalization persists order, hide/show, minimum three an
   ]);
 });
 
-test("pointer reorder works and normal card navigation remains active after editing", async ({
+test("pointer reorder persists blood before food and normal card navigation remains active", async ({
   page,
   request,
 }) => {
@@ -101,28 +101,146 @@ test("pointer reorder works and normal card navigation remains active after edit
   await createDashboardSession(page, request, { workScheduleType: "VARIABLE_SHIFT" });
   await openEditor(page);
 
-  const foodHandle = page.locator('[data-dashboard-card-drag-handle="food"]');
-  const bloodRow = page.locator('[data-dashboard-card-editor-item="blood"]');
-  const foodBox = await foodHandle.boundingBox();
-  const bloodBox = await bloodRow.boundingBox();
-  expect(foodBox).not.toBeNull();
+  const bloodHandle = page.locator('[data-dashboard-card-drag-handle="blood"]');
+  const foodRow = page.locator('[data-dashboard-card-editor-item="food"]');
+  const bloodBox = await bloodHandle.boundingBox();
+  const foodBox = await foodRow.boundingBox();
   expect(bloodBox).not.toBeNull();
+  expect(foodBox).not.toBeNull();
 
-  await page.mouse.move(foodBox!.x + foodBox!.width / 2, foodBox!.y + foodBox!.height / 2);
+  const saveResponse = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PUT" &&
+      new URL(response.url()).pathname.endsWith("/account/dashboard-cards"),
+  );
+
+  await page.mouse.move(bloodBox!.x + bloodBox!.width / 2, bloodBox!.y + bloodBox!.height / 2);
   await page.mouse.down();
   await page.mouse.move(
-    bloodBox!.x + bloodBox!.width / 2,
-    bloodBox!.y + bloodBox!.height * 0.8,
+    foodBox!.x + foodBox!.width / 2,
+    foodBox!.y + foodBox!.height * 0.2,
     { steps: 8 },
   );
   await page.mouse.up();
+
+  const response = await saveResponse;
+  expect(response.ok()).toBe(true);
+  expect(response.request().postDataJSON()).toEqual({
+    order: ["blood", "food", "progress", "coach"],
+    hidden: [],
+  });
   await waitForSaved(page);
   await expect.poll(() => slotIds(page)).toEqual(["blood", "food", "progress", "coach"]);
 
   await page.keyboard.press("Escape");
   await expect(page.locator("[data-dashboard-card-editor]")).toBeHidden();
+  await page.reload();
+  await expect.poll(() => slotIds(page), { timeout: 15_000 }).toEqual([
+    "blood",
+    "food",
+    "progress",
+    "coach",
+  ]);
+
   await page.locator('[data-dashboard-card-slot="food"] [data-dashboard-live-feature-link]').click();
   await expect(page).toHaveURL(/\/meals\/scan(?:$|\?)/);
+});
+
+
+test("touch-style pointer reorder is handle-scoped and persists on mobile", async ({
+  browser,
+  request,
+}) => {
+  test.setTimeout(120_000);
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    hasTouch: true,
+    isMobile: true,
+  });
+  const page = await context.newPage();
+  try {
+    await createDashboardSession(page, request, { workScheduleType: "VARIABLE_SHIFT" });
+    await openEditor(page);
+
+    const bloodHandle = page.locator('[data-dashboard-card-drag-handle="blood"]');
+    const foodRow = page.locator('[data-dashboard-card-editor-item="food"]');
+    const bloodBox = await bloodHandle.boundingBox();
+    const foodBox = await foodRow.boundingBox();
+    expect(bloodBox).not.toBeNull();
+    expect(foodBox).not.toBeNull();
+
+    expect(await bloodHandle.evaluate((node) => getComputedStyle(node).touchAction)).toBe("none");
+    expect(
+      await foodRow.evaluate((node) => getComputedStyle(node).touchAction),
+    ).not.toBe("none");
+
+    const saveResponse = page.waitForResponse(
+      (response) =>
+        response.request().method() === "PUT" &&
+        new URL(response.url()).pathname.endsWith("/account/dashboard-cards"),
+    );
+
+    await bloodHandle.dispatchEvent("pointerdown", {
+      pointerId: 41,
+      pointerType: "touch",
+      isPrimary: true,
+      buttons: 1,
+      clientX: bloodBox!.x + bloodBox!.width / 2,
+      clientY: bloodBox!.y + bloodBox!.height / 2,
+    });
+    await page.evaluate(
+      ({ x, y }) => {
+        window.dispatchEvent(
+          new PointerEvent("pointermove", {
+            bubbles: true,
+            cancelable: true,
+            pointerId: 41,
+            pointerType: "touch",
+            isPrimary: true,
+            buttons: 1,
+            clientX: x,
+            clientY: y,
+          }),
+        );
+      },
+      {
+        x: foodBox!.x + foodBox!.width / 2,
+        y: foodBox!.y + foodBox!.height * 0.2,
+      },
+    );
+    await page.evaluate(() => {
+      window.dispatchEvent(
+        new PointerEvent("pointerup", {
+          bubbles: true,
+          cancelable: true,
+          pointerId: 41,
+          pointerType: "touch",
+          isPrimary: true,
+          buttons: 0,
+        }),
+      );
+    });
+
+    const response = await saveResponse;
+    expect(response.ok()).toBe(true);
+    expect(response.request().postDataJSON()).toEqual({
+      order: ["blood", "food", "progress", "coach"],
+      hidden: [],
+    });
+    await waitForSaved(page);
+    await expect.poll(() => slotIds(page)).toEqual(["blood", "food", "progress", "coach"]);
+
+    const editor = page.locator("[data-dashboard-card-editor]");
+    const editorOverflow = await editor.evaluate((node) => getComputedStyle(node).overflowY);
+    expect(["auto", "scroll"]).toContain(editorOverflow);
+
+    await page.keyboard.press("Escape");
+    await expect(editor).toBeHidden();
+    await page.locator('[data-dashboard-card-slot="food"] [data-dashboard-live-feature-link]').tap();
+    await expect(page).toHaveURL(/\/meals\/scan(?:$|\?)/);
+  } finally {
+    await context.close();
+  }
 });
 
 test("personalized card layer stays responsive and keeps approved card geometry", async ({

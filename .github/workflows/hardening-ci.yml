@@ -320,6 +320,9 @@ jobs:
           done
           cat /tmp/diewish-frontend.log
           exit 1
+      - name: Run targeted Dashboard card personalization E2E
+        working-directory: frontend
+        run: npx playwright test e2e/dashboard-card-personalization.spec.ts --workers=1 --reporter=line
       - name: Run browser smoke
         working-directory: frontend
         run: >-
