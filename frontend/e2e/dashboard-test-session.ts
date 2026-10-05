@@ -97,10 +97,10 @@ export async function setDashboardTheme(
   );
 
   if (theme === "dark" && !isDark) {
-    await page.getByRole("button", { name: "Koyu temaya geç" }).click();
+    await page.getByRole("button", { name: "Koyu temaya geç" }).click({ force: true });
     await expect(html).toHaveClass(/dark/);
   } else if (theme === "light" && isDark) {
-    await page.getByRole("button", { name: "Açık temaya geç" }).click();
+    await page.getByRole("button", { name: "Açık temaya geç" }).click({ force: true });
     await expect(html).not.toHaveClass(/dark/);
   }
 }

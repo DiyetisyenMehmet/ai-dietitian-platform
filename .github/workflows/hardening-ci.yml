@@ -114,6 +114,8 @@ jobs:
         run: node --test tests/dashboard-blood-test-card.test.cjs
       - name: Test Food and Progress card coordinate contract
         run: node --test tests/dashboard-live-feature-card.test.cjs
+      - name: Test Dashboard card personalization contracts
+        run: node --test tests/dashboard-card-personalization.test.cjs
       - name: Test Journey dashboard activation and daily source reliability
         env:
           TZ: Europe/Istanbul
@@ -332,6 +334,7 @@ jobs:
           e2e/semantic-icon-browser.spec.js
           e2e/dashboard-blood-test-card.spec.ts
           e2e/dashboard-live-feature-card.spec.ts
+          e2e/dashboard-card-personalization.spec.ts
           e2e/journey-compact.spec.ts
           e2e/blood-test-longitudinal-comparison.spec.ts
           e2e/admin-foundation.spec.js
