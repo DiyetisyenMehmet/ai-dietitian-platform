@@ -20,7 +20,6 @@ export const CoachNavIcon: LucideIcon = React.forwardRef<SVGSVGElement, LucidePr
       {...props}
     >
       <path
-        transform="translate(12 12) scale(1.20) translate(-12 -12)"
         fill="currentColor"
         fillRule="evenodd"
         clipRule="evenodd"
