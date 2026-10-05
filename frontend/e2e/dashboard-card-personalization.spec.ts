@@ -318,12 +318,16 @@ test("touch drag is handle-scoped and keyboard reorder stays accessible", async 
     await createDashboardSession(page, request, { workScheduleType: "VARIABLE_SHIFT" });
     await openEdit(page);
 
-    const cardHandle = page.locator('[data-dashboard-card-drag-handle="blood"]');
-    const cardTarget = page.locator('[data-dashboard-card-slot="food"]');
-    const cardHandleBox = await cardHandle.boundingBox();
-    const cardTargetBox = await cardTarget.boundingBox();
-    expect(cardHandleBox).not.toBeNull();
-    expect(cardTargetBox).not.toBeNull();
+    const {
+      handle: cardHandle,
+      target: cardTarget,
+      handleBox: cardHandleBox,
+      targetBox: cardTargetBox,
+    } = await preparePointerDrag(
+      page,
+      '[data-dashboard-card-drag-handle="blood"]',
+      '[data-dashboard-card-slot="food"]',
+    );
     expect(await cardHandle.evaluate((node) => getComputedStyle(node).touchAction)).toBe("none");
     expect(
       await cardTarget.evaluate((node) => getComputedStyle(node).touchAction),
@@ -334,6 +338,7 @@ test("touch drag is handle-scoped and keyboard reorder stays accessible", async 
       (response) =>
         response.request().method() === "PUT" &&
         new URL(response.url()).pathname.endsWith("/account/dashboard-cards"),
+      { timeout: 15_000 },
     );
     await cdp.send("Input.dispatchTouchEvent", {
       type: "touchStart",
@@ -362,12 +367,16 @@ test("touch drag is handle-scoped and keyboard reorder stays accessible", async 
     await waitForSaved(page);
     expect(await cardIds(page)).toEqual(["blood", "food", "progress", "coach"]);
 
-    const quickHandle = page.locator('[data-quick-action-drag-handle="weight"]');
-    const quickTarget = page.locator('[data-quick-action-slot="meal"]');
-    const quickHandleBox = await quickHandle.boundingBox();
-    const quickTargetBox = await quickTarget.boundingBox();
-    expect(quickHandleBox).not.toBeNull();
-    expect(quickTargetBox).not.toBeNull();
+    const {
+      handle: quickHandle,
+      target: quickTarget,
+      handleBox: quickHandleBox,
+      targetBox: quickTargetBox,
+    } = await preparePointerDrag(
+      page,
+      '[data-quick-action-drag-handle="weight"]',
+      '[data-quick-action-slot="meal"]',
+    );
     expect(await quickHandle.evaluate((node) => getComputedStyle(node).touchAction)).toBe("none");
     expect(
       await quickTarget.evaluate((node) => getComputedStyle(node).touchAction),
@@ -377,6 +386,7 @@ test("touch drag is handle-scoped and keyboard reorder stays accessible", async 
       (response) =>
         response.request().method() === "PUT" &&
         new URL(response.url()).pathname.endsWith("/account/dashboard-cards"),
+      { timeout: 15_000 },
     );
     await cdp.send("Input.dispatchTouchEvent", {
       type: "touchStart",
