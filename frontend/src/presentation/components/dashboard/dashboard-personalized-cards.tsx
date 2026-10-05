@@ -229,6 +229,8 @@ function CardEditor({
           className="max-h-[min(88dvh,760px)] overflow-x-hidden overflow-y-auto p-4 sm:p-6"
           data-dashboard-card-editor
           data-saving={saving ? "true" : "false"}
+          data-dragging-card={dragging ?? ""}
+          data-draft-order={draft.order.join(",")}
         >
           <ModalHeader className="pr-8">
             <ModalTitle>Ana ekran kartları</ModalTitle>

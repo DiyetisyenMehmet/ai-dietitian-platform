@@ -114,15 +114,35 @@ test("pointer reorder persists blood before food and normal card navigation rema
       new URL(response.url()).pathname.endsWith("/account/dashboard-cards"),
   );
 
+  const editor = page.locator("[data-dashboard-card-editor]");
+  const dropPoint = {
+    x: foodBox!.x + foodBox!.width / 2,
+    y: foodBox!.y + foodBox!.height * 0.2,
+  };
+  expect(
+    await page.evaluate(
+      ({ x, y }) =>
+        document
+          .elementFromPoint(x, y)
+          ?.closest<HTMLElement>("[data-dashboard-card-editor-item]")
+          ?.dataset.dashboardCardEditorItem ?? null,
+      dropPoint,
+    ),
+  ).toBe("food");
+
   await page.mouse.move(bloodBox!.x + bloodBox!.width / 2, bloodBox!.y + bloodBox!.height / 2);
   await page.mouse.down();
-  await page.mouse.move(
-    foodBox!.x + foodBox!.width / 2,
-    foodBox!.y + foodBox!.height * 0.2,
-    { steps: 8 },
-  );
-  await page.mouse.up();
+  await expect(editor).toHaveAttribute("data-dragging-card", "blood");
 
+  await page.mouse.move(dropPoint.x, dropPoint.y);
+  await expect(editor).toHaveAttribute(
+    "data-draft-order",
+    "blood,food,progress,coach",
+    { timeout: 5_000 },
+  );
+
+  await page.mouse.up();
+  await expect(editor).toHaveAttribute("data-dragging-card", "");
   const response = await saveResponse;
   expect(response.ok()).toBe(true);
   expect(response.request().postDataJSON()).toEqual({
@@ -180,6 +200,22 @@ test("touch-style pointer reorder is handle-scoped and persists on mobile", asyn
         new URL(response.url()).pathname.endsWith("/account/dashboard-cards"),
     );
 
+    const editor = page.locator("[data-dashboard-card-editor]");
+    const dropPoint = {
+      x: foodBox!.x + foodBox!.width / 2,
+      y: foodBox!.y + foodBox!.height * 0.2,
+    };
+    expect(
+      await page.evaluate(
+        ({ x, y }) =>
+          document
+            .elementFromPoint(x, y)
+            ?.closest<HTMLElement>("[data-dashboard-card-editor-item]")
+            ?.dataset.dashboardCardEditorItem ?? null,
+        dropPoint,
+      ),
+    ).toBe("food");
+
     await bloodHandle.dispatchEvent("pointerdown", {
       pointerId: 41,
       pointerType: "touch",
@@ -188,6 +224,8 @@ test("touch-style pointer reorder is handle-scoped and persists on mobile", asyn
       clientX: bloodBox!.x + bloodBox!.width / 2,
       clientY: bloodBox!.y + bloodBox!.height / 2,
     });
+    await expect(editor).toHaveAttribute("data-dragging-card", "blood");
+
     await page.evaluate(
       ({ x, y }) => {
         window.dispatchEvent(
@@ -203,11 +241,14 @@ test("touch-style pointer reorder is handle-scoped and persists on mobile", asyn
           }),
         );
       },
-      {
-        x: foodBox!.x + foodBox!.width / 2,
-        y: foodBox!.y + foodBox!.height * 0.2,
-      },
+      dropPoint,
     );
+    await expect(editor).toHaveAttribute(
+      "data-draft-order",
+      "blood,food,progress,coach",
+      { timeout: 5_000 },
+    );
+
     await page.evaluate(() => {
       window.dispatchEvent(
         new PointerEvent("pointerup", {
@@ -220,7 +261,7 @@ test("touch-style pointer reorder is handle-scoped and persists on mobile", asyn
         }),
       );
     });
-
+    await expect(editor).toHaveAttribute("data-dragging-card", "");
     const response = await saveResponse;
     expect(response.ok()).toBe(true);
     expect(response.request().postDataJSON()).toEqual({
