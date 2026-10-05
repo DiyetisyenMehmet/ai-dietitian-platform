@@ -1,0 +1,59 @@
+name: APP3 Quick Actions Staging Sanity
+
+on:
+  push:
+    branches:
+      - feature/app3-dashboard-quick-actions-a1
+    paths:
+      - .github/workflows/app3-quick-actions-staging-sanity.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: app3-quick-actions-staging-sanity
+  cancel-in-progress: false
+
+env:
+  EXPECTED_STAGING_SHA: b206db359ee3919a37d535011b0b1bcdd0f891c4
+  E2E_WEB_BASE_URL: https://staging.diewish.com
+  E2E_API_BASE_URL: https://staging.diewish.com/api
+
+jobs:
+  sanity:
+    name: Verify live inline Dashboard personalization
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify exact staging SHA
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          actual="$(curl --fail --silent --show-error             -H "Authorization: Bearer ${GH_TOKEN}"             -H "Accept: application/vnd.github+json"             "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/branches/feature%2Fstaging-preview"             | jq -r '.commit.sha')"
+          test "$actual" = "$EXPECTED_STAGING_SHA"
+
+      - name: Verify live staging health
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error "${E2E_WEB_BASE_URL}/register" >/dev/null
+          curl --fail --silent --show-error "${E2E_API_BASE_URL}/health" >/dev/null
+
+      - name: Prepare Playwright
+        working-directory: frontend
+        run: |
+          npm ci
+          sudo find /etc/apt/sources.list.d -maxdepth 1 -type f -iname '*google*chrome*' -delete
+          npx playwright install --with-deps chromium
+
+      - name: Run live Dashboard personalization sanity
+        working-directory: frontend
+        env:
+          E2E_WEB_BASE_URL: ${{ env.E2E_WEB_BASE_URL }}
+          E2E_API_BASE_URL: ${{ env.E2E_API_BASE_URL }}
+        run: npx playwright test e2e/dashboard-card-personalization.spec.ts --workers=1 --reporter=line
