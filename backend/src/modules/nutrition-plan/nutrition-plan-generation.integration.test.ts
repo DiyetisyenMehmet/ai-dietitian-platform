@@ -6,6 +6,7 @@ import { FixtureAdapter } from "./test-fixtures/provider";
 import { setAIAdapter } from "../blood-test-analysis/ai-adapter/ai-adapter.factory";
 import type { NutritionPlan } from "@prisma/client";
 import type { NutritionPlanContent } from "./types";
+import { disconnectNutritionGenerationLocks } from "./nutrition-plan-generation-lock";
 
 interface ResponseBody {
   data: {
@@ -40,6 +41,7 @@ test("nutrition generation: duration, safety gates, bounded retry, persistence a
     await new Promise<void>((r) => server.close(() => r()));
     await prisma.user.deleteMany({ where: { id: { in: ids } } });
     await prisma.$disconnect();
+    await disconnectNutritionGenerationLocks();
   });
   const fixture = async (premium = false) => {
     const reg = await request("/auth/register", "", {

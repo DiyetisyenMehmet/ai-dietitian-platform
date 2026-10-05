@@ -237,6 +237,9 @@ export const nutritionPlanService = {
       } catch (error) {
         logger.error({ err: error, userId, duration }, "Nutrition plan generation failed");
         if (error instanceof ApiError) throw error;
+        // The generation lock maps expired transactions to an explicit timeout.
+        if (error && typeof error === "object" && "code" in error && error.code === "P2028")
+          throw error;
         throw ApiError.internal("Nutrition plan generation failed.");
       }
     });
