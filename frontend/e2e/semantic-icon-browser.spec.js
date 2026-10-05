@@ -128,8 +128,8 @@ async function checkCoachNavigation(page, { active }) {
 
     const iconBox = await icon.boundingBox();
     expect(iconBox).not.toBeNull();
-    expect(iconBox.width).toBeCloseTo(24, 1);
-    expect(iconBox.height).toBeCloseTo(24, 1);
+    expect(iconBox.width).toBeCloseTo(28, 1);
+    expect(iconBox.height).toBeCloseTo(28, 1);
     await expect(icon.locator("xpath=..")).not.toHaveClass(/bg-accent/);
     await expect(coach.getByText("Koç", { exact: true })).toBeVisible();
 
@@ -168,8 +168,8 @@ async function checkCoachNavigation(page, { active }) {
     expect(iconBoxes).toHaveLength(5);
     for (const box of iconBoxes) {
       if (box.coach) {
-        expect(box.width).toBeCloseTo(24, 1);
-        expect(box.height).toBeCloseTo(24, 1);
+        expect(box.width).toBeCloseTo(28, 1);
+        expect(box.height).toBeCloseTo(28, 1);
       } else {
         expect(box.width).toBeCloseTo(20, 1);
         expect(box.height).toBeCloseTo(20, 1);

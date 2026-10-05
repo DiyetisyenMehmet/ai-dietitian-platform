@@ -65,7 +65,7 @@ test('blood-test description is larger and moved lower while keeping its x align
 
   assert.match(source, /x: 258/);
   assert.match(source, /firstY: 214/);
-  assert.match(source, /secondY: 250/);
+  assert.match(source, /secondY: 255/);
   assert.match(source, /title: \{ x: 258, y: 158, fontSize: 52/);
   assert.match(source, /fontSize: 36/);
   assert.match(source, /labelFontSize: 26/);

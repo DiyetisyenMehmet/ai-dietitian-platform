@@ -64,7 +64,7 @@ export function BottomNavigation() {
                 >
                   <Icon
                     className={cn(
-                      item.id === "ai" ? "size-6 fill-current" : "size-5",
+                      item.id === "ai" ? "size-7 fill-current" : "size-5",
                     )}
                     aria-hidden="true"
                   />
