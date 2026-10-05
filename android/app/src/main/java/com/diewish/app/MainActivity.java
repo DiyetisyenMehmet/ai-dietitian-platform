@@ -771,9 +771,10 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
                         + "if(!style){style=document.createElement('style');style.id=id;"
                         + "style.textContent="
                         + JSONObject.quote(
-                            "html.diewish-android [data-blood-test-stage] > [data-blood-test-live-text]:nth-of-type(4){font-size:0.96cqw!important;}"
-                                + "html.diewish-android [data-blood-test-stage] > [data-blood-test-live-text]:nth-of-type(5){font-size:0.90cqw!important;}"
-                                + "html.diewish-android [data-blood-test-row]{font-size:0.88cqw!important;}"
+                            "html.diewish-android [data-blood-test-stage] > [data-blood-test-live-text]:nth-of-type(4){font-size:0.96cqw!important;transform:translateY(-50%) scale(0.84)!important;transform-origin:left center!important;}"
+                                + "html.diewish-android [data-blood-test-stage] > [data-blood-test-live-text]:nth-of-type(5){font-size:0.90cqw!important;transform:translate(-50%,-50%) scale(0.78)!important;transform-origin:center!important;}"
+                                + "html.diewish-android [data-blood-test-row]:first-child{font-size:0.88cqw!important;transform:translateY(-50%) scale(0.78)!important;transform-origin:left center!important;}"
+                                + "html.diewish-android [data-blood-test-row]:last-child{font-size:0.88cqw!important;transform:translateY(-50%) scale(0.78)!important;transform-origin:right center!important;}"
                         )
                         + ";(document.head||document.documentElement).appendChild(style);}"
                         + "})();"
