@@ -123,12 +123,15 @@ test("elapsed recording windows use neutral copy instead of claiming the user sk
   const result = h.journey();
   assert.ok(result.steps.some((step) => step.state === "skipped"));
 
-  const html = h.render(
-    "presentation/components/dashboard/daily-journey-section.tsx",
-    "DailyJourneySection",
-  );
-  assert.match(html, /Kayıt zamanı geçti/);
-  assert.doesNotMatch(html, />Atlandı</);
+  const { visibleJourneySteps } = h.load("application/health/daily-journey.ts");
+  const collapsed = visibleJourneySteps(result.steps, result.status, false);
+  const expanded = visibleJourneySteps(result.steps, result.status, true);
+  assert.equal(collapsed.some((step) => step.state === "skipped"), false);
+  assert.equal(expanded.some((step) => step.state === "skipped"), true);
+
+  const source = read("src/presentation/components/dashboard/daily-journey-section.tsx");
+  assert.match(source, /Kayıt zamanı geçti/);
+  assert.doesNotMatch(source, />Atlandı</);
 });
 
 test("clickable Journey rows keep a visible keyboard focus contract and normal text scaling", () => {

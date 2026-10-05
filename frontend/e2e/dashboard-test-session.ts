@@ -36,6 +36,7 @@ async function grantRequiredConsents(request: APIRequestContext, token: string) 
 export async function createDashboardSession(
   page: Page,
   request: APIRequestContext,
+  options: { workScheduleType?: "REGULAR" | "VARIABLE_SHIFT" | "NIGHT_SHIFT" } = {},
 ) {
   const runId = `${Date.now()}.${Math.random().toString(16).slice(2)}`;
   const email = `dashboard.browser.${runId}@example.com`;
@@ -68,7 +69,7 @@ export async function createDashboardSession(
       allergies: [],
       dietaryPreference: "OMNIVORE",
       dailyWaterGoalMl: 2500,
-      workScheduleType: "REGULAR",
+      workScheduleType: options.workScheduleType ?? "REGULAR",
       usualWakeTime: "07:00",
       usualSleepTime: "23:00",
     },
@@ -83,7 +84,7 @@ export async function createDashboardSession(
   await page.getByRole("button", { name: "Giriş Yap" }).click();
   await expect(page).toHaveURL(/\/dashboard$/, { timeout: 20_000 });
 
-  return { email, fullName };
+  return { email, fullName, token };
 }
 
 export async function setDashboardTheme(
