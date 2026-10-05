@@ -132,7 +132,7 @@ function CardEditor({
       ?.closest<HTMLElement>("[data-dashboard-card-editor-item]");
     const targetId = target?.dataset.dashboardCardEditorItem as DashboardCardId | undefined;
     const currentVisible = visibleDashboardCardIds(draftRef.current);
-    if (!targetId || targetId === activeId || !currentVisible.includes(targetId)) return;
+    if (!target || !targetId || targetId === activeId || !currentVisible.includes(targetId)) return;
 
     const sourceIndex = currentVisible.indexOf(activeId);
     const targetIndex = currentVisible.indexOf(targetId);
