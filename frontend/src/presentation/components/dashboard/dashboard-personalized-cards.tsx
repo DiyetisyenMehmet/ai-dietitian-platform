@@ -67,8 +67,6 @@ function CardEditor({
   const [resetOpen, setResetOpen] = React.useState(false);
   const [dragging, setDragging] = React.useState<DashboardCardId | null>(null);
   const draggingRef = React.useRef<DashboardCardId | null>(null);
-  const activePointerIdRef = React.useRef<number | null>(null);
-  const dragStartPreferencesRef = React.useRef<DashboardCardPreferences | null>(null);
 
   React.useEffect(() => {
     if (!open) return;
@@ -114,112 +112,53 @@ function CardEditor({
     void persist(showDashboardCard(draftRef.current, id));
   };
 
-  const applyPointerPosition = React.useCallback(
-    (clientX: number, clientY: number) => {
-      const activeId = draggingRef.current;
-      if (!activeId) return;
-
-      const target = document
-        .elementFromPoint(clientX, clientY)
-        ?.closest<HTMLElement>("[data-dashboard-card-editor-item]");
-      const targetId = target?.dataset.dashboardCardEditorItem as DashboardCardId | undefined;
-      const currentVisible = visibleDashboardCardIds(draftRef.current);
-      if (!target || !targetId || targetId === activeId || !currentVisible.includes(targetId)) {
-        return;
-      }
-
-      const sourceIndex = currentVisible.indexOf(activeId);
-      const targetIndex = currentVisible.indexOf(targetId);
-      if (sourceIndex < 0 || targetIndex < 0) return;
-
-      const targetBox = target.getBoundingClientRect();
-      const afterTarget = clientY > targetBox.top + targetBox.height / 2;
-      let insertionIndex = targetIndex + (afterTarget ? 1 : 0);
-      const nextVisible = [...currentVisible];
-      nextVisible.splice(sourceIndex, 1);
-      if (sourceIndex < insertionIndex) insertionIndex -= 1;
-      insertionIndex = Math.max(0, Math.min(insertionIndex, nextVisible.length));
-      nextVisible.splice(insertionIndex, 0, activeId);
-
-      const next = reorderVisibleDashboardCards(draftRef.current, nextVisible);
-      if (!samePreferences(next, draftRef.current)) updateDraft(next);
-    },
-    [updateDraft],
-  );
-
-  const finishPointerDrag = React.useCallback(
-    (commit: boolean) => {
-      if (!draggingRef.current) return;
-      const start = dragStartPreferencesRef.current;
-      const next = draftRef.current;
-
-      draggingRef.current = null;
-      activePointerIdRef.current = null;
-      dragStartPreferencesRef.current = null;
-      setDragging(null);
-
-      if (!commit) {
-        if (start) updateDraft(start);
-        return;
-      }
-      if (start && !samePreferences(next, start)) {
-        void persist(next);
-      }
-    },
-    [persist, updateDraft],
-  );
-
-  React.useEffect(() => {
-    const onWindowPointerMove = (event: PointerEvent) => {
-      if (
-        activePointerIdRef.current === null ||
-        event.pointerId !== activePointerIdRef.current
-      ) {
-        return;
-      }
-      event.preventDefault();
-      applyPointerPosition(event.clientX, event.clientY);
-    };
-    const onWindowPointerUp = (event: PointerEvent) => {
-      if (
-        activePointerIdRef.current === null ||
-        event.pointerId !== activePointerIdRef.current
-      ) {
-        return;
-      }
-      event.preventDefault();
-      finishPointerDrag(true);
-    };
-    const onWindowPointerCancel = (event: PointerEvent) => {
-      if (
-        activePointerIdRef.current === null ||
-        event.pointerId !== activePointerIdRef.current
-      ) {
-        return;
-      }
-      finishPointerDrag(false);
-    };
-
-    window.addEventListener("pointermove", onWindowPointerMove, { passive: false });
-    window.addEventListener("pointerup", onWindowPointerUp, { passive: false });
-    window.addEventListener("pointercancel", onWindowPointerCancel, { passive: false });
-    return () => {
-      window.removeEventListener("pointermove", onWindowPointerMove);
-      window.removeEventListener("pointerup", onWindowPointerUp);
-      window.removeEventListener("pointercancel", onWindowPointerCancel);
-    };
-  }, [applyPointerPosition, finishPointerDrag]);
-
   const onPointerDown = (
     event: React.PointerEvent<HTMLButtonElement>,
     id: DashboardCardId,
   ) => {
-    if (saving || visible.length < 2 || draggingRef.current) return;
+    if (saving || visible.length < 2) return;
     event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
     draggingRef.current = id;
-    activePointerIdRef.current = event.pointerId;
-    dragStartPreferencesRef.current = draftRef.current;
     setDragging(id);
+  };
+
+  const onPointerMove = (event: React.PointerEvent<HTMLButtonElement>) => {
+    const activeId = draggingRef.current;
+    if (!activeId) return;
+    event.preventDefault();
+    const target = document
+      .elementFromPoint(event.clientX, event.clientY)
+      ?.closest<HTMLElement>("[data-dashboard-card-editor-item]");
+    const targetId = target?.dataset.dashboardCardEditorItem as DashboardCardId | undefined;
+    const currentVisible = visibleDashboardCardIds(draftRef.current);
+    if (!target || !targetId || targetId === activeId || !currentVisible.includes(targetId)) return;
+
+    const sourceIndex = currentVisible.indexOf(activeId);
+    const targetIndex = currentVisible.indexOf(targetId);
+    if (sourceIndex < 0 || targetIndex < 0) return;
+
+    const targetBox = target.getBoundingClientRect();
+    const afterTarget = event.clientY > targetBox.top + targetBox.height / 2;
+    let insertionIndex = targetIndex + (afterTarget ? 1 : 0);
+    const nextVisible = [...currentVisible];
+    nextVisible.splice(sourceIndex, 1);
+    if (sourceIndex < insertionIndex) insertionIndex -= 1;
+    insertionIndex = Math.max(0, Math.min(insertionIndex, nextVisible.length));
+    nextVisible.splice(insertionIndex, 0, activeId);
+
+    const next = reorderVisibleDashboardCards(draftRef.current, nextVisible);
+    if (!samePreferences(next, draftRef.current)) updateDraft(next);
+  };
+
+  const finishPointerDrag = (event?: React.PointerEvent<HTMLButtonElement>) => {
+    if (!draggingRef.current) return;
+    event?.preventDefault();
+    draggingRef.current = null;
+    setDragging(null);
+    if (!samePreferences(draftRef.current, preferences)) {
+      void persist(draftRef.current);
+    }
   };
 
   return (
@@ -254,6 +193,9 @@ function CardEditor({
                   aria-label={`${dashboardCardLabel(id)} kartını sürükle`}
                   disabled={saving}
                   onPointerDown={(event) => onPointerDown(event, id)}
+                  onPointerMove={onPointerMove}
+                  onPointerUp={finishPointerDrag}
+                  onPointerCancel={() => finishPointerDrag()}
                   className="flex size-10 shrink-0 touch-none items-center justify-center rounded-xl text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
                   data-dashboard-card-drag-handle={id}
                 >

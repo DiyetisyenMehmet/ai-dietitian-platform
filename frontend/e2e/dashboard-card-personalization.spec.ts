@@ -16,7 +16,12 @@ async function slotIds(page: Page): Promise<string[]> {
 
 async function openEditor(page: Page) {
   await page.getByRole("button", { name: "Ana ekran kartlarını düzenle" }).click();
-  await expect(page.locator("[data-dashboard-card-editor]")).toBeVisible();
+  const editor = page.locator("[data-dashboard-card-editor]");
+  await expect(editor).toBeVisible();
+  await editor.evaluate(async (node) => {
+    const animations = node.getAnimations({ subtree: true });
+    await Promise.all(animations.map((animation) => animation.finished.catch(() => undefined)));
+  });
 }
 
 async function waitForSaved(page: Page) {
@@ -216,50 +221,44 @@ test("touch-style pointer reorder is handle-scoped and persists on mobile", asyn
       ),
     ).toBe("food");
 
-    await bloodHandle.dispatchEvent("pointerdown", {
-      pointerId: 41,
-      pointerType: "touch",
-      isPrimary: true,
-      buttons: 1,
-      clientX: bloodBox!.x + bloodBox!.width / 2,
-      clientY: bloodBox!.y + bloodBox!.height / 2,
+    const cdp = await context.newCDPSession(page);
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [
+        {
+          x: bloodBox!.x + bloodBox!.width / 2,
+          y: bloodBox!.y + bloodBox!.height / 2,
+          id: 1,
+          radiusX: 1,
+          radiusY: 1,
+          force: 1,
+        },
+      ],
     });
     await expect(editor).toHaveAttribute("data-dragging-card", "blood");
 
-    await page.evaluate(
-      ({ x, y }) => {
-        window.dispatchEvent(
-          new PointerEvent("pointermove", {
-            bubbles: true,
-            cancelable: true,
-            pointerId: 41,
-            pointerType: "touch",
-            isPrimary: true,
-            buttons: 1,
-            clientX: x,
-            clientY: y,
-          }),
-        );
-      },
-      dropPoint,
-    );
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [
+        {
+          x: dropPoint.x,
+          y: dropPoint.y,
+          id: 1,
+          radiusX: 1,
+          radiusY: 1,
+          force: 1,
+        },
+      ],
+    });
     await expect(editor).toHaveAttribute(
       "data-draft-order",
       "blood,food,progress,coach",
       { timeout: 5_000 },
     );
 
-    await page.evaluate(() => {
-      window.dispatchEvent(
-        new PointerEvent("pointerup", {
-          bubbles: true,
-          cancelable: true,
-          pointerId: 41,
-          pointerType: "touch",
-          isPrimary: true,
-          buttons: 0,
-        }),
-      );
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchEnd",
+      touchPoints: [],
     });
     await expect(editor).toHaveAttribute("data-dragging-card", "");
     const response = await saveResponse;
