@@ -5,7 +5,7 @@ export const DASHBOARD_WEB_BASE_URL =
 
 const API_BASE_URL =
   process.env.E2E_API_BASE_URL || "http://127.0.0.1:4000/api";
-const PASSWORD = "DashboardBrowserPass123";
+export const DASHBOARD_TEST_DASHBOARD_TEST_PASSWORD = "DashboardBrowserPass123";
 
 async function postJson(
   request: APIRequestContext,
@@ -33,6 +33,18 @@ async function grantRequiredConsents(request: APIRequestContext, token: string) 
   }
 }
 
+export async function loginDashboardSession(
+  page: Page,
+  email: string,
+  password = DASHBOARD_TEST_PASSWORD,
+) {
+  await page.goto(`${DASHBOARD_WEB_BASE_URL}/login`);
+  await page.getByLabel("E-posta").fill(email);
+  await page.getByLabel("Şifre", { exact: true }).fill(password);
+  await page.getByRole("button", { name: "Giriş Yap" }).click();
+  await expect(page).toHaveURL(/\/dashboard$/, { timeout: 20_000 });
+}
+
 export async function createDashboardSession(
   page: Page,
   request: APIRequestContext,
@@ -44,7 +56,7 @@ export async function createDashboardSession(
 
   const registration = await postJson(request, "/auth/register", {
     email,
-    password: PASSWORD,
+    password: DASHBOARD_TEST_PASSWORD,
     fullName,
   });
   expect(registration.response.status()).toBe(201);
@@ -78,13 +90,9 @@ export async function createDashboardSession(
   expect(onboarding.response.status()).toBe(200);
   expect(onboarding.body?.success).toBe(true);
 
-  await page.goto(`${DASHBOARD_WEB_BASE_URL}/login`);
-  await page.getByLabel("E-posta").fill(email);
-  await page.getByLabel("Şifre", { exact: true }).fill(PASSWORD);
-  await page.getByRole("button", { name: "Giriş Yap" }).click();
-  await expect(page).toHaveURL(/\/dashboard$/, { timeout: 20_000 });
+  await loginDashboardSession(page, email);
 
-  return { email, fullName, token };
+  return { email, fullName, token, password: DASHBOARD_TEST_PASSWORD };
 }
 
 export async function setDashboardTheme(

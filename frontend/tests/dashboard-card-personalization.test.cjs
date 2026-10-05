@@ -21,114 +21,185 @@ function load() {
   return exports;
 }
 
+function read(relative) {
+  return fs.readFileSync(path.join(__dirname, "..", relative), "utf8");
+}
+
 function plain(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-test("new users receive the system default Dashboard card order", () => {
+test("new users receive default cards and the four real quick actions", () => {
   const {
     DEFAULT_DASHBOARD_CARD_ORDER,
+    DEFAULT_DASHBOARD_QUICK_ACTION_ORDER,
     normalizeDashboardCardPreferences,
     visibleDashboardCardIds,
+    visibleDashboardQuickActionIds,
   } = load();
-  const result = normalizeDashboardCardPreferences({ order: [], hidden: [] });
+  const result = normalizeDashboardCardPreferences({
+    order: [],
+    hidden: [],
+    quickActionOrder: [],
+    hiddenQuickActionIds: [],
+  });
+
   assert.deepEqual(plain(result.order), Array.from(DEFAULT_DASHBOARD_CARD_ORDER));
+  assert.deepEqual(
+    plain(result.quickActionOrder),
+    Array.from(DEFAULT_DASHBOARD_QUICK_ACTION_ORDER),
+  );
   assert.deepEqual(plain(visibleDashboardCardIds(result)), Array.from(DEFAULT_DASHBOARD_CARD_ORDER));
+  assert.deepEqual(
+    plain(visibleDashboardQuickActionIds(result)),
+    Array.from(DEFAULT_DASHBOARD_QUICK_ACTION_ORDER),
+  );
 });
 
-test("unknown and duplicate ids are ignored without breaking the Dashboard", () => {
+test("unknown and duplicate card or quick-action ids normalize safely", () => {
   const { normalizeDashboardCardPreferences } = load();
   const result = normalizeDashboardCardPreferences({
     order: ["progress", "unknown-card", "progress", "food"],
     hidden: ["unknown-card", "blood", "blood"],
+    quickActionOrder: ["weight", "fake-action", "weight", "meal"],
+    hiddenQuickActionIds: ["fake-action", "water", "water"],
   });
+
   assert.deepEqual(plain(result.order), ["blood", "progress", "food", "coach"]);
   assert.deepEqual(plain(result.hidden), ["blood"]);
+  assert.deepEqual(plain(result.quickActionOrder), ["water", "activity", "weight", "meal"]);
+  assert.deepEqual(plain(result.hiddenQuickActionIds), ["water"]);
 });
 
-test("corrupt hidden state is normalized back to at least three visible cards", () => {
+test("corrupt stored state cannot reduce cards or quick actions below three", () => {
   const {
+    MIN_VISIBLE_DASHBOARD_CARDS,
+    MIN_VISIBLE_DASHBOARD_QUICK_ACTIONS,
     normalizeDashboardCardPreferences,
     visibleDashboardCardIds,
-    MIN_VISIBLE_DASHBOARD_CARDS,
+    visibleDashboardQuickActionIds,
   } = load();
   const result = normalizeDashboardCardPreferences({
     order: ["food", "blood", "progress", "coach"],
     hidden: ["food", "blood", "progress", "coach"],
+    quickActionOrder: ["meal", "water", "activity", "weight"],
+    hiddenQuickActionIds: ["meal", "water", "activity", "weight"],
   });
+
   assert.equal(visibleDashboardCardIds(result).length, MIN_VISIBLE_DASHBOARD_CARDS);
-});
-
-test("a future registry card missing from an old preference is inserted safely", () => {
-  const { normalizeDashboardCardPreferenceIds } = load();
-  const result = normalizeDashboardCardPreferenceIds(
-    {
-      order: ["progress", "food", "coach"],
-      hidden: [],
-    },
-    ["food", "blood", "progress", "coach", "future_card"],
-    3,
+  assert.equal(
+    visibleDashboardQuickActionIds(result).length,
+    MIN_VISIBLE_DASHBOARD_QUICK_ACTIONS,
   );
-  assert.equal(result.order.includes("blood"), true);
-  assert.equal(result.order.includes("future_card"), true);
-  assert.equal(new Set(result.order).size, 5);
 });
 
-test("reorder changes visible order while preserving hidden card positions", () => {
+test("generic normalization inserts new registry ids and enforces quick-action max five", () => {
+  const { normalizeDashboardPreferenceIds } = load();
+  const result = normalizeDashboardPreferenceIds(
+    ["meal", "water", "activity"],
+    [],
+    ["meal", "water", "activity", "weight", "future_a", "future_b"],
+    3,
+    5,
+  );
+
+  assert.equal(result.order.length, 6);
+  assert.equal(new Set(result.order).size, 6);
+  assert.equal(result.order.includes("future_a"), true);
+  assert.equal(result.order.includes("future_b"), true);
+  assert.equal(result.order.filter((id) => !result.hidden.includes(id)).length, 5);
+});
+
+test("card and quick-action reorder preserve hidden positions", () => {
   const {
     normalizeDashboardCardPreferences,
     reorderVisibleDashboardCards,
+    reorderVisibleDashboardQuickActions,
     visibleDashboardCardIds,
+    visibleDashboardQuickActionIds,
   } = load();
   const start = normalizeDashboardCardPreferences({
     order: ["food", "blood", "progress", "coach"],
     hidden: ["blood"],
+    quickActionOrder: ["meal", "water", "activity", "weight"],
+    hiddenQuickActionIds: ["water"],
   });
-  const next = reorderVisibleDashboardCards(start, ["coach", "food", "progress"]);
-  assert.deepEqual(plain(next.order), ["coach", "blood", "food", "progress"]);
-  assert.deepEqual(plain(next.hidden), ["blood"]);
-  assert.deepEqual(plain(visibleDashboardCardIds(next)), ["coach", "food", "progress"]);
+
+  const cards = reorderVisibleDashboardCards(start, ["coach", "food", "progress"]);
+  assert.deepEqual(plain(cards.order), ["coach", "blood", "food", "progress"]);
+  assert.deepEqual(plain(visibleDashboardCardIds(cards)), ["coach", "food", "progress"]);
+
+  const actions = reorderVisibleDashboardQuickActions(cards, ["weight", "meal", "activity"]);
+  assert.deepEqual(plain(actions.quickActionOrder), ["weight", "water", "meal", "activity"]);
+  assert.deepEqual(plain(visibleDashboardQuickActionIds(actions)), ["weight", "meal", "activity"]);
 });
 
-test("hide enforces minimum three and restore returns a card to its saved order", () => {
+test("hide enforces minimum three and restore uses stored order for both groups", () => {
   const {
     normalizeDashboardCardPreferences,
     hideDashboardCard,
+    hideDashboardQuickAction,
     showDashboardCard,
+    showDashboardQuickAction,
     visibleDashboardCardIds,
+    visibleDashboardQuickActionIds,
   } = load();
   const start = normalizeDashboardCardPreferences({
     order: ["blood", "food", "progress", "coach"],
     hidden: [],
+    quickActionOrder: ["weight", "meal", "water", "activity"],
+    hiddenQuickActionIds: [],
   });
-  const hidden = hideDashboardCard(start, "food");
-  assert.equal(hidden.changed, true);
-  assert.deepEqual(plain(visibleDashboardCardIds(hidden.preferences)), ["blood", "progress", "coach"]);
 
-  const rejected = hideDashboardCard(hidden.preferences, "blood");
-  assert.equal(rejected.changed, false);
+  const cardHidden = hideDashboardCard(start, "food");
+  assert.equal(cardHidden.changed, true);
+  assert.equal(hideDashboardCard(cardHidden.preferences, "blood").changed, false);
   assert.deepEqual(
-    plain(visibleDashboardCardIds(rejected.preferences)),
-    ["blood", "progress", "coach"],
+    plain(visibleDashboardCardIds(showDashboardCard(cardHidden.preferences, "food"))),
+    ["blood", "food", "progress", "coach"],
   );
 
-  const restored = showDashboardCard(hidden.preferences, "food");
-  assert.deepEqual(plain(visibleDashboardCardIds(restored)), ["blood", "food", "progress", "coach"]);
+  const actionHidden = hideDashboardQuickAction(start, "meal");
+  assert.equal(actionHidden.changed, true);
+  assert.equal(hideDashboardQuickAction(actionHidden.preferences, "weight").changed, false);
+  assert.deepEqual(
+    plain(visibleDashboardQuickActionIds(showDashboardQuickAction(actionHidden.preferences, "meal"))),
+    ["weight", "meal", "water", "activity"],
+  );
 });
 
-test("feature card source components keep their existing fixed geometry contracts", () => {
-  const live = fs.readFileSync(
-    path.join(__dirname, "../src/presentation/components/dashboard/dashboard-live-feature-card.tsx"),
-    "utf8",
-  );
-  const blood = fs.readFileSync(
-    path.join(__dirname, "../src/presentation/components/dashboard/blood-test-card.tsx"),
-    "utf8",
-  );
-  const coach = fs.readFileSync(
-    path.join(__dirname, "../src/presentation/components/dashboard/dashboard-ai-banner.tsx"),
-    "utf8",
-  );
+test("inline personalization source removes the old editor modal and visible move arrows", () => {
+  const view = read("src/presentation/components/dashboard/dashboard-view.tsx");
+  const cards = read("src/presentation/components/dashboard/dashboard-personalized-cards.tsx");
+  const section = read("src/presentation/components/dashboard/dashboard-personalization-section.tsx");
+  const quick = read("src/presentation/components/dashboard/dashboard-quick-actions.tsx");
+
+  assert.match(view, /<DashboardPersonalizationSection \/>/);
+  assert.doesNotMatch(view, /<DashboardQuickActions \/>|<DashboardPersonalizedCards \/>/);
+  assert.doesNotMatch(cards, /ArrowUp|ArrowDown|ModalContent|Ana ekran kartları/);
+  assert.match(cards, /data-dashboard-card-drag-handle/);
+  assert.match(quick, /data-dashboard-edit-toggle/);
+  assert.doesNotMatch(quick, />Düzenle</);
+  assert.match(section, /Gizlenenleri Gör/);
+  assert.match(section, /role="tablist"/);
+  assert.match(section, /Kartlar/);
+  assert.match(section, /Hızlı İşlemler/);
+  assert.match(section, /Varsayılana Dön/);
+  assert.doesNotMatch(section, /Haftalık Özetim|Beslenme Planım/);
+});
+
+test("only the four real quick actions exist in the registry", () => {
+  const registry = read("src/presentation/components/dashboard/dashboard-quick-action-registry.tsx");
+  for (const id of ["meal", "water", "activity", "weight"]) {
+    assert.match(registry, new RegExp(`id: "${id}"`));
+  }
+  assert.doesNotMatch(registry, /sleep|barcode|photo|blood|plan/);
+});
+
+test("feature card source components keep approved fixed geometry contracts", () => {
+  const live = read("src/presentation/components/dashboard/dashboard-live-feature-card.tsx");
+  const blood = read("src/presentation/components/dashboard/blood-test-card.tsx");
+  const coach = read("src/presentation/components/dashboard/dashboard-ai-banner.tsx");
   assert.match(live, /data-dashboard-fixed-geometry/);
   assert.match(live, /data-frame-aspect="21:5"/);
   assert.match(blood, /data-dashboard-fixed-geometry/);
