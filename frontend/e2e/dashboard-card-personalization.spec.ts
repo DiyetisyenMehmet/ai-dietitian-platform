@@ -271,7 +271,6 @@ test("touch-style pointer reorder is handle-scoped and persists on mobile", asyn
     await waitForSaved(page);
     await expect.poll(() => slotIds(page)).toEqual(["blood", "food", "progress", "coach"]);
 
-    const editor = page.locator("[data-dashboard-card-editor]");
     const editorOverflow = await editor.evaluate((node) => getComputedStyle(node).overflowY);
     expect(["auto", "scroll"]).toContain(editorOverflow);
 
