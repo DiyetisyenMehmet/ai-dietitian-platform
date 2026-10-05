@@ -65,15 +65,25 @@ jobs:
         working-directory: frontend
       - run: npx prisma validate && npx prisma generate && npx prisma migrate deploy
         working-directory: backend
-      - run: npm test && npm run test:integration
+      - run: npm test
         working-directory: backend
+      - run: npm run test:integration
+        if: ${{ !cancelled() }}
+        working-directory: backend
+        env:
+          CORS_ORIGIN: http://localhost:3000
+          APP_WEB_URL: http://localhost:3000
       - run: node --import tsx --test --test-concurrency=1 src/modules/nutrition-plan/nutrition-plan-generation.integration.test.ts src/modules/nutrition-plan/nutrition-plan-generation-lock.integration.test.ts
+        if: ${{ !cancelled() }}
         working-directory: backend
       - run: npm run lint && npm run build
+        if: ${{ !cancelled() }}
         working-directory: backend
       - run: npx playwright install --with-deps chromium
+        if: ${{ !cancelled() }}
         working-directory: frontend
       - run: node --test tests/*.test.cjs
+        if: ${{ !cancelled() }}
         working-directory: frontend
       - run: NODE_ENV=production npm run build
         if: ${{ !cancelled() }}

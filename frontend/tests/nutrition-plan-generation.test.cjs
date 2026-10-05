@@ -69,7 +69,11 @@ test("generation request keeps its payload and has a finite cancellable loading 
   assert.match(body.startDate, /^\d{4}-\d{2}-\d{2}$/);
 });
 function store(client) {
+  const { ApiError } = http(async () => {
+    throw new Error("Unused test transport");
+  });
   return load("application/health/nutrition-plan-store.ts", {
+    "@/infrastructure/api/http-client": { ApiError },
     react: { useSyncExternalStore: (_subscribe, snapshot) => snapshot() },
     "@/infrastructure/nutrition/nutrition-plan-client": {
       nutritionPlanClient: client,
@@ -152,7 +156,10 @@ test("loading guard prevents duplicate request, success updates active plan, his
   });
   const work = module.nutritionPlanStore.generate("SEVEN_DAY");
   assert.equal(module.useNutritionPlan().generating, true);
-  await assert.rejects(module.nutritionPlanStore.generate("SEVEN_DAY"), /already in progress/);
+  await assert.rejects(
+    module.nutritionPlanStore.generate("SEVEN_DAY"),
+    (error) => error.code === "NUTRITION_PLAN_GENERATION_IN_PROGRESS",
+  );
   assert.equal(calls, 1);
   pending.resolve({ plan: plan("new") });
   await work;

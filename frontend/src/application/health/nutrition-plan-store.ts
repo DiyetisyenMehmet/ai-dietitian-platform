@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { ApiError } from "@/infrastructure/api/http-client";
 
 import {
   isSupportedNutritionPlanDuration,
@@ -75,7 +76,10 @@ function planPantryText(plan: NutritionPlanRecord | null): string | null {
   return value ? value.slice(0, 800) : null;
 }
 
-function mergeActivePlan(plans: NutritionPlanRecord[], plan: NutritionPlanRecord): NutritionPlanRecord[] {
+function mergeActivePlan(
+  plans: NutritionPlanRecord[],
+  plan: NutritionPlanRecord,
+): NutritionPlanRecord[] {
   return [
     plan,
     ...plans
@@ -101,6 +105,16 @@ function completeGeneration(plan: NutritionPlanRecord): NutritionPlanRecord {
 function failGeneration(error: unknown): never {
   patch({ generating: false, generatingDuration: null });
   throw error;
+}
+
+function assertNotGenerating(): void {
+  if (state.generating) {
+    throw new ApiError(
+      "Nutrition plan generation is already in progress.",
+      409,
+      "NUTRITION_PLAN_GENERATION_IN_PROGRESS",
+    );
+  }
 }
 
 function requireSupportedSource(planId: string): SupportedNutritionPlanRecord {
@@ -147,7 +161,7 @@ export const nutritionPlanStore = {
     duration: SupportedNutritionPlanDuration,
     pantryText = state.pantryDraft,
   ): Promise<NutritionPlanRecord> {
-    if (state.generating) throw new Error("Nutrition plan generation is already in progress.");
+    assertNotGenerating();
     patch({ generating: true, generatingDuration: duration });
     try {
       const { plan } = await nutritionPlanClient.generate(duration, pantryText);
@@ -158,7 +172,7 @@ export const nutritionPlanStore = {
   },
 
   async regenerate(planId: string): Promise<NutritionPlanRecord> {
-    if (state.generating) throw new Error("Nutrition plan generation is already in progress.");
+    assertNotGenerating();
     const source = requireSupportedSource(planId);
     patch({ generating: true, generatingDuration: source.duration });
     try {
@@ -170,7 +184,7 @@ export const nutritionPlanStore = {
   },
 
   async refresh(planId: string, input: RefreshNutritionPlanInput): Promise<NutritionPlanRecord> {
-    if (state.generating) throw new Error("Nutrition plan generation is already in progress.");
+    assertNotGenerating();
     const source = requireSupportedSource(planId);
     patch({ generating: true, generatingDuration: source.duration });
     try {
@@ -185,7 +199,7 @@ export const nutritionPlanStore = {
     planId: string,
     duration: SupportedNutritionPlanDuration,
   ): Promise<NutritionPlanRecord> {
-    if (state.generating) throw new Error("Nutrition plan generation is already in progress.");
+    assertNotGenerating();
     requireSupportedSource(planId);
     patch({ generating: true, generatingDuration: duration });
     try {
