@@ -75,6 +75,6 @@ test("dashboard card preference payload is bounded and contains only card ids", 
       hidden: [],
       weightKg: 82,
     }).success,
-    true,
+    false,
   );
 });
