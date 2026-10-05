@@ -5,7 +5,7 @@ export const DASHBOARD_WEB_BASE_URL =
 
 const API_BASE_URL =
   process.env.E2E_API_BASE_URL || "http://127.0.0.1:4000/api";
-export const DASHBOARD_TEST_DASHBOARD_TEST_PASSWORD = "DashboardBrowserPass123";
+export const DASHBOARD_TEST_PASSWORD = "DashboardBrowserPass123";
 
 async function postJson(
   request: APIRequestContext,
