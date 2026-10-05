@@ -112,7 +112,7 @@ test("pointer reorder works and normal card navigation remains active after edit
   await page.mouse.down();
   await page.mouse.move(
     bloodBox!.x + bloodBox!.width / 2,
-    bloodBox!.y + bloodBox!.height / 2,
+    bloodBox!.y + bloodBox!.height * 0.8,
     { steps: 8 },
   );
   await page.mouse.up();

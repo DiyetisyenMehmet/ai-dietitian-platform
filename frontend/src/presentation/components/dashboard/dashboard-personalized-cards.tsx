@@ -66,6 +66,7 @@ function CardEditor({
   const draftRef = React.useRef(preferences);
   const [resetOpen, setResetOpen] = React.useState(false);
   const [dragging, setDragging] = React.useState<DashboardCardId | null>(null);
+  const draggingRef = React.useRef<DashboardCardId | null>(null);
 
   React.useEffect(() => {
     if (!open) return;
@@ -118,30 +119,42 @@ function CardEditor({
     if (saving || visible.length < 2) return;
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
+    draggingRef.current = id;
     setDragging(id);
   };
 
   const onPointerMove = (event: React.PointerEvent<HTMLButtonElement>) => {
-    if (!dragging) return;
+    const activeId = draggingRef.current;
+    if (!activeId) return;
     event.preventDefault();
     const target = document
       .elementFromPoint(event.clientX, event.clientY)
       ?.closest<HTMLElement>("[data-dashboard-card-editor-item]");
     const targetId = target?.dataset.dashboardCardEditorItem as DashboardCardId | undefined;
-    if (!targetId || targetId === dragging || !visible.includes(targetId)) return;
+    const currentVisible = visibleDashboardCardIds(draftRef.current);
+    if (!targetId || targetId === activeId || !currentVisible.includes(targetId)) return;
 
-    const sourceIndex = visible.indexOf(dragging);
-    const targetIndex = visible.indexOf(targetId);
+    const sourceIndex = currentVisible.indexOf(activeId);
+    const targetIndex = currentVisible.indexOf(targetId);
     if (sourceIndex < 0 || targetIndex < 0) return;
-    const nextVisible = [...visible];
+
+    const targetBox = target.getBoundingClientRect();
+    const afterTarget = event.clientY > targetBox.top + targetBox.height / 2;
+    let insertionIndex = targetIndex + (afterTarget ? 1 : 0);
+    const nextVisible = [...currentVisible];
     nextVisible.splice(sourceIndex, 1);
-    nextVisible.splice(targetIndex, 0, dragging);
-    updateDraft(reorderVisibleDashboardCards(draftRef.current, nextVisible));
+    if (sourceIndex < insertionIndex) insertionIndex -= 1;
+    insertionIndex = Math.max(0, Math.min(insertionIndex, nextVisible.length));
+    nextVisible.splice(insertionIndex, 0, activeId);
+
+    const next = reorderVisibleDashboardCards(draftRef.current, nextVisible);
+    if (!samePreferences(next, draftRef.current)) updateDraft(next);
   };
 
-  const onPointerUp = (event: React.PointerEvent<HTMLButtonElement>) => {
-    if (!dragging) return;
-    event.preventDefault();
+  const finishPointerDrag = (event?: React.PointerEvent<HTMLButtonElement>) => {
+    if (!draggingRef.current) return;
+    event?.preventDefault();
+    draggingRef.current = null;
     setDragging(null);
     if (!samePreferences(draftRef.current, preferences)) {
       void persist(draftRef.current);
@@ -179,8 +192,8 @@ function CardEditor({
                   disabled={saving}
                   onPointerDown={(event) => onPointerDown(event, id)}
                   onPointerMove={onPointerMove}
-                  onPointerUp={onPointerUp}
-                  onPointerCancel={() => setDragging(null)}
+                  onPointerUp={finishPointerDrag}
+                  onPointerCancel={() => finishPointerDrag()}
                   className="flex size-10 shrink-0 touch-none items-center justify-center rounded-xl text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
                   data-dashboard-card-drag-handle={id}
                 >
