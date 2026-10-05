@@ -180,6 +180,13 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         settings.setSupportMultipleWindows(false);
         settings.setMediaPlaybackRequiresUserGesture(true);
+
+        // Android WebView can inherit device/vendor text scaling and font boosting
+        // differently from Chrome. Keep CSS pixel typography at the web source-of-truth
+        // size without changing the web app or its responsive card styles.
+        settings.setTextZoom(100);
+        settings.setLayoutAlgorithm(WebSettings.LayoutAlgorithm.NORMAL);
+
         settings.setUserAgentString(
             settings.getUserAgentString() + " DiewishAndroid/" + BuildConfig.VERSION_NAME
         );
