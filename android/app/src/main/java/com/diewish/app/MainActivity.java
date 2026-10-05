@@ -771,9 +771,9 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
                         + "if(!style){style=document.createElement('style');style.id=id;"
                         + "style.textContent="
                         + JSONObject.quote(
-                            "html.diewish-android [data-blood-test-stage] > [data-blood-test-live-text]:nth-of-type(4){font-size:1.28cqw!important;}"
-                                + "html.diewish-android [data-blood-test-stage] > [data-blood-test-live-text]:nth-of-type(5){font-size:1.18cqw!important;}"
-                                + "html.diewish-android [data-blood-test-row]{font-size:1.18cqw!important;}"
+                            "html.diewish-android [data-blood-test-stage] > [data-blood-test-live-text]:nth-of-type(4){font-size:0.96cqw!important;}"
+                                + "html.diewish-android [data-blood-test-stage] > [data-blood-test-live-text]:nth-of-type(5){font-size:0.90cqw!important;}"
+                                + "html.diewish-android [data-blood-test-row]{font-size:0.88cqw!important;}"
                         )
                         + ";(document.head||document.documentElement).appendChild(style);}"
                         + "})();"
