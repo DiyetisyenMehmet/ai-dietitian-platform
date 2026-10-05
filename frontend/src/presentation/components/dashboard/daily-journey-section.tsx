@@ -2,13 +2,18 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Check, ChevronRight, SkipForward } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, ChevronUp, SkipForward } from "lucide-react";
 
 import { cn } from "@/shared/lib/utils";
 import { Card, CardContent } from "@/presentation/components/ui/card";
 import { ProgressBar } from "@/presentation/components/ui/progress-bar";
 import { healthIcon } from "@/presentation/components/health/health-icon";
-import { useDailyJourneyResult, summarizeJourney } from "@/application/health/daily-journey";
+import {
+  summarizeJourney,
+  useDailyJourneyResult,
+  visibleJourneySteps,
+} from "@/application/health/daily-journey";
+import type { JourneyResult } from "@/application/health/journey-engine";
 import type { JourneyStep, JourneyStepState } from "@/domain/health/types";
 
 const STATE_META: Record<
@@ -54,7 +59,6 @@ export function StepRow({ step, last }: { step: JourneyStep; last: boolean }) {
         meta.row,
       )}
     >
-      {/* Timeline node */}
       <div className="relative flex shrink-0 flex-col items-center self-stretch">
         <span
           className={cn(
@@ -124,28 +128,44 @@ export function StepRow({ step, last }: { step: JourneyStep; last: boolean }) {
   return <li>{inner}</li>;
 }
 
-/**
- * "Today's Journey" — the guided, chronological sequence of the day's steps.
- * Each step clearly signals its state so the user always knows what is done,
- * what is pending, what is recommended next, and what was skipped.
- */
-export function DailyJourneySection() {
-  const { steps, status } = useDailyJourneyResult();
+interface DailyJourneyContentProps {
+  steps: JourneyStep[];
+  status: JourneyResult["status"];
+  expanded: boolean;
+  onExpandedChange: (expanded: boolean) => void;
+}
+
+export function DailyJourneyContent({
+  steps,
+  status,
+  expanded,
+  onExpandedChange,
+}: DailyJourneyContentProps) {
   const { completed, total, percent } = summarizeJourney(steps);
   const allDone = status === "all-done";
   const insufficientData = status === "insufficient-data";
   const noActionableStep = status === "no-actionable-step";
+  const visibleSteps = visibleJourneySteps(steps, status, expanded);
+  const canToggleDetails =
+    steps.length > 0 && (expanded || visibleSteps.length !== steps.length);
+  const detailsId = "daily-journey-steps";
 
   return (
-    <section className="space-y-3">
+    <section
+      className="space-y-3"
+      data-daily-journey-section
+      data-journey-status={status}
+      data-journey-expanded={expanded ? "true" : "false"}
+    >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-base font-semibold">Bugünkü Yolculuğun</h3>
         <span className="text-xs font-medium text-muted-foreground">
           {insufficientData ? "Veri bekleniyor" : `${completed}/${total} adım`}
         </span>
       </div>
-      <Card>
-        <CardContent className="space-y-4 p-4">
+
+      <Card data-daily-journey-card>
+        <CardContent className="space-y-3 p-4">
           {insufficientData ? (
             <div className="rounded-xl bg-muted/40 p-3">
               <p className="text-sm font-medium">
@@ -171,13 +191,62 @@ export function DailyJourneySection() {
               <ProgressBar value={percent} />
             </div>
           )}
-          <ul className="space-y-2">
-            {steps.map((step, i) => (
-              <StepRow key={step.kind} step={step} last={i === steps.length - 1} />
-            ))}
-          </ul>
+
+          {visibleSteps.length > 0 && (
+            <ul
+              id={detailsId}
+              className="space-y-2"
+              data-daily-journey-steps
+              data-visible-journey-steps={visibleSteps.length}
+            >
+              {visibleSteps.map((step, index) => (
+                <StepRow
+                  key={step.kind}
+                  step={step}
+                  last={index === visibleSteps.length - 1}
+                />
+              ))}
+            </ul>
+          )}
+
+          {canToggleDetails && (
+            <button
+              type="button"
+              aria-expanded={expanded}
+              aria-controls={detailsId}
+              data-journey-details-toggle
+              onClick={() => onExpandedChange(!expanded)}
+              className="flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-primary transition-colors hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
+              <span>{expanded ? "Daralt" : "Tümünü göster"}</span>
+              {expanded ? (
+                <ChevronUp className="size-4" aria-hidden="true" />
+              ) : (
+                <ChevronDown className="size-4" aria-hidden="true" />
+              )}
+            </button>
+          )}
         </CardContent>
       </Card>
     </section>
+  );
+}
+
+/**
+ * "Today's Journey" keeps the engine as the only decision source. The dashboard
+ * collapses the presentation to the next meaningful step and expands the same
+ * StepRow list on demand.
+ */
+export function DailyJourneySection() {
+  const { steps, status } = useDailyJourneyResult();
+  const [expanded, setExpanded] = React.useState(false);
+
+  return (
+    <DailyJourneyContent
+      steps={steps}
+      status={status}
+      expanded={expanded}
+      onExpandedChange={setExpanded}
+    />
   );
 }
