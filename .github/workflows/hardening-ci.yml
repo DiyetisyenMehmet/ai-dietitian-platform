@@ -6,6 +6,7 @@ on:
       - fix/production-hardening
       - feature/android-native-scanner
       - feature/staging-preview
+      - feature/app3-dashboard-cards-personalize-a1
   workflow_dispatch:
 
 permissions:
