@@ -97,10 +97,14 @@ export async function setDashboardTheme(
   );
 
   if (theme === "dark" && !isDark) {
-    await page.getByRole("button", { name: "Koyu temaya geç" }).click({ force: true });
+    await page
+      .getByRole("button", { name: "Koyu temaya geç" })
+      .evaluate((element) => (element as HTMLButtonElement).click());
     await expect(html).toHaveClass(/dark/);
   } else if (theme === "light" && isDark) {
-    await page.getByRole("button", { name: "Açık temaya geç" }).click({ force: true });
+    await page
+      .getByRole("button", { name: "Açık temaya geç" })
+      .evaluate((element) => (element as HTMLButtonElement).click());
     await expect(html).not.toHaveClass(/dark/);
   }
 }

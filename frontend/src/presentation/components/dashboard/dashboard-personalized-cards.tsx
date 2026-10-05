@@ -152,8 +152,9 @@ function CardEditor({
     <>
       <Modal open={open} onOpenChange={onOpenChange}>
         <ModalContent
-          className="max-h-[min(88dvh,760px)] overflow-y-auto p-4 sm:p-6"
+          className="max-h-[min(88dvh,760px)] overflow-x-hidden overflow-y-auto p-4 sm:p-6"
           data-dashboard-card-editor
+          data-saving={saving ? "true" : "false"}
         >
           <ModalHeader className="pr-8">
             <ModalTitle>Ana ekran kartları</ModalTitle>
@@ -168,7 +169,7 @@ function CardEditor({
                 key={id}
                 data-dashboard-card-editor-item={id}
                 className={cn(
-                  "flex min-w-0 items-center gap-2 rounded-2xl border border-border bg-background p-2",
+                  "grid min-w-0 grid-cols-[2.5rem_minmax(0,1fr)] items-center gap-2 rounded-2xl border border-border bg-background p-2 sm:grid-cols-[2.5rem_minmax(0,1fr)_auto]",
                   dragging === id && "ring-2 ring-primary/35",
                 )}
               >
@@ -190,7 +191,7 @@ function CardEditor({
                   {dashboardCardLabel(id)}
                 </span>
 
-                <div className="flex shrink-0 items-center gap-1">
+                <div className="col-span-2 flex min-w-0 items-center justify-end gap-1 sm:col-span-1 sm:col-start-3 sm:row-start-1">
                   <button
                     type="button"
                     aria-label={`${dashboardCardLabel(id)} kartını yukarı taşı`}

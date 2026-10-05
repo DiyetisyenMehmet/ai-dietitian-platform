@@ -20,9 +20,11 @@ async function openEditor(page: Page) {
 }
 
 async function waitForSaved(page: Page) {
-  await expect(
-    page.locator("[data-dashboard-card-editor] button:disabled"),
-  ).toHaveCount(0, { timeout: 10_000 });
+  await expect(page.locator("[data-dashboard-card-editor]")).toHaveAttribute(
+    "data-saving",
+    "false",
+    { timeout: 10_000 },
+  );
 }
 
 test("Dashboard card personalization persists order, hide/show, minimum three and reset", async ({
