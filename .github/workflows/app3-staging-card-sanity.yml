@@ -1,0 +1,61 @@
+name: APP3 Staging Card Sanity
+
+on:
+  push:
+    branches:
+      - feature/app3-dashboard-cards-personalize-a1
+    paths:
+      - ".github/workflows/app3-staging-card-sanity.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: app3-staging-card-sanity
+  cancel-in-progress: true
+
+env:
+  EXPECTED_STAGING_SHA: cd252333ba8825e27be9fdd9663d5b528543ec6c
+  E2E_WEB_BASE_URL: https://staging.diewish.com
+  E2E_API_BASE_URL: https://staging.diewish.com/api
+  NEXT_TELEMETRY_DISABLED: "1"
+
+jobs:
+  sanity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Verify staging branch still points to expected SHA
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          actual="$(curl --fail --silent --show-error \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/branches/feature%2Fstaging-preview" \
+            | jq -r '.commit.sha')"
+          test "${actual}" = "${EXPECTED_STAGING_SHA}"
+          curl --fail --silent --show-error "${E2E_WEB_BASE_URL}/api/health" >/dev/null
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.EXPECTED_STAGING_SHA }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Prepare Playwright
+        working-directory: frontend
+        run: |
+          npm ci
+          sudo find /etc/apt/sources.list.d -maxdepth 1 -type f -iname '*google*chrome*' -delete
+          npx playwright install --with-deps chromium
+
+      - name: Run staging Dashboard card personalization sanity
+        working-directory: frontend
+        run: npx playwright test e2e/dashboard-card-personalization.spec.ts --workers=1 --reporter=line
