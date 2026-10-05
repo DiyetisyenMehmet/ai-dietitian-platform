@@ -52,6 +52,7 @@ export function normalizeDashboardPreferenceIds(
   hiddenInput: readonly unknown[] | null | undefined,
   registry: readonly string[],
   minimumVisible: number,
+  maximumVisible?: number,
 ): { order: string[]; hidden: string[] } {
   const defaultOrder = [...registry];
   const order = uniqueKnownIds(orderInput, defaultOrder);
@@ -80,6 +81,18 @@ export function normalizeDashboardPreferenceIds(
       hidden = hidden.filter((candidate) => candidate !== id);
       visibleCount += 1;
       if (visibleCount >= minVisible) break;
+    }
+  }
+
+  if (maximumVisible !== undefined) {
+    const maxVisible = Math.max(minVisible, Math.min(maximumVisible, defaultOrder.length));
+    if (visibleCount > maxVisible) {
+      for (const id of [...defaultOrder].reverse()) {
+        if (hidden.includes(id)) continue;
+        hidden = [...hidden, id];
+        visibleCount -= 1;
+        if (visibleCount <= maxVisible) break;
+      }
     }
   }
 
@@ -113,6 +126,7 @@ export function normalizeDashboardCardPreferences(
     raw?.hiddenQuickActionIds,
     DEFAULT_DASHBOARD_QUICK_ACTION_ORDER,
     MIN_VISIBLE_DASHBOARD_QUICK_ACTIONS,
+    MAX_VISIBLE_DASHBOARD_QUICK_ACTIONS,
   );
 
   return {
