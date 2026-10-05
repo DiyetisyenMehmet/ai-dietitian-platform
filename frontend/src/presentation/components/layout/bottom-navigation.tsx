@@ -57,11 +57,17 @@ export function BottomNavigation() {
               >
                 <span
                   className={cn(
-                    "flex h-8 w-12 items-center justify-center rounded-full transition-colors",
-                    active && "bg-accent",
+                    "flex h-8 w-12 items-center justify-center transition-colors",
+                    item.id !== "ai" && "rounded-full",
+                    active && item.id !== "ai" && "bg-accent",
                   )}
                 >
-                  <Icon className="size-5" aria-hidden="true" />
+                  <Icon
+                    className={cn(
+                      item.id === "ai" ? "size-6 fill-current" : "size-5",
+                    )}
+                    aria-hidden="true"
+                  />
                 </span>
                 {item.label}
               </Link>
