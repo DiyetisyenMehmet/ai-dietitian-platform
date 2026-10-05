@@ -128,8 +128,9 @@ async function checkCoachNavigation(page, { active }) {
 
     const iconBox = await icon.boundingBox();
     expect(iconBox).not.toBeNull();
-    expect(iconBox.width).toBeCloseTo(20, 1);
-    expect(iconBox.height).toBeCloseTo(20, 1);
+    expect(iconBox.width).toBeCloseTo(24, 1);
+    expect(iconBox.height).toBeCloseTo(24, 1);
+    await expect(icon.locator("xpath=..")).not.toHaveClass(/bg-accent/);
     await expect(coach.getByText("Koç", { exact: true })).toBeVisible();
 
     const geometry = await icon.evaluate((svg) => {
@@ -156,16 +157,26 @@ async function checkCoachNavigation(page, { active }) {
     const iconBoxes = await nav.locator("svg").evaluateAll((icons) =>
       icons.map((item) => {
         const rect = item.getBoundingClientRect();
-        return { width: rect.width, height: rect.height, top: rect.top };
+        return {
+          width: rect.width,
+          height: rect.height,
+          centerY: rect.top + rect.height / 2,
+          coach: item.hasAttribute("data-coach-nav-icon"),
+        };
       }),
     );
     expect(iconBoxes).toHaveLength(5);
     for (const box of iconBoxes) {
-      expect(box.width).toBeCloseTo(20, 1);
-      expect(box.height).toBeCloseTo(20, 1);
+      if (box.coach) {
+        expect(box.width).toBeCloseTo(24, 1);
+        expect(box.height).toBeCloseTo(24, 1);
+      } else {
+        expect(box.width).toBeCloseTo(20, 1);
+        expect(box.height).toBeCloseTo(20, 1);
+      }
     }
-    const iconTops = iconBoxes.map((box) => box.top);
-    expect(Math.max(...iconTops) - Math.min(...iconTops)).toBeLessThanOrEqual(1);
+    const iconCenters = iconBoxes.map((box) => box.centerY);
+    expect(Math.max(...iconCenters) - Math.min(...iconCenters)).toBeLessThanOrEqual(1);
   }
 }
 
