@@ -11,6 +11,7 @@ import { ApiError } from "../../utils/api-error";
 import { generateOpaqueToken, hashToken } from "../../utils/jwt";
 import { hashPassword, verifyPassword } from "../../utils/password";
 import { accountRepository } from "./account.repository";
+import type { DashboardCardPreferencesInput } from "./account.schemas";
 
 const MS_PER_MINUTE = 60 * 1000;
 const MS_PER_HOUR = 60 * MS_PER_MINUTE;
@@ -53,6 +54,30 @@ function bloodTestStorageNamespace(userId: string): string {
 }
 
 export const accountService = {
+  async getDashboardCardPreferences(userId: string) {
+    const stored = await accountRepository.getDashboardCardPreference(userId);
+    return {
+      order: stored?.cardOrder ?? [],
+      hidden: stored?.hiddenCardIds ?? [],
+    };
+  },
+
+  async updateDashboardCardPreferences(
+    userId: string,
+    input: DashboardCardPreferencesInput,
+  ) {
+    const order = [...new Set(input.order)];
+    const hidden = [...new Set(input.hidden)];
+    const stored = await accountRepository.upsertDashboardCardPreference(userId, {
+      order,
+      hidden,
+    });
+    return {
+      order: stored.cardOrder,
+      hidden: stored.hiddenCardIds,
+    };
+  },
+
   /**
    * Issues (and "sends") an email-verification link for the authenticated user.
    * Idempotent when already verified — no token is issued in that case.

@@ -8,6 +8,7 @@ import { accountService } from "./account.service";
 import type {
   ChangePasswordInput,
   ConfirmPasswordInput,
+  DashboardCardPreferencesInput,
   ForgotPasswordInput,
   ResetPasswordInput,
   VerifyEmailInput,
@@ -30,6 +31,19 @@ function requireUserId(req: Request): string {
 }
 
 export const accountController = {
+  getDashboardCardPreferences: asyncHandler(async (req: Request, res: Response) => {
+    const preferences = await accountService.getDashboardCardPreferences(requireUserId(req));
+    sendSuccess(res, { preferences });
+  }),
+
+  updateDashboardCardPreferences: asyncHandler(async (req: Request, res: Response) => {
+    const preferences = await accountService.updateDashboardCardPreferences(
+      requireUserId(req),
+      req.body as DashboardCardPreferencesInput,
+    );
+    sendSuccess(res, { preferences });
+  }),
+
   requestEmailVerification: asyncHandler(async (req: Request, res: Response) => {
     const userId = requireUserId(req);
     const { alreadyVerified } = await accountService.requestEmailVerification(

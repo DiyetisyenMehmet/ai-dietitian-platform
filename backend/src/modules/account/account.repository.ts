@@ -22,6 +22,32 @@ export const accountRepository = {
     return prisma.user.findUnique({ where: { id } });
   },
 
+  getDashboardCardPreference(userId: string) {
+    return prisma.dashboardCardPreference.findUnique({
+      where: { userId },
+      select: { cardOrder: true, hiddenCardIds: true },
+    });
+  },
+
+  upsertDashboardCardPreference(
+    userId: string,
+    input: { order: string[]; hidden: string[] },
+  ) {
+    return prisma.dashboardCardPreference.upsert({
+      where: { userId },
+      create: {
+        userId,
+        cardOrder: input.order,
+        hiddenCardIds: input.hidden,
+      },
+      update: {
+        cardOrder: input.order,
+        hiddenCardIds: input.hidden,
+      },
+      select: { cardOrder: true, hiddenCardIds: true },
+    });
+  },
+
   /**
    * Returns every externally stored blood-test object owned by the user. These
    * references must be removed before the account row is deleted, because the

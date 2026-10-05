@@ -62,6 +62,7 @@ model User {
   monthlyReviews          MonthlyReview[]
   notifications           Notification[]
   notificationPreference  NotificationPreference?
+  dashboardCardPreference DashboardCardPreference?
   activities              Activity[]
   historyInsights          HistoryInsight[]
   goals                   Goal[]
@@ -815,6 +816,18 @@ model NotificationPreference {
   updatedAt             DateTime @updatedAt
 
   @@map("notification_preferences")
+}
+
+model DashboardCardPreference {
+  id            String   @id @default(uuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cardOrder     String[] @default([])
+  hiddenCardIds String[] @default([])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("dashboard_card_preferences")
 }
 
 enum ActivityType {

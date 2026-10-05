@@ -55,8 +55,21 @@ export const confirmPasswordSchema = z.object({
   password: z.string().min(1, "Password is required").max(128),
 });
 
+const dashboardCardIdSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(64)
+  .regex(/^[a-z0-9_-]+$/, "Invalid dashboard card id");
+
+export const dashboardCardPreferencesSchema = z.object({
+  order: z.array(dashboardCardIdSchema).max(32),
+  hidden: z.array(dashboardCardIdSchema).max(32),
+});
+
 export type VerifyEmailInput = z.infer<typeof verifyEmailSchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 export type ConfirmPasswordInput = z.infer<typeof confirmPasswordSchema>;
+export type DashboardCardPreferencesInput = z.infer<typeof dashboardCardPreferencesSchema>;

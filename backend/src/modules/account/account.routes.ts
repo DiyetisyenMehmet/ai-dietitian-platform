@@ -7,6 +7,7 @@ import { accountController } from "./account.controller";
 import {
   changePasswordSchema,
   confirmPasswordSchema,
+  dashboardCardPreferencesSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
   verifyEmailSchema,
@@ -21,6 +22,19 @@ import {
  * actions are also rate-limited because they trigger email or verify a secret.
  */
 export const accountRouter = Router();
+
+accountRouter.get(
+  "/dashboard-cards",
+  authenticate,
+  accountController.getDashboardCardPreferences,
+);
+
+accountRouter.put(
+  "/dashboard-cards",
+  authenticate,
+  validate({ body: dashboardCardPreferencesSchema }),
+  accountController.updateDashboardCardPreferences,
+);
 
 /**
  * @openapi
