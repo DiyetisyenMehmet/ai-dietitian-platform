@@ -1,0 +1,44 @@
+name: APP3 Dashboard Stale Test Check
+
+on:
+  push:
+    branches:
+      - feature/app3-dash-stale-test-fix-a1
+    paths:
+      - .github/workflows/app3-dashboard-stale-test-check.yml
+
+permissions:
+  contents: read
+
+jobs:
+  frontend-check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - name: Test Dashboard contracts
+        run: >-
+          node --test
+          tests/dashboard-home-typography.test.cjs
+          tests/dashboard-card-personalization.test.cjs
+          tests/dashboard-live-feature-card.test.cjs
+          tests/dashboard-blood-test-card.test.cjs
+          tests/dashboard-webview-parity.test.cjs
+          tests/journey-dashboard-activation.test.cjs
+      - name: Lint frontend
+        run: npm run lint
+      - name: Type-check frontend
+        run: npm run type-check
+      - name: Build frontend
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_BASE_URL: https://example.invalid/api
+          NEXT_PUBLIC_SITE_URL: https://example.invalid
