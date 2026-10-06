@@ -365,7 +365,7 @@ export function DashboardPersonalizationSection() {
 
   return (
     <section
-      className="space-y-3"
+      className={cn("space-y-3", editing && "[overflow-anchor:none]")}
       aria-label="Ana ekran kişiselleştirme alanı"
       data-dashboard-personalization
       data-editing={editing ? "true" : "false"}

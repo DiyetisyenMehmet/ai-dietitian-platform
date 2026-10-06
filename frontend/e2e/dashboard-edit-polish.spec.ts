@@ -102,6 +102,7 @@ async function drag(page: Page, from: string, to: string, axis: "x" | "y", touch
   expect(await page.evaluate(({ x, y, from }) => !!document.elementFromPoint(x, y)?.closest(from), { x, y, from })).toBe(true);
   const tx = axis === "x" ? b.x + b.width * 0.2 : x;
   const ty = axis === "y" ? b.y + b.height * 0.2 : y;
+  let scrollBeforeDrag = await page.evaluate(() => scrollY);
   if (touch) {
     const cdp = await page.context().newCDPSession(page);
     await cdp.send("Input.dispatchTouchEvent", {
@@ -109,6 +110,9 @@ async function drag(page: Page, from: string, to: string, axis: "x" | "y", touch
       touchPoints: [{ x, y, id: 1 }],
     });
     await page.waitForTimeout(190);
+    // The hold stops inertia from the preceding native scroll. The intentional
+    // drag must keep that settled viewport position throughout the move/drop.
+    scrollBeforeDrag = await page.evaluate(() => scrollY);
     for (let i = 1; i <= 10; i++)
       await cdp.send("Input.dispatchTouchEvent", {
         type: "touchMove",
@@ -121,6 +125,7 @@ async function drag(page: Page, from: string, to: string, axis: "x" | "y", touch
     await page.mouse.move(tx, ty, { steps: 10 });
     await page.mouse.up();
   }
+  expect(await page.evaluate(() => scrollY)).toBeCloseTo(scrollBeforeDrag, 0);
 }
 
 test("only Save persists; dirty exit, minimums, restore/reset drafts, failure and duplicate prevention", async ({
@@ -334,6 +339,7 @@ for (const theme of ["light", "dark"])
           return {
             width: node.getBoundingClientRect().width,
             height: node.getBoundingClientRect().height,
+            transform: getComputedStyle(node).transform,
             eye: { x: eye.x, y: eye.y, width: eye.width, height: eye.height },
             arrow: arrowBox && {
               x: arrowBox.x,
@@ -349,6 +355,7 @@ for (const theme of ["light", "dark"])
       for (let i = 0; i < checks.length; i++) {
         expect(checks[i].width).toBeCloseTo(initial[i].width, 2);
         expect(checks[i].height).toBeCloseTo(initial[i].height, 2);
+        expect(checks[i].transform).toBe("none");
         expect(checks[i].dotsX).toBeLessThan(initial[i].width * 0.025 + 16);
         if (checks[i].arrow) {
           expect(checks[i].eye.x).toBeCloseTo(checks[i].arrow!.x, 0);

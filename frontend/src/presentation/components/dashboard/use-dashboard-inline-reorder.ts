@@ -42,6 +42,7 @@ export function useDashboardInlineReorder<T extends string>({
   const gesture = React.useRef<Gesture<T> | null>(null);
   const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const boxes = React.useRef(new Map<T, DOMRect>());
+  const lastLayoutOrder = React.useRef(ids.join("|"));
   const animations = React.useRef(new Map<HTMLElement, Animation>());
   const [draggingId, setDraggingId] = React.useState<T | null>(null);
   const callbacks = React.useRef({ onPreview, onCommit });
@@ -57,13 +58,16 @@ export function useDashboardInlineReorder<T extends string>({
   );
   const animate = React.useCallback((element: HTMLElement, dx: number, dy: number) => {
     animations.current.get(element)?.cancel();
+    animations.current.delete(element);
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const animation = element.animate(
       [{ transform: `translate3d(${dx}px, ${dy}px, 0)` }, { transform: "translate3d(0, 0, 0)" }],
       { duration: SETTLE_MS, easing: "cubic-bezier(.2,.8,.2,1)" },
     );
     animations.current.set(element, animation);
-    animation.onfinish = () => animations.current.delete(element);
+    animation.onfinish = () => {
+      if (animations.current.get(element) === animation) animations.current.delete(element);
+    };
   }, []);
   const positionActive = React.useCallback(() => {
     const current = gesture.current;
@@ -76,6 +80,9 @@ export function useDashboardInlineReorder<T extends string>({
     element.style.transform = `translate3d(${dx}px, ${dy}px, 0) scale(1.008)`;
   }, [axis]);
   React.useLayoutEffect(() => {
+    const order = ids.join("|");
+    const changedOrder = lastLayoutOrder.current !== order;
+    lastLayoutOrder.current = order;
     for (const node of elements()) {
       const id = node.dataset.personalizeItem as T;
       if (id === gesture.current?.id && gesture.current.active) continue;
@@ -84,23 +91,34 @@ export function useDashboardInlineReorder<T extends string>({
       const visual = node.getBoundingClientRect();
       const matrix = new DOMMatrixReadOnly(getComputedStyle(node).transform);
       const next = new DOMRect(
-        visual.left - matrix.m41,
-        visual.top - matrix.m42,
+        visual.left - matrix.m41 + window.scrollX,
+        visual.top - matrix.m42 + window.scrollY,
         node.offsetWidth,
         node.offsetHeight,
       );
-      if (old && (Math.abs(old.left - next.left) > 1 || Math.abs(old.top - next.top) > 1)) {
+      if (disabled && running) {
+        running.cancel();
+        animations.current.delete(node);
+      }
+      // Scroll and responsive layout changes are not reorders. Store document
+      // coordinates so a real reorder never includes the page's scroll offset.
+      if (
+        !disabled &&
+        changedOrder &&
+        old &&
+        (Math.abs(old.left - next.left) > 1 || Math.abs(old.top - next.top) > 1)
+      ) {
         animate(
           node,
-          (running ? visual : old).left - next.left,
-          (running ? visual : old).top - next.top,
+          (running ? visual.left + window.scrollX : old.left) - next.left,
+          (running ? visual.top + window.scrollY : old.top) - next.top,
         );
       }
       boxes.current.set(id, next);
     }
     if (!gesture.current) idsRef.current = [...ids];
     positionActive();
-  }, [ids, animate, elements, positionActive]);
+  }, [ids, disabled, animate, elements, positionActive]);
   const finish = React.useCallback(
     (commit: boolean) => {
       if (timer.current) clearTimeout(timer.current);
@@ -214,7 +232,15 @@ export function useDashboardInlineReorder<T extends string>({
       const nodes = elements();
       const rects = nodes.map((node) => node.getBoundingClientRect());
       boxes.current = new Map(
-        nodes.map((node, index) => [node.dataset.personalizeItem as T, rects[index]]),
+        nodes.map((node, index) => [
+          node.dataset.personalizeItem as T,
+          new DOMRect(
+            rects[index].left + window.scrollX,
+            rects[index].top + window.scrollY,
+            rects[index].width,
+            rects[index].height,
+          ),
+        ]),
       );
       gesture.current = {
         id,
