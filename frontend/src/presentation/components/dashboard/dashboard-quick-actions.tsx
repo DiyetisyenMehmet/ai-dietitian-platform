@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Droplets, Footprints, Moon, Utensils, X } from "lucide-react";
+import { EllipsisVertical, EyeOff, SlidersHorizontal, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { activityStore } from "@/application/health/activity-store";
@@ -10,13 +10,18 @@ import { dailyTrackingStore } from "@/application/health/daily-tracking-store";
 import { useWeightEntries, weightStore } from "@/application/health/weight-store";
 import type { ActivityType } from "@/infrastructure/activity/activity-client";
 import { sleepClient } from "@/infrastructure/sleep/sleep-client";
+import type { DashboardQuickActionId } from "@/domain/account/dashboard-card-preferences";
+import {
+  DashboardQuickActionIcon,
+  dashboardQuickActionMeta,
+} from "@/presentation/components/dashboard/dashboard-quick-action-registry";
+import { useDashboardInlineReorder } from "@/presentation/components/dashboard/use-dashboard-inline-reorder";
 import { Button } from "@/presentation/components/ui/button";
 import { Input } from "@/presentation/components/ui/input";
+import { cn } from "@/shared/lib/utils";
 
 const tileClass =
-  "flex min-h-20 min-w-0 flex-1 basis-0 flex-col items-center justify-center gap-1.5 rounded-2xl border border-border/70 px-1.5 py-2.5 text-center shadow-sm transition hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-24 sm:gap-2 sm:px-2 sm:py-3";
-
-const SHOW_SLEEP_QUICK_ACTION = false;
+  "flex min-h-20 w-full min-w-0 flex-col items-center justify-center gap-1.5 rounded-2xl border border-border/70 px-1.5 py-2.5 text-center shadow-sm transition hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-24 sm:gap-2 sm:px-2 sm:py-3";
 
 type QuickAction = "water" | "activity" | "weight" | "sleep";
 type WaterUnit = "ml" | "L";
@@ -56,26 +61,6 @@ function defaultSleepTimes(): { start: string; wake: string } {
   wake.setSeconds(0, 0);
   const start = new Date(wake.getTime() - 8 * 60 * 60 * 1000);
   return { start: toLocalDateTimeInput(start), wake: toLocalDateTimeInput(wake) };
-}
-
-function WeightScaleIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      className="size-6 text-violet-500 sm:size-7"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <rect x="4" y="3" width="16" height="18" rx="4" />
-      <rect x="8" y="6" width="8" height="5" rx="2" />
-      <path d="M12 8.5 14 7" />
-      <path d="M8 17h8" />
-    </svg>
-  );
 }
 
 function QuickModal({
@@ -119,7 +104,25 @@ function QuickModal({
 }
 
 /** Equal-width dashboard actions. The visible count can safely vary from 2 to 5. */
-export function DashboardQuickActions() {
+export interface DashboardQuickActionsProps {
+  editing?: boolean;
+  visibleActionIds?: DashboardQuickActionId[];
+  savingPreferences?: boolean;
+  onToggleEditing?: () => void;
+  onHideAction?: (id: DashboardQuickActionId) => void;
+  onOrderPreview?: (ids: DashboardQuickActionId[]) => void;
+  onOrderCommit?: (ids: DashboardQuickActionId[]) => void | Promise<unknown>;
+}
+
+export function DashboardQuickActions({
+  editing = false,
+  visibleActionIds = ["meal", "water", "activity", "weight"],
+  savingPreferences = false,
+  onToggleEditing,
+  onHideAction,
+  onOrderPreview = () => undefined,
+  onOrderCommit = () => undefined,
+}: DashboardQuickActionsProps = {}) {
   const weights = useWeightEntries();
   const latestWeight = weights.at(-1)?.weightKg;
   const historyPushed = React.useRef(false);
@@ -139,6 +142,15 @@ export function DashboardQuickActions() {
   const [sleepStart, setSleepStart] = React.useState(sleepDefaults.start);
   const [wakeTime, setWakeTime] = React.useState(sleepDefaults.wake);
   const [sleepQuality, setSleepQuality] = React.useState("3");
+
+  const quickReorder = useDashboardInlineReorder<DashboardQuickActionId>({
+    group: "quick-actions",
+    axis: "x",
+    ids: visibleActionIds,
+    disabled: savingPreferences || !editing,
+    onPreview: onOrderPreview,
+    onCommit: onOrderCommit,
+  });
 
   const openQuickAction = React.useCallback((action: QuickAction) => {
     if (typeof window !== "undefined") {
@@ -289,36 +301,142 @@ export function DashboardQuickActions() {
   };
 
   return (
-    <section className="space-y-3" aria-labelledby="dashboard-quick-actions-heading">
-      <h2 id="dashboard-quick-actions-heading" className="text-[22px] font-bold sm:text-2xl">Bugün için hızlı işlemler</h2>
-
-      <div
-        className="flex gap-1.5 sm:gap-3"
-        data-quick-action-layout="equal-flex"
-        data-max-actions="5"
-      >
-        <Link href="/meals/add?returnTo=%2Fdashboard" className={`${tileClass} bg-emerald-500/[0.06]`}>
-          <Utensils className="size-6 text-emerald-500 sm:size-7" aria-hidden="true" />
-          <span className="whitespace-nowrap text-[12px] font-semibold leading-tight sm:text-base">Öğün Ekle</span>
-        </Link>
-        <button type="button" onClick={() => openQuickAction("water")} className={`${tileClass} bg-sky-500/[0.06]`}>
-          <Droplets className="size-6 text-sky-500 sm:size-7" aria-hidden="true" />
-          <span className="whitespace-nowrap text-[12px] font-semibold leading-tight sm:text-base">Su Ekle</span>
-        </button>
-        <button type="button" onClick={() => openQuickAction("activity")} className={`${tileClass} bg-teal-500/[0.06]`}>
-          <Footprints className="size-6 text-teal-500 sm:size-7" aria-hidden="true" />
-          <span className="whitespace-nowrap text-[12px] font-semibold leading-tight sm:text-base">Hareket</span>
-        </button>
-        <button type="button" onClick={() => openQuickAction("weight")} className={`${tileClass} bg-violet-500/[0.06]`}>
-          <WeightScaleIcon />
-          <span className="whitespace-nowrap text-[12px] font-semibold leading-tight sm:text-base">Kilo Ekle</span>
-        </button>
-        {SHOW_SLEEP_QUICK_ACTION && (
-          <button type="button" onClick={() => openQuickAction("sleep")} className={`${tileClass} bg-indigo-500/[0.06]`}>
-            <Moon className="size-6 text-indigo-500 sm:size-7" aria-hidden="true" />
-            <span className="whitespace-nowrap text-[12px] font-semibold leading-tight sm:text-base">Uyku Ekle</span>
+    <section
+      className="space-y-3"
+      aria-labelledby="dashboard-quick-actions-heading"
+      data-dashboard-quick-actions
+      data-dashboard-edit-mode={editing ? "true" : "false"}
+    >
+      <div className="flex min-w-0 items-center justify-between gap-3">
+        <h2
+          id="dashboard-quick-actions-heading"
+          className="min-w-0 text-[22px] font-bold sm:text-2xl"
+        >
+          Bugün için hızlı işlemler
+        </h2>
+        {onToggleEditing && (
+          <button
+            type="button"
+            aria-label={editing ? "Ana ekran düzenlemeyi kapat" : "Ana ekranı düzenle"}
+            aria-pressed={editing}
+            onClick={onToggleEditing}
+            className={cn(
+              "flex size-11 shrink-0 items-center justify-center rounded-full border border-border/70 bg-card text-muted-foreground shadow-sm transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              editing && "border-primary/30 bg-primary/10 text-primary",
+            )}
+            data-dashboard-edit-toggle
+          >
+            <SlidersHorizontal className="size-5" aria-hidden="true" />
           </button>
         )}
+      </div>
+
+      <div
+        className={cn(
+          "flex min-w-0",
+          visibleActionIds.length >= 5 ? "gap-1" : "gap-1.5 sm:gap-3",
+        )}
+        data-quick-action-layout="equal-flex"
+        data-max-actions="5"
+        data-visible-actions={visibleActionIds.length}
+      >
+        {visibleActionIds.map((id) => {
+          const meta = dashboardQuickActionMeta(id);
+          const tileContent = (
+            <>
+              <DashboardQuickActionIcon id={id} />
+              <span className="whitespace-nowrap text-[12px] font-semibold leading-tight sm:text-base">
+                {meta.label}
+              </span>
+            </>
+          );
+
+          return (
+            <div
+              key={id}
+              onPointerDown={(event) => {
+                const target = event.target as HTMLElement;
+                if (target.closest("[data-dashboard-personalization-control]")) return;
+                quickReorder.onPointerDown(event, id);
+              }}
+              className={cn(
+                "relative min-w-0 flex-1 basis-0 transition-[transform,filter,box-shadow] duration-200 ease-out",
+                editing && "touch-none cursor-grab select-none",
+                quickReorder.draggingId === id &&
+                  "z-20 scale-[1.015] cursor-grabbing drop-shadow-lg",
+              )}
+              data-quick-action-slot={id}
+              data-personalize-group="quick-actions"
+              data-personalize-item={id}
+              data-quick-action-drag-surface={editing ? id : undefined}
+            >
+              {id === "meal" ? (
+                <Link
+                  href="/meals/add?returnTo=%2Fdashboard"
+                  tabIndex={editing ? -1 : undefined}
+                  aria-disabled={editing || undefined}
+                  onClick={
+                    editing
+                      ? (event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                        }
+                      : undefined
+                  }
+                  className={cn(
+                    tileClass,
+                    meta.tileClass,
+                    editing && "pointer-events-none select-none",
+                  )}
+                >
+                  {tileContent}
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  disabled={editing}
+                  onClick={() => openQuickAction(id)}
+                  className={cn(
+                    tileClass,
+                    meta.tileClass,
+                    "disabled:opacity-100",
+                    editing && "pointer-events-none select-none",
+                  )}
+                >
+                  {tileContent}
+                </button>
+              )}
+
+              {editing && (
+                <>
+                  <button
+                    type="button"
+                    aria-label={`${meta.label} hızlı işlemini sürükle. Sol ve sağ ok tuşlarıyla sırala.`}
+                    aria-grabbed={quickReorder.draggingId === id}
+                    disabled={savingPreferences}
+                    onKeyDown={(event) => quickReorder.onKeyDown(event, id)}
+                    className="absolute left-0.5 top-0.5 z-30 flex size-7 items-center justify-center text-muted-foreground/80 transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                    data-quick-action-drag-handle={id}
+                  >
+                    <EllipsisVertical className="size-3.5" aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`${meta.label} hızlı işlemini gizle`}
+                    disabled={savingPreferences}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={() => onHideAction?.(id)}
+                    className="absolute right-0.5 top-1.5 z-30 flex size-7 items-center justify-center rounded-full border border-border/60 bg-background/80 text-muted-foreground shadow-sm backdrop-blur transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                    data-dashboard-personalization-control
+                    data-quick-action-hide={id}
+                  >
+                    <EyeOff className="size-3.5" aria-hidden="true" />
+                  </button>
+                </>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {active === "water" && (

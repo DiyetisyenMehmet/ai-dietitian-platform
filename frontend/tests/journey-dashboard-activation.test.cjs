@@ -33,7 +33,7 @@ test("dashboard activates Journey directly after the header without duplicate ta
   assert.match(source, /import \{ DailyJourneySection \}/);
   assert.doesNotMatch(source, /TodayTasksSection/);
   assert.doesNotMatch(source, /CoachHeroSection/);
-  assert.match(source, /<DashboardPersonalizedCards \/>/);
+  assert.match(source, /<DashboardPersonalizationSection \/>/);
   const registry = read("src/presentation/components/dashboard/dashboard-card-registry.tsx");
   assert.match(registry, /DashboardAiBanner/);
   assert.match(registry, /id === "coach"/);

@@ -25,13 +25,23 @@ export const accountRepository = {
   getDashboardCardPreference(userId: string) {
     return prisma.dashboardCardPreference.findUnique({
       where: { userId },
-      select: { cardOrder: true, hiddenCardIds: true },
+      select: {
+        cardOrder: true,
+        hiddenCardIds: true,
+        quickActionOrder: true,
+        hiddenQuickActionIds: true,
+      },
     });
   },
 
   upsertDashboardCardPreference(
     userId: string,
-    input: { order: string[]; hidden: string[] },
+    input: {
+      order: string[];
+      hidden: string[];
+      quickActionOrder?: string[];
+      hiddenQuickActionIds?: string[];
+    },
   ) {
     return prisma.dashboardCardPreference.upsert({
       where: { userId },
@@ -39,12 +49,25 @@ export const accountRepository = {
         userId,
         cardOrder: input.order,
         hiddenCardIds: input.hidden,
+        quickActionOrder: input.quickActionOrder ?? [],
+        hiddenQuickActionIds: input.hiddenQuickActionIds ?? [],
       },
       update: {
         cardOrder: input.order,
         hiddenCardIds: input.hidden,
+        ...(input.quickActionOrder !== undefined
+          ? { quickActionOrder: input.quickActionOrder }
+          : {}),
+        ...(input.hiddenQuickActionIds !== undefined
+          ? { hiddenQuickActionIds: input.hiddenQuickActionIds }
+          : {}),
       },
-      select: { cardOrder: true, hiddenCardIds: true },
+      select: {
+        cardOrder: true,
+        hiddenCardIds: true,
+        quickActionOrder: true,
+        hiddenQuickActionIds: true,
+      },
     });
   },
 

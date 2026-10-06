@@ -30,17 +30,33 @@ export function useDashboardCardPreferences(
   const [loading, setLoading] = React.useState(Boolean(userId));
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState(false);
+
   const generation = React.useRef(0);
   const userIdRef = React.useRef(userId);
+  const confirmedRef = React.useRef<DashboardCardPreferences>(
+    DEFAULT_DASHBOARD_CARD_PREFERENCES,
+  );
+  const latestSaveIdRef = React.useRef(0);
+  const pendingCountRef = React.useRef(0);
+  const saveQueueRef = React.useRef<Promise<void>>(Promise.resolve());
 
   React.useEffect(() => {
     userIdRef.current = userId;
   }, [userId]);
 
+  const applyPreferences = React.useCallback((next: DashboardCardPreferences) => {
+    setPreferences(next);
+  }, []);
+
   const reload = React.useCallback(async () => {
     const activeUserId = userId;
     const requestGeneration = ++generation.current;
-    setPreferences(DEFAULT_DASHBOARD_CARD_PREFERENCES);
+    latestSaveIdRef.current += 1;
+    saveQueueRef.current = Promise.resolve();
+    pendingCountRef.current = 0;
+    setSaving(false);
+    applyPreferences(DEFAULT_DASHBOARD_CARD_PREFERENCES);
+    confirmedRef.current = DEFAULT_DASHBOARD_CARD_PREFERENCES;
     setError(false);
 
     if (!activeUserId) {
@@ -55,7 +71,9 @@ export function useDashboardCardPreferences(
         requestGeneration === generation.current &&
         userIdRef.current === activeUserId
       ) {
-        setPreferences(normalizeDashboardCardPreferences(stored));
+        const normalized = normalizeDashboardCardPreferences(stored);
+        confirmedRef.current = normalized;
+        applyPreferences(normalized);
       }
     } catch {
       if (
@@ -72,7 +90,7 @@ export function useDashboardCardPreferences(
         setLoading(false);
       }
     }
-  }, [userId]);
+  }, [applyPreferences, userId]);
 
   React.useEffect(() => {
     void reload();
@@ -82,44 +100,63 @@ export function useDashboardCardPreferences(
   }, [reload]);
 
   const save = React.useCallback(
-    async (next: DashboardCardPreferences) => {
-      if (!userId) return false;
+    (next: DashboardCardPreferences): Promise<boolean> => {
+      if (!userId) return Promise.resolve(false);
+
       const normalized = normalizeDashboardCardPreferences(next);
-      const previous = preferences;
       const activeUserId = userId;
       const requestGeneration = generation.current;
-      setPreferences(normalized);
-      setSaving(true);
-      setError(false);
+      const saveId = ++latestSaveIdRef.current;
 
-      try {
-        const stored = await updateDashboardCardPreferences(normalized);
-        if (
-          requestGeneration === generation.current &&
-          userIdRef.current === activeUserId
-        ) {
-          setPreferences(normalizeDashboardCardPreferences(stored));
-        }
-        return true;
-      } catch {
-        if (
-          requestGeneration === generation.current &&
-          userIdRef.current === activeUserId
-        ) {
-          setPreferences(previous);
-          setError(true);
-        }
-        return false;
-      } finally {
-        if (
-          requestGeneration === generation.current &&
-          userIdRef.current === activeUserId
-        ) {
-          setSaving(false);
-        }
-      }
+      applyPreferences(normalized);
+      setError(false);
+      pendingCountRef.current += 1;
+      setSaving(true);
+
+      const task = saveQueueRef.current
+        .catch(() => undefined)
+        .then(async () => {
+          if (
+            requestGeneration !== generation.current ||
+            userIdRef.current !== activeUserId
+          ) {
+            return false;
+          }
+
+          try {
+            const stored = await updateDashboardCardPreferences(normalized);
+            const confirmed = normalizeDashboardCardPreferences(stored);
+            confirmedRef.current = confirmed;
+            if (saveId === latestSaveIdRef.current) {
+              applyPreferences(confirmed);
+            }
+            return true;
+          } catch {
+            if (
+              requestGeneration === generation.current &&
+              userIdRef.current === activeUserId &&
+              saveId === latestSaveIdRef.current
+            ) {
+              applyPreferences(confirmedRef.current);
+              setError(true);
+            }
+            return false;
+          } finally {
+            pendingCountRef.current = Math.max(0, pendingCountRef.current - 1);
+            if (
+              requestGeneration === generation.current &&
+              userIdRef.current === activeUserId &&
+              pendingCountRef.current === 0
+            ) {
+              setSaving(false);
+            }
+          }
+        });
+
+      saveQueueRef.current = task.then(() => undefined, () => undefined);
+      return task;
     },
-    [preferences, userId],
+    [applyPreferences, userId],
   );
 
   return { preferences, loading, saving, error, save, reload };

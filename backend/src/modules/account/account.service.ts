@@ -59,6 +59,8 @@ export const accountService = {
     return {
       order: stored?.cardOrder ?? [],
       hidden: stored?.hiddenCardIds ?? [],
+      quickActionOrder: stored?.quickActionOrder ?? [],
+      hiddenQuickActionIds: stored?.hiddenQuickActionIds ?? [],
     };
   },
 
@@ -68,13 +70,26 @@ export const accountService = {
   ) {
     const order = [...new Set(input.order)];
     const hidden = [...new Set(input.hidden)];
+    const quickActionOrder =
+      input.quickActionOrder === undefined
+        ? undefined
+        : [...new Set(input.quickActionOrder)];
+    const hiddenQuickActionIds =
+      input.hiddenQuickActionIds === undefined
+        ? undefined
+        : [...new Set(input.hiddenQuickActionIds)];
+
     const stored = await accountRepository.upsertDashboardCardPreference(userId, {
       order,
       hidden,
+      quickActionOrder,
+      hiddenQuickActionIds,
     });
     return {
       order: stored.cardOrder,
       hidden: stored.hiddenCardIds,
+      quickActionOrder: stored.quickActionOrder,
+      hiddenQuickActionIds: stored.hiddenQuickActionIds,
     };
   },
 

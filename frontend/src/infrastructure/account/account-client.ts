@@ -44,6 +44,8 @@ export async function updateDashboardCardPreferences(
     body: JSON.stringify({
       order: preferences.order ?? [],
       hidden: preferences.hidden ?? [],
+      quickActionOrder: preferences.quickActionOrder ?? [],
+      hiddenQuickActionIds: preferences.hiddenQuickActionIds ?? [],
     }),
   });
   return result.preferences;

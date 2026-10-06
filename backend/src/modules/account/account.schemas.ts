@@ -66,6 +66,8 @@ export const dashboardCardPreferencesSchema = z
   .object({
     order: z.array(dashboardCardIdSchema).max(32),
     hidden: z.array(dashboardCardIdSchema).max(32),
+    quickActionOrder: z.array(dashboardCardIdSchema).max(16).optional(),
+    hiddenQuickActionIds: z.array(dashboardCardIdSchema).max(16).optional(),
   })
   .strict();
 

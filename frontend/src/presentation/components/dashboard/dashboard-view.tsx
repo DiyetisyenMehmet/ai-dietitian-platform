@@ -7,10 +7,9 @@ import { ArrowRight, ChevronDown, ChevronUp } from "lucide-react";
 import { useAuth } from "@/application/auth/auth-store";
 import { useCoachInsights } from "@/application/health/coach";
 import { useHealthProfile } from "@/application/health/health-profile-store";
-import { DashboardPersonalizedCards } from "@/presentation/components/dashboard/dashboard-personalized-cards";
 import { DashboardHomeHeader } from "@/presentation/components/dashboard/dashboard-home-header";
 import { DashboardMetricsSection } from "@/presentation/components/dashboard/dashboard-metrics-section";
-import { DashboardQuickActions } from "@/presentation/components/dashboard/dashboard-quick-actions";
+import { DashboardPersonalizationSection } from "@/presentation/components/dashboard/dashboard-personalization-section";
 import { DailyJourneySection } from "@/presentation/components/dashboard/daily-journey-section";
 import { TodayProgressSection } from "@/presentation/components/dashboard/today-progress-section";
 import { CoachInsightCard } from "@/presentation/components/health/coach-insight-card";
@@ -32,8 +31,7 @@ export function DashboardView() {
       <DashboardHomeHeader userName={displayName} />
       <DailyJourneySection />
       <DashboardMetricsSection />
-      <DashboardQuickActions />
-      <DashboardPersonalizedCards />
+      <DashboardPersonalizationSection />
 
       <section className="border-t border-border/70 pt-2" aria-label="Detaylı günlük takip">
         <button
