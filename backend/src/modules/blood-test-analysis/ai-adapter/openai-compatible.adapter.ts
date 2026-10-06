@@ -7,6 +7,10 @@ import {
   FORBIDDEN_AI_TERMS,
 } from "../constants";
 import { NUTRITION_PLAN_SYSTEM_PROMPT } from "../../nutrition-plan/constants";
+import {
+  checkNutritionProviderBudget,
+  nutritionProviderSignal,
+} from "../../nutrition-plan/nutrition-plan-provider-budget";
 import { DIETITIAN_CHAT_SYSTEM_PROMPT } from "../../ai-chat/constants";
 import { DOCUMENT_VALIDATION_SYSTEM_PROMPT } from "../validation/document-validation.constants";
 import type { DocumentValidationResult } from "../validation/document-validation.types";
@@ -80,6 +84,9 @@ export class OpenAICompatibleAdapter implements IAIAdapter {
    * failures so callers get a consistent error envelope.
    */
   protected async chat(messages: ChatMessage[], maxTokensOverride?: number): Promise<string> {
+    const nutritionRequest = messages.some(
+      (message) => message.role === "system" && message.content === NUTRITION_PLAN_SYSTEM_PROMPT,
+    );
     const url = `${this.config.baseUrl.replace(/\/+$/, "")}/chat/completions`;
     let response: Response;
     try {
@@ -96,8 +103,10 @@ export class OpenAICompatibleAdapter implements IAIAdapter {
           temperature: this.config.temperature,
           response_format: { type: "json_object" },
         }),
+        ...(nutritionRequest ? { signal: nutritionProviderSignal(60_000) } : {}),
       });
     } catch (error) {
+      if (nutritionRequest) checkNutritionProviderBudget();
       logger.error({ err: error }, "AI provider request failed");
       throw new ApiError(502, "The AI provider could not be reached.", {
         code: "AI_PROVIDER_UNREACHABLE",
@@ -437,7 +446,9 @@ export class OpenAICompatibleAdapter implements IAIAdapter {
   async generateNutritionPlan(input: NutritionPlanAIInput): Promise<NutritionPlanAIOutput> {
     const startDayNumber = input.startDayNumber ?? 1;
     const planDurationDays = input.planDurationDays ?? input.cycleLengthDays;
-    const endDayNumber = startDayNumber + input.cycleLengthDays - 1;
+    const requestedDayNumbers =
+      input.requestedDayNumbers ??
+      Array.from({ length: input.cycleLengthDays }, (_, index) => startDayNumber + index);
     const avoidMealSignatures = (input.avoidMealSignatures ?? [])
       .map((signature) => signature.trim())
       .filter(Boolean)
@@ -466,10 +477,12 @@ export class OpenAICompatibleAdapter implements IAIAdapter {
       '  "summary": "string"',
       "}",
       `Generate exactly ${input.cycleLengthDays} unique days in "cycle".`,
-      `This batch represents plan days ${startDayNumber}-${endDayNumber} of a ${planDurationDays}-day plan.`,
+      `This batch represents plan days ${requestedDayNumbers.join(", ")} of a ${planDurationDays}-day plan. Return them in that order; do not regenerate other days.`,
       "Treat avoidMealSignatures as prior-day meal/food combinations to avoid repeating when practical; they are context, not permission to violate targets, allergies, or dietary constraints.",
       "Treat behaviorInsights only as bounded preference/adherence context for practical food selection; they must never override calorie/macro targets, mealTiming, allergies, dietary preference, health constraints, or safety rules.",
-      "Each day's meals must sum close to the daily calorie and macro targets.",
+      "Choose realistic foods and portions whose actual estimated nutrition meets the targets. Use mealTargets as planning budgets, not fabricated nutrition values. Do not copy target numbers into totals unless the chosen foods and meal values support them.",
+      "For every day, totalCalories/totalProteinGrams/totalCarbsGrams/totalFatGrams must equal the sums of its meals. Each meal's calories must reflect its foods and portions. Check all four daily target fields before returning JSON.",
+      "When validationFeedback is present, replace only requestedDayNumbers with newly selected foods/portions that resolve those failures. Keep all original targets and safety constraints. Never just edit reported numbers to pass validation.",
       "Honor every allergy as a HARD exclusion — no allergen in any food, ever.",
       "For every food, return an explicit complete ingredients array. When allergies are present, do not use packaged, branded, mixed, sauce-based, or composite foods unless their full composition can be stated. Missing ingredient composition is not permission to assume allergy safety.",
     ].join("\n");
@@ -484,6 +497,13 @@ export class OpenAICompatibleAdapter implements IAIAdapter {
         waterMl: input.waterMl,
       },
       mealTiming: input.mealTiming,
+      mealTargets: input.mealTiming.slots.map((slot) => ({
+        name: slot.name,
+        calories: Math.round(input.dailyCalories * slot.calorieShare),
+        proteinGrams: Math.round(input.proteinGrams * slot.calorieShare),
+        carbsGrams: Math.round(input.carbsGrams * slot.calorieShare),
+        fatGrams: Math.round(input.fatGrams * slot.calorieShare),
+      })),
       dietaryPreference: input.dietaryPreference,
       allergies: input.allergies,
       healthConditions: input.healthConditions,
@@ -492,6 +512,8 @@ export class OpenAICompatibleAdapter implements IAIAdapter {
       cycleLengthDays: input.cycleLengthDays,
       planDurationDays,
       startDayNumber,
+      requestedDayNumbers,
+      validationFeedback: input.validationFeedback,
       avoidMealSignatures,
     };
 

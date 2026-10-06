@@ -20,6 +20,7 @@ import {
 } from "../nutrition-plan-realism";
 import { findAllergenViolations } from "./allergen-validator";
 import { findNutritionTargetViolations } from "./nutrition-target-validator";
+import { checkNutritionProviderBudget } from "../nutrition-plan-provider-budget";
 import type {
   DailyPlan,
   MealTimingRecommendation,
@@ -124,9 +125,18 @@ async function generateValidatedBatch(
   const adapter = getAIAdapter();
 
   let retried = false;
-  const requestOutput = async () => {
+  const requestOutput = async (requestInput = input) => {
+    checkNutritionProviderBudget();
     try {
-      return await adapter.generateNutritionPlan(input);
+      const result = await adapter.generateNutritionPlan(requestInput);
+      checkNutritionProviderBudget();
+      return {
+        ...result,
+        cycle: result.cycle.map((day, index) => ({
+          ...day,
+          dayLabel: `${requestInput.requestedDayNumbers?.[index] ?? (requestInput.startDayNumber ?? 1) + index}. Gün`,
+        })),
+      };
     } catch (error) {
       // Some compatible providers throw a native JSON parser error. Keep the
       // retry bounded to this batch and expose a stable domain error instead.
@@ -187,7 +197,75 @@ async function generateValidatedBatch(
       },
       "Nutrition-plan batch failed deterministic validation; retrying once",
     );
-    output = await requestOutput();
+    // Repair only target-invalid days when all other batch constraints passed.
+    // Cross-day realism failures still require one bounded full-batch retry.
+    // Provider values are preserved verbatim; no nutrient scaling or clamping.
+    const repairIndices =
+      !wrongDayCount &&
+      !invalidMealStructure &&
+      allergenViolations.length === 0 &&
+      realismViolations.length === 0
+        ? output.cycle.flatMap((day, index) =>
+            nutritionViolations.some((violation) => violation.dayLabel === day.dayLabel)
+              ? [index]
+              : [],
+          )
+        : [];
+    const feedback = output.cycle.flatMap((day, index) => {
+      const issues = nutritionViolations.filter((violation) => violation.dayLabel === day.dayLabel);
+      if (!issues.length) return [];
+      return [
+        JSON.stringify({
+          dayNumber: (input.startDayNumber ?? 1) + index,
+          issues: issues.map(({ field, kind }) => ({ field, kind })),
+          reported: {
+            calories: day.totalCalories,
+            protein: day.totalProteinGrams,
+            carbs: day.totalCarbsGrams,
+            fat: day.totalFatGrams,
+          },
+          mealSum: day.meals.reduce(
+            (sum, meal) => ({
+              calories: sum.calories + meal.calories,
+              protein: sum.protein + meal.proteinGrams,
+              carbs: sum.carbs + meal.carbsGrams,
+              fat: sum.fat + meal.fatGrams,
+            }),
+            { calories: 0, protein: 0, carbs: 0, fat: 0 },
+          ),
+        }),
+      ];
+    });
+    if (repairIndices.length) {
+      const requestedDayNumbers = repairIndices.map((index) => (input.startDayNumber ?? 1) + index);
+      logger.info(
+        { requestedDayNumbers, retainedDays: output.cycle.length - repairIndices.length },
+        "Repairing only target-invalid nutrition-plan days",
+      );
+      const repair = await requestOutput({
+        ...input,
+        cycleLengthDays: repairIndices.length,
+        requestedDayNumbers,
+        validationFeedback: feedback,
+        avoidMealSignatures: [
+          ...(input.avoidMealSignatures ?? []),
+          ...output.cycle.filter((_, index) => !repairIndices.includes(index)).map(daySignature),
+        ].slice(-MAX_AVOID_SIGNATURES),
+      });
+      if (repair.cycle.length !== repairIndices.length) {
+        throw new ApiError(502, "The nutrition-plan provider returned an incomplete repair.", {
+          code: "NUTRITION_PLAN_INCOMPLETE",
+          isOperational: false,
+        });
+      }
+      const repairedCycle = [...output.cycle];
+      repairIndices.forEach((index, repairIndex) => {
+        repairedCycle[index] = repair.cycle[repairIndex];
+      });
+      output = { ...output, cycle: repairedCycle };
+    } else {
+      output = await requestOutput({ ...input, validationFeedback: feedback });
+    }
     allergenViolations = findAllergenViolations(output.cycle, input.allergies);
     nutritionViolations = findNutritionTargetViolations(output.cycle, input);
     realismViolations = findRealLifePlanViolations(

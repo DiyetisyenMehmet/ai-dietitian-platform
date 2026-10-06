@@ -33,7 +33,7 @@ export class FixtureAdapter extends OpenAICompatibleAdapter {
     const days = this.mode === "incomplete" && input.startDayNumber > 5 ? 0 : input.cycleLengthDays;
     return JSON.stringify({
       cycle: Array.from({ length: days }, (_, day) => ({
-        dayLabel: `${input.startDayNumber + day}. Gün`,
+        dayLabel: `${input.requestedDayNumbers?.[day] ?? input.startDayNumber + day}. Gün`,
         meals: Array.from({ length: count }, (_, index) => ({
           name: input.mealTiming.slots[index].name,
           time: input.mealTiming.slots[index].time,

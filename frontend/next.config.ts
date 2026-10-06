@@ -32,8 +32,9 @@ const diewishBuildStamp = new Date().toISOString();
 const nextConfig: NextConfig = {
   // Generation runs in bounded AI batches. The default 30-second rewrite
   // proxy can fail while the backend still completes and charges the plan.
-  // Stay within the existing 120s backend / 180s frontend service deadlines.
-  experimental: { proxyTimeout: 150_000 },
+  // Outlive the measured nutrition generation deadline and backend (170s),
+  // while remaining inside the frontend service/client deadline (180s).
+  experimental: { proxyTimeout: 175_000 },
   reactStrictMode: true,
   env: {
     NEXT_PUBLIC_DIEWISH_BUILD_STAMP: diewishBuildStamp,

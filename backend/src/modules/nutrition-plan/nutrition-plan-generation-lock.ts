@@ -1,6 +1,10 @@
 import { PrismaClient, type Prisma } from "@prisma/client";
 import { env } from "../../config/env";
 import { ApiError } from "../../utils/api-error";
+import {
+  NUTRITION_GENERATION_TRANSACTION_TIMEOUT_MS,
+  withNutritionProviderBudget,
+} from "./nutrition-plan-provider-budget";
 
 const generatingUsers = new Set<string>();
 let lockClient: PrismaClient | undefined;
@@ -27,14 +31,18 @@ function inProgress(): ApiError {
 /** A transaction-scoped advisory lock covers generation across processes and
  * transaction poolers. Completed plan + usage writes use this same transaction,
  * so expiration, disconnect or failure cannot persist an unlocked generation.
- * The deadline matches the existing staging backend request window (120s). */
+ * Provider cancellation precedes transaction expiration and the HTTP deadline. */
 export async function withNutritionGenerationLock<T>(
   userId: string,
   generate: (transaction: Prisma.TransactionClient) => Promise<T>,
-  timeoutMs = 120_000,
+  timeoutMs = NUTRITION_GENERATION_TRANSACTION_TIMEOUT_MS,
 ): Promise<T> {
   if (generatingUsers.has(userId)) throw inProgress();
   generatingUsers.add(userId);
+  const transactionTimeoutMs = Math.min(
+    NUTRITION_GENERATION_TRANSACTION_TIMEOUT_MS,
+    Math.max(1, timeoutMs),
+  );
   const key = `nutrition-plan-generation:${userId}`;
   try {
     return await getLockClient().$transaction(
@@ -43,9 +51,11 @@ export async function withNutritionGenerationLock<T>(
         SELECT pg_try_advisory_xact_lock(hashtextextended(${key}, 0)) AS locked
       `;
         if (rows[0]?.locked !== true) throw inProgress();
-        return generate(transaction);
+        return withNutritionProviderBudget(Math.max(1, transactionTimeoutMs - 10_000), () =>
+          generate(transaction),
+        );
       },
-      { timeout: Math.min(120_000, Math.max(1, timeoutMs)), maxWait: 5_000 },
+      { timeout: transactionTimeoutMs, maxWait: 5_000 },
     );
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "P2028") {

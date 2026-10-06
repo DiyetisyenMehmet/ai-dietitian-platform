@@ -1,7 +1,7 @@
 name: Nutrition plan creation validation
 on:
   push:
-    branches: [feature/workmode-nutrition-plan-create-fix-w1]
+    branches: [feature/workmode-nutrition-plan-create-fix-w1, feature/workmode-nutrition-plan-live-generation-fix-w1-04]
 permissions:
   contents: read
 concurrency:

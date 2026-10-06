@@ -2,6 +2,10 @@ import { env } from "../../../config/env";
 import { logger } from "../../../lib/logger";
 import { ApiError } from "../../../utils/api-error";
 import { NUTRITION_PLAN_SYSTEM_PROMPT } from "../../nutrition-plan/constants";
+import {
+  checkNutritionProviderBudget,
+  nutritionProviderSignal,
+} from "../../nutrition-plan/nutrition-plan-provider-budget";
 import { ANALYSIS_SYSTEM_PROMPT, EXTRACTION_SYSTEM_PROMPT } from "../constants";
 import { DOCUMENT_VALIDATION_SYSTEM_PROMPT } from "../validation/document-validation.constants";
 import {
@@ -397,9 +401,12 @@ export class VertexAIAdapter extends OpenAICompatibleAdapter {
     responseSchema?: VertexResponseSchema,
   ): Promise<VertexGenerateContentResponse> {
     const isGemini3 = this.isGemini3Model();
-    const effectiveResponseSchema = responseSchema ?? (interactiveChat ? CHAT_RESPONSE_SCHEMA : undefined);
+    const effectiveResponseSchema =
+      responseSchema ?? (interactiveChat ? CHAT_RESPONSE_SCHEMA : undefined);
+    const nutritionRequest = responseSchema === NUTRITION_PLAN_RESPONSE_SCHEMA;
 
     for (let attempt = 1; attempt <= PROVIDER_REQUEST_ATTEMPTS; attempt += 1) {
+      if (nutritionRequest) checkNutritionProviderBudget();
       let response: Response;
       try {
         response = await fetch(url, {
@@ -415,19 +422,31 @@ export class VertexAIAdapter extends OpenAICompatibleAdapter {
               maxOutputTokens,
               responseMimeType: "application/json",
               ...(effectiveResponseSchema ? { responseSchema: effectiveResponseSchema } : {}),
-              // Gemini 3.x manages sampling internally. LOW thinking keeps
-              // bounded structured responses reliable without removing the
-              // deterministic medical safety/reference-range layer.
+              // The measured nutrition retry spent 4,657 tokens reasoning.
+              // Supported Flash models can use MINIMAL for bounded food JSON;
+              // deterministic validation still rejects unsafe/inconsistent output.
+              // Other structured tasks retain their existing LOW behavior.
               ...(isGemini3
                 ? interactiveChat || responseSchema
-                  ? { thinkingConfig: { thinkingLevel: "LOW" } }
+                  ? {
+                      thinkingConfig: {
+                        thinkingLevel:
+                          nutritionRequest &&
+                          /^gemini-3(?:\.5)?-flash(?:-|$)/i.test(this.vertex.model)
+                            ? "MINIMAL"
+                            : "LOW",
+                      },
+                    }
                   : {}
                 : { temperature: this.vertex.temperature }),
             },
           }),
-          signal: AbortSignal.timeout(env.AI_REQUEST_TIMEOUT_MS),
+          signal: nutritionRequest
+            ? nutritionProviderSignal(env.AI_REQUEST_TIMEOUT_MS)
+            : AbortSignal.timeout(env.AI_REQUEST_TIMEOUT_MS),
         });
       } catch (error) {
+        if (nutritionRequest) checkNutritionProviderBudget();
         if (attempt < PROVIDER_REQUEST_ATTEMPTS) {
           logger.warn(
             { attempt, model: this.vertex.model },
@@ -469,6 +488,7 @@ export class VertexAIAdapter extends OpenAICompatibleAdapter {
       try {
         return (await response.json()) as VertexGenerateContentResponse;
       } catch (error) {
+        if (nutritionRequest) checkNutritionProviderBudget();
         if (attempt < PROVIDER_REQUEST_ATTEMPTS) {
           logger.warn(
             { attempt, model: this.vertex.model },
@@ -513,7 +533,10 @@ export class VertexAIAdapter extends OpenAICompatibleAdapter {
     });
   }
 
-  protected override async chat(messages: ChatMessage[], maxTokensOverride?: number): Promise<string> {
+  protected override async chat(
+    messages: ChatMessage[],
+    maxTokensOverride?: number,
+  ): Promise<string> {
     const systemText = messages
       .filter((message) => message.role === "system")
       .map((message) => (typeof message.content === "string" ? message.content : ""))
