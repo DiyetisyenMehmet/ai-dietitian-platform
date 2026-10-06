@@ -63,6 +63,8 @@ async function reorderAndHide(page: Page) {
 async function restore(page: Page) {
   await page.getByRole("button", { name: "Gizlenenleri Gör" }).click();
   const sheet = page.locator("[data-hidden-items-sheet]");
+  // The panel remembers its last tab when reopened during the same edit session.
+  await sheet.getByRole("tab", { name: "Kartlar", exact: true }).click();
   await sheet
     .locator('[data-hidden-card="progress"]')
     .getByRole("button", { name: "Göster" })
