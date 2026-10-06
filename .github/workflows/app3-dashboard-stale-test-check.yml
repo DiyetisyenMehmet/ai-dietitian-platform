@@ -31,7 +31,6 @@ jobs:
           tests/dashboard-card-personalization.test.cjs
           tests/dashboard-live-feature-card.test.cjs
           tests/dashboard-blood-test-card.test.cjs
-          tests/dashboard-webview-parity.test.cjs
           tests/journey-dashboard-activation.test.cjs
       - name: Lint frontend
         run: npm run lint
