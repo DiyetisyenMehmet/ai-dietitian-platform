@@ -273,10 +273,10 @@ test("native touch: immediate swipe scrolls, stationary hold drags both full sur
     for (let i = 1; i <= 8; i++)
       await cdp.send("Input.dispatchTouchEvent", {
         type: "touchMove",
-        touchPoints: [{ x, y: y - i * 15, id: 1 }],
+        touchPoints: [{ x, y: y + i * 15, id: 1 }],
       });
     await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
-    expect(await page.evaluate(() => scrollY)).toBeGreaterThan(before + 20);
+    await expect.poll(() => page.evaluate(() => scrollY)).toBeLessThan(before - 20);
     expect(await ids(cards(page))).toEqual(defaults().order);
     await drag(
       page,
