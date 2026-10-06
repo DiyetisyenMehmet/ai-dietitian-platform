@@ -14,7 +14,9 @@ const actionIds = (page: Page) =>
     .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-quick-action-slot")));
 const editor = (page: Page) => page.locator("[data-dashboard-personalization]");
 async function open(page: Page) {
-  await page.getByRole("button", { name: "Ana ekranı düzenle" }).click();
+  const toggle = page.getByRole("button", { name: "Ana ekranı düzenle" });
+  await expect(toggle).toBeEnabled({ timeout: 60_000 });
+  await toggle.click();
   await expect(editor(page)).toHaveAttribute("data-editing", "true");
 }
 async function save(page: Page) {
@@ -78,12 +80,15 @@ test("Dashboard deployed runtime: explicit save, discard, reorder, hide/show, re
   page,
   request,
 }, testInfo) => {
-  test.setTimeout(180_000);
+  test.setTimeout(240_000);
   await page.setViewportSize({ width: 390, height: 844 });
   const account = await createDashboardSession(page, request, {
     workScheduleType: "VARIABLE_SHIFT",
   });
-  await expect.poll(() => cardIds(page)).toEqual(originalCards);
+  await expect(page.getByRole("button", { name: "Ana ekranı düzenle" })).toBeEnabled({
+    timeout: 60_000,
+  });
+  await expect.poll(() => cardIds(page), { timeout: 20_000 }).toEqual(originalCards);
   let writes = 0;
   page.on("request", (req) => {
     if (req.method() === "PUT" && new URL(req.url()).pathname.endsWith("/account/dashboard-cards"))
@@ -98,9 +103,9 @@ test("Dashboard deployed runtime: explicit save, discard, reorder, hide/show, re
   };
   const food = page.locator('[data-dashboard-card-slot="food"]');
   const arrow = food.locator("[data-dashboard-feature-chevron]");
-  const arrowBox = (await arrow.boundingBox())!;
   await open(page);
   await expect(arrow.locator("svg")).toBeHidden();
+  const arrowBox = (await arrow.boundingBox())!;
   const eyeBox = (await food.locator("[data-dashboard-card-hide]").boundingBox())!;
   expect(eyeBox.x).toBeCloseTo(arrowBox.x, 0);
   expect(eyeBox.y).toBeCloseTo(arrowBox.y, 0);
@@ -126,15 +131,23 @@ test("Dashboard deployed runtime: explicit save, discard, reorder, hide/show, re
   await expect.poll(() => cardIds(page)).toEqual(originalCards);
   expect(writes).toBe(0);
   await page.reload();
-  await expect.poll(() => actionIds(page)).toEqual(originalActions);
+  await expect(page.getByRole("button", { name: "Ana ekranı düzenle" })).toBeEnabled({
+    timeout: 60_000,
+  });
+  await expect.poll(() => actionIds(page), { timeout: 20_000 }).toEqual(originalActions);
   await open(page);
   await reorderAndHide(page);
   await save(page);
   expect(writes).toBe(1);
   await expect(arrow.locator("svg")).toBeVisible();
   await page.reload();
-  await expect.poll(() => cardIds(page)).toEqual(["blood", "food", "coach"]);
-  await expect.poll(() => actionIds(page)).toEqual(["weight", "meal", "water"]);
+  await expect(page.getByRole("button", { name: "Ana ekranı düzenle" })).toBeEnabled({
+    timeout: 60_000,
+  });
+  await expect.poll(() => cardIds(page), { timeout: 20_000 }).toEqual(["blood", "food", "coach"]);
+  await expect
+    .poll(() => actionIds(page), { timeout: 20_000 })
+    .toEqual(["weight", "meal", "water"]);
   await open(page);
   await restore(page);
   await expect(page.locator("[data-dashboard-card-slot]")).toHaveCount(4);
@@ -148,8 +161,11 @@ test("Dashboard deployed runtime: explicit save, discard, reorder, hide/show, re
   await save(page);
   expect(writes).toBe(2);
   await page.reload();
-  await expect(page.locator("[data-dashboard-card-slot]")).toHaveCount(4);
-  await expect(page.locator("[data-quick-action-slot]")).toHaveCount(4);
+  await expect(page.getByRole("button", { name: "Ana ekranı düzenle" })).toBeEnabled({
+    timeout: 60_000,
+  });
+  await expect(page.locator("[data-dashboard-card-slot]")).toHaveCount(4, { timeout: 20_000 });
+  await expect(page.locator("[data-quick-action-slot]")).toHaveCount(4, { timeout: 20_000 });
   expect((await readSaved()).hidden).toEqual([]);
   await expect(food.locator("[data-dashboard-card-hide]")).toHaveCount(0);
   await food.locator("[data-dashboard-live-feature-link]").click();

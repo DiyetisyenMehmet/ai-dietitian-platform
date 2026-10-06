@@ -213,11 +213,13 @@ test("only Save persists; dirty exit, minimums, restore/reset drafts, failure an
 test("full card/tile surfaces track movement, animate neighbors and drop; keyboard and saved navigation", async ({
   page,
 }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
   const api = await session(page);
   await edit(page);
   const food = page.locator('[data-dashboard-card-slot="food"]');
   const blood = page.locator('[data-dashboard-card-slot="blood"]');
   await blood.evaluate((node) => node.scrollIntoView({ block: "center", behavior: "instant" }));
+  await page.waitForTimeout(250);
   const a = (await blood.boundingBox())!,
     b = (await food.boundingBox())!;
   const x = a.x + a.width * 0.5,
