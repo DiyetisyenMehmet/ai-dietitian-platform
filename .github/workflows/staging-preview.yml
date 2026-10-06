@@ -520,6 +520,33 @@ jobs:
             fi
           done
 
+      - name: Set up Node for Dashboard staging sanity
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Verify deployed Dashboard edit runtime
+        working-directory: frontend
+        env:
+          E2E_WEB_BASE_URL: ${{ env.CUSTOM_FRONTEND_URL }}
+          E2E_API_BASE_URL: ${{ env.CUSTOM_FRONTEND_URL }}/api
+        run: |
+          npm ci
+          sudo find /etc/apt/sources.list.d -maxdepth 1 -type f -iname '*google*chrome*' -delete
+          npx playwright install --with-deps chromium
+          npx playwright test e2e/dashboard-edit-sanity.spec.ts --workers=1 --reporter=line
+
+      - name: Upload Dashboard staging sanity evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dashboard-staging-sanity-${{ github.run_number }}
+          path: frontend/test-results/
+          if-no-files-found: warn
+          retention-days: 7
+
       - name: Resolve staging Android Firebase config
         shell: bash
         run: |

@@ -169,6 +169,10 @@ test("inline edit manages hide/show, minimums, reset, persistence and account is
   await expect(page.getByText("Ana ekranda en az 3 hızlı işlem bulunmalı.")).toBeVisible();
   expect(await quickIds(page)).toEqual(["meal", "water", "activity"]);
 
+  await page.locator("[data-save-dashboard-layout]").click();
+  await expect(page.locator("[data-dashboard-personalization]")).toHaveAttribute("data-editing", "false");
+  await openEdit(page);
+
   const sameUserContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const sameUserPage = await sameUserContext.newPage();
   try {
@@ -230,7 +234,8 @@ test("inline edit manages hide/show, minimums, reset, persistence and account is
 
   await page.keyboard.press("Escape");
   await expect(sheet).toBeHidden();
-  await closeEdit(page);
+  await page.locator("[data-save-dashboard-layout]").click();
+  await expect(page.locator("[data-dashboard-personalization]")).toHaveAttribute("data-editing", "false");
   await expect(page.locator("[data-dashboard-card-drag-handle]")).toHaveCount(0);
   await expect(page.locator("[data-quick-action-drag-handle]")).toHaveCount(0);
 });
@@ -254,12 +259,14 @@ test("mouse drag persists cards and quick actions, then normal navigation return
     '[data-dashboard-card-slot="food"]',
     "y",
   );
+  await page.locator("[data-save-dashboard-layout]").click();
   let response = await responsePromise;
   expect(response.ok()).toBe(true);
   expect(response.request().postDataJSON().order).toEqual(["blood", "food", "progress", "coach"]);
   await waitForSaved(page);
   expect(await cardIds(page)).toEqual(["blood", "food", "progress", "coach"]);
 
+  await openEdit(page);
   responsePromise = page.waitForResponse(
     (candidate) =>
       candidate.request().method() === "PUT" &&
@@ -271,6 +278,7 @@ test("mouse drag persists cards and quick actions, then normal navigation return
     '[data-quick-action-slot="meal"]',
     "x",
   );
+  await page.locator("[data-save-dashboard-layout]").click();
   response = await responsePromise;
   expect(response.ok()).toBe(true);
   expect(response.request().postDataJSON().quickActionOrder).toEqual([
@@ -282,7 +290,6 @@ test("mouse drag persists cards and quick actions, then normal navigation return
   await waitForSaved(page);
   expect(await quickIds(page)).toEqual(["weight", "meal", "water", "activity"]);
 
-  await closeEdit(page);
   await page.reload();
   await expect.poll(() => cardIds(page), { timeout: 15_000 }).toEqual([
     "blood",
@@ -328,10 +335,10 @@ test("touch drag is surface-wide and keyboard reorder stays accessible", async (
       '[data-dashboard-card-slot="blood"]',
       '[data-dashboard-card-slot="food"]',
     );
-    expect(await cardSource.evaluate((node) => getComputedStyle(node).touchAction)).toBe("none");
+    expect(await cardSource.evaluate((node) => getComputedStyle(node).touchAction)).toBe("pan-y");
     expect(
       await cardTarget.evaluate((node) => getComputedStyle(node).touchAction),
-    ).toBe("none");
+    ).toBe("pan-y");
 
     const cdp = await context.newCDPSession(page);
     let saveResponse = page.waitForResponse(
@@ -351,6 +358,7 @@ test("touch drag is surface-wide and keyboard reorder stays accessible", async (
         force: 1,
       }],
     });
+    await page.waitForTimeout(190);
     await cdp.send("Input.dispatchTouchEvent", {
       type: "touchMove",
       touchPoints: [{
@@ -363,10 +371,12 @@ test("touch drag is surface-wide and keyboard reorder stays accessible", async (
       }],
     });
     await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await page.locator("[data-save-dashboard-layout]").click();
     expect((await saveResponse).ok()).toBe(true);
     await waitForSaved(page);
     expect(await cardIds(page)).toEqual(["blood", "food", "progress", "coach"]);
 
+    await openEdit(page);
     const {
       source: quickSource,
       target: quickTarget,
@@ -377,10 +387,10 @@ test("touch drag is surface-wide and keyboard reorder stays accessible", async (
       '[data-quick-action-slot="weight"]',
       '[data-quick-action-slot="meal"]',
     );
-    expect(await quickSource.evaluate((node) => getComputedStyle(node).touchAction)).toBe("none");
+    expect(await quickSource.evaluate((node) => getComputedStyle(node).touchAction)).toBe("pan-y");
     expect(
       await quickTarget.evaluate((node) => getComputedStyle(node).touchAction),
-    ).toBe("none");
+    ).toBe("pan-y");
 
     saveResponse = page.waitForResponse(
       (response) =>
@@ -399,6 +409,7 @@ test("touch drag is surface-wide and keyboard reorder stays accessible", async (
         force: 1,
       }],
     });
+    await page.waitForTimeout(190);
     await cdp.send("Input.dispatchTouchEvent", {
       type: "touchMove",
       touchPoints: [{
@@ -411,10 +422,12 @@ test("touch drag is surface-wide and keyboard reorder stays accessible", async (
       }],
     });
     await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await page.locator("[data-save-dashboard-layout]").click();
     expect((await saveResponse).ok()).toBe(true);
     await waitForSaved(page);
     expect(await quickIds(page)).toEqual(["weight", "meal", "water", "activity"]);
 
+    await openEdit(page);
     const beforeScroll = {
       cards: await cardIds(page),
       actions: await quickIds(page),

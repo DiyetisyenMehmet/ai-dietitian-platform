@@ -69,14 +69,12 @@ function HiddenItemsSheet({
   return (
     <Modal open={open} onOpenChange={onOpenChange}>
       <ModalContent
-        className="!bottom-0 !top-auto !max-h-[82dvh] !w-full !max-w-2xl !translate-y-0 overflow-x-hidden overflow-y-auto rounded-b-none rounded-t-[28px] p-4 sm:!bottom-auto sm:!top-1/2 sm:!-translate-y-1/2 sm:rounded-[28px] sm:p-6"
+        className="!bottom-0 !top-auto !max-h-[82dvh] !w-full !max-w-2xl !translate-y-0 overflow-y-auto overflow-x-hidden rounded-b-none rounded-t-[28px] p-4 sm:!bottom-auto sm:!top-1/2 sm:!-translate-y-1/2 sm:rounded-[28px] sm:p-6"
         data-hidden-items-sheet
       >
         <ModalHeader className="pr-9">
           <ModalTitle className="text-xl">Gizlenenleri Gör</ModalTitle>
-          <ModalDescription>
-            Ana sayfanda gizlediğin içerikleri buradan yönet.
-          </ModalDescription>
+          <ModalDescription>Ana sayfanda gizlediğin içerikleri buradan yönet.</ModalDescription>
         </ModalHeader>
 
         <div
@@ -91,9 +89,7 @@ function HiddenItemsSheet({
             onClick={() => setTab("cards")}
             className={cn(
               "min-h-11 rounded-xl px-3 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              tab === "cards"
-                ? "bg-background text-primary shadow-sm"
-                : "text-muted-foreground",
+              tab === "cards" ? "bg-background text-primary shadow-sm" : "text-muted-foreground",
             )}
           >
             Kartlar
@@ -132,7 +128,10 @@ function HiddenItemsSheet({
                     <p className="break-words text-sm font-semibold">{dashboardCardLabel(id)}</p>
                     <p className="mt-0.5 text-xs text-muted-foreground">Ana sayfada gizli</p>
                   </div>
-                  <EyeOff className="hidden size-4 shrink-0 text-muted-foreground sm:block" aria-hidden="true" />
+                  <EyeOff
+                    className="hidden size-4 shrink-0 text-muted-foreground sm:block"
+                    aria-hidden="true"
+                  />
                   <Button
                     type="button"
                     variant="outline"
@@ -169,7 +168,10 @@ function HiddenItemsSheet({
                       <p className="break-words text-sm font-semibold">{meta.label}</p>
                       <p className="mt-0.5 text-xs text-muted-foreground">Ana sayfada gizli</p>
                     </div>
-                    <EyeOff className="hidden size-4 shrink-0 text-muted-foreground sm:block" aria-hidden="true" />
+                    <EyeOff
+                      className="hidden size-4 shrink-0 text-muted-foreground sm:block"
+                      aria-hidden="true"
+                    />
                     <Button
                       type="button"
                       variant="outline"
@@ -200,10 +202,14 @@ function HiddenItemsSheet({
               Varsayılana Dön
             </Button>
           ) : (
-            <div className="rounded-2xl border border-border bg-muted/25 p-3" data-reset-confirmation>
+            <div
+              className="rounded-2xl border border-border bg-muted/25 p-3"
+              data-reset-confirmation
+            >
               <p className="text-sm font-semibold">Dashboard düzeni varsayılana döndürülsün mü?</p>
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                Kartlar ve hızlı işlemler sistem sırasına döner; gizlenen öğeler tekrar görünür olur.
+                Kartlar ve hızlı işlemler sistem sırasına döner; gizlenen öğeler tekrar görünür
+                olur.
               </p>
               <div className="mt-3 flex justify-end gap-2">
                 <Button
@@ -238,12 +244,18 @@ function HiddenItemsSheet({
 
 export function DashboardPersonalizationSection() {
   const { user } = useAuth();
-  const { preferences, loading, saving, error, save, reload } =
-    useDashboardCardPreferences(user?.id);
+  const { preferences, loading, loadError, saving, save, reload } = useDashboardCardPreferences(
+    user?.id,
+  );
   const [draft, setDraft] = React.useState(preferences);
   const draftRef = React.useRef(preferences);
   const [editing, setEditing] = React.useState(false);
   const [hiddenOpen, setHiddenOpen] = React.useState(false);
+  const [confirmExit, setConfirmExit] = React.useState(false);
+  const [saveFailed, setSaveFailed] = React.useState(false);
+  const saveInFlight = React.useRef(false);
+  const accountRef = React.useRef(user?.id);
+  accountRef.current = user?.id;
 
   const updateDraft = React.useCallback((next: DashboardCardPreferences) => {
     draftRef.current = next;
@@ -251,18 +263,16 @@ export function DashboardPersonalizationSection() {
   }, []);
 
   React.useEffect(() => {
-    updateDraft(preferences);
-  }, [preferences, updateDraft]);
+    if (!editing) updateDraft(preferences);
+  }, [editing, preferences, updateDraft]);
 
-  const persist = React.useCallback(
-    async (next: DashboardCardPreferences, failureMessage: string) => {
-      updateDraft(next);
-      const ok = await save(next);
-      if (!ok) toast.error(failureMessage);
-      return ok;
-    },
-    [save, updateDraft],
-  );
+  React.useEffect(() => {
+    setEditing(false);
+    setHiddenOpen(false);
+    setConfirmExit(false);
+    setSaveFailed(false);
+    saveInFlight.current = false;
+  }, [user?.id]);
 
   const previewCards = React.useCallback(
     (ids: DashboardCardId[]) => {
@@ -270,30 +280,12 @@ export function DashboardPersonalizationSection() {
     },
     [updateDraft],
   );
-  const commitCards = React.useCallback(
-    (ids: DashboardCardId[]) =>
-      persist(
-        reorderVisibleDashboardCards(draftRef.current, ids),
-        "Kart sırası kaydedilemedi.",
-      ),
-    [persist],
-  );
-
   const previewQuickActions = React.useCallback(
     (ids: DashboardQuickActionId[]) => {
       updateDraft(reorderVisibleDashboardQuickActions(draftRef.current, ids));
     },
     [updateDraft],
   );
-  const commitQuickActions = React.useCallback(
-    (ids: DashboardQuickActionId[]) =>
-      persist(
-        reorderVisibleDashboardQuickActions(draftRef.current, ids),
-        "Hızlı işlem sırası kaydedilemedi.",
-      ),
-    [persist],
-  );
-
   const hideCard = React.useCallback(
     (id: DashboardCardId) => {
       const result = hideDashboardCard(draftRef.current, id);
@@ -301,9 +293,9 @@ export function DashboardPersonalizationSection() {
         toast.info("Ana ekranda en az 3 kart bulunmalı.");
         return;
       }
-      void persist(result.preferences, "Kart gizleme tercihi kaydedilemedi.");
+      updateDraft(result.preferences);
     },
-    [persist],
+    [updateDraft],
   );
 
   const hideQuickAction = React.useCallback(
@@ -313,57 +305,80 @@ export function DashboardPersonalizationSection() {
         toast.info("Ana ekranda en az 3 hızlı işlem bulunmalı.");
         return;
       }
-      void persist(result.preferences, "Hızlı işlem tercihi kaydedilemedi.");
+      updateDraft(result.preferences);
     },
-    [persist],
+    [updateDraft],
   );
 
   const showCard = React.useCallback(
     (id: DashboardCardId) => {
-      void persist(
-        showDashboardCard(draftRef.current, id),
-        "Kart gösterme tercihi kaydedilemedi.",
-      );
+      updateDraft(showDashboardCard(draftRef.current, id));
     },
-    [persist],
+    [updateDraft],
   );
 
   const showQuickAction = React.useCallback(
     (id: DashboardQuickActionId) => {
-      void persist(
-        showDashboardQuickAction(draftRef.current, id),
-        "Hızlı işlem tercihi kaydedilemedi.",
-      );
+      updateDraft(showDashboardQuickAction(draftRef.current, id));
     },
-    [persist],
+    [updateDraft],
   );
 
+  const discardAndClose = React.useCallback(() => {
+    updateDraft(preferences);
+    setHiddenOpen(false);
+    setConfirmExit(false);
+    setSaveFailed(false);
+    setEditing(false);
+  }, [preferences, updateDraft]);
+
   const toggleEditing = React.useCallback(() => {
-    setEditing((current) => {
-      if (current) setHiddenOpen(false);
-      return !current;
-    });
-  }, []);
+    if (saving || loading || loadError || saveInFlight.current) return;
+    if (!editing) {
+      updateDraft(preferences);
+      setSaveFailed(false);
+      setEditing(true);
+    } else if (JSON.stringify(draftRef.current) !== JSON.stringify(preferences)) {
+      setConfirmExit(true);
+    } else {
+      discardAndClose();
+    }
+  }, [saving, loading, loadError, editing, preferences, updateDraft, discardAndClose]);
 
   const saveAndClose = React.useCallback(async () => {
+    if (saving || loading || loadError || saveInFlight.current) return;
+    saveInFlight.current = true;
+    const account = user?.id;
+    setSaveFailed(false);
     const ok = await save(draftRef.current);
+    if (accountRef.current !== account) return;
+    saveInFlight.current = false;
     if (!ok) {
-      toast.error("Ana ekran düzeni kaydedilemedi.");
+      setSaveFailed(true);
+      toast.error("Ana ekran düzeni kaydedilemedi. Tekrar Kaydet’e basabilirsin.");
       return;
     }
     setHiddenOpen(false);
     setEditing(false);
     toast.success("Ana ekran düzeni kaydedildi.");
-  }, [save]);
+  }, [save, saving, loading, loadError, user?.id]);
 
   return (
     <section
-      className="space-y-3"
+      className={cn("space-y-3", editing && "[overflow-anchor:none]")}
       aria-label="Ana ekran kişiselleştirme alanı"
       data-dashboard-personalization
       data-editing={editing ? "true" : "false"}
       data-saving={saving ? "true" : "false"}
     >
+      {loadError && (
+        <p role="alert" className="text-xs text-destructive">
+          Kaydedilmiş düzen yüklenemedi.
+          <button type="button" onClick={() => void reload()} className="ml-2 underline">
+            Yeniden dene
+          </button>
+        </p>
+      )}
       <DashboardQuickActions
         editing={editing}
         visibleActionIds={draft.quickActionOrder.filter(
@@ -373,7 +388,7 @@ export function DashboardPersonalizationSection() {
         onToggleEditing={toggleEditing}
         onHideAction={hideQuickAction}
         onOrderPreview={previewQuickActions}
-        onOrderCommit={commitQuickActions}
+        onOrderCommit={previewQuickActions}
       />
 
       <DashboardPersonalizedCards
@@ -382,36 +397,26 @@ export function DashboardPersonalizationSection() {
         saving={saving || loading}
         onHide={hideCard}
         onOrderPreview={previewCards}
-        onOrderCommit={commitCards}
+        onOrderCommit={previewCards}
       />
 
       {editing && (
         <div className="flex min-w-0 flex-col gap-2 rounded-2xl border border-border/70 bg-muted/25 p-2.5 sm:flex-row sm:items-center sm:justify-between">
-          {error ? (
-            <button
-              type="button"
-              onClick={() => void reload()}
-              className="min-h-10 text-left text-xs font-medium text-destructive hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              Düzen kaydedilemedi · yeniden dene
-            </button>
-          ) : (
-            <span className="px-1 text-xs font-medium text-muted-foreground">
-              Tutup sürükleyerek sırala
-            </span>
-          )}
+          <span className="px-1 text-xs font-medium text-muted-foreground">
+            Kartları tutup sürükleyerek sıralayabilirsin
+          </span>
 
           <div className="flex min-w-0 gap-2 sm:shrink-0">
             <Button
               type="button"
               size="sm"
-              disabled={loading}
+              disabled={loading || saving}
               isLoading={saving}
               onClick={() => void saveAndClose()}
               className="min-h-10 flex-1 sm:flex-none"
               data-save-dashboard-layout
             >
-              Kaydet
+              {saving ? "Kaydediliyor…" : "Kaydet"}
             </Button>
             <Button
               type="button"
@@ -436,13 +441,30 @@ export function DashboardPersonalizationSection() {
         saving={saving}
         onShowCard={showCard}
         onShowQuickAction={showQuickAction}
-        onReset={() =>
-          persist(
-            DEFAULT_DASHBOARD_CARD_PREFERENCES,
-            "Varsayılan düzen geri yüklenemedi.",
-          )
-        }
+        onReset={async () => {
+          updateDraft(DEFAULT_DASHBOARD_CARD_PREFERENCES);
+          return true;
+        }}
       />
+      {saveFailed && editing && (
+        <p role="alert" className="text-xs text-destructive">
+          Düzen kaydedilemedi. Değişikliklerin korunuyor; tekrar Kaydet’e basabilirsin.
+        </p>
+      )}
+      <Modal open={confirmExit} onOpenChange={setConfirmExit}>
+        <ModalContent className="max-w-sm">
+          <ModalHeader>
+            <ModalTitle>Değişiklikleri kaydetmeden çıkmak istiyor musun?</ModalTitle>
+            <ModalDescription>Kaydetmediğin düzenlemeler uygulanmayacak.</ModalDescription>
+          </ModalHeader>
+          <div className="flex flex-col gap-2">
+            <Button onClick={() => setConfirmExit(false)}>Düzenlemeye devam et</Button>
+            <Button variant="outline" onClick={discardAndClose}>
+              Kaydetmeden çık
+            </Button>
+          </div>
+        </ModalContent>
+      </Modal>
     </section>
   );
 }

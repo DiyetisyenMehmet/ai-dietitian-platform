@@ -15,6 +15,7 @@ import {
 export interface DashboardCardPreferencesState {
   preferences: DashboardCardPreferences;
   loading: boolean;
+  loadError: boolean;
   saving: boolean;
   error: boolean;
   save: (next: DashboardCardPreferences) => Promise<boolean>;
@@ -30,6 +31,7 @@ export function useDashboardCardPreferences(
   const [loading, setLoading] = React.useState(Boolean(userId));
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState(false);
+  const [loadError, setLoadError] = React.useState(false);
 
   const generation = React.useRef(0);
   const userIdRef = React.useRef(userId);
@@ -40,9 +42,7 @@ export function useDashboardCardPreferences(
   const pendingCountRef = React.useRef(0);
   const saveQueueRef = React.useRef<Promise<void>>(Promise.resolve());
 
-  React.useEffect(() => {
-    userIdRef.current = userId;
-  }, [userId]);
+  userIdRef.current = userId;
 
   const applyPreferences = React.useCallback((next: DashboardCardPreferences) => {
     setPreferences(next);
@@ -58,6 +58,7 @@ export function useDashboardCardPreferences(
     applyPreferences(DEFAULT_DASHBOARD_CARD_PREFERENCES);
     confirmedRef.current = DEFAULT_DASHBOARD_CARD_PREFERENCES;
     setError(false);
+    setLoadError(false);
 
     if (!activeUserId) {
       setLoading(false);
@@ -81,6 +82,7 @@ export function useDashboardCardPreferences(
         userIdRef.current === activeUserId
       ) {
         setError(true);
+        setLoadError(true);
       }
     } finally {
       if (
@@ -108,7 +110,6 @@ export function useDashboardCardPreferences(
       const requestGeneration = generation.current;
       const saveId = ++latestSaveIdRef.current;
 
-      applyPreferences(normalized);
       setError(false);
       pendingCountRef.current += 1;
       setSaving(true);
@@ -125,6 +126,10 @@ export function useDashboardCardPreferences(
 
           try {
             const stored = await updateDashboardCardPreferences(normalized);
+            if (
+              requestGeneration !== generation.current ||
+              userIdRef.current !== activeUserId
+            ) return false;
             const confirmed = normalizeDashboardCardPreferences(stored);
             confirmedRef.current = confirmed;
             if (saveId === latestSaveIdRef.current) {
@@ -142,13 +147,12 @@ export function useDashboardCardPreferences(
             }
             return false;
           } finally {
-            pendingCountRef.current = Math.max(0, pendingCountRef.current - 1);
             if (
               requestGeneration === generation.current &&
-              userIdRef.current === activeUserId &&
-              pendingCountRef.current === 0
+              userIdRef.current === activeUserId
             ) {
-              setSaving(false);
+              pendingCountRef.current = Math.max(0, pendingCountRef.current - 1);
+              if (pendingCountRef.current === 0) setSaving(false);
             }
           }
         });
@@ -159,5 +163,5 @@ export function useDashboardCardPreferences(
     [applyPreferences, userId],
   );
 
-  return { preferences, loading, saving, error, save, reload };
+  return { preferences, loading, loadError, saving, error, save, reload };
 }
