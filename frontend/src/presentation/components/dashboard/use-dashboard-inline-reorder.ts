@@ -1,11 +1,8 @@
 "use client";
-
 import * as React from "react";
 
 type Axis = "x" | "y";
-type KeyboardDirection = "previous" | "next";
-
-interface UseDashboardInlineReorderOptions<T extends string> {
+interface Options<T extends string> {
   group: string;
   axis: Axis;
   ids: readonly T[];
@@ -13,6 +10,25 @@ interface UseDashboardInlineReorderOptions<T extends string> {
   onPreview: (ids: T[]) => void;
   onCommit: (ids: T[]) => void | Promise<unknown>;
 }
+interface Gesture<T> {
+  id: T;
+  pointer: number;
+  touch: boolean;
+  armed: boolean;
+  active: boolean;
+  x: number;
+  y: number;
+  lastX: number;
+  lastY: number;
+  origin: DOMRect;
+  order: T[];
+  centers: number[];
+  element: HTMLElement;
+}
+const TOUCH_HOLD_MS = 170;
+const ACTIVATION_DISTANCE = 5;
+const TOUCH_SCROLL_TOLERANCE = 8;
+const SETTLE_MS = 220;
 
 export function useDashboardInlineReorder<T extends string>({
   group,
@@ -21,152 +37,241 @@ export function useDashboardInlineReorder<T extends string>({
   disabled = false,
   onPreview,
   onCommit,
-}: UseDashboardInlineReorderOptions<T>) {
+}: Options<T>) {
   const idsRef = React.useRef<T[]>([...ids]);
-  const startOrderRef = React.useRef<T[] | null>(null);
-  const activeIdRef = React.useRef<T | null>(null);
-  const pointerIdRef = React.useRef<number | null>(null);
+  const gesture = React.useRef<Gesture<T> | null>(null);
+  const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const boxes = React.useRef(new Map<T, DOMRect>());
+  const animations = React.useRef(new Map<HTMLElement, Animation>());
   const [draggingId, setDraggingId] = React.useState<T | null>(null);
-
-  React.useEffect(() => {
-    if (!activeIdRef.current) idsRef.current = [...ids];
-  }, [ids]);
-
-  const previewAt = React.useCallback(
-    (clientX: number, clientY: number) => {
-      const activeId = activeIdRef.current;
-      if (!activeId) return;
-
-      const target = document
-        .elementFromPoint(clientX, clientY)
-        ?.closest<HTMLElement>(
+  const callbacks = React.useRef({ onPreview, onCommit });
+  callbacks.current = { onPreview, onCommit };
+  const elements = React.useCallback(
+    () =>
+      Array.from(
+        document.querySelectorAll<HTMLElement>(
           `[data-personalize-group="${group}"][data-personalize-item]`,
-        );
-      const targetId = target?.dataset.personalizeItem as T | undefined;
-      if (!target || !targetId || targetId === activeId || !idsRef.current.includes(targetId)) {
-        return;
-      }
-
-      const sourceIndex = idsRef.current.indexOf(activeId);
-      const targetIndex = idsRef.current.indexOf(targetId);
-      if (sourceIndex < 0 || targetIndex < 0) return;
-
-      const box = target.getBoundingClientRect();
-      const after =
-        axis === "x"
-          ? clientX > box.left + box.width / 2
-          : clientY > box.top + box.height / 2;
-      let insertionIndex = targetIndex + (after ? 1 : 0);
-      const next = [...idsRef.current];
-      next.splice(sourceIndex, 1);
-      if (sourceIndex < insertionIndex) insertionIndex -= 1;
-      insertionIndex = Math.max(0, Math.min(insertionIndex, next.length));
-      next.splice(insertionIndex, 0, activeId);
-
-      if (next.join("|") === idsRef.current.join("|")) return;
-      idsRef.current = next;
-      onPreview(next);
-    },
-    [axis, group, onPreview],
+        ),
+      ),
+    [group],
   );
-
+  const animate = React.useCallback((element: HTMLElement, dx: number, dy: number) => {
+    animations.current.get(element)?.cancel();
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const animation = element.animate(
+      [{ transform: `translate3d(${dx}px, ${dy}px, 0)` }, { transform: "translate3d(0, 0, 0)" }],
+      { duration: SETTLE_MS, easing: "cubic-bezier(.2,.8,.2,1)" },
+    );
+    animations.current.set(element, animation);
+    animation.onfinish = () => animations.current.delete(element);
+  }, []);
+  const positionActive = React.useCallback(() => {
+    const current = gesture.current;
+    if (!current?.active) return;
+    const { element, origin } = current;
+    element.style.transform = "";
+    const layout = element.getBoundingClientRect();
+    const dx = axis === "x" ? current.lastX - current.x + origin.left - layout.left : 0;
+    const dy = axis === "y" ? current.lastY - current.y + origin.top - layout.top : 0;
+    element.style.transform = `translate3d(${dx}px, ${dy}px, 0) scale(1.008)`;
+  }, [axis]);
+  React.useLayoutEffect(() => {
+    for (const node of elements()) {
+      const id = node.dataset.personalizeItem as T;
+      if (id === gesture.current?.id && gesture.current.active) continue;
+      const old = boxes.current.get(id);
+      const running = animations.current.get(node);
+      const visual = node.getBoundingClientRect();
+      const matrix = new DOMMatrixReadOnly(getComputedStyle(node).transform);
+      const next = new DOMRect(
+        visual.left - matrix.m41,
+        visual.top - matrix.m42,
+        node.offsetWidth,
+        node.offsetHeight,
+      );
+      if (old && (Math.abs(old.left - next.left) > 1 || Math.abs(old.top - next.top) > 1)) {
+        animate(
+          node,
+          (running ? visual : old).left - next.left,
+          (running ? visual : old).top - next.top,
+        );
+      }
+      boxes.current.set(id, next);
+    }
+    if (!gesture.current) idsRef.current = [...ids];
+    positionActive();
+  }, [ids, animate, elements, positionActive]);
   const finish = React.useCallback(
     (commit: boolean) => {
-      if (!activeIdRef.current) return;
-      const start = startOrderRef.current;
-      const next = [...idsRef.current];
-
-      activeIdRef.current = null;
-      pointerIdRef.current = null;
-      startOrderRef.current = null;
-      setDraggingId(null);
-
-      if (!commit) {
-        if (start) {
-          idsRef.current = [...start];
-          onPreview([...start]);
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = null;
+      const current = gesture.current;
+      gesture.current = null;
+      if (!current) return;
+      if (current.active) {
+        const visual = current.element.getBoundingClientRect();
+        current.element.style.transform = "";
+        const layout = current.element.getBoundingClientRect();
+        animate(current.element, visual.left - layout.left, visual.top - layout.top);
+        setDraggingId(null);
+        if (!commit) {
+          idsRef.current = [...current.order];
+          callbacks.current.onPreview([...current.order]);
+        } else if (current.order.join("|") !== idsRef.current.join("|")) {
+          void callbacks.current.onCommit([...idsRef.current]);
         }
+      }
+    },
+    [animate],
+  );
+  const move = React.useCallback(
+    (x: number, y: number): boolean => {
+      const current = gesture.current;
+      if (!current) return false;
+      const distance = Math.hypot(x - current.x, y - current.y);
+      if (!current.active) {
+        if (current.touch && !current.armed) {
+          if (distance > TOUCH_SCROLL_TOLERANCE) finish(false);
+          return false;
+        }
+        if (distance < ACTIVATION_DISTANCE) return current.touch && current.armed;
+        current.active = true;
+        animations.current.get(current.element)?.cancel();
+        setDraggingId(current.id);
+      }
+      current.lastX = x;
+      current.lastY = y;
+      positionActive();
+      // Fixed slot midpoints avoid edge-triggered swaps and oscillation.
+      const center =
+        axis === "x"
+          ? current.origin.left + current.origin.width / 2 + x - current.x
+          : current.origin.top + current.origin.height / 2 + y - current.y;
+      let targetIndex = idsRef.current.indexOf(current.id);
+      while (targetIndex < current.centers.length - 1 && center > current.centers[targetIndex + 1])
+        targetIndex++;
+      while (targetIndex > 0 && center < current.centers[targetIndex - 1]) targetIndex--;
+      const next = current.order.filter((id) => id !== current.id);
+      next.splice(targetIndex, 0, current.id);
+      if (next.join("|") !== idsRef.current.join("|")) {
+        idsRef.current = next;
+        callbacks.current.onPreview(next);
+      }
+      return true;
+    },
+    [axis, finish, positionActive],
+  );
+  React.useEffect(() => {
+    const runningAnimations = animations.current;
+    const pointerMove = (event: PointerEvent) => {
+      if (gesture.current?.touch || event.pointerId !== gesture.current?.pointer) return;
+      if (move(event.clientX, event.clientY)) event.preventDefault();
+    };
+    const pointerEnd = (event: PointerEvent) => {
+      if (!gesture.current?.touch && event.pointerId === gesture.current?.pointer)
+        finish(event.type === "pointerup");
+    };
+    const touchMove = (event: TouchEvent) => {
+      const current = gesture.current;
+      if (!current?.touch) return;
+      if (event.touches.length !== 1) {
+        finish(false);
         return;
       }
-
-      if (start && start.join("|") !== next.join("|")) {
-        void onCommit(next);
-      }
-    },
-    [onCommit, onPreview],
-  );
-
-  React.useEffect(() => {
-    const onMove = (event: PointerEvent) => {
-      if (pointerIdRef.current === null || event.pointerId !== pointerIdRef.current) return;
-      event.preventDefault();
-      previewAt(event.clientX, event.clientY);
+      const touch = Array.from(event.touches).find((item) => item.identifier === current.pointer);
+      if (touch && move(touch.clientX, touch.clientY) && event.cancelable) event.preventDefault();
     };
-    const onUp = (event: PointerEvent) => {
-      if (pointerIdRef.current === null || event.pointerId !== pointerIdRef.current) return;
-      event.preventDefault();
-      finish(true);
+    const touchEnd = (event: TouchEvent) => {
+      if (gesture.current?.touch) finish(event.type === "touchend");
     };
-    const onCancel = (event: PointerEvent) => {
-      if (pointerIdRef.current === null || event.pointerId !== pointerIdRef.current) return;
-      finish(false);
-    };
-
-    window.addEventListener("pointermove", onMove, { passive: false });
-    window.addEventListener("pointerup", onUp, { passive: false });
-    window.addEventListener("pointercancel", onCancel, { passive: false });
+    const cancel = () => finish(false);
+    window.addEventListener("pointermove", pointerMove, { passive: false });
+    window.addEventListener("pointerup", pointerEnd);
+    window.addEventListener("pointercancel", pointerEnd);
+    window.addEventListener("touchmove", touchMove, { passive: false });
+    window.addEventListener("touchend", touchEnd);
+    window.addEventListener("touchcancel", touchEnd);
+    window.addEventListener("blur", cancel);
     return () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-      window.removeEventListener("pointercancel", onCancel);
+      window.removeEventListener("pointermove", pointerMove);
+      window.removeEventListener("pointerup", pointerEnd);
+      window.removeEventListener("pointercancel", pointerEnd);
+      window.removeEventListener("touchmove", touchMove);
+      window.removeEventListener("touchend", touchEnd);
+      window.removeEventListener("touchcancel", touchEnd);
+      window.removeEventListener("blur", cancel);
+      if (timer.current) clearTimeout(timer.current);
+      gesture.current?.element.style.removeProperty("transform");
+      runningAnimations.forEach((animation) => animation.cancel());
     };
-  }, [finish, previewAt]);
-
+  }, [finish, move]);
+  React.useEffect(() => {
+    if (disabled) finish(false);
+  }, [disabled, finish]);
+  const start = React.useCallback(
+    (element: HTMLElement, id: T, x: number, y: number, pointer: number, touch: boolean) => {
+      if (disabled || gesture.current || idsRef.current.length < 2) return;
+      const nodes = elements();
+      const rects = nodes.map((node) => node.getBoundingClientRect());
+      boxes.current = new Map(
+        nodes.map((node, index) => [node.dataset.personalizeItem as T, rects[index]]),
+      );
+      gesture.current = {
+        id,
+        pointer,
+        touch,
+        armed: !touch,
+        active: false,
+        x,
+        y,
+        lastX: x,
+        lastY: y,
+        element,
+        origin: element.getBoundingClientRect(),
+        order: [...idsRef.current],
+        centers: rects.map((rect) =>
+          axis === "x" ? rect.left + rect.width / 2 : rect.top + rect.height / 2,
+        ),
+      };
+      if (touch)
+        timer.current = setTimeout(() => {
+          if (gesture.current) gesture.current.armed = true;
+        }, TOUCH_HOLD_MS);
+    },
+    [axis, disabled, elements],
+  );
   const onPointerDown = React.useCallback(
     (event: React.PointerEvent<HTMLElement>, id: T) => {
-      if (disabled || activeIdRef.current || idsRef.current.length < 2) return;
-      event.preventDefault();
-      activeIdRef.current = id;
-      pointerIdRef.current = event.pointerId;
-      startOrderRef.current = [...idsRef.current];
-      setDraggingId(id);
+      if (event.pointerType === "touch" || event.button !== 0 || !event.isPrimary) return;
+      start(event.currentTarget, id, event.clientX, event.clientY, event.pointerId, false);
     },
-    [disabled],
+    [start],
   );
-
-  const moveByKeyboard = React.useCallback(
-    (id: T, direction: KeyboardDirection) => {
-      if (disabled) return;
-      const current = [...idsRef.current];
-      const index = current.indexOf(id);
-      const target = direction === "previous" ? index - 1 : index + 1;
-      if (index < 0 || target < 0 || target >= current.length) return;
-      [current[index], current[target]] = [current[target], current[index]];
-      idsRef.current = current;
-      onPreview(current);
-      void onCommit(current);
+  const onTouchStart = React.useCallback(
+    (event: React.TouchEvent<HTMLElement>, id: T) => {
+      if (event.touches.length !== 1) return;
+      const touch = event.touches[0];
+      start(event.currentTarget, id, touch.clientX, touch.clientY, touch.identifier, true);
     },
-    [disabled, onCommit, onPreview],
+    [start],
   );
-
   const onKeyDown = React.useCallback(
     (event: React.KeyboardEvent<HTMLButtonElement>, id: T) => {
+      if (disabled || gesture.current) return;
       const previousKey = axis === "x" ? "ArrowLeft" : "ArrowUp";
       const nextKey = axis === "x" ? "ArrowRight" : "ArrowDown";
-      if (event.key === previousKey) {
-        event.preventDefault();
-        moveByKeyboard(id, "previous");
-      } else if (event.key === nextKey) {
-        event.preventDefault();
-        moveByKeyboard(id, "next");
-      }
+      if (event.key !== previousKey && event.key !== nextKey) return;
+      event.preventDefault();
+      const next = [...idsRef.current];
+      const index = next.indexOf(id);
+      const target = index + (event.key === previousKey ? -1 : 1);
+      if (index < 0 || target < 0 || target >= next.length) return;
+      [next[index], next[target]] = [next[target], next[index]];
+      idsRef.current = next;
+      callbacks.current.onPreview(next);
+      void callbacks.current.onCommit(next);
     },
-    [axis, moveByKeyboard],
+    [axis, disabled],
   );
-
-  return {
-    draggingId,
-    onPointerDown,
-    onKeyDown,
-  };
+  return { draggingId, onPointerDown, onTouchStart, onKeyDown };
 }

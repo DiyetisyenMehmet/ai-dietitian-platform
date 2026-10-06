@@ -186,7 +186,7 @@ test("inline personalization source removes the old editor modal and visible mov
   assert.match(quick, /EllipsisVertical/);
   assert.doesNotMatch(quick, /GripVertical/);
   assert.doesNotMatch(quick, />Düzenle</);
-  assert.match(section, /Tutup sürükleyerek sırala/);
+  assert.match(section, /Kartları tutup sürükleyerek sıralayabilirsin/);
   assert.match(section, /Kaydet/);
   assert.match(section, /Gizlenenleri Gör/);
   assert.match(section, /role="tablist"/);

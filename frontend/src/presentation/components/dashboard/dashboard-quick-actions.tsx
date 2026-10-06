@@ -359,11 +359,16 @@ export function DashboardQuickActions({
                 if (target.closest("[data-dashboard-personalization-control]")) return;
                 quickReorder.onPointerDown(event, id);
               }}
+              onTouchStart={(event) => {
+                if ((event.target as HTMLElement).closest("[data-dashboard-personalization-control]")) return;
+                quickReorder.onTouchStart(event, id);
+              }}
+              onContextMenu={(event) => { if (editing) event.preventDefault(); }}
               className={cn(
-                "relative min-w-0 flex-1 basis-0 transition-[transform,filter,box-shadow] duration-200 ease-out",
-                editing && "touch-none cursor-grab select-none",
+                "relative min-w-0 flex-1 basis-0",
+                editing && "touch-pan-y cursor-grab select-none",
                 quickReorder.draggingId === id &&
-                  "z-20 scale-[1.015] cursor-grabbing drop-shadow-lg",
+                  "z-40 cursor-grabbing drop-shadow-lg",
               )}
               data-quick-action-slot={id}
               data-personalize-group="quick-actions"
@@ -415,7 +420,7 @@ export function DashboardQuickActions({
                     aria-grabbed={quickReorder.draggingId === id}
                     disabled={savingPreferences}
                     onKeyDown={(event) => quickReorder.onKeyDown(event, id)}
-                    className="absolute left-0.5 top-0.5 z-30 flex size-7 items-center justify-center text-muted-foreground/80 transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                    className="absolute -left-0.5 top-[38%] z-30 flex h-7 w-5 -translate-y-1/2 items-center justify-center text-muted-foreground/80 transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
                     data-quick-action-drag-handle={id}
                   >
                     <EllipsisVertical className="size-3.5" aria-hidden="true" />
@@ -426,7 +431,7 @@ export function DashboardQuickActions({
                     disabled={savingPreferences}
                     onPointerDown={(event) => event.stopPropagation()}
                     onClick={() => onHideAction?.(id)}
-                    className="absolute right-0.5 top-1.5 z-30 flex size-7 items-center justify-center rounded-full border border-border/60 bg-background/80 text-muted-foreground shadow-sm backdrop-blur transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                    className="absolute right-0 top-[38%] z-30 flex size-6 -translate-y-1/2 items-center justify-center text-muted-foreground transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
                     data-dashboard-personalization-control
                     data-quick-action-hide={id}
                   >

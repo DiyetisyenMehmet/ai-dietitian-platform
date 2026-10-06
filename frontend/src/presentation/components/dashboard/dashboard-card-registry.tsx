@@ -85,7 +85,12 @@ export function DashboardCardPreviewIcon({
   );
 }
 
-export function DashboardRegisteredCard({ id }: { id: DashboardCardId }) {
-  if (id === "coach") return <DashboardAiBanner />;
+export function DashboardRegisteredCard({ id, editing, saving, onHide }: {
+  id: DashboardCardId;
+  editing?: boolean;
+  saving?: boolean;
+  onHide?: () => void;
+}) {
+  if (id === "coach") return <DashboardAiBanner editing={editing} saving={saving} onHide={onHide} />;
   return <DashboardFeatureCard kind={id as DashboardFeatureLinkKind} />;
 }
