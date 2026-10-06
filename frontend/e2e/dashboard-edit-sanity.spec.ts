@@ -102,6 +102,7 @@ test("Dashboard deployed runtime: explicit save, discard, reorder, hide/show, re
     return (await response.json()).data.preferences;
   };
   const food = page.locator('[data-dashboard-card-slot="food"]');
+  const baselinePreferences = await readSaved();
   const arrow = food.locator("[data-dashboard-feature-chevron]");
   await open(page);
   await expect(arrow.locator("svg")).toBeHidden();
@@ -116,10 +117,7 @@ test("Dashboard deployed runtime: explicit save, discard, reorder, hide/show, re
   await reorderAndHide(page);
   expect(writes).toBe(0);
   const unchanged = await readSaved();
-  expect(unchanged.order).toEqual(originalCards);
-  expect(unchanged.hidden).toEqual([]);
-  expect(unchanged.quickActionOrder).toEqual(originalActions);
-  expect(unchanged.hiddenQuickActionIds).toEqual([]);
+  expect(unchanged).toEqual(baselinePreferences);
   await page.getByRole("button", { name: "Ana ekran düzenlemeyi kapat" }).click();
   await expect(page.getByRole("dialog")).toContainText(
     "Değişiklikleri kaydetmeden çıkmak istiyor musun?",

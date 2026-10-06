@@ -24,6 +24,7 @@ interface Gesture<T> {
   order: T[];
   centers: number[];
   element: HTMLElement;
+  releaseScroll?: () => void;
 }
 const TOUCH_HOLD_MS = 170;
 const ACTIVATION_DISTANCE = 5;
@@ -126,6 +127,7 @@ export function useDashboardInlineReorder<T extends string>({
       const current = gesture.current;
       gesture.current = null;
       if (!current) return;
+      current.releaseScroll?.();
       if (current.active) {
         const visual = current.element.getBoundingClientRect();
         current.element.style.transform = "";
@@ -181,6 +183,9 @@ export function useDashboardInlineReorder<T extends string>({
   );
   React.useEffect(() => {
     const runningAnimations = animations.current;
+    const touchStart = (event: TouchEvent) => {
+      if (event.touches.length !== 1) finish(false);
+    };
     const pointerMove = (event: PointerEvent) => {
       if (gesture.current?.touch || event.pointerId !== gesture.current?.pointer) return;
       if (move(event.clientX, event.clientY)) event.preventDefault();
@@ -206,6 +211,7 @@ export function useDashboardInlineReorder<T extends string>({
     window.addEventListener("pointermove", pointerMove, { passive: false });
     window.addEventListener("pointerup", pointerEnd);
     window.addEventListener("pointercancel", pointerEnd);
+    window.addEventListener("touchstart", touchStart, { passive: true });
     window.addEventListener("touchmove", touchMove, { passive: false });
     window.addEventListener("touchend", touchEnd);
     window.addEventListener("touchcancel", touchEnd);
@@ -214,11 +220,13 @@ export function useDashboardInlineReorder<T extends string>({
       window.removeEventListener("pointermove", pointerMove);
       window.removeEventListener("pointerup", pointerEnd);
       window.removeEventListener("pointercancel", pointerEnd);
+      window.removeEventListener("touchstart", touchStart);
       window.removeEventListener("touchmove", touchMove);
       window.removeEventListener("touchend", touchEnd);
       window.removeEventListener("touchcancel", touchEnd);
       window.removeEventListener("blur", cancel);
       if (timer.current) clearTimeout(timer.current);
+      gesture.current?.releaseScroll?.();
       gesture.current?.element.style.removeProperty("transform");
       runningAnimations.forEach((animation) => animation.cancel());
     };
@@ -261,10 +269,28 @@ export function useDashboardInlineReorder<T extends string>({
       };
       if (touch)
         timer.current = setTimeout(() => {
-          if (gesture.current) gesture.current.armed = true;
+          const current = gesture.current;
+          if (!current) return;
+          current.armed = true;
+          current.active = true;
+          // A touch that interrupts a fling may already be uncancelable. Lock
+          // native viewport panning only after the intentional stationary hold.
+          // Immediate swipes cancel before this timer and keep native scrolling.
+          const viewport = document.documentElement;
+          const overflow = viewport.style.getPropertyValue("overflow");
+          const priority = viewport.style.getPropertyPriority("overflow");
+          viewport.style.setProperty("overflow", "hidden");
+          current.releaseScroll = () => {
+            if (overflow) viewport.style.setProperty("overflow", overflow, priority);
+            else viewport.style.removeProperty("overflow");
+          };
+          animations.current.get(current.element)?.cancel();
+          animations.current.delete(current.element);
+          setDraggingId(current.id);
+          positionActive();
         }, TOUCH_HOLD_MS);
     },
-    [axis, disabled, elements],
+    [axis, disabled, elements, positionActive],
   );
   const onPointerDown = React.useCallback(
     (event: React.PointerEvent<HTMLElement>, id: T) => {
