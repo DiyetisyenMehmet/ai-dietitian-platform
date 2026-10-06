@@ -91,6 +91,35 @@ test("a target-invalid repair is rejected without scaling values or further gene
   assert.equal(provider.outputs[1].cycle[0].totalCalories, 800);
 });
 
+test("repairs day-specific realism violations with the affected day range and feedback", async () => {
+  const provider = new ObservedProvider();
+  provider.fault = (output, call) => {
+    if (call !== 1) return;
+    for (const [dayIndex, meals] of [
+      [1, ["Tavuk", "Levrek"]],
+      [2, ["Tavuk", "Kıyma"]],
+    ] as const) {
+      meals.forEach((name, mealIndex) => {
+        output.cycle[dayIndex].meals[mealIndex].name = name;
+        output.cycle[dayIndex].meals[mealIndex].foods[0].name = name;
+      });
+    }
+  };
+  setAIAdapter(provider);
+  const result = await mealGeneratorService.generate(input);
+  assert.equal(provider.inputs.length, 3);
+  assert.deepEqual(provider.inputs[1].requestedDayNumbers, [2, 3]);
+  assert.equal(provider.inputs[1].cycleLengthDays, 2);
+  assert.ok(
+    provider.inputs[1].validationFeedback?.some((item) => item.includes("MEAT_AND_FISH_SAME_DAY")),
+  );
+  assert.equal(result.output.cycle.length, 7);
+  assert.deepEqual(
+    result.output.cycle.map((day) => day.dayLabel),
+    Array.from({ length: 7 }, (_, i) => `${i + 1}. Gün`),
+  );
+});
+
 test("an incomplete partial repair is rejected rather than persisting a partial horizon", async () => {
   const provider = new ObservedProvider();
   provider.fault = (output, call) => {

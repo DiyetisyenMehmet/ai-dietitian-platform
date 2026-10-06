@@ -200,24 +200,50 @@ async function generateValidatedBatch(
     // Repair only target-invalid days when all other batch constraints passed.
     // Cross-day realism failures still require one bounded full-batch retry.
     // Provider values are preserved verbatim; no nutrient scaling or clamping.
+    const targetRepairIndices = output.cycle.flatMap((day, index) =>
+      nutritionViolations.some((violation) => violation.dayLabel === day.dayLabel) ? [index] : [],
+    );
+    const startDayNumber = input.startDayNumber ?? 1;
+    const daySpecificRealism = realismViolations.every((violation) =>
+      ["MULTIPLE_ANIMAL_MEALS", "MEAT_AND_FISH_SAME_DAY"].includes(violation.code),
+    );
+    const realismRepairDays = daySpecificRealism
+      ? realismViolations
+          .map((violation) => violation.dayNumber - startDayNumber)
+          .filter((index) => index >= 0 && index < output.cycle.length)
+      : [];
+    const allRepairIndices = [...new Set([...targetRepairIndices, ...realismRepairDays])].sort(
+      (a, b) => a - b,
+    );
+    // A same-day realism violation can depend on the neighboring meal choices.
+    // Regenerate the bounded span around those days; rolling 14-day violations
+    // remain a full-batch retry with explicit feedback.
     const repairIndices =
       !wrongDayCount &&
       !invalidMealStructure &&
       allergenViolations.length === 0 &&
-      realismViolations.length === 0
-        ? output.cycle.flatMap((day, index) =>
-            nutritionViolations.some((violation) => violation.dayLabel === day.dayLabel)
-              ? [index]
-              : [],
-          )
+      (realismViolations.length === 0 || daySpecificRealism) &&
+      allRepairIndices.length > 0
+        ? realismRepairDays.length > 0
+          ? Array.from(
+              { length: allRepairIndices.at(-1)! - allRepairIndices[0] + 1 },
+              (_, offset) => allRepairIndices[0] + offset,
+            )
+          : allRepairIndices
         : [];
     const feedback = output.cycle.flatMap((day, index) => {
-      const issues = nutritionViolations.filter((violation) => violation.dayLabel === day.dayLabel);
-      if (!issues.length) return [];
+      const issues = nutritionViolations
+        .filter((violation) => violation.dayLabel === day.dayLabel)
+        .map(({ field, kind }) => ({ field, kind }));
+      const dayNumber = startDayNumber + index;
+      const realismIssues = realismViolations
+        .filter((violation) => violation.dayNumber === dayNumber)
+        .map(({ code }) => ({ field: "realism", kind: code }));
+      if (!issues.length && !realismIssues.length) return [];
       return [
         JSON.stringify({
-          dayNumber: (input.startDayNumber ?? 1) + index,
-          issues: issues.map(({ field, kind }) => ({ field, kind })),
+          dayNumber,
+          issues: [...issues, ...realismIssues],
           reported: {
             calories: day.totalCalories,
             protein: day.totalProteinGrams,
@@ -244,6 +270,7 @@ async function generateValidatedBatch(
       );
       const repair = await requestOutput({
         ...input,
+        startDayNumber: requestedDayNumbers[0],
         cycleLengthDays: repairIndices.length,
         requestedDayNumbers,
         validationFeedback: feedback,
