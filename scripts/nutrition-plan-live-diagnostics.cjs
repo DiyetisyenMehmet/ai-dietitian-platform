@@ -8,6 +8,8 @@ if (process.env.DIEWISH_ENVIRONMENT !== 'staging' ||
 }
 const { getAIAdapter } = require('/app/dist/modules/blood-test-analysis/ai-adapter/ai-adapter.factory');
 const { findNutritionTargetViolations } = require('/app/dist/modules/nutrition-plan/meal-generator/nutrition-target-validator');
+const { findRealLifePlanViolations } = require('/app/dist/modules/nutrition-plan/nutrition-plan-realism');
+const { findAllergenViolations } = require('/app/dist/modules/nutrition-plan/meal-generator/allergen-validator');
 const { prisma } = require('/app/dist/lib/prisma');
 const { disconnectNutritionGenerationLocks } = require('/app/dist/modules/nutrition-plan/nutrition-plan-generation-lock');
 const evidence = { sourceSha: process.env.DIEWISH_APPLICATION_SHA, providerCalls: [], transports: [], checks: {} };
@@ -34,6 +36,8 @@ global.fetch = async (...args) => {
 const adapter = getAIAdapter();
 evidence.provider = adapter.info;
 const generate = adapter.generateNutritionPlan.bind(adapter);
+const acceptedDays = [];
+const pendingBatches = new Map();
 adapter.generateNutritionPlan = async input => {
   const started = Date.now();
   const record = {
@@ -48,9 +52,25 @@ adapter.generateNutritionPlan = async input => {
     const output = await generate(input);
     record.elapsedMs = Date.now() - started;
     record.violations = findNutritionTargetViolations(output.cycle, input);
+    // Reconstruct the candidate without changing returned provider data. This
+    // is synthetic-only evidence, including bounded meal names/composition so
+    // rolling meat/fish/specialty failures can be traced to the actual meals.
+    const start = input.startDayNumber || 1;
+    if (!input.requestedDayNumbers) pendingBatches.set(start, { count: input.cycleLengthDays, days: new Map() });
+    const pending = pendingBatches.get(start);
+    output.cycle.forEach((day, index) => pending?.days.set(input.requestedDayNumbers?.[index] || start + index, { ...day, dayLabel: `${input.requestedDayNumbers?.[index] || start + index}. Gün` }));
+    const candidate = pending ? [...pending.days.entries()].sort((a,b) => a[0]-b[0]).map(([,day]) => day) : output.cycle;
+    const prior = acceptedDays.slice(0, start - 1);
+    record.realismViolations = findRealLifePlanViolations(candidate, start, prior, input.realLifePlanning);
+    if (pending && candidate.length === pending.count && !record.realismViolations.length &&
+        !findNutritionTargetViolations(candidate, input).length && !findAllergenViolations(candidate, input.allergies).length &&
+        candidate.every(day => day.meals.length === input.mealTiming.mealsPerDay)) {
+      acceptedDays.splice(start - 1, pending.count, ...candidate);
+    }
     record.days = output.cycle.map((day, index) => {
       const totals = { calories: day.totalCalories, protein: day.totalProteinGrams, carbs: day.totalCarbsGrams, fat: day.totalFatGrams };
-      const meals = day.meals.map((meal, i) => ({ mealIndex: i + 1, calories: meal.calories, protein: meal.proteinGrams, carbs: meal.carbsGrams, fat: meal.fatGrams }));
+      const meals = day.meals.map((meal, i) => ({ mealIndex: i + 1, calories: meal.calories, protein: meal.proteinGrams, carbs: meal.carbsGrams, fat: meal.fatGrams,
+        foods: meal.foods.map(food => ({ name: food.name, portion: food.portion, ingredients: food.ingredients })) }));
       const sum = Object.fromEntries(Object.keys(totals).map(field => [field, meals.reduce((n, meal) => n + meal[field], 0)]));
       return {
         dayNumber: input.requestedDayNumbers?.[index] || record.startDay + index,

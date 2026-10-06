@@ -54,6 +54,17 @@ jobs:
           gcloud run jobs execute "$job" --project "$PROJECT_ID" --region "$REGION" --wait --quiet
           gcloud storage cp "gs://${BUCKET}/${object}" /tmp/nutrition-live-evidence.json --quiet
           python3 -m json.tool /tmp/nutrition-live-evidence.json
+      - name: Read bounded staging realism failure metadata when permitted
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          filter='resource.type="cloud_run_revision" AND resource.labels.service_name="diewish-backend-staging" AND timestamp>="2026-10-06T19:51:37Z" AND timestamp<="2026-10-06T19:52:40Z" AND (jsonPayload.msg:"Nutrition-plan" OR textPayload:"Nutrition-plan")'
+          if gcloud logging read "$filter" --project "$PROJECT_ID" --limit 30 --format=json > /tmp/nutrition-realism-log-metadata.json; then
+            jq '[.[] | {timestamp, metadata: (.jsonPayload | {msg,startDayNumber,requestedDays,receivedDays,invalidMealStructure,nutritionViolationCount,realismViolationCount,violationCodes,processingTimeMs})}]' /tmp/nutrition-realism-log-metadata.json
+          else
+            echo '{"runtimeLogReadConfigured":false}'
+          fi
       - name: Preserve numeric synthetic evidence
         if: always()
         uses: actions/upload-artifact@v4
