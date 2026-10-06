@@ -319,6 +319,7 @@ export function DashboardQuickActions({
             type="button"
             aria-label={editing ? "Ana ekran düzenlemeyi kapat" : "Ana ekranı düzenle"}
             aria-pressed={editing}
+            disabled={savingPreferences}
             onClick={onToggleEditing}
             className={cn(
               "flex size-11 shrink-0 items-center justify-center rounded-full border border-border/70 bg-card text-muted-foreground shadow-sm transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
