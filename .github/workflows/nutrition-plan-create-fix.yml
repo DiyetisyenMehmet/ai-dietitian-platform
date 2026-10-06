@@ -1,0 +1,122 @@
+name: Nutrition plan creation validation
+on:
+  push:
+    branches: [feature/workmode-nutrition-plan-create-fix-w1, feature/workmode-nutrition-plan-live-generation-fix-w1-04]
+permissions:
+  contents: read
+concurrency:
+  group: nutrition-plan-create-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  security:
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@v2.6.0
+    with:
+      scan-args: |-
+        --lockfile=backend/package-lock.json
+        --lockfile=frontend/package-lock.json
+      upload-sarif: false
+      fail-on-vuln: true
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+  application:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: nutrition
+          POSTGRES_PASSWORD: nutrition
+          POSTGRES_DB: nutrition_test
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U nutrition -d nutrition_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      NODE_ENV: test
+      DIEWISH_ENVIRONMENT: test
+      DATABASE_URL: postgresql://nutrition:nutrition@127.0.0.1:5432/nutrition_test
+      JWT_ACCESS_SECRET: nutrition-ci-access-secret-0000000000000000000
+      JWT_REFRESH_SECRET: nutrition-ci-refresh-secret-000000000000000000
+      LOG_LEVEL: silent
+      CORS_ORIGIN: http://127.0.0.1:3000
+      APP_WEB_URL: http://127.0.0.1:3000
+      BCRYPT_ROUNDS: 10
+      RATE_LIMIT_MAX: 10000
+      AUTH_RATE_LIMIT_MAX: 10000
+      NUTRITION_TEST_FIXTURE_FILE: /tmp/nutrition-fixtures.json
+      NEXT_PUBLIC_API_BASE_URL: /api
+      DIEWISH_API_PROXY_TARGET: http://127.0.0.1:4000
+      E2E_WEB_BASE_URL: http://127.0.0.1:3000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+      - run: npm ci
+        working-directory: backend
+      - run: npm ci
+        working-directory: frontend
+      - run: npx prisma validate && npx prisma generate && npx prisma migrate deploy
+        working-directory: backend
+      - run: npm test
+        working-directory: backend
+      - run: npm run test:integration
+        if: ${{ !cancelled() }}
+        working-directory: backend
+        env:
+          CORS_ORIGIN: http://localhost:3000
+          APP_WEB_URL: http://localhost:3000
+      - run: node --import tsx --test --test-concurrency=1 src/modules/nutrition-plan/nutrition-plan-generation.integration.test.ts src/modules/nutrition-plan/nutrition-plan-generation-lock.integration.test.ts
+        if: ${{ !cancelled() }}
+        working-directory: backend
+      - run: npm run lint && npm run build
+        if: ${{ !cancelled() }}
+        working-directory: backend
+      - run: npx playwright install --with-deps chromium
+        if: ${{ !cancelled() }}
+        working-directory: frontend
+      - run: node --test tests/*.test.cjs
+        if: ${{ !cancelled() }}
+        working-directory: frontend
+      - run: NODE_ENV=production npm run build
+        if: ${{ !cancelled() }}
+        working-directory: frontend
+      - name: Start isolated fixture backend and local web server
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          cd backend
+          node --import tsx src/modules/nutrition-plan/test-fixtures/browser-server.ts > /tmp/nutrition-backend.log 2>&1 &
+          cd ../frontend
+          NODE_ENV=production npm start > /tmp/nutrition-web.log 2>&1 &
+          for attempt in $(seq 1 60); do
+            if [ -s /tmp/nutrition-fixtures.json ] && curl -fsS http://127.0.0.1:3000/login > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          exit 1
+      - run: npx playwright test --config=playwright.nutrition-plan.config.ts
+        if: ${{ !cancelled() }}
+        working-directory: frontend
+  android-sanity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.6.0"
+      - run: gradle --no-daemon -p android :app:testDebugUnitTest -PDIEWISH_WEB_BASE_URL=https://staging.diewish.com

@@ -1,0 +1,88 @@
+name: Nutrition plan live diagnostics
+on:
+  push:
+    branches: [feature/staging-preview]
+    paths:
+      - .github/workflows/nutrition-plan-live-diagnostics.yml
+      - scripts/nutrition-plan-live-diagnostics.cjs
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: nutrition-live-diagnostics-staging
+  cancel-in-progress: false
+jobs:
+  diagnose:
+    if: github.ref == 'refs/heads/feature/staging-preview'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: staging
+    env:
+      PROJECT_ID: project-a2e260c1-839d-4f1d-b90
+      REGION: europe-west1
+      BUCKET: project-a2e260c1-839d-4f1d-b90-diewish-health-staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/730419163638/locations/global/workloadIdentityPools/github-actions/providers/diewish-staging
+          service_account: diewish-staging-deployer@project-a2e260c1-839d-4f1d-b90.iam.gserviceaccount.com
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+      - name: Observe actual provider using deployed staging image and synthetic account
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$PROJECT_ID" = project-a2e260c1-839d-4f1d-b90
+          job="diewish-nutrition-diag-staging-${GITHUB_RUN_ID}"
+          object="nutrition-diagnostics/${GITHUB_RUN_ID}/evidence.json"
+          echo "DIAGNOSTIC_JOB=$job" >> "$GITHUB_ENV"
+          echo "DIAGNOSTIC_OBJECT=$object" >> "$GITHUB_ENV"
+          service="$(gcloud run services describe diewish-backend-staging --project "$PROJECT_ID" --region "$REGION" --format=json)"
+          image="$(jq -r '.spec.template.spec.containers[0].image' <<<"$service")"
+          source_sha="$(jq -r '.spec.template.spec.containers[0].env[] | select(.name == "DIEWISH_APPLICATION_SHA") | .value' <<<"$service")"
+          test "$image" = "${REGION}-docker.pkg.dev/${PROJECT_ID}/diewish-staging/backend:${source_sha}"
+          script_b64="$(base64 -w0 scripts/nutrition-plan-live-diagnostics.cjs)"
+          gcloud run jobs deploy "$job" --project "$PROJECT_ID" --region "$REGION" \
+            --image "$image" --command node --args "^|^-e|eval(Buffer.from('${script_b64}','base64').toString())" \
+            --service-account "diewish-staging-runtime@${PROJECT_ID}.iam.gserviceaccount.com" \
+            --tasks 1 --parallelism 1 --max-retries 0 --task-timeout 600s --cpu 2 --memory 1Gi \
+            --set-env-vars "NODE_ENV=production,DIEWISH_ENVIRONMENT=staging,DIEWISH_APPLICATION_SHA=${source_sha},LOG_LEVEL=silent,API_PREFIX=/api,CORS_ORIGIN=http://127.0.0.1:4000,APP_WEB_URL=http://127.0.0.1:4000,JWT_ISSUER=diewish-staging,BCRYPT_ROUNDS=10,AI_PROVIDER=vertex,GOOGLE_CLOUD_PROJECT=${PROJECT_ID},VERTEX_AI_LOCATION=global,VERTEX_AI_MODEL=gemini-3.5-flash,DIAGNOSTIC_BUCKET=${BUCKET},DIAGNOSTIC_OBJECT=${object}" \
+            --set-secrets "DATABASE_URL=diewish-staging-database-url:latest,JWT_ACCESS_SECRET=diewish-staging-jwt-access:latest,JWT_REFRESH_SECRET=diewish-staging-jwt-refresh:latest" --quiet
+          gcloud run jobs execute "$job" --project "$PROJECT_ID" --region "$REGION" --wait --quiet
+          gcloud storage cp "gs://${BUCKET}/${object}" /tmp/nutrition-live-evidence.json --quiet
+          python3 -m json.tool /tmp/nutrition-live-evidence.json
+      - name: Read bounded staging realism failure metadata when permitted
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          filter='resource.type="cloud_run_revision" AND resource.labels.service_name="diewish-backend-staging" AND timestamp>="2026-10-06T19:51:37Z" AND timestamp<="2026-10-06T19:52:40Z" AND (jsonPayload.msg:"Nutrition-plan" OR textPayload:"Nutrition-plan")'
+          if gcloud logging read "$filter" --project "$PROJECT_ID" --limit 30 --format=json > /tmp/nutrition-realism-log-metadata.json; then
+            jq '[.[] | {timestamp, metadata: (.jsonPayload | {msg,startDayNumber,requestedDays,receivedDays,invalidMealStructure,nutritionViolationCount,realismViolationCount,violationCodes,processingTimeMs})}]' /tmp/nutrition-realism-log-metadata.json
+          else
+            echo '{"runtimeLogReadConfigured":false}'
+          fi
+      - name: Preserve numeric synthetic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nutrition-live-evidence-${{ github.run_number }}
+          path: /tmp/nutrition-live-evidence.json
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Remove temporary diagnostic job and object
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "${DIAGNOSTIC_JOB:-}" ]]; then
+            gcloud run jobs delete "$DIAGNOSTIC_JOB" --project "$PROJECT_ID" --region "$REGION" --quiet
+          fi
+          if [[ -n "${DIAGNOSTIC_OBJECT:-}" ]]; then
+            if gcloud storage ls "gs://${BUCKET}/${DIAGNOSTIC_OBJECT}" >/dev/null 2>&1; then
+              gcloud storage rm "gs://${BUCKET}/${DIAGNOSTIC_OBJECT}" --quiet
+            fi
+          fi

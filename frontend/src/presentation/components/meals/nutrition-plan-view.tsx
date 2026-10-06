@@ -15,7 +15,8 @@ import {
 import { toast } from "sonner";
 
 import { nutritionPlanStore, useNutritionPlan } from "@/application/health/nutrition-plan-store";
-import { ApiError } from "@/infrastructure/api/http-client";
+import { useWeightCheckInStatus } from "@/application/health/weight-store";
+import { planError } from "./nutrition-plan-errors";
 import {
   SUPPORTED_NUTRITION_PLAN_DURATIONS,
   type CreateNutritionPlanDeviationInput,
@@ -143,24 +144,6 @@ function number(value: number): string {
   return Math.round(value).toLocaleString("tr-TR");
 }
 
-function planError(error: unknown): string {
-  if (error instanceof ApiError) {
-    if (error.code === "SUBSCRIPTION_REQUIRED") {
-      return "Bu plan yönetimi özelliği Premium ve Premium Plus kullanıcıları içindir.";
-    }
-    if (error.code === "NUTRITION_PLAN_DAY_STALE") {
-      return "Plan günü değişmiş. Güncel plan yeniden yüklendikten sonra tekrar deneyebilirsin.";
-    }
-    if (error.code === "NUTRITION_PLAN_INCOMPLETE") {
-      return "Planın tüm günleri güvenilir şekilde oluşturulamadı. Lütfen tekrar dene.";
-    }
-    if (error.status === 429) {
-      return "Öğün planı oluşturma limitine ulaştın. Daha sonra tekrar deneyebilirsin.";
-    }
-  }
-  return "Öğün planı işlemi tamamlanamadı. Lütfen tekrar dene.";
-}
-
 function MealBlock({
   dayNumber,
   mealIndex,
@@ -264,6 +247,7 @@ function DayCard({
   onRefreshDay(dayNumber: number): Promise<void>;
   onShiftDay(dayNumber: number): Promise<void>;
 }) {
+  const checkInRequired = useWeightCheckInStatus()?.required === true;
   const [confirmShift, setConfirmShift] = React.useState(false);
   const [shifting, setShifting] = React.useState(false);
   const dayDeviations = deviations.filter((item) => item.dayNumber === dayNumber);
@@ -355,7 +339,7 @@ function DayCard({
             </Button>
           )}
           {canRefresh && (
-            <Button type="button" variant="outline" size="sm" disabled={generating} onClick={() => void onRefreshDay(dayNumber)}>
+            <Button type="button" variant="outline" size="sm" disabled={generating || checkInRequired} onClick={() => void onRefreshDay(dayNumber)}>
               <RefreshCw aria-hidden="true" />
               Bu günü yenile
             </Button>
@@ -379,7 +363,9 @@ function DurationOptions({
   generatingDuration: SupportedNutritionPlanDuration | null;
   currentPlan?: NutritionPlanRecord;
 }) {
+  const checkInRequired = useWeightCheckInStatus()?.required === true;
   const create = async (duration: SupportedNutritionPlanDuration) => {
+    if (generating || checkInRequired) return;
     if (duration === currentPlan?.duration) return;
     const currentDays = currentPlan ? safeContent(currentPlan)?.durationDays ?? DURATION_DAYS[currentPlan.duration] : 0;
     const targetDays = DURATION_DAYS[duration];
@@ -419,7 +405,7 @@ function DurationOptions({
                   ? `Mevcut ${currentDays} gün korunur, yalnızca ${targetDays - currentDays} yeni gün eklenir.`
                   : "Daha kısa süre seçildiğinde bugünden başlayan yeni bir plan hazırlanır."}
               </p>
-              <Button className="mt-4 w-full" disabled={generating} onClick={() => void create(duration)}>
+              <Button className="mt-4 w-full" disabled={generating || checkInRequired} onClick={() => void create(duration)}>
                 <CalendarDays className={selected ? "animate-pulse" : ""} aria-hidden="true" />
                 {selected ? "Hazırlanıyor…" : extending ? `${targetDays} güne uzat` : "Yeni plan oluştur"}
               </Button>
@@ -455,6 +441,7 @@ function EmptyPlan({ generating, generatingDuration }: { generating: boolean; ge
 
 export function NutritionPlanView() {
   const { activePlan, hydrated, loading, generating, generatingDuration } = useNutritionPlan();
+  const checkInRequired = useWeightCheckInStatus()?.required === true;
   const [weekIndex, setWeekIndex] = React.useState(0);
   const [showDurationOptions, setShowDurationOptions] = React.useState(false);
   const [showRefreshOptions, setShowRefreshOptions] = React.useState(false);
@@ -518,6 +505,7 @@ export function NutritionPlanView() {
       : `bugün ara gün · sıradaki ${focusDay}. gün ${dateLabel(activePlan, focusDay)}`;
 
   const regenerateAll = async () => {
+    if (generating || checkInRequired) return;
     try {
       await nutritionPlanStore.regenerate(activePlan.id);
       toast.success("Bütün öğün planın yenilendi");
@@ -527,6 +515,7 @@ export function NutritionPlanView() {
   };
 
   const refreshFromFocus = async () => {
+    if (generating || checkInRequired) return;
     try {
       await nutritionPlanStore.refresh(activePlan.id, { mode: "FROM_DAY", dayNumber: focusDay });
       toast.success(`${focusDay}. günden sonraki planın yenilendi`);
@@ -536,6 +525,7 @@ export function NutritionPlanView() {
   };
 
   const refreshDay = async (dayNumber: number) => {
+    if (generating || checkInRequired) return;
     try {
       await nutritionPlanStore.refresh(activePlan.id, { mode: "DAY", dayNumber });
       toast.success(`${dayNumber}. gün yenilendi`);
@@ -599,10 +589,10 @@ export function NutritionPlanView() {
                 Bütün planı yeniden oluşturmak mevcut plan devamlılığını değiştirebilir. Geçmiş günleri korumak için sıradaki günden sonrasını yenilemen önerilir.
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
-                <Button size="sm" disabled={generating} onClick={() => void refreshFromFocus()}>
+                <Button size="sm" disabled={generating || checkInRequired} onClick={() => void refreshFromFocus()}>
                   {position.exactToday ? "Bugünden sonrasını yenile" : "Sıradaki günden sonrasını yenile"}
                 </Button>
-                <Button variant="outline" size="sm" disabled={generating} onClick={() => void regenerateAll()}>
+                <Button variant="outline" size="sm" disabled={generating || checkInRequired} onClick={() => void regenerateAll()}>
                   Bütün planı yenile
                 </Button>
                 <Button variant="ghost" size="sm" disabled={generating} onClick={() => setShowRefreshOptions(false)}>Vazgeç</Button>

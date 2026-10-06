@@ -7,6 +7,7 @@ export class ApiError extends Error {
     readonly status: number,
     /** Machine-readable error code from the API envelope, when present. */
     readonly code?: string,
+    readonly details?: unknown,
   ) {
     super(message);
     this.name = "ApiError";
@@ -37,7 +38,7 @@ interface SuccessEnvelope<T> {
 
 interface ErrorEnvelope {
   success: false;
-  error: { code: string; message: string };
+  error: { code: string; message: string; details?: unknown };
 }
 
 const CONSENT_REQUIRED_CODE = "CONSENT_REQUIRED";
@@ -158,7 +159,7 @@ export async function apiRequest<TResponse>({
     }
 
     const message = err?.error?.message ?? `İstek başarısız oldu (${response.status}).`;
-    throw new ApiError(message, response.status, code);
+    throw new ApiError(message, response.status, code, err?.error?.details);
   }
 
   if (body && typeof body === "object" && "success" in body) {

@@ -30,6 +30,11 @@ const apiProxyTarget = process.env.DIEWISH_API_PROXY_TARGET?.trim().replace(/\/+
 const diewishBuildStamp = new Date().toISOString();
 
 const nextConfig: NextConfig = {
+  // Generation runs in bounded AI batches. The default 30-second rewrite
+  // proxy can fail while the backend still completes and charges the plan.
+  // Outlive the measured nutrition generation deadline and backend (170s),
+  // while remaining inside the frontend service/client deadline (180s).
+  experimental: { proxyTimeout: 175_000 },
   reactStrictMode: true,
   env: {
     NEXT_PUBLIC_DIEWISH_BUILD_STAMP: diewishBuildStamp,

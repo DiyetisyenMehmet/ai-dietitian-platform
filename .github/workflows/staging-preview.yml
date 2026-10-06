@@ -297,7 +297,7 @@ jobs:
             --cpu 1 \
             --memory 1Gi \
             --concurrency 40 \
-            --timeout 120 \
+            --timeout 170 \
             --min 0 \
             --max 2 \
             --update-env-vars "API_PREFIX=/api,DIEWISH_ENVIRONMENT=staging,DIEWISH_APPLICATION_SHA=${GITHUB_SHA},TRUST_PROXY_HOPS=1,RATE_LIMIT_WINDOW_MS=60000,RATE_LIMIT_MAX=600,ENABLE_API_DOCS=false,LOG_LEVEL=info,JWT_ISSUER=diewish-staging,REFRESH_COOKIE_NAME=diewish_staging_refresh,REFRESH_COOKIE_SAME_SITE=lax,STORAGE_PROVIDER=gcs,STORAGE_GCS_BUCKET=${HEALTH_STORAGE_BUCKET},STORAGE_GCS_PREFIX=diewish-staging,AI_PROVIDER=vertex,GOOGLE_CLOUD_PROJECT=${PROJECT_ID},FIREBASE_MESSAGING_SENDER_ID=${PROJECT_NUMBER},VERTEX_AI_LOCATION=global,VERTEX_AI_MODEL=gemini-3.5-flash,USDA_FDC_API_KEY=DEMO_KEY,OPEN_FOOD_FACTS_USER_AGENT=Diewish-Staging/0.1" \
@@ -359,7 +359,7 @@ jobs:
         run: |
           set -euo pipefail
           # Browser API calls are proxied through this service. Its request
-          # timeout must outlive the backend's 120-second synchronous analysis
+          # timeout must outlive the backend's 170-second bounded synchronous generation
           # window; otherwise the proxy can fail first while the backend later
           # persists a successful blood-test result.
           gcloud run deploy "$FRONTEND_SERVICE" \

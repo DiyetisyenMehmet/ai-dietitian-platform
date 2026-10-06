@@ -6,6 +6,7 @@ on:
       - fix/production-hardening
       - feature/android-native-scanner
       - feature/staging-preview
+      - feature/workmode-dashboard-edit-polish-a1
   workflow_dispatch:
 
 permissions:
@@ -321,7 +322,11 @@ jobs:
           exit 1
       - name: Run targeted Dashboard card personalization E2E
         working-directory: frontend
-        run: npx playwright test e2e/dashboard-card-personalization.spec.ts --workers=1 --reporter=line
+        run: >-
+          npx playwright test
+          e2e/dashboard-card-personalization.spec.ts
+          e2e/dashboard-edit-polish.spec.ts
+          --workers=1 --reporter=line
       - name: Run browser smoke
         working-directory: frontend
         run: >-

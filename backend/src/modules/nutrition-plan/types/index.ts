@@ -170,6 +170,10 @@ export interface NutritionPlanAIInput extends Omit<NutritionPlanGenerationInput,
   planDurationDays?: number;
   startDayNumber?: number;
   avoidMealSignatures?: string[];
+  /** A bounded repair returns only these plan days, in this exact order. */
+  requestedDayNumbers?: number[];
+  /** Deterministic validation feedback; never permission to loosen safety gates. */
+  validationFeedback?: string[];
 }
 
 export interface NutritionPlanAIOutput {
