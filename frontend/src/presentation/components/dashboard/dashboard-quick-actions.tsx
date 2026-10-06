@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { EyeOff, GripVertical, SlidersHorizontal, X } from "lucide-react";
+import { EllipsisVertical, EyeOff, SlidersHorizontal, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { activityStore } from "@/application/health/activity-store";
@@ -354,13 +354,21 @@ export function DashboardQuickActions({
           return (
             <div
               key={id}
+              onPointerDown={(event) => {
+                const target = event.target as HTMLElement;
+                if (target.closest("[data-dashboard-personalization-control]")) return;
+                quickReorder.onPointerDown(event, id);
+              }}
               className={cn(
-                "relative min-w-0 flex-1 basis-0 transition-[transform,filter] duration-150",
-                quickReorder.draggingId === id && "z-20 scale-[1.02] drop-shadow-lg",
+                "relative min-w-0 flex-1 basis-0 transition-[transform,filter,box-shadow] duration-200 ease-out",
+                editing && "touch-none cursor-grab select-none",
+                quickReorder.draggingId === id &&
+                  "z-20 scale-[1.015] cursor-grabbing drop-shadow-lg",
               )}
               data-quick-action-slot={id}
               data-personalize-group="quick-actions"
               data-personalize-item={id}
+              data-quick-action-drag-surface={editing ? id : undefined}
             >
               {id === "meal" ? (
                 <Link
@@ -375,7 +383,11 @@ export function DashboardQuickActions({
                         }
                       : undefined
                   }
-                  className={cn(tileClass, meta.tileClass)}
+                  className={cn(
+                    tileClass,
+                    meta.tileClass,
+                    editing && "pointer-events-none select-none",
+                  )}
                 >
                   {tileContent}
                 </Link>
@@ -384,7 +396,12 @@ export function DashboardQuickActions({
                   type="button"
                   disabled={editing}
                   onClick={() => openQuickAction(id)}
-                  className={cn(tileClass, meta.tileClass, "disabled:opacity-100")}
+                  className={cn(
+                    tileClass,
+                    meta.tileClass,
+                    "disabled:opacity-100",
+                    editing && "pointer-events-none select-none",
+                  )}
                 >
                   {tileContent}
                 </button>
@@ -397,22 +414,23 @@ export function DashboardQuickActions({
                     aria-label={`${meta.label} hızlı işlemini sürükle. Sol ve sağ ok tuşlarıyla sırala.`}
                     aria-grabbed={quickReorder.draggingId === id}
                     disabled={savingPreferences}
-                    onPointerDown={(event) => quickReorder.onPointerDown(event, id)}
                     onKeyDown={(event) => quickReorder.onKeyDown(event, id)}
-                    className="absolute -left-1 -top-2 z-30 flex size-10 touch-none items-center justify-center rounded-full border border-border/80 bg-background/95 text-muted-foreground shadow-sm backdrop-blur focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                    className="absolute left-0.5 top-0.5 z-30 flex size-7 items-center justify-center text-muted-foreground/80 transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
                     data-quick-action-drag-handle={id}
                   >
-                    <GripVertical className="size-4" aria-hidden="true" />
+                    <EllipsisVertical className="size-3.5" aria-hidden="true" />
                   </button>
                   <button
                     type="button"
                     aria-label={`${meta.label} hızlı işlemini gizle`}
                     disabled={savingPreferences}
+                    onPointerDown={(event) => event.stopPropagation()}
                     onClick={() => onHideAction?.(id)}
-                    className="absolute -right-1 -top-2 z-30 flex size-10 items-center justify-center rounded-full border border-border/80 bg-background/95 text-muted-foreground shadow-sm backdrop-blur hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                    className="absolute right-0.5 top-1.5 z-30 flex size-7 items-center justify-center rounded-full border border-border/60 bg-background/80 text-muted-foreground shadow-sm backdrop-blur transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                    data-dashboard-personalization-control
                     data-quick-action-hide={id}
                   >
-                    <EyeOff className="size-4" aria-hidden="true" />
+                    <EyeOff className="size-3.5" aria-hidden="true" />
                   </button>
                 </>
               )}

@@ -123,7 +123,7 @@ export function useDashboardInlineReorder<T extends string>({
   }, [finish, previewAt]);
 
   const onPointerDown = React.useCallback(
-    (event: React.PointerEvent<HTMLButtonElement>, id: T) => {
+    (event: React.PointerEvent<HTMLElement>, id: T) => {
       if (disabled || activeIdRef.current || idsRef.current.length < 2) return;
       event.preventDefault();
       activeIdRef.current = id;

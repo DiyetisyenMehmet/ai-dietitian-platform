@@ -59,19 +59,19 @@ async function waitForSaved(page: Page) {
 
 async function preparePointerDrag(
   page: Page,
-  handleSelector: string,
+  sourceSelector: string,
   targetSelector: string,
 ) {
-  const handle = page.locator(handleSelector);
+  const source = page.locator(sourceSelector);
   const target = page.locator(targetSelector);
 
   await target.scrollIntoViewIfNeeded();
-  await handle.scrollIntoViewIfNeeded();
-  await expect(handle).toBeEnabled();
+  await source.scrollIntoViewIfNeeded();
+  await expect(source).toBeVisible();
 
   await expect
     .poll(async () =>
-      handle.evaluate((node) => {
+      source.evaluate((node) => {
         const rect = node.getBoundingClientRect();
         const x = rect.left + rect.width / 2;
         const y = rect.top + rect.height / 2;
@@ -88,28 +88,28 @@ async function preparePointerDrag(
     )
     .toBe(true);
 
-  const handleBox = await handle.boundingBox();
+  const sourceBox = await source.boundingBox();
   const targetBox = await target.boundingBox();
-  expect(handleBox).not.toBeNull();
+  expect(sourceBox).not.toBeNull();
   expect(targetBox).not.toBeNull();
-  return { handle, target, handleBox: handleBox!, targetBox: targetBox! };
+  return { source, target, sourceBox: sourceBox!, targetBox: targetBox! };
 }
 
 async function dragBefore(
   page: Page,
-  handleSelector: string,
+  sourceSelector: string,
   targetSelector: string,
   axis: "x" | "y",
 ) {
-  const { handleBox, targetBox } = await preparePointerDrag(
+  const { sourceBox, targetBox } = await preparePointerDrag(
     page,
-    handleSelector,
+    sourceSelector,
     targetSelector,
   );
 
   await page.mouse.move(
-    handleBox.x + handleBox.width / 2,
-    handleBox.y + handleBox.height / 2,
+    sourceBox.x + sourceBox.width / 2,
+    sourceBox.y + sourceBox.height / 2,
   );
   await page.mouse.down();
   await page.mouse.move(
@@ -250,7 +250,7 @@ test("mouse drag persists cards and quick actions, then normal navigation return
   );
   await dragBefore(
     page,
-    '[data-dashboard-card-drag-handle="blood"]',
+    '[data-dashboard-card-slot="blood"]',
     '[data-dashboard-card-slot="food"]',
     "y",
   );
@@ -267,7 +267,7 @@ test("mouse drag persists cards and quick actions, then normal navigation return
   );
   await dragBefore(
     page,
-    '[data-quick-action-drag-handle="weight"]',
+    '[data-quick-action-slot="weight"]',
     '[data-quick-action-slot="meal"]',
     "x",
   );
@@ -301,7 +301,7 @@ test("mouse drag persists cards and quick actions, then normal navigation return
   await expect(page).toHaveURL(/\/meals\/scan(?:$|\?)/);
 });
 
-test("touch drag is handle-scoped and keyboard reorder stays accessible", async ({
+test("touch drag is surface-wide and keyboard reorder stays accessible", async ({
   browser,
   request,
 }) => {
@@ -319,19 +319,19 @@ test("touch drag is handle-scoped and keyboard reorder stays accessible", async 
     await openEdit(page);
 
     const {
-      handle: cardHandle,
+      source: cardSource,
       target: cardTarget,
-      handleBox: cardHandleBox,
+      sourceBox: cardSourceBox,
       targetBox: cardTargetBox,
     } = await preparePointerDrag(
       page,
-      '[data-dashboard-card-drag-handle="blood"]',
+      '[data-dashboard-card-slot="blood"]',
       '[data-dashboard-card-slot="food"]',
     );
-    expect(await cardHandle.evaluate((node) => getComputedStyle(node).touchAction)).toBe("none");
+    expect(await cardSource.evaluate((node) => getComputedStyle(node).touchAction)).toBe("none");
     expect(
       await cardTarget.evaluate((node) => getComputedStyle(node).touchAction),
-    ).not.toBe("none");
+    ).toBe("none");
 
     const cdp = await context.newCDPSession(page);
     let saveResponse = page.waitForResponse(
@@ -343,8 +343,8 @@ test("touch drag is handle-scoped and keyboard reorder stays accessible", async 
     await cdp.send("Input.dispatchTouchEvent", {
       type: "touchStart",
       touchPoints: [{
-        x: cardHandleBox!.x + cardHandleBox!.width / 2,
-        y: cardHandleBox!.y + cardHandleBox!.height / 2,
+        x: cardSourceBox!.x + cardSourceBox!.width / 2,
+        y: cardSourceBox!.y + cardSourceBox!.height / 2,
         id: 1,
         radiusX: 1,
         radiusY: 1,
@@ -368,19 +368,19 @@ test("touch drag is handle-scoped and keyboard reorder stays accessible", async 
     expect(await cardIds(page)).toEqual(["blood", "food", "progress", "coach"]);
 
     const {
-      handle: quickHandle,
+      source: quickSource,
       target: quickTarget,
-      handleBox: quickHandleBox,
+      sourceBox: quickSourceBox,
       targetBox: quickTargetBox,
     } = await preparePointerDrag(
       page,
-      '[data-quick-action-drag-handle="weight"]',
+      '[data-quick-action-slot="weight"]',
       '[data-quick-action-slot="meal"]',
     );
-    expect(await quickHandle.evaluate((node) => getComputedStyle(node).touchAction)).toBe("none");
+    expect(await quickSource.evaluate((node) => getComputedStyle(node).touchAction)).toBe("none");
     expect(
       await quickTarget.evaluate((node) => getComputedStyle(node).touchAction),
-    ).not.toBe("none");
+    ).toBe("none");
 
     saveResponse = page.waitForResponse(
       (response) =>
@@ -391,8 +391,8 @@ test("touch drag is handle-scoped and keyboard reorder stays accessible", async 
     await cdp.send("Input.dispatchTouchEvent", {
       type: "touchStart",
       touchPoints: [{
-        x: quickHandleBox!.x + quickHandleBox!.width / 2,
-        y: quickHandleBox!.y + quickHandleBox!.height / 2,
+        x: quickSourceBox!.x + quickSourceBox!.width / 2,
+        y: quickSourceBox!.y + quickSourceBox!.height / 2,
         id: 2,
         radiusX: 1,
         radiusY: 1,

@@ -178,8 +178,16 @@ test("inline personalization source removes the old editor modal and visible mov
   assert.doesNotMatch(view, /<DashboardQuickActions \/>|<DashboardPersonalizedCards \/>/);
   assert.doesNotMatch(cards, /ArrowUp|ArrowDown|ModalContent|Ana ekran kartları/);
   assert.match(cards, /data-dashboard-card-drag-handle/);
+  assert.match(cards, /data-dashboard-card-drag-surface/);
+  assert.match(cards, /EllipsisVertical/);
+  assert.doesNotMatch(cards, /GripVertical/);
   assert.match(quick, /data-dashboard-edit-toggle/);
+  assert.match(quick, /data-quick-action-drag-surface/);
+  assert.match(quick, /EllipsisVertical/);
+  assert.doesNotMatch(quick, /GripVertical/);
   assert.doesNotMatch(quick, />Düzenle</);
+  assert.match(section, /Tutup sürükleyerek sırala/);
+  assert.match(section, /Kaydet/);
   assert.match(section, /Gizlenenleri Gör/);
   assert.match(section, /role="tablist"/);
   assert.match(section, /Kartlar/);

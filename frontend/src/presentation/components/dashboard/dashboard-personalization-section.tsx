@@ -345,6 +345,17 @@ export function DashboardPersonalizationSection() {
     });
   }, []);
 
+  const saveAndClose = React.useCallback(async () => {
+    const ok = await save(draftRef.current);
+    if (!ok) {
+      toast.error("Ana ekran düzeni kaydedilemedi.");
+      return;
+    }
+    setHiddenOpen(false);
+    setEditing(false);
+    toast.success("Ana ekran düzeni kaydedildi.");
+  }, [save]);
+
   return (
     <section
       className="space-y-3"
@@ -375,7 +386,7 @@ export function DashboardPersonalizationSection() {
       />
 
       {editing && (
-        <div className="flex min-w-0 items-center justify-between gap-2 pt-1">
+        <div className="flex min-w-0 flex-col gap-2 rounded-2xl border border-border/70 bg-muted/25 p-2.5 sm:flex-row sm:items-center sm:justify-between">
           {error ? (
             <button
               type="button"
@@ -385,21 +396,36 @@ export function DashboardPersonalizationSection() {
               Düzen kaydedilemedi · yeniden dene
             </button>
           ) : (
-            <span className="text-xs text-muted-foreground">
-              Tutup sürükleyerek sıralayabilirsin.
+            <span className="px-1 text-xs font-medium text-muted-foreground">
+              Tutup sürükleyerek sırala
             </span>
           )}
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setHiddenOpen(true)}
-            className="min-h-10 shrink-0"
-            data-open-hidden-items
-          >
-            <EyeOff className="size-4" aria-hidden="true" />
-            Gizlenenleri Gör
-          </Button>
+
+          <div className="flex min-w-0 gap-2 sm:shrink-0">
+            <Button
+              type="button"
+              size="sm"
+              disabled={loading}
+              isLoading={saving}
+              onClick={() => void saveAndClose()}
+              className="min-h-10 flex-1 sm:flex-none"
+              data-save-dashboard-layout
+            >
+              Kaydet
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={saving || loading}
+              onClick={() => setHiddenOpen(true)}
+              className="min-h-10 flex-1 sm:flex-none"
+              data-open-hidden-items
+            >
+              <EyeOff className="size-4" aria-hidden="true" />
+              Gizlenenleri Gör
+            </Button>
+          </div>
         </div>
       )}
 

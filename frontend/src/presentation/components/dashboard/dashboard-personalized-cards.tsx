@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { EyeOff, GripVertical } from "lucide-react";
+import { EllipsisVertical, EyeOff } from "lucide-react";
 
 import {
   visibleDashboardCardIds,
@@ -60,15 +60,23 @@ export function DashboardPersonalizedCards({
             data-dashboard-card-slot={id}
             data-personalize-group="cards"
             data-personalize-item={id}
+            onPointerDown={(event) => {
+              const target = event.target as HTMLElement;
+              if (target.closest("[data-dashboard-personalization-control]")) return;
+              reorder.onPointerDown(event, id);
+            }}
             className={cn(
-              "relative transition-[transform,filter] duration-150",
+              "relative transition-[transform,filter,box-shadow] duration-200 ease-out",
               index === 0
                 ? ""
                 : index === 3
                   ? "mt-5"
                   : "mt-[clamp(0.65rem,2.2vw,0.95rem)]",
-              reorder.draggingId === id && "z-20 scale-[1.01] drop-shadow-lg",
+              editing && "touch-none cursor-grab select-none",
+              reorder.draggingId === id &&
+                "z-20 scale-[1.008] cursor-grabbing drop-shadow-lg",
             )}
+            data-dashboard-card-drag-surface={editing ? id : undefined}
           >
             <div
               className={cn(editing && "pointer-events-none select-none")}
@@ -90,23 +98,24 @@ export function DashboardPersonalizedCards({
                   aria-label={`${dashboardCardLabel(id)} kartını sürükle. Yukarı ve aşağı ok tuşlarıyla sırala.`}
                   aria-grabbed={reorder.draggingId === id}
                   disabled={saving}
-                  onPointerDown={(event) => reorder.onPointerDown(event, id)}
                   onKeyDown={(event) => reorder.onKeyDown(event, id)}
-                  className="absolute -left-1 top-1/2 z-30 flex size-11 -translate-y-1/2 touch-none items-center justify-center rounded-full border border-border/80 bg-background/95 text-muted-foreground shadow-sm backdrop-blur hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                  className="absolute left-0.5 top-1/2 z-30 flex size-8 -translate-y-1/2 items-center justify-center text-muted-foreground/80 transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
                   data-dashboard-card-drag-handle={id}
                 >
-                  <GripVertical className="size-5" aria-hidden="true" />
+                  <EllipsisVertical className="size-4" aria-hidden="true" />
                 </button>
 
                 <button
                   type="button"
                   aria-label={`${dashboardCardLabel(id)} kartını gizle`}
                   disabled={saving}
+                  onPointerDown={(event) => event.stopPropagation()}
                   onClick={() => onHide(id)}
-                  className="absolute right-2 top-2 z-30 flex size-11 items-center justify-center rounded-full border border-border/80 bg-background/95 text-muted-foreground shadow-sm backdrop-blur hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                  className="absolute right-[1%] top-[calc(50%-2.55rem)] z-40 flex size-8 items-center justify-center rounded-full border border-border/70 bg-background/85 text-muted-foreground shadow-sm backdrop-blur transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                  data-dashboard-personalization-control
                   data-dashboard-card-hide={id}
                 >
-                  <EyeOff className="size-5" aria-hidden="true" />
+                  <EyeOff className="size-4" aria-hidden="true" />
                 </button>
               </>
             )}
