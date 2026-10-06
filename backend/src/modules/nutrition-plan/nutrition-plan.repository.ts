@@ -71,8 +71,11 @@ function deviationWhere(
  * current active plan across the supported 7/14/30-day horizons.
  */
 export const nutritionPlanRepository = {
-  async createVersioned(data: CreatePlanData): Promise<NutritionPlan> {
-    return prisma.$transaction(async (tx) => {
+  async createVersioned(
+    data: CreatePlanData,
+    transaction?: Prisma.TransactionClient,
+  ): Promise<NutritionPlan> {
+    const persist = async (tx: Prisma.TransactionClient) => {
       const latest = await tx.nutritionPlan.findFirst({
         where: { userId: data.userId, duration: data.duration },
         orderBy: { version: "desc" },
@@ -89,7 +92,7 @@ export const nutritionPlanRepository = {
         data: { isActive: false },
       });
 
-      return tx.nutritionPlan.create({
+      const plan = await tx.nutritionPlan.create({
         data: {
           userId: data.userId,
           duration: data.duration,
@@ -116,7 +119,18 @@ export const nutritionPlanRepository = {
           processingTimeMs: data.processingTimeMs,
         },
       });
-    });
+      // The completed plan and its quota event commit or roll back together.
+      await tx.aiUsageEvent.create({
+        data: {
+          userId: data.userId,
+          feature: "NUTRITION_PLAN",
+          provider: data.aiProvider,
+          model: data.aiModel,
+        },
+      });
+      return plan;
+    };
+    return transaction ? persist(transaction) : prisma.$transaction(persist);
   },
 
   /** Creates a new immutable version from an existing plan and optionally carries adherence history forward. */
@@ -134,7 +148,8 @@ export const nutritionPlanRepository = {
         data: { isActive: false },
       });
 
-      const mealTiming = data.mealTiming ?? (data.source.mealTiming as unknown as MealTimingRecommendation);
+      const mealTiming =
+        data.mealTiming ?? (data.source.mealTiming as unknown as MealTimingRecommendation);
       const plan = await tx.nutritionPlan.create({
         data: {
           userId: data.userId,

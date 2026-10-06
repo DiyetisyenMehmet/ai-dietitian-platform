@@ -16,6 +16,7 @@ import { nutritionPlanAdaptationService } from "./nutrition-plan-adaptation.serv
 import { buildRealLifePlanningContext } from "./nutrition-plan-realism";
 import { nutritionPlanRepository } from "./nutrition-plan.repository";
 import { assessNutritionPlanSafety } from "./nutrition-plan-safety";
+import { withNutritionGenerationLock } from "./nutrition-plan-generation-lock";
 import type {
   BloodTestImplicationInput,
   CalendarDay,
@@ -132,115 +133,116 @@ export const nutritionPlanService = {
     startDateYmd?: string,
     pantryText?: string,
   ): Promise<NutritionPlan> {
-    const startedAt = Date.now();
-    try {
-      const tier = await aiUsageService.resolveTier(userId);
-      if (tier === "FREE" && duration !== "SEVEN_DAY") {
-        throw new ApiError(
-          403,
-          "Ücretsiz planda yalnızca tek seferlik 7 günlük başlangıç planı kullanılabilir.",
-          {
-            code: ENTITLEMENT_REQUIRED_CODE,
-            details: {
-              feature: "NUTRITION_PLAN",
-              tier,
-              reason: "FREE_DURATION_RESTRICTED",
-              allowedDuration: "SEVEN_DAY",
+    return withNutritionGenerationLock(userId, async (transaction) => {
+      const startedAt = Date.now();
+      try {
+        const tier = await aiUsageService.resolveTier(userId);
+        if (tier === "FREE" && duration !== "SEVEN_DAY") {
+          throw new ApiError(
+            403,
+            "Ücretsiz planda yalnızca tek seferlik 7 günlük başlangıç planı kullanılabilir.",
+            {
+              code: ENTITLEMENT_REQUIRED_CODE,
+              details: {
+                feature: "NUTRITION_PLAN",
+                tier,
+                reason: "FREE_DURATION_RESTRICTED",
+                allowedDuration: "SEVEN_DAY",
+              },
             },
-          },
-        );
-      }
+          );
+        }
 
-      const profile = await buildProfile(userId);
-      assertOrdinaryPlanSafety(profile);
+        const profile = await buildProfile(userId);
+        assertOrdinaryPlanSafety(profile);
 
-      // Quota is only asserted after deterministic safety eligibility. Usage is
-      // recorded only after a complete plan is persisted, so safety/provider
-      // failures never consume a successful generation right.
-      await aiUsageService.assertWithinQuota(userId, "NUTRITION_PLAN", tier);
+        // Quota is only asserted after deterministic safety eligibility. Usage is
+        // recorded only after a complete plan is persisted, so safety/provider
+        // failures never consume a successful generation right.
+        await aiUsageService.assertWithinQuota(userId, "NUTRITION_PLAN", tier);
 
-      const [{ analysisId, implications }, adaptation] = await Promise.all([
-        loadBloodTestImplications(userId),
-        nutritionPlanAdaptationService.build(userId),
-      ]);
+        const [{ analysisId, implications }, adaptation] = await Promise.all([
+          loadBloodTestImplications(userId),
+          nutritionPlanAdaptationService.build(userId),
+        ]);
 
-      const calories = calculateCalories(profile);
-      const macros = calculateMacros(profile, calories.dailyCalories, calories.goal);
-      const water = calculateWater(profile);
-      const mealTiming = calculateMealTiming(calories.goal, {
-        usualWakeTime: profile.usualWakeTime,
-        usualSleepTime: profile.usualSleepTime,
-        workScheduleType: profile.workScheduleType,
-        preferredSnackTime: adaptation.preferredSnackTime,
-      });
-      const durationDays = DURATION_DAYS[duration];
-      const startDate = dateOnlyFromYmd(startDateYmd);
-      const realLifePlanning = buildRealLifePlanningContext(pantryText);
-
-      const generation = await mealGeneratorService.generate({
-        goal: calories.goal,
-        dailyCalories: calories.dailyCalories,
-        proteinGrams: macros.proteinGrams,
-        carbsGrams: macros.carbsGrams,
-        fatGrams: macros.fatGrams,
-        waterMl: water.waterMl,
-        mealTiming,
-        dietaryPreference: profile.dietaryPreference,
-        allergies: profile.allergies,
-        healthConditions: profile.healthConditions,
-        bloodTestImplications: implications,
-        behaviorInsights: adaptation.behaviorInsights,
-        realLifePlanning,
-        durationDays,
-      });
-
-      const cycle = generation.output.cycle;
-      if (cycle.length !== durationDays) {
-        throw new ApiError(502, "The nutrition-plan provider returned an incomplete plan.", {
-          code: "NUTRITION_PLAN_INCOMPLETE",
-          isOperational: false,
+        const calories = calculateCalories(profile);
+        const macros = calculateMacros(profile, calories.dailyCalories, calories.goal);
+        const water = calculateWater(profile);
+        const mealTiming = calculateMealTiming(calories.goal, {
+          usualWakeTime: profile.usualWakeTime,
+          usualSleepTime: profile.usualSleepTime,
+          workScheduleType: profile.workScheduleType,
+          preferredSnackTime: adaptation.preferredSnackTime,
         });
+        const durationDays = DURATION_DAYS[duration];
+        const startDate = dateOnlyFromYmd(startDateYmd);
+        const realLifePlanning = buildRealLifePlanningContext(pantryText);
+
+        const generation = await mealGeneratorService.generate({
+          goal: calories.goal,
+          dailyCalories: calories.dailyCalories,
+          proteinGrams: macros.proteinGrams,
+          carbsGrams: macros.carbsGrams,
+          fatGrams: macros.fatGrams,
+          waterMl: water.waterMl,
+          mealTiming,
+          dietaryPreference: profile.dietaryPreference,
+          allergies: profile.allergies,
+          healthConditions: profile.healthConditions,
+          bloodTestImplications: implications,
+          behaviorInsights: adaptation.behaviorInsights,
+          realLifePlanning,
+          durationDays,
+        });
+
+        const cycle = generation.output.cycle;
+        if (cycle.length !== durationDays) {
+          throw new ApiError(502, "The nutrition-plan provider returned an incomplete plan.", {
+            code: "NUTRITION_PLAN_INCOMPLETE",
+            isOperational: false,
+          });
+        }
+
+        const content: NutritionPlanContent = {
+          durationDays,
+          cycleLengthDays: cycle.length,
+          cycle,
+          calendar: buildCalendar(durationDays),
+          planningContext: realLifePlanning,
+        };
+
+        const plan = await nutritionPlanRepository.createVersioned(
+          {
+            userId,
+            duration,
+            startDate,
+            bloodTestAnalysisId: analysisId,
+            calories,
+            macros,
+            water,
+            mealTiming,
+            content,
+            explanations: generation.output.explanations,
+            recommendations: generation.output.recommendations,
+            summary: generation.output.summary,
+            aiProvider: generation.aiProvider,
+            aiModel: generation.aiModel,
+            processingTimeMs: Date.now() - startedAt,
+          },
+          transaction,
+        );
+
+        return plan;
+      } catch (error) {
+        logger.error({ err: error, userId, duration }, "Nutrition plan generation failed");
+        if (error instanceof ApiError) throw error;
+        // The generation lock maps expired transactions to an explicit timeout.
+        if (error && typeof error === "object" && "code" in error && error.code === "P2028")
+          throw error;
+        throw ApiError.internal("Nutrition plan generation failed.");
       }
-
-      const content: NutritionPlanContent = {
-        durationDays,
-        cycleLengthDays: cycle.length,
-        cycle,
-        calendar: buildCalendar(durationDays),
-        planningContext: realLifePlanning,
-      };
-
-      const plan = await nutritionPlanRepository.createVersioned({
-        userId,
-        duration,
-        startDate,
-        bloodTestAnalysisId: analysisId,
-        calories,
-        macros,
-        water,
-        mealTiming,
-        content,
-        explanations: generation.output.explanations,
-        recommendations: generation.output.recommendations,
-        summary: generation.output.summary,
-        aiProvider: generation.aiProvider,
-        aiModel: generation.aiModel,
-        processingTimeMs: Date.now() - startedAt,
-      });
-
-      await aiUsageService.record({
-        userId,
-        feature: "NUTRITION_PLAN",
-        provider: generation.aiProvider,
-        model: generation.aiModel,
-      });
-
-      return plan;
-    } catch (error) {
-      logger.error({ err: error, userId, duration }, "Nutrition plan generation failed");
-      if (error instanceof ApiError) throw error;
-      throw ApiError.internal("Nutrition plan generation failed.");
-    }
+    });
   },
 
   async regenerate(userId: string, planId: string): Promise<NutritionPlan> {

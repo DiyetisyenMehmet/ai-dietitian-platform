@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { ApiError } from "@/infrastructure/api/http-client";
 
 import {
   isSupportedNutritionPlanDuration,
@@ -75,7 +76,10 @@ function planPantryText(plan: NutritionPlanRecord | null): string | null {
   return value ? value.slice(0, 800) : null;
 }
 
-function mergeActivePlan(plans: NutritionPlanRecord[], plan: NutritionPlanRecord): NutritionPlanRecord[] {
+function mergeActivePlan(
+  plans: NutritionPlanRecord[],
+  plan: NutritionPlanRecord,
+): NutritionPlanRecord[] {
   return [
     plan,
     ...plans
@@ -103,6 +107,16 @@ function failGeneration(error: unknown): never {
   throw error;
 }
 
+function assertNotGenerating(): void {
+  if (state.generating) {
+    throw new ApiError(
+      "Nutrition plan generation is already in progress.",
+      409,
+      "NUTRITION_PLAN_GENERATION_IN_PROGRESS",
+    );
+  }
+}
+
 function requireSupportedSource(planId: string): SupportedNutritionPlanRecord {
   const source = state.plans.find((item) => item.id === planId) ?? state.activePlan;
   if (!source || !isSupportedNutritionPlanDuration(source.duration)) {
@@ -113,9 +127,15 @@ function requireSupportedSource(planId: string): SupportedNutritionPlanRecord {
 
 export const nutritionPlanStore = {
   async hydrateFromBackend(): Promise<NutritionPlanRecord | null> {
+    const previousActiveId = state.activePlan?.id;
     patch({ loading: true });
     try {
       const { plans } = await nutritionPlanClient.list();
+      // An older list response must not replace a plan generated meanwhile.
+      if (state.activePlan?.id !== previousActiveId) {
+        patch({ loading: false, hydrated: true });
+        return state.activePlan;
+      }
       const activePlan = chooseActive(plans);
       emit({
         ...state,
@@ -127,8 +147,9 @@ export const nutritionPlanStore = {
       });
       return activePlan;
     } catch {
-      emit({ ...EMPTY_STATE, pantryDraft: state.pantryDraft, hydrated: true });
-      return null;
+      // A failed concurrent read must not unlock an ongoing generation.
+      patch({ loading: false, hydrated: true });
+      return state.activePlan;
     }
   },
 
@@ -140,7 +161,7 @@ export const nutritionPlanStore = {
     duration: SupportedNutritionPlanDuration,
     pantryText = state.pantryDraft,
   ): Promise<NutritionPlanRecord> {
-    if (state.generating) throw new Error("Nutrition plan generation is already in progress.");
+    assertNotGenerating();
     patch({ generating: true, generatingDuration: duration });
     try {
       const { plan } = await nutritionPlanClient.generate(duration, pantryText);
@@ -151,7 +172,7 @@ export const nutritionPlanStore = {
   },
 
   async regenerate(planId: string): Promise<NutritionPlanRecord> {
-    if (state.generating) throw new Error("Nutrition plan generation is already in progress.");
+    assertNotGenerating();
     const source = requireSupportedSource(planId);
     patch({ generating: true, generatingDuration: source.duration });
     try {
@@ -163,7 +184,7 @@ export const nutritionPlanStore = {
   },
 
   async refresh(planId: string, input: RefreshNutritionPlanInput): Promise<NutritionPlanRecord> {
-    if (state.generating) throw new Error("Nutrition plan generation is already in progress.");
+    assertNotGenerating();
     const source = requireSupportedSource(planId);
     patch({ generating: true, generatingDuration: source.duration });
     try {
@@ -178,7 +199,7 @@ export const nutritionPlanStore = {
     planId: string,
     duration: SupportedNutritionPlanDuration,
   ): Promise<NutritionPlanRecord> {
-    if (state.generating) throw new Error("Nutrition plan generation is already in progress.");
+    assertNotGenerating();
     requireSupportedSource(planId);
     patch({ generating: true, generatingDuration: duration });
     try {
