@@ -326,6 +326,7 @@ jobs:
           npx playwright test
           e2e/dashboard-card-personalization.spec.ts
           e2e/dashboard-edit-polish.spec.ts
+          e2e/dashboard-edit-sanity.spec.ts
           --workers=1 --reporter=line
       - name: Run browser smoke
         working-directory: frontend
