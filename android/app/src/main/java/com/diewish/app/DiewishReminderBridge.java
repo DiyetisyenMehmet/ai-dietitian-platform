@@ -58,6 +58,7 @@ public final class DiewishReminderBridge {
     public void deletePushToken() {
         if (!trustedPage.getAsBoolean()) return;
         DiewishPushTokenStore.clear(activity.getApplicationContext());
+        NotificationAlertStore.clear(activity.getApplicationContext());
         if (FirebaseApp.getApps(activity).isEmpty()) return;
         FirebaseMessaging.getInstance().deleteToken();
     }
@@ -194,11 +195,28 @@ public final class DiewishReminderBridge {
     @JavascriptInterface
     public boolean showTestNotification() {
         if (!trustedPage.getAsBoolean()) return false;
-        return WellnessReminderReceiver.show(
-            activity.getApplicationContext(),
-            "test",
-            "wellness-test"
-        );
+        return NotificationAlertPresentation.preview(activity.getApplicationContext(), "water", "{}").startsWith("posted");
+    }
+
+    @JavascriptInterface
+    public String notificationAlertCapabilities() {
+        if (!trustedPage.getAsBoolean()) return "{}";
+        return "{\"version\":1,\"customSounds\":true,\"vibration\":" + NotificationAlertPresentation.hasVibration(activity) + ",\"testNotification\":" + "staging".equals(BuildConfig.APP_ENVIRONMENT) + "}";
+    }
+
+    @JavascriptInterface
+    public boolean setNotificationAlertPreferences(String json) {
+        return trustedPage.getAsBoolean() && NotificationAlertStore.replace(activity.getApplicationContext(), json);
+    }
+
+    @JavascriptInterface
+    public String previewNotification(String category, String json) {
+        return trustedPage.getAsBoolean() ? NotificationAlertPresentation.preview(activity.getApplicationContext(), category, json) : "unavailable";
+    }
+
+    @JavascriptInterface
+    public boolean previewNotificationSound(String preset) {
+        return trustedPage.getAsBoolean() && NotificationAlertPresentation.previewSound(activity.getApplicationContext(), preset);
     }
 
     @JavascriptInterface

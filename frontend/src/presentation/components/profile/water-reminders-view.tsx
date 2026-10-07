@@ -1,4 +1,5 @@
 "use client";
+import { NotificationAlertsLink } from "./notification-alerts-view";
 
 import * as React from "react";
 import {
@@ -232,6 +233,7 @@ export function WaterRemindersView() {
 
   return (
     <div className="space-y-4" data-water-reminders data-saving={saving}>
+      <NotificationAlertsLink category="water" />
       <div className="flex items-start gap-3 rounded-2xl bg-primary/5 p-4">
         <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-sky-500/10 text-sky-600 dark:text-sky-400">
           <Droplets className="size-6" aria-hidden="true" />

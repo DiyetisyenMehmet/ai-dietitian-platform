@@ -8,6 +8,7 @@ import { logger } from "../../lib/logger";
 import { prisma } from "../../lib/prisma";
 import { getNotificationProvider, type NotificationDeliveryResult } from "./notification.provider";
 import type { UpdateNotificationPreferencesInput } from "./notification.schemas";
+import { normalizedCategoryAlerts } from "./notification-alerts";
 
 const DEFAULT_PREFERENCES = {
   mealReminders: false,
@@ -273,13 +274,27 @@ export const notificationService = {
         input.weeklySummaryDay !== undefined ||
         input.weeklySummaryTime !== undefined ||
         input.timezoneOffsetMinutes !== undefined;
-      const previous = hasTimingUpdate
-        ? await tx.notificationPreference.findUnique({ where: { userId } })
-        : null;
+      // Serialize account edits so two devices cannot overwrite another
+      // category while merging the small shared preference map.
+      if (input.categoryAlerts)
+        await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`;
+      const previous =
+        hasTimingUpdate || input.categoryAlerts
+          ? await tx.notificationPreference.findUnique({ where: { userId } })
+          : null;
+      const merged = input.categoryAlerts
+        ? {
+            ...persisted,
+            categoryAlerts: {
+              ...normalizedCategoryAlerts(previous?.categoryAlerts),
+              ...input.categoryAlerts,
+            },
+          }
+        : persisted;
       const preferences = await tx.notificationPreference.upsert({
         where: { userId },
-        create: { userId, ...DEFAULT_PREFERENCES, ...persisted },
-        update: persisted,
+        create: { userId, ...DEFAULT_PREFERENCES, ...merged },
+        update: merged,
       });
       if (
         (input.weeklySummaryDay !== undefined &&
@@ -439,7 +454,11 @@ export const notificationService = {
 
         let result: NotificationDeliveryResult;
         try {
-          result = await provider.send(claim.notification, new Set(claim.deliveredDeviceKeys));
+          result = await provider.send(
+            claim.notification,
+            new Set(claim.deliveredDeviceKeys),
+            "categoryAlerts" in preferences ? preferences.categoryAlerts : null,
+          );
         } catch (error) {
           logger.warn(
             { err: error, notificationId: claim.notification.id },

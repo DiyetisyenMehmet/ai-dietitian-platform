@@ -30,17 +30,9 @@ public final class WellnessReminderReceiver extends BroadcastReceiver {
         NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
         if (manager == null) return false;
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationChannel channel = new NotificationChannel(CHANNEL_ID, "Sağlıklı yaşam hatırlatmaları", NotificationManager.IMPORTANCE_DEFAULT);
-            channel.setDescription("Diewish su, aktivite, uyku ve haftalık özet hatırlatmaları");
-            manager.createNotificationChannel(channel);
-            NotificationChannel activeChannel = manager.getNotificationChannel(CHANNEL_ID);
-            if (
-                activeChannel != null
-                    && activeChannel.getImportance() == NotificationManager.IMPORTANCE_NONE
-            ) return false;
-        }
-        if (!manager.areNotificationsEnabled()) return false;
+        String category = NotificationAlertPolicy.contains(NotificationAlertPolicy.CATEGORIES, type) ? type : "water";
+        NotificationChannel channel = NotificationAlertPresentation.channel(context, category, NotificationAlertStore.get(context, category));
+        if (!NotificationAlertPresentation.canPost(context, channel, CHANNEL_ID)) return false;
 
         String title;
         String body;
@@ -69,7 +61,7 @@ public final class WellnessReminderReceiver extends BroadcastReceiver {
             requestCode,
             unreadId
         );
-        Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O ? new Notification.Builder(context, CHANNEL_ID) : new Notification.Builder(context);
+        Notification.Builder builder = new Notification.Builder(context, channel.getId());
         Notification notification = builder
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)

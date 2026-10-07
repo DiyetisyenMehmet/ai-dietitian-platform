@@ -4,6 +4,7 @@ import type { Notification } from "@prisma/client";
 
 import { env } from "../../config/env";
 import { logger } from "../../lib/logger";
+import { normalizedCategoryAlerts, remoteCategory } from "./notification-alerts";
 import {
   notificationDeviceService,
   type ActiveNotificationDevice,
@@ -27,6 +28,7 @@ export interface NotificationProvider {
   send(
     notification: Notification,
     alreadyDeliveredDeviceKeys?: ReadonlySet<string>,
+    categoryAlerts?: unknown,
   ): Promise<NotificationDeliveryResult>;
 }
 
@@ -44,8 +46,7 @@ function isStagingRemotePushEnabled(): boolean {
   if (explicit === "false") return false;
   if (explicit === "true") return Boolean(env.GOOGLE_CLOUD_PROJECT.trim());
   return Boolean(
-    env.GOOGLE_CLOUD_PROJECT.trim() &&
-      process.env.K_SERVICE?.trim().endsWith("-staging"),
+    env.GOOGLE_CLOUD_PROJECT.trim() && process.env.K_SERVICE?.trim().endsWith("-staging"),
   );
 }
 
@@ -101,7 +102,8 @@ export function classifyFcmFailure(status: number, code?: string): FcmFailureCla
     status === 408 ||
     status === 429 ||
     status >= 500
-  ) return "retryable";
+  )
+    return "retryable";
   if (code === "THIRD_PARTY_AUTH_ERROR" || status === 401 || status === 403) return "config";
   return "permanent";
 }
@@ -139,6 +141,8 @@ export interface FcmMessageEnvelope {
     type: string;
     title: string;
     body: string;
+    soundPreset: string;
+    vibrationPreset: string;
   };
   android?: {
     priority: "high";
@@ -161,8 +165,12 @@ export interface FcmMessageEnvelope {
 export function buildFcmMessage(
   notification: Notification,
   device: ActiveNotificationDevice,
+  categoryAlerts?: unknown,
 ): FcmMessageEnvelope {
   const copy = privacySafeRemoteCopy(notification.type);
+  const category = remoteCategory(notification.type);
+  const alerts = normalizedCategoryAlerts(categoryAlerts);
+  const alert = category ? alerts[category] : { soundPreset: "system", vibrationPreset: "off" };
   const message: FcmMessageEnvelope = {
     token: device.token,
     data: {
@@ -170,6 +178,8 @@ export function buildFcmMessage(
       type: notification.type,
       title: copy.title,
       body: copy.body,
+      soundPreset: alert.soundPreset,
+      vibrationPreset: alert.vibrationPreset,
     },
   };
 
@@ -201,6 +211,7 @@ export class FirebaseCloudMessagingProvider implements NotificationProvider {
   async send(
     notification: Notification,
     alreadyDeliveredDeviceKeys: ReadonlySet<string> = new Set<string>(),
+    categoryAlerts?: unknown,
   ): Promise<NotificationDeliveryResult> {
     if (!isStagingRemotePushEnabled()) {
       return { disposition: "disabled", code: "FCM_DISABLED", deliveredDeviceKeys: [] };
@@ -241,7 +252,7 @@ export class FirebaseCloudMessagingProvider implements NotificationProvider {
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              message: buildFcmMessage(notification, device),
+              message: buildFcmMessage(notification, device, categoryAlerts),
             }),
             signal: AbortSignal.timeout(10_000),
           },

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { categoryAlertsSchema } from "./notification-alerts";
 
 const localTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Expected a 24-hour HH:MM time.");
 export const MAX_WATER_TIMES_PER_DAY = 8;
@@ -53,6 +54,7 @@ export const updateNotificationPreferencesSchema = z
     weeklySummaryDay: z.number().int().min(0).max(6).optional(),
     weeklySummaryTime: localTime.optional(),
     timezoneOffsetMinutes: z.number().int().min(-840).max(840).optional(),
+    categoryAlerts: categoryAlertsSchema.optional(),
   })
   .refine((value) => Object.keys(value).length > 0, "At least one preference must be supplied.");
 

@@ -4,6 +4,7 @@ import test from "node:test";
 import type { Notification } from "@prisma/client";
 
 import { prisma } from "../lib/prisma";
+import { categoryAlertsSchema } from "../modules/notifications/notification-alerts";
 import {
   buildFcmMessage,
   classifyFcmFailure,
@@ -580,4 +581,134 @@ test("weekly edits reschedule only the owner's future unsent server reviews with
     ).scheduledFor.toISOString(),
     future.toISOString(),
   );
+});
+
+test("category alert edits are bounded, account scoped and merge without touching plans or schedules", async (t) => {
+  const [first, second] = await Promise.all([
+    createUser("alert-first"),
+    createUser("alert-second"),
+  ]);
+  t.after(async () => {
+    await prisma.user.deleteMany({ where: { id: { in: [first.id, second.id] } } });
+  });
+  for (const invalid of [
+    {},
+    { water: { soundPreset: "fake", vibrationPreset: "off" } },
+    { water: { soundPreset: "system", vibrationPreset: "unsafe" } },
+    { water: { soundPreset: "system", vibrationPreset: "off", permission: "granted" } },
+    { iosDevice: { soundPreset: "system", vibrationPreset: "off" } },
+  ])
+    assert.equal(categoryAlertsSchema.safeParse(invalid).success, false);
+  await notificationService.updatePreferences(first.id, {
+    waterReminders: true,
+    waterReminderTime: "13:55",
+    mealReminders: true,
+  });
+  const a = await notificationService.updatePreferences(
+    first.id,
+    updateNotificationPreferencesSchema.parse({
+      categoryAlerts: { water: { soundPreset: "diewish_drop", vibrationPreset: "double_short" } },
+    }),
+  );
+  const b = await notificationService.updatePreferences(first.id, {
+    categoryAlerts: { meals: { soundPreset: "silent", vibrationPreset: "off" } },
+  });
+  assert.deepEqual(
+    (b.categoryAlerts as Record<string, unknown>).water,
+    (a.categoryAlerts as Record<string, unknown>).water,
+  );
+  assert.deepEqual((b.categoryAlerts as Record<string, unknown>).meals, {
+    soundPreset: "silent",
+    vibrationPreset: "off",
+  });
+  assert.equal(b.waterReminderTime, "13:55");
+  assert.equal(b.waterReminders, true);
+  assert.equal(b.mealReminders, true);
+  assert.equal(
+    await prisma.notificationPreference.findUnique({ where: { userId: second.id } }),
+    null,
+  );
+  assert.equal(await prisma.notification.count({ where: { userId: first.id } }), 0);
+  await Promise.all([
+    notificationService.updatePreferences(first.id, {
+      categoryAlerts: { activity: { soundPreset: "system", vibrationPreset: "short" } },
+    }),
+    notificationService.updatePreferences(first.id, {
+      categoryAlerts: { sleep: { soundPreset: "diewish_gentle", vibrationPreset: "long" } },
+    }),
+  ]);
+  const final = await notificationService.getPreferences(first.id);
+  const alerts = "categoryAlerts" in final ? (final.categoryAlerts as Record<string, unknown>) : {};
+  assert.deepEqual(alerts.activity, { soundPreset: "system", vibrationPreset: "short" });
+  assert.deepEqual(alerts.sleep, { soundPreset: "diewish_gentle", vibrationPreset: "long" });
+  assert.deepEqual(alerts.water, (a.categoryAlerts as Record<string, unknown>).water);
+});
+
+test("remote push carries category alerts without creating notification payloads or queue rows", () => {
+  const now = new Date();
+  const notification = {
+    id: "alert-envelope",
+    userId: "alert-user",
+    type: "WEEKLY_REVIEW",
+    title: "private",
+    body: "private",
+    scheduledFor: now,
+    deliveredAt: null,
+    readAt: null,
+    metadata: null,
+    createdAt: now,
+  } as Notification;
+  const prefs = {
+    weekly: { soundPreset: "silent", vibrationPreset: "off" },
+    coach: { soundPreset: "diewish_gentle", vibrationPreset: "short_long" },
+  };
+  const weekly = buildFcmMessage(notification, { token: "test-token", platform: "android" }, prefs);
+  assert.equal(weekly.data.soundPreset, "silent");
+  assert.equal(weekly.data.vibrationPreset, "off");
+  assert.equal("notification" in weekly, false);
+  assert.equal(weekly.data.body, "Yeni haftalık özetin hazır.");
+  const coach = buildFcmMessage(
+    { ...notification, type: "PROACTIVE_MESSAGE" },
+    { token: "test-token", platform: "web" },
+    prefs,
+  );
+  assert.equal(coach.data.soundPreset, "diewish_gentle");
+  assert.equal(coach.data.vibrationPreset, "short_long");
+  assert.equal("notification" in coach, false);
+  assert.equal(coach.android, undefined);
+  const unsafe = buildFcmMessage(
+    notification,
+    { token: "test-token", platform: "android" },
+    { weekly: { soundPreset: "file://unsafe", vibrationPreset: "repeat_forever" } },
+  );
+  assert.equal(unsafe.data.soundPreset, "system");
+  assert.equal(unsafe.data.vibrationPreset, "off");
+});
+
+test("changing weekly or coach alert presets leaves the existing server queue untouched", async (t) => {
+  const user = await createUser("alert-queue");
+  t.after(async () => {
+    await prisma.user.delete({ where: { id: user.id } });
+  });
+  const at = new Date(Date.now() + 14 * 86400000);
+  const row = await notificationService.scheduleNotification(
+    user.id,
+    "WEEKLY_REVIEW",
+    "Weekly",
+    "Ready",
+    at,
+  );
+  await notificationService.updatePreferences(user.id, {
+    categoryAlerts: {
+      weekly: { soundPreset: "diewish_gentle", vibrationPreset: "short" },
+      coach: { soundPreset: "silent", vibrationPreset: "off" },
+    },
+  });
+  assert.equal(
+    (
+      await prisma.notification.findUniqueOrThrow({ where: { id: row.id } })
+    ).scheduledFor.toISOString(),
+    at.toISOString(),
+  );
+  assert.equal(await prisma.notification.count({ where: { userId: user.id } }), 1);
 });

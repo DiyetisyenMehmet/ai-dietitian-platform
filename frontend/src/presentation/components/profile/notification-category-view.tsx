@@ -24,6 +24,7 @@ import { syncWellnessReminderSchedule } from "@/infrastructure/notifications/nat
 import { Button } from "@/presentation/components/ui/button";
 import { Card, CardContent } from "@/presentation/components/ui/card";
 import { Input } from "@/presentation/components/ui/input";
+import { NotificationAlertsLink } from "./notification-alerts-view";
 import {
   CategoryIcon,
   PreferenceSwitch,
@@ -396,6 +397,7 @@ export function NotificationCategoryView({ category }: { category: NotificationD
           </CardContent>
         </Card>
       )}
+      <NotificationAlertsLink category={category} />
       <div className="flex items-start gap-2 rounded-2xl bg-primary/5 p-4 text-xs leading-relaxed text-muted-foreground">
         <Info className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
         <p>

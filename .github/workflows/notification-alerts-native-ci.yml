@@ -1,0 +1,42 @@
+name: Notification alerts native checks
+
+on:
+  push:
+    branches:
+      - feature/workmode-notification-preferences-a1
+    paths:
+      - "android/**"
+      - ".github/workflows/notification-alerts-native-ci.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: notification-alerts-native-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - name: Install the existing Android SDK target
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.6.0"
+      - name: Test mappings and build the staging debug application
+        run: gradle --no-daemon -p android :app:testDebugUnitTest :app:assembleDebug -PDIEWISH_WEB_BASE_URL=https://staging.diewish.com
+      - name: Retain native test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: notification-alerts-native-test-results
+          path: android/app/build/test-results/testDebugUnitTest/
+          if-no-files-found: ignore

@@ -37,3 +37,25 @@ Görev: `WORKMODE-NOTIFICATION-PREFERENCES-A1` — Çalışma Modu 2.
 - Ön yüz üretim derlemesi, değişen dosyalarda lint ve ön/arka uç tip kontrolleri geçti. Derlemedeki dört mevcut, görev dışı uyarı devam eder.
 
 Ses/titreşim Faz 4'e aittir; bu fazda geliştirilmedi.
+
+## Faz 4 — Ses, titreşim ve cihaz önizlemesi
+
+- Altı kategorinin mantıksal `soundPreset` ve `vibrationPreset` değerleri mevcut tercih kaydındaki yeni, nullable `categoryAlerts` JSON alanında tutulur. Alan eklenmesi zorunluydu: önceki model kategori sesi/titreşimini saklayacak bir alan içermiyordu. Tek migration eski kayıtları ve plan saatlerini değiştirmeden bu alanı ekler; yayın öncesi uygulanmalıdır.
+- Kategori yamaları kullanıcı satırı kilidi altında birleştirilir. Başka kategorinin eşzamanlı ayarı veya cihaz izni/token bilgisi bu yamayla ezilmez. Cihaz izni, donanım yeteneği ve bağlantı durumu hesap modeline eklenmez.
+- `Diewish · Damla` ve `Diewish · Nazik`, üçüncü taraf kayıt içermeyen gerçek, özgün PCM WAV dosyalarıdır. `scripts/generate-notification-sounds.py` bunları yeniden üretir; Android ve Web kopyalarının özdeşliği, örnek sayıları ve SHA-256 değerleri test edilir. Sessiz ve sistem varsayılanı da bulunur. Cihazdan ses seçme eklenmez.
+- Android'de mevcut bildirim sunumuna bir adaptör eklenir; öğün/wellness zamanlayıcıları ve 240/128 sınırları değiştirilmez. Kısa, çift kısa, uzun ve kısa-uzun desenler bildirim kanallarına eşlenir. Titreşim donanımı yoksa desen seçimi sunulmaz. Ses dinleme gerçek MediaPlayer önizlemesidir.
+- Android kanal davranışı oluşturulduktan sonra değiştirilemediğinden kategori/ses/desen kombinasyonlarının en çok 120 sabit kanal kimliği vardır; yalnız kullanılanlar oluşturulur. Kanal grupları kategori bazlıdır. Kanallar silinerek cihaz ayarları geçersiz kılınmaz. Mevcut kapalı eski kanal, yeni kanal/grup engeli ve rahatsız etmeyin önceliği korunur.
+- Haftalık özet/Koç için mevcut data-only uzak push paketi mantıksal tercihleri taşır. Mevcut tekrar deneme, cihaz bazlı teslim kaydı ve bildirim kimliğiyle tekrar önleme davranışı korunur. Yeni yerel haftalık/Koç alarmı veya sunucu bildirim kaydı oluşturulmaz.
+- Web özel sistem bildirim sesini seçemez; bu seçimler etkin gösterilmez. Gerçek WAV dosyaları sayfada dinlenebilir, fakat sayfa sesi gerçek push teslimi gibi kullanılmaz. Titreşim deseni denetimi sunulmaz. Sessiz bildirim desteği yetenek kontrolüne bağlıdır; destekleyen tarayıcıda `silent` kullanılır ve bununla birlikte `vibrate` gönderilmez.
+- Kategori testi yalnız yerel/test ortamında çalışır. Android mevcut köprü üzerinden geçici, 15 saniyelik bir bildirim gönderir; plan/kuyruk/geçmiş/okunmamış sayısı/hesap tercihi yazmaz. Web mevcut service worker üzerinden doğrudan `showNotification` kullanır; uzak sağlayıcı, Firebase token kaydı veya `/notifications/test` çağrısı yapmaz. Üretim alan adları ve üretim native uygulaması bu test yolunda engellenir. Test hatası tercih kaydını bozmaz.
+- Başarısız kayıt son kayıtlı iki seçimi geri yükler. Hesap kaydı başarılı fakat cihaz kopyası uygulanamamışsa bunun ayrı hata olduğu açıkça belirtilir.
+- Android'e özel ürün dili kaldırıldı: öğün ekranı artık yalnız mevcut cihazın yeteneğini açıklar.
+- iOS için ortak model ve yetenek sözleşmesi korunur; yeni native iOS teslim hattı eklenmedi. **iOS henüz doğrulanmadı.**
+
+Faz 4 doğrulaması: 71 bildirim tarayıcı testi (15 yeni ses/titreşim testi dahil), 28 bildirim birim testi, 16 yerel veritabanı entegrasyon testi ve 32 mevcut beslenme planı testi geçti. Yeni ekranlar 390×844 / 412×915 / 430×844, açık/koyu temada ve test düğmesinin görünür dokunma alanıyla kontrol edildi. Ön yüz üretim derlemesi, tip ve değişen dosya lint kontrolleri geçti. Gerçek Web push teslimi, gerçek Android ses/titreşim ve iOS doğrulaması son platform fazında açık kalır.
+
+Android debug derlemesi ve 9 native birim testi (4 yeni eşleme testi dahil) yerel ortamda başarıyla tamamlandı. Bu, gerçek cihazda duyulan ses veya hissedilen titreşim doğrulaması değildir.
+
+Android için yalnız çalışma dalında test/derleme yapan `notification-alerts-native-ci.yml` eklendi. Bu akış staging veya production deploy işlemi yapmaz.
+
+Kaynaklar: [Android bildirim kanalları](https://developer.android.com/develop/ui/views/notifications/channels), [Web showNotification seçenekleri](https://developer.mozilla.org/en-US/docs/Web/API/ServiceWorkerRegistration/showNotification).

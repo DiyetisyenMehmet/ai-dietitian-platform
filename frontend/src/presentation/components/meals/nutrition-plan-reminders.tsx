@@ -133,7 +133,7 @@ export function NutritionPlanReminders({ entries, completed }: NutritionPlanRemi
           <div>
             <p className="text-sm font-semibold">Öğün hatırlatmaları</p>
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              Yerel öğün bildirimleri Diewish Android uygulamasında kullanılabilir.
+              Bu cihazda yerel öğün bildirimleri kullanılamıyor.
             </p>
           </div>
         </div>
@@ -205,7 +205,7 @@ export function NutritionPlanReminders({ entries, completed }: NutritionPlanRemi
                 : enabled && permission === "granted"
                   ? "Planındaki gelecek öğün saatleri için bu cihazda yerel bildirimler açık."
                   : enabled
-                    ? "Hatırlatmalar açık, ancak Android bildirim izni bekleniyor."
+                    ? "Hatırlatmalar açık, ancak bu cihazın bildirim izni bekleniyor."
                     : "Öğün saatlerinde yalnızca bu cihazda, hassas sağlık ayrıntısı içermeyen bildirimler al."}
             </p>
           </div>

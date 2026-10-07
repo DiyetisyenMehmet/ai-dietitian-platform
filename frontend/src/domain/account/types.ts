@@ -1,4 +1,5 @@
 import type { WaterReminderSchedule } from "./water-reminder-plan";
+import type { CategoryAlertPreferences } from "./notification-alerts";
 
 /**
  * Account-management domain types: persisted notification preferences and
@@ -19,6 +20,7 @@ export interface NotificationPreferences {
   productUpdates: boolean;
   waterReminderTime: string;
   waterReminderSchedule?: WaterReminderSchedule | null;
+  categoryAlerts?: CategoryAlertPreferences | null;
   activityReminderTime: string;
   sleepReminderTime: string;
   weeklySummaryDay: number;
