@@ -22,10 +22,8 @@ function formatBuildStamp(raw: string | undefined): string {
     timeZone: "Europe/Istanbul",
     day: "2-digit",
     month: "2-digit",
-    year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-    second: "2-digit",
     hour12: false,
   })
     .format(date)
@@ -74,17 +72,17 @@ export function DashboardHomeHeader({ userName }: DashboardHomeHeaderProps) {
 
   return (
     <section
-      className="relative pt-0.5"
+      className="relative"
       aria-label="Ana sayfa özeti"
       data-dashboard-home-header
     >
-      <div className="flex min-w-0 items-center justify-between gap-2">
-        <h1 className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap pr-1 text-[20px] font-bold leading-none tracking-tight min-[400px]:text-[21px] sm:text-[28px]" data-dashboard-greeting>
-          {now ? getGreeting(now) : "Merhaba"}, {displayName} <span aria-hidden="true">👋</span>
+      <div className="flex min-w-0 items-center justify-between gap-1.5">
+        <h1 className="min-w-0 flex-1 whitespace-nowrap py-0.5 pr-1 text-[19px] font-bold leading-[1.2] tracking-tight min-[400px]:text-[20px] min-[430px]:text-[21px] sm:text-[28px]" data-dashboard-greeting>
+          {now ? getGreeting(now) : "Merhaba"}, {displayName} <span className="inline-block translate-y-[0.03em] text-[0.95em] leading-none" data-dashboard-greeting-emoji aria-hidden="true">👋</span>
         </h1>
 
-        <div className="flex shrink-0 items-center gap-1" data-dashboard-header-actions>
-          <div className="flex size-9 items-center justify-center rounded-xl border border-border bg-card shadow-sm sm:size-10 [&_button]:size-9 [&_button]:rounded-xl [&_svg]:size-[18px] sm:[&_button]:size-10">
+        <div className="flex shrink-0 items-center gap-0.5" data-dashboard-header-actions>
+          <div className="flex size-9 items-center justify-center rounded-xl border border-border bg-card shadow-sm sm:size-10 [&_button]:size-9 [&_button]:rounded-xl [&_svg]:size-4 sm:[&_button]:size-10">
             <ThemeToggle />
           </div>
           <Link
@@ -92,7 +90,7 @@ export function DashboardHomeHeader({ userName }: DashboardHomeHeaderProps) {
             aria-label={unreadCount > 0 ? `Bildirim Merkezi, ${unreadCount} okunmamış` : "Bildirim Merkezi"}
             className="relative flex size-9 items-center justify-center rounded-xl border border-border bg-card text-foreground shadow-sm transition hover:border-primary/30 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:size-10"
           >
-            <Bell className="size-[18px]" aria-hidden="true" />
+            <Bell className="size-4" aria-hidden="true" />
             {unreadCount > 0 && (
               <span
                 className="absolute -right-1 -top-1 flex min-w-4.5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold leading-[18px] text-destructive-foreground shadow-sm"
@@ -106,17 +104,17 @@ export function DashboardHomeHeader({ userName }: DashboardHomeHeaderProps) {
       </div>
 
       <div
-        className="mt-1 flex min-w-0 flex-wrap items-center justify-end gap-x-1.5 gap-y-0.5 text-right"
+        className="mt-0.5 flex min-w-0 flex-nowrap items-center justify-end gap-x-1.5 overflow-visible whitespace-nowrap text-right"
         data-dashboard-header-info
       >
-        <p className="text-[11px] font-medium leading-tight text-muted-foreground sm:text-xs">
+        <p className="text-[10px] font-medium leading-tight text-muted-foreground sm:text-[11px]">
           {now ? formatLongDate(now) : "\u00a0"}
         </p>
-        <span className="text-[10px] text-muted-foreground/40" aria-hidden="true">
+        <span className="text-[9px] text-muted-foreground/40" aria-hidden="true">
           •
         </span>
         <p
-          className="text-[10px] font-medium leading-tight tracking-[0.01em] text-muted-foreground/55 sm:text-[11px]"
+          className="text-[9px] font-medium leading-tight tracking-[0.01em] text-muted-foreground/55 sm:text-[10px]"
           data-dashboard-build-stamp={DASHBOARD_BUILD_STAMP ?? "unknown"}
         >
           Güncelleme: {buildStampLabel}
