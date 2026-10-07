@@ -73,48 +73,61 @@ export function DashboardHomeHeader({ userName }: DashboardHomeHeaderProps) {
   const buildStampLabel = formatBuildStamp(DASHBOARD_BUILD_STAMP);
 
   return (
-    <section className="relative pt-1" aria-label="Ana sayfa özeti">
-      <div className="min-w-0">
-        <p className="text-base font-medium text-muted-foreground">
+    <section
+      className="relative pt-0.5"
+      aria-label="Ana sayfa özeti"
+      data-dashboard-home-header
+    >
+      <div className="flex min-w-0 items-start justify-between gap-2.5">
+        <h1 className="min-w-0 flex-1 break-words pr-1 text-[24px] font-bold leading-[1.12] tracking-tight sm:text-[30px]">
+          {now ? getGreeting(now) : "Merhaba"}, {displayName} <span aria-hidden="true">👋</span>
+        </h1>
+
+        <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
+          <div className="flex size-10 items-center justify-center rounded-2xl border border-border bg-card shadow-sm sm:size-11 [&_button]:size-10 [&_button]:rounded-2xl sm:[&_button]:size-11">
+            <ThemeToggle />
+          </div>
+          <Link
+            href="/notifications"
+            aria-label={unreadCount > 0 ? `Bildirim Merkezi, ${unreadCount} okunmamış` : "Bildirim Merkezi"}
+            className="relative flex size-10 items-center justify-center rounded-2xl border border-border bg-card text-foreground shadow-sm transition hover:border-primary/30 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:size-11"
+          >
+            <Bell className="size-5" aria-hidden="true" />
+            {unreadCount > 0 && (
+              <span
+                className="absolute -right-1 -top-1 flex min-w-4.5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold leading-[18px] text-destructive-foreground shadow-sm"
+                aria-hidden="true"
+              >
+                {unreadCount > 99 ? "99+" : unreadCount}
+              </span>
+            )}
+          </Link>
+          <Link
+            href="/profile"
+            aria-label="Profilini aç"
+            className="flex size-10 items-center justify-center rounded-2xl border border-border bg-card text-foreground shadow-sm transition hover:border-primary/30 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:size-11"
+          >
+            <UserRound className="size-5" aria-hidden="true" />
+          </Link>
+        </div>
+      </div>
+
+      <div
+        className="mt-1.5 flex min-w-0 flex-wrap items-center justify-end gap-x-2 gap-y-0.5 text-right"
+        data-dashboard-header-info
+      >
+        <p className="text-[11px] font-medium leading-tight text-muted-foreground sm:text-xs">
           {now ? formatLongDate(now) : "\u00a0"}
         </p>
+        <span className="text-[10px] text-muted-foreground/40" aria-hidden="true">
+          •
+        </span>
         <p
-          className="mt-1 text-[12px] font-semibold tracking-[0.02em] text-muted-foreground/70"
+          className="text-[10px] font-medium leading-tight tracking-[0.01em] text-muted-foreground/55 sm:text-[11px]"
           data-dashboard-build-stamp={DASHBOARD_BUILD_STAMP ?? "unknown"}
         >
           Güncelleme: {buildStampLabel}
         </p>
-        <h1 className="mt-1.5 break-words text-[28px] font-bold leading-tight tracking-tight sm:text-[34px]">
-          {now ? getGreeting(now) : "Merhaba"}, {displayName} <span aria-hidden="true">👋</span>
-        </h1>
-      </div>
-
-      <div className="absolute right-0 top-0 flex shrink-0 -translate-y-1 items-center gap-1 sm:gap-2">
-        <div className="flex size-10 items-center justify-center rounded-2xl border border-border bg-card shadow-sm sm:size-11 [&_button]:size-10 [&_button]:rounded-2xl sm:[&_button]:size-11">
-          <ThemeToggle />
-        </div>
-        <Link
-          href="/notifications"
-          aria-label={unreadCount > 0 ? `Bildirim Merkezi, ${unreadCount} okunmamış` : "Bildirim Merkezi"}
-          className="relative flex size-10 items-center justify-center rounded-2xl border border-border bg-card text-foreground shadow-sm transition hover:border-primary/30 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:size-11"
-        >
-          <Bell className="size-5" aria-hidden="true" />
-          {unreadCount > 0 && (
-            <span
-              className="absolute -right-1 -top-1 flex min-w-4.5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold leading-[18px] text-destructive-foreground shadow-sm"
-              aria-hidden="true"
-            >
-              {unreadCount > 99 ? "99+" : unreadCount}
-            </span>
-          )}
-        </Link>
-        <Link
-          href="/profile"
-          aria-label="Profilini aç"
-          className="flex size-10 items-center justify-center rounded-2xl border border-border bg-card text-foreground shadow-sm transition hover:border-primary/30 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:size-11"
-        >
-          <UserRound className="size-5" aria-hidden="true" />
-        </Link>
       </div>
     </section>
   );
