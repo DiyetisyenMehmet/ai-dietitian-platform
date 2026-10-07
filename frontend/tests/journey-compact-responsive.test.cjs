@@ -27,7 +27,7 @@ async function openFixture(width, height, theme, expanded) {
   return { context, page };
 }
 
-async function assertNoOverflow(page, expectedRows, expanded) {
+async function assertNoOverflow(page, expectedRows, expanded, textScale = 1) {
   const result = await page.evaluate(() => {
     const card = document.querySelector("[data-daily-journey-card]").getBoundingClientRect();
     const section = document.querySelector("[data-daily-journey-section]").getBoundingClientRect();
@@ -44,6 +44,12 @@ async function assertNoOverflow(page, expectedRows, expanded) {
       rows,
       toggleHeight: toggleBox?.height ?? 0,
       ariaExpanded: toggle?.getAttribute("aria-expanded") ?? null,
+      heading: document.querySelector("h3").textContent,
+      headingFont: getComputedStyle(document.querySelector("h3")).fontSize,
+      hintFont: getComputedStyle(document.querySelector("[data-journey-row] p")).fontSize,
+      progressRight: document.querySelector("[data-journey-progress-area] [role=progressbar]").getBoundingClientRect().right,
+      toggleLeft: toggleBox.left,
+      footerTextPresent: document.body.textContent.includes("Tümünü göster"),
     };
   });
 
@@ -53,6 +59,11 @@ async function assertNoOverflow(page, expectedRows, expanded) {
   assert.ok(result.rows.every((row) => row.left >= result.card.left - 1 && row.right <= result.card.right + 1));
   assert.ok(result.toggleHeight >= 43.5, `toggle touch target: ${result.toggleHeight}px`);
   assert.equal(result.ariaExpanded, expanded ? "true" : "false");
+  assert.equal(result.heading, "Bugünkü Yolculuğum");
+  assert.equal(result.footerTextPresent, false);
+  assert.ok(Math.abs(parseFloat(result.headingFont) - 16 * textScale) < 0.1, "heading font preserved");
+  assert.ok(Math.abs(parseFloat(result.hintFont) - 12 * textScale) < 0.1, "task hint font preserved");
+  assert.ok(result.toggleLeft >= result.progressRight, "detail control should follow the compact progress bar");
   return result.card.height;
 }
 
@@ -71,6 +82,7 @@ for (const [width, height] of [
       try {
         collapsedHeight = await assertNoOverflow(collapsed.page, 1, false);
         assert.ok(collapsedHeight <= 300, `collapsed Journey card too tall: ${collapsedHeight}px`);
+        if (width >= 390) assert.ok(collapsedHeight <= 220, `compact Journey height: ${collapsedHeight}px`);
       } finally {
         await collapsed.context.close();
       }
@@ -100,7 +112,7 @@ for (const expanded of [false, true]) {
           if (Number.isFinite(size) && size > 0) node.style.fontSize = `${size * 1.3}px`;
         }
       });
-      await assertNoOverflow(page, expanded ? 4 : 1, expanded);
+      await assertNoOverflow(page, expanded ? 4 : 1, expanded, 1.3);
     } finally {
       await context.close();
     }

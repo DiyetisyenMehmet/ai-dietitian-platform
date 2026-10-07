@@ -27,7 +27,7 @@ export function DashboardView() {
   const displayName = profile.fullName || user?.fullName || "Diewish";
 
   return (
-    <div className="animate-fade-in space-y-5">
+    <div className="animate-fade-in space-y-5 [&>[data-daily-journey-section]+*]:!mt-3 [&>[data-dashboard-personalization]]:!mt-3">
       <DashboardHomeHeader userName={displayName} />
       <DailyJourneySection />
       <DashboardMetricsSection />
@@ -40,8 +40,14 @@ export function DashboardView() {
           onClick={() => setShowDetails((current) => !current)}
           className="flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-lg font-semibold text-muted-foreground transition hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <span>{showDetails ? "Detaylı günlük takibi gizle" : "Detaylı günlük takibi göster"}</span>
-          {showDetails ? <ChevronUp className="size-4" aria-hidden="true" /> : <ChevronDown className="size-4" aria-hidden="true" />}
+          <span>
+            {showDetails ? "Detaylı günlük takibi gizle" : "Detaylı günlük takibi göster"}
+          </span>
+          {showDetails ? (
+            <ChevronUp className="size-4" aria-hidden="true" />
+          ) : (
+            <ChevronDown className="size-4" aria-hidden="true" />
+          )}
         </button>
 
         {showDetails && (

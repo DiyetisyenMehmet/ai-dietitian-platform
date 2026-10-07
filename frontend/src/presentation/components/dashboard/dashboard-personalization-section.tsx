@@ -403,7 +403,7 @@ export function DashboardPersonalizationSection() {
       {editing && (
         <div className="flex min-w-0 flex-col gap-2 rounded-2xl border border-border/70 bg-muted/25 p-2.5 sm:flex-row sm:items-center sm:justify-between">
           <span className="px-1 text-xs font-medium text-muted-foreground">
-            Kartları tutup sürükleyerek sıralayabilirsin
+            Kartları basılı tutup sıralayabilirsin.
           </span>
 
           <div className="flex min-w-0 gap-2 sm:shrink-0">
