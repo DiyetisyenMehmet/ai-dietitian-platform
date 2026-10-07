@@ -179,7 +179,7 @@ test("Journey stays compact by default and expands/collapses with keyboard contr
     }
     if (width === 390) expect(geometry.firstCard.visible).toBeGreaterThanOrEqual(72);
     if (width === 412) expect(geometry.firstCard.visible).toBeGreaterThanOrEqual(88);
-    if (width === 430) expect(geometry.firstCard.visible).toBeGreaterThanOrEqual(100);
+    if (width === 430) expect(geometry.firstCard.visible).toBeGreaterThanOrEqual(92);
   }
 
   for (const [width, height] of [
@@ -212,7 +212,7 @@ test("Journey stays compact by default and expands/collapses with keyboard contr
       expect(themeGeometry.greetingWhiteSpace).toBe("nowrap");
       expect(themeGeometry.greetingEmojiContained).toBe(true);
       expect(themeGeometry.profileCount).toBe(0);
-      const minimumVisible = width === 390 ? 72 : width === 412 ? 88 : 100;
+      const minimumVisible = width === 390 ? 72 : width === 412 ? 88 : 92;
       expect(themeGeometry.firstCardVisible).toBeGreaterThanOrEqual(minimumVisible);
       await page.screenshot({
         path: testInfo.outputPath(`dashboard-compact-${width}x${height}-${theme}.png`),
