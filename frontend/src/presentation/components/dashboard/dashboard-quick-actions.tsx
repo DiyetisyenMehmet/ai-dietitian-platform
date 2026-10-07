@@ -321,13 +321,18 @@ export function DashboardQuickActions({
             aria-pressed={editing}
             disabled={savingPreferences}
             onClick={onToggleEditing}
-            className={cn(
-              "relative flex size-9 shrink-0 items-center justify-center rounded-full border border-border/70 bg-card text-muted-foreground shadow-sm transition after:absolute after:-inset-0.5 after:content-[''] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              editing && "border-primary/30 bg-primary/10 text-primary",
-            )}
+            className="flex size-10 shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             data-dashboard-edit-toggle
           >
-            <SlidersHorizontal className="size-[15px]" aria-hidden="true" />
+            <span
+              className={cn(
+                "flex size-8 items-center justify-center rounded-full border border-border/70 bg-card shadow-sm transition",
+                editing && "border-primary/30 bg-primary/10 text-primary",
+              )}
+              aria-hidden="true"
+            >
+              <SlidersHorizontal className="size-[15px]" />
+            </span>
           </button>
         )}
       </div>
