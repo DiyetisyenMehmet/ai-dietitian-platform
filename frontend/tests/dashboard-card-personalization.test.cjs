@@ -215,3 +215,33 @@ test("feature card source components keep approved fixed geometry contracts", ()
   assert.match(coach, /data-dashboard-fixed-geometry/);
   assert.match(coach, /aspectRatio: "670 \/ 126"/);
 });
+
+
+test("dashboard home compact refinement keeps the approved scope and geometry", () => {
+  const header = read("src/presentation/components/dashboard/dashboard-home-header.tsx");
+  const journey = read("src/presentation/components/dashboard/daily-journey-section.tsx");
+  const metrics = read("src/presentation/components/dashboard/dashboard-metrics-section.tsx");
+  const quick = read("src/presentation/components/dashboard/dashboard-quick-actions.tsx");
+  const view = read("src/presentation/components/dashboard/dashboard-view.tsx");
+
+  assert.match(header, /data-dashboard-home-header/);
+  assert.match(header, /data-dashboard-header-info/);
+  assert.match(header, /text-\[24px\].*sm:text-\[30px\]/);
+  assert.match(header, /text-\[10px\].*text-muted-foreground\/55/);
+
+  assert.match(journey, /data-journey-card-heading/);
+  assert.match(journey, /<h3 className="min-w-0 text-base font-semibold leading-tight">/);
+  assert.match(journey, /\$\{completed\}\/\$\{total\} adım/);
+  assert.doesNotMatch(journey, /Günlük yolculuğun/);
+
+  assert.match(metrics, /data-dashboard-metrics/);
+  assert.match(metrics, /max-w-\[74px\].*sm:max-w-\[94px\]/);
+  assert.match(metrics, /px-2\.5 py-3.*sm:px-4 sm:py-3\.5/);
+
+  assert.match(quick, /text-\[19px\] font-bold leading-tight sm:text-xl/);
+  assert.match(quick, /flex size-10 shrink-0 items-center justify-center rounded-full/);
+  assert.match(quick, /SlidersHorizontal className="size-\[18px\]"/);
+
+  assert.match(view, /data-daily-journey-section\]\]:!mt-2\.5/);
+  assert.match(view, /data-dashboard-personalization\]\]:!mt-2\.5/);
+});
