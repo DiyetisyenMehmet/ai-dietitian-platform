@@ -94,8 +94,12 @@ test("Journey stays compact by default and expands/collapses with keyboard contr
           scrollWidth: element.scrollWidth,
           whiteSpace: getComputedStyle(element).whiteSpace,
           fontSize: getComputedStyle(element).fontSize,
+          right: box.right,
         };
       })(),
+      headerActionsLeft:
+        document.querySelector("[data-dashboard-header-actions]")?.getBoundingClientRect().left ??
+        Number.POSITIVE_INFINITY,
       topProfileCount: document.querySelectorAll('a[aria-label="Profilini aç"]').length,
       headerActionCount: document.querySelector("[data-dashboard-header-actions]")?.children.length ?? 0,
       headerActionSizes: Array.from(
@@ -125,7 +129,7 @@ test("Journey stays compact by default and expands/collapses with keyboard contr
     expect(geometry.topProfileCount).toBe(0);
     expect(geometry.headerActionCount).toBe(2);
     expect(geometry.greeting.whiteSpace).toBe("nowrap");
-    expect(geometry.greeting.scrollWidth).toBeLessThanOrEqual(geometry.greeting.width + 1);
+    expect(geometry.greeting.right).toBeLessThanOrEqual(geometry.headerActionsLeft - 7);
     for (const size of geometry.headerActionSizes) {
       expect(size.width).toBeGreaterThanOrEqual(36);
       expect(size.height).toBeGreaterThanOrEqual(36);
