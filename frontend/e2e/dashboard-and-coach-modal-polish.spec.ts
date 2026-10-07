@@ -1,4 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
+
+// These scenarios target the mobile dialogs; the resize test switches to desktop explicitly.
+test.use({ viewport: { width: 390, height: 844 } });
 const base = process.env.E2E_WEB_BASE_URL || "http://127.0.0.1:3000";
 const title = "Bugünkü öğünlerimi analiz eder misin lütfen ve günlük hedeflerimi değerlendir";
 async function session(page: Page, area: string) {
