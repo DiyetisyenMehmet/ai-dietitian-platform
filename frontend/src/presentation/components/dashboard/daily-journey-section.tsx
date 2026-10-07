@@ -55,7 +55,7 @@ export function StepRow({ step, last }: { step: JourneyStep; last: boolean }) {
     <div
       data-journey-row
       className={cn(
-        "flex min-w-0 items-center gap-3 rounded-xl border p-3 transition-colors",
+        "flex min-w-0 items-center gap-2.5 rounded-xl border p-2.5 transition-colors sm:gap-3 sm:p-3",
         meta.row,
       )}
     >
@@ -168,22 +168,27 @@ export function DailyJourneyContent({
 
   return (
     <section
-      className="space-y-2"
+      className="space-y-0"
       data-daily-journey-section
       data-journey-status={status}
       data-journey-expanded={expanded ? "true" : "false"}
     >
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-base font-semibold">Bugünkü Yolculuğum</h3>
-        <span className="text-xs font-medium text-muted-foreground">
-          {insufficientData ? "Veri bekleniyor" : `${completed}/${total} adım`}
-        </span>
-      </div>
+      <Card className="rounded-[22px]" data-daily-journey-card>
+        <CardContent className="space-y-2 p-2.5 sm:p-3">
+          <div
+            className="flex min-w-0 items-center justify-between gap-2"
+            data-journey-card-heading
+          >
+            <h3 className="min-w-0 text-[15px] font-semibold leading-tight sm:text-base">
+              Bugünkü Yolculuğum
+            </h3>
+            <span className="shrink-0 text-[11px] font-medium leading-tight text-muted-foreground sm:text-xs">
+              {insufficientData ? "Veri bekleniyor" : `${completed}/${total} adım`}
+            </span>
+          </div>
 
-      <Card data-daily-journey-card>
-        <CardContent className="space-y-2 p-3">
           {insufficientData ? (
-            <div className="flex items-start gap-2 rounded-xl bg-muted/40 p-3">
+            <div className="flex items-start gap-2 rounded-xl bg-muted/40 p-2.5 sm:p-3">
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium">
                   Bugünkü öneriyi netleştirmek için bazı takip verileri henüz hazır değil.
@@ -197,18 +202,24 @@ export function DailyJourneyContent({
           ) : (
             <div className="flex items-center gap-2" data-journey-progress-area>
               <div className="min-w-0 max-w-md flex-1">
-                <div className="mb-1.5 flex items-center justify-between gap-3 text-xs">
-                  <span className="text-muted-foreground">
-                    {allDone ? "Bugünün yolculuğunu tamamladın! 🎉" : "Günlük yolculuğun"}
-                  </span>
-                  <span className="shrink-0 font-semibold">%{percent}</span>
-                </div>
+                {allDone && (
+                  <p className="mb-1 text-[11px] leading-tight text-muted-foreground sm:text-xs">
+                    Bugünün yolculuğunu tamamladın! 🎉
+                  </p>
+                )}
                 {noActionableStep && (
-                  <p className="mb-2 text-xs leading-relaxed text-muted-foreground">
+                  <p className="mb-1.5 text-xs leading-relaxed text-muted-foreground">
                     Şu an açılacak yeni bir adım yok. Günlük ilerlemeni burada takip edebilirsin.
                   </p>
                 )}
-                <ProgressBar value={percent} />
+                <div className="flex min-w-0 items-center gap-2">
+                  <div className="min-w-0 flex-1">
+                    <ProgressBar value={percent} />
+                  </div>
+                  <span className="shrink-0 text-[11px] font-semibold leading-none sm:text-xs">
+                    %{percent}
+                  </span>
+                </div>
               </div>
               {detailsControl}
             </div>
