@@ -110,9 +110,7 @@ public final class DiewishReminderBridge {
         ) {
             boolean requested = activity.getSharedPreferences("diewish_notification_device", Activity.MODE_PRIVATE)
                 .getBoolean("permission_requested", false);
-            int flags = activity.getPackageManager().getPermissionFlags(
-                Manifest.permission.POST_NOTIFICATIONS, activity.getPackageName(), android.os.Process.myUserHandle());
-            return requested || (flags & (PackageManager.FLAG_PERMISSION_USER_SET | PackageManager.FLAG_PERMISSION_USER_FIXED)) != 0
+            return requested || activity.shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS)
                 ? "denied" : "default";
         }
 
