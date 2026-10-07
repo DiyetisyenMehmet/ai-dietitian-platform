@@ -179,7 +179,7 @@ export function DailyJourneyContent({
             className="flex min-w-0 items-center justify-between gap-2"
             data-journey-card-heading
           >
-            <h3 className="min-w-0 text-[15px] font-semibold leading-tight sm:text-base">
+            <h3 className="min-w-0 text-base font-semibold leading-tight">
               Bugünkü Yolculuğum
             </h3>
             <span className="shrink-0 text-[11px] font-medium leading-tight text-muted-foreground sm:text-xs">
