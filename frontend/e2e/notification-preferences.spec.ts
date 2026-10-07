@@ -184,6 +184,7 @@ for (const width of [390, 412, 430])
       await page.screenshot({
         path: `${test.info().outputDir}/main-${width}-${theme}.png`,
         fullPage: true,
+        animations: "disabled",
       });
     });
   }
