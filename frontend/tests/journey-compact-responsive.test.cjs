@@ -39,6 +39,7 @@ async function assertNoOverflow(page, expectedRows, expanded, textScale = 1) {
     const toggleBox = toggle?.getBoundingClientRect();
     return {
       pageOverflow: document.documentElement.scrollWidth - innerWidth,
+      viewportWidth: innerWidth,
       card: { left: card.left, right: card.right, width: card.width, height: card.height },
       section: { left: section.left, right: section.right },
       rows,
@@ -61,7 +62,8 @@ async function assertNoOverflow(page, expectedRows, expanded, textScale = 1) {
   assert.equal(result.ariaExpanded, expanded ? "true" : "false");
   assert.equal(result.heading, "Bugünkü Yolculuğum");
   assert.equal(result.footerTextPresent, false);
-  assert.ok(Math.abs(parseFloat(result.headingFont) - 16 * textScale) < 0.1, "heading font preserved");
+  const headingBase = result.viewportWidth < 640 ? 15 : 16;
+  assert.ok(Math.abs(parseFloat(result.headingFont) - headingBase * textScale) < 0.1, "heading font preserved");
   assert.ok(Math.abs(parseFloat(result.hintFont) - 12 * textScale) < 0.1, "task hint font preserved");
   assert.ok(result.toggleLeft >= result.progressRight, "detail control should follow the compact progress bar");
   return result.card.height;
@@ -82,7 +84,7 @@ for (const [width, height] of [
       try {
         collapsedHeight = await assertNoOverflow(collapsed.page, 1, false);
         assert.ok(collapsedHeight <= 300, `collapsed Journey card too tall: ${collapsedHeight}px`);
-        if (width >= 390) assert.ok(collapsedHeight <= 220, `compact Journey height: ${collapsedHeight}px`);
+        if (width >= 390) assert.ok(collapsedHeight <= 190, `compact Journey height: ${collapsedHeight}px`);
       } finally {
         await collapsed.context.close();
       }
