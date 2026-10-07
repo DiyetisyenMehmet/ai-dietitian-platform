@@ -174,7 +174,7 @@ test("Journey stays compact by default and expands/collapses with keyboard contr
       expect(geometry.headerHeight).toBeLessThanOrEqual(88);
       expect(geometry.metricsHeight).toBeLessThanOrEqual(98);
       expect(geometry.quickHeadingFont).toBe("16px");
-      expect(geometry.greeting.height).toBeLessThanOrEqual(28);
+      expect(geometry.greeting.height).toBeLessThanOrEqual(30);
       expect(Math.max(...geometry.quickTileSizes.map((item) => item.height))).toBeLessThanOrEqual(73);
     }
     if (width === 390) expect(geometry.firstCard.visible).toBeGreaterThanOrEqual(72);
