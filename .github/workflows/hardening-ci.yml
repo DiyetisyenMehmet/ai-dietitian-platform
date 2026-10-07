@@ -8,7 +8,6 @@ on:
       - feature/staging-preview
       - feature/workmode2-dashboard-journey-compact-text-a1
       - feature/workmode2-dashboard-and-coach-modal-polish-a1
-      - feature/app4-dashboard-home-compact-refine-a1
   workflow_dispatch:
 
 permissions:
