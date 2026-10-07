@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { BellRing, Check, Smartphone } from "lucide-react";
+import { BellRing, Info, Smartphone } from "lucide-react";
 import { toast } from "sonner";
 
 import { NOTIFICATION_PREFERENCES, type NotificationPreferences } from "@/domain/account/types";
@@ -15,10 +15,12 @@ import {
 } from "@/infrastructure/notifications/web-push";
 import { Button } from "@/presentation/components/ui/button";
 import { Card, CardContent } from "@/presentation/components/ui/card";
-import { Input } from "@/presentation/components/ui/input";
-
-type ToggleKey = (typeof NOTIFICATION_PREFERENCES)[number]["key"];
-type TimedKey = "waterReminders" | "activityReminders" | "sleepReminders" | "weeklySummary";
+import { Modal, ModalContent } from "@/presentation/components/ui/modal";
+import {
+  NotificationPreferenceCard,
+  NotificationPreferenceDetail,
+  type ToggleKey,
+} from "./notification-preference-category";
 
 interface NativeReminderBridge {
   isAvailable(): boolean;
@@ -38,22 +40,14 @@ interface ReminderEntry {
   type: "water" | "activity" | "sleep";
 }
 
-const TIME_FIELDS: Partial<Record<TimedKey, keyof NotificationPreferences>> = {
-  waterReminders: "waterReminderTime",
-  activityReminders: "activityReminderTime",
-  sleepReminders: "sleepReminderTime",
-  weeklySummary: "weeklySummaryTime",
-};
-
 function nativeBridge(): NativeReminderBridge | undefined {
   if (typeof window === "undefined") return undefined;
   try {
     // Android WebView exposes JavaScriptInterface objects through a proxy. Older
     // Diewish APKs do not contain the wellness methods and may throw while an
     // unknown method is inspected, so capability detection itself must be safe.
-    const bridge = (
-      window as typeof window & { DiewishReminders?: Partial<NativeReminderBridge> }
-    ).DiewishReminders;
+    const bridge = (window as typeof window & { DiewishReminders?: Partial<NativeReminderBridge> })
+      .DiewishReminders;
     if (
       !bridge ||
       typeof bridge.isAvailable !== "function" ||
@@ -128,13 +122,14 @@ function buildSchedule(preferences: NotificationPreferences): ReminderEntry[] {
   return schedule;
 }
 
-function isTimedKey(key: ToggleKey): key is TimedKey {
-  return key in TIME_FIELDS;
-}
-
 export function NotificationsView() {
   const [preferences, setPreferences] = React.useState<NotificationPreferences | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const [loadAttempt, setLoadAttempt] = React.useState(0);
+  const [loadError, setLoadError] = React.useState<string | null>(null);
+  const [saveError, setSaveError] = React.useState<string | null>(null);
+  const [selectedKey, setSelectedKey] = React.useState<ToggleKey | null>(null);
+  const saveLock = React.useRef(false);
   const [savingKey, setSavingKey] = React.useState<string | null>(null);
   const [savedKey, setSavedKey] = React.useState<string | null>(null);
   const [nativeAvailable, setNativeAvailable] = React.useState(false);
@@ -176,6 +171,9 @@ export function NotificationsView() {
   }, []);
 
   React.useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setLoadError(null);
     refreshPermission();
     void notificationClient
       .getPreferences()
@@ -186,12 +184,23 @@ export function NotificationsView() {
             ? loaded
             : (await notificationClient.updatePreferences({ timezoneOffsetMinutes: offset }))
                 .preferences;
+        if (cancelled) return;
         setPreferences(next);
         syncNative(next);
       })
-      .catch(() => toast.error("Bildirim tercihleri yüklenemedi."))
-      .finally(() => setLoading(false));
-  }, [refreshPermission, syncNative]);
+      .catch(() => {
+        if (!cancelled)
+          setLoadError(
+            "Bildirim tercihleri yüklenemedi. Bağlantını kontrol edip tekrar deneyebilirsin.",
+          );
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshPermission, syncNative, loadAttempt]);
 
   React.useEffect(() => {
     const onFocus = () => refreshPermission();
@@ -200,7 +209,10 @@ export function NotificationsView() {
   }, [refreshPermission]);
 
   const patchPreference = async (key: string, update: Partial<NotificationPreferences>) => {
-    if (!preferences) return;
+    if (!preferences || saveLock.current) return false;
+    saveLock.current = true;
+    setSaveError(null);
+    setSavedKey(null);
     setSavingKey(key);
     try {
       const { preferences: next } = await notificationClient.updatePreferences(update);
@@ -211,18 +223,28 @@ export function NotificationsView() {
         setSavedKey((current) => (current === key ? null : current));
       }, 2200);
       toast.success("Bildirim tercihi kaydedildi");
+      return true;
     } catch {
+      setSaveError("Tercihin kaydedilemedi. Kayıtlı ayarın korundu; tekrar deneyebilirsin.");
       toast.error("Bildirim tercihi kaydedilemedi.");
+      return false;
     } finally {
+      saveLock.current = false;
       setSavingKey(null);
     }
   };
 
   const toggle = async (key: ToggleKey) => {
-    if (!preferences) return;
+    if (!preferences || saveLock.current || savingKey !== null) return;
     const enabled = !preferences[key];
-    if (enabled && nativeAvailable && permission !== "granted") nativeBridge()?.requestPermission();
-    await patchPreference(key, { [key]: enabled });
+    const saved = await patchPreference(key, { [key]: enabled });
+    if (saved && enabled && nativeAvailable && permission !== "granted") {
+      try {
+        nativeBridge()?.requestPermission();
+      } catch {
+        refreshPermission();
+      }
+    }
   };
 
   const enableWebPush = async () => {
@@ -261,123 +283,107 @@ export function NotificationsView() {
 
   if (loading) {
     return (
-      <Card>
-        <CardContent className="p-5 text-sm text-muted-foreground">
-          Bildirim tercihleri yükleniyor…
-        </CardContent>
-      </Card>
+      <div role="status" aria-busy="true" className="space-y-3">
+        <p className="text-sm text-muted-foreground">Bildirim tercihleri yükleniyor…</p>
+        {Array.from({ length: 6 }, (_, index) => (
+          <div
+            key={index}
+            aria-hidden="true"
+            className="h-32 animate-pulse rounded-2xl border border-border bg-muted/50 motion-reduce:animate-none"
+          />
+        ))}
+      </div>
     );
   }
   if (!preferences) {
     return (
       <Card>
-        <CardContent className="p-5 text-sm text-destructive">
-          Bildirim tercihleri şu anda kullanılamıyor.
+        <CardContent className="space-y-3 p-5">
+          <p role="alert" className="text-sm leading-relaxed text-destructive">
+            {loadError ?? "Bildirim tercihleri şu anda kullanılamıyor."}
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            onClick={() => setLoadAttempt((attempt) => attempt + 1)}
+          >
+            Tekrar dene
+          </Button>
         </CardContent>
       </Card>
     );
   }
 
-  return (
-    <div className="space-y-4">
-      <Card>
-        <CardContent className="space-y-3 p-5">
-          <div className="flex items-start gap-3">
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <BellRing className="size-5" aria-hidden="true" />
-            </span>
-            <div>
-              <h2 className="text-sm font-semibold">Bildirim tercihleri</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Yalnızca açtığın hatırlatmalar gönderilir. Tercihlerin Diewish hesabında saklanır.
-              </p>
-            </div>
-          </div>
+  const selectedItem = NOTIFICATION_PREFERENCES.find((item) => item.key === selectedKey);
 
-          {NOTIFICATION_PREFERENCES.map((item) => {
-            const enabled = preferences[item.key];
-            const timeField = isTimedKey(item.key) ? TIME_FIELDS[item.key] : undefined;
-            return (
-              <div key={item.key} className="rounded-2xl border border-border p-4">
-                <div className="flex items-start gap-3">
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={enabled}
-                    aria-label={item.label}
-                    disabled={savingKey !== null}
-                    onClick={() => void toggle(item.key)}
-                    className={`mt-0.5 flex h-7 w-12 shrink-0 items-center rounded-full p-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${enabled ? "bg-primary" : "bg-muted-foreground/30"}`}
-                  >
-                    <span
-                      className={`flex size-5 items-center justify-center rounded-full bg-white transition-transform ${enabled ? "translate-x-5" : "translate-x-0"}`}
-                    >
-                      {enabled && <Check className="size-3 text-primary" aria-hidden="true" />}
-                    </span>
-                  </button>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold">{item.label}</p>
-                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                      {item.description}
-                    </p>
-                    {enabled && timeField && (
-                      <div className="mt-3 flex flex-wrap items-center gap-2">
-                        <label className="text-xs font-medium" htmlFor={`time-${item.key}`}>
-                          Saat
-                        </label>
-                        <Input
-                          id={`time-${item.key}`}
-                          type="time"
-                          className="h-9 w-32"
-                          value={String(preferences[timeField])}
-                          disabled={savingKey !== null}
-                          onChange={(event) => {
-                            const value = event.target.value;
-                            setPreferences({ ...preferences, [timeField]: value });
-                            void patchPreference(String(timeField), {
-                              [timeField]: value,
-                            });
-                          }}
-                        />
-                        <span
-                          className="min-w-20 text-[11px] font-medium text-muted-foreground"
-                          aria-live="polite"
-                        >
-                          {savingKey === String(timeField)
-                            ? "Kaydediliyor…"
-                            : savedKey === String(timeField)
-                              ? "✓ Kaydedildi"
-                              : ""}
-                        </span>
-                        {item.key === "weeklySummary" && (
-                          <select
-                            aria-label="Haftalık özet günü"
-                            className="h-9 rounded-xl border border-input bg-background px-2 text-xs"
-                            value={preferences.weeklySummaryDay}
-                            onChange={(event) =>
-                              void patchPreference("weeklySummaryDay", {
-                                weeklySummaryDay: Number(event.target.value),
-                              })
-                            }
-                          >
-                            <option value={0}>Pazar</option>
-                            <option value={1}>Pazartesi</option>
-                            <option value={2}>Salı</option>
-                            <option value={3}>Çarşamba</option>
-                            <option value={4}>Perşembe</option>
-                            <option value={5}>Cuma</option>
-                            <option value={6}>Cumartesi</option>
-                          </select>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </CardContent>
-      </Card>
+  return (
+    <div className="space-y-4" data-notification-preferences>
+      <div className="flex items-start gap-3 rounded-2xl bg-primary/5 p-4">
+        <BellRing className="mt-0.5 size-5 shrink-0 text-primary" aria-hidden="true" />
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          Yalnızca istediğin hatırlatmaları aç. Programı görmek ve düzenlemek için kartın altındaki
+          özete dokun.
+        </p>
+      </div>
+      {saveError && (
+        <p
+          role="alert"
+          className="rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-xs leading-relaxed text-destructive"
+        >
+          {saveError}
+        </p>
+      )}
+      <p role="status" aria-live="polite" className="sr-only">
+        {savingKey
+          ? "Bildirim tercihi kaydediliyor…"
+          : savedKey
+            ? "Bildirim tercihi kaydedildi."
+            : ""}
+      </p>
+      <div className="space-y-3" aria-label="Bildirim kategorileri">
+        {NOTIFICATION_PREFERENCES.map((item) => (
+          <NotificationPreferenceCard
+            key={item.key}
+            item={item}
+            preferences={preferences}
+            busy={savingKey !== null}
+            saving={savingKey === item.key}
+            onToggle={() => void toggle(item.key)}
+            onOpen={() => {
+              setSaveError(null);
+              setSelectedKey(item.key);
+            }}
+          />
+        ))}
+      </div>
+      <div className="flex items-start gap-2 rounded-2xl bg-primary/5 p-4 text-xs leading-relaxed text-muted-foreground">
+        <Info className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
+        <p>
+          Tercihlerin Diewish hesabında saklanır. Cihazında bildirim alabilmek için bildirim izninin
+          de açık olması gerekir.
+        </p>
+      </div>
+      <Modal
+        open={Boolean(selectedItem)}
+        onOpenChange={(open) => {
+          if (!open) setSelectedKey(null);
+        }}
+      >
+        <ModalContent variant="centered">
+          {selectedItem && (
+            <NotificationPreferenceDetail
+              key={selectedItem.key}
+              item={selectedItem}
+              preferences={preferences}
+              busy={savingKey !== null}
+              error={saveError}
+              onToggle={() => void toggle(selectedItem.key)}
+              onSave={(update) => patchPreference(selectedItem.key, update)}
+            />
+          )}
+        </ModalContent>
+      </Modal>
 
       <Card>
         <CardContent className="space-y-3 p-5">
@@ -393,12 +399,14 @@ export function NotificationsView() {
                       : exactAlarm === "granted"
                         ? "Android bildirim ve tam zamanlı hatırlatıcı izinleri açık."
                         : "Android bildirim izni açık."
-                    : "Android bildirim izni bekleniyor."
+                    : permission === "denied"
+                      ? "Android bildirim izni kapalı. Cihaz ayarlarından Diewish bildirimlerine izin verebilirsin."
+                      : "Android bildirim izni bekleniyor."
                   : webAvailable
                     ? webPermission === "granted"
                       ? "Tarayıcı bildirim izni açık."
                       : webPermission === "denied"
-                        ? "Tarayıcı bildirim izni engellenmiş."
+                        ? "Tarayıcı bildirim izni kapalı. Tarayıcının site ayarlarından Diewish bildirimlerine izin verebilirsin."
                         : "Tarayıcı bildirim izni bekleniyor."
                     : "Bu tarayıcı gerçek zamanlı bildirimleri desteklemiyor."}
               </p>
@@ -409,9 +417,15 @@ export function NotificationsView() {
               className="w-full"
               variant="outline"
               disabled={savingKey !== null}
-              onClick={() => nativeBridge()?.requestPermission()}
+              onClick={() => {
+                try {
+                  nativeBridge()?.requestPermission();
+                } catch {
+                  refreshPermission();
+                }
+              }}
             >
-              Bildirim izni ver
+              {permission === "denied" ? "Bildirim iznini kontrol et" : "Bildirim izni ver"}
             </Button>
           )}
           {!nativeAvailable && webAvailable && webPermission !== "granted" && (
@@ -471,7 +485,7 @@ export function NotificationsView() {
                 disabled={savingKey !== null}
                 onClick={() => void sendRemoteTest()}
               >
-                Gerçek FCM test bildirimi gönder
+                Test bildirimi gönder
               </Button>
             )}
         </CardContent>

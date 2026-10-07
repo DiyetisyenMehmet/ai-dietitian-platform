@@ -61,7 +61,7 @@ export const NOTIFICATION_PREFERENCES: readonly NotificationPreferenceMeta[] = [
   {
     key: "mealReminders",
     label: "Öğün hatırlatmaları",
-    description: "Öğünlerini kaydetmeyi unuttuğunda nazikçe hatırlatalım.",
+    description: "Planındaki öğün saatlerini nazikçe hatırlatalım.",
   },
   {
     key: "waterReminders",
@@ -85,7 +85,7 @@ export const NOTIFICATION_PREFERENCES: readonly NotificationPreferenceMeta[] = [
   },
   {
     key: "coachTips",
-    label: "Diewish koç bildirimleri",
+    label: "Diewish Koç bildirimleri",
     description: "Seçtiğin hedeflere göre önemli koç önerilerini telefona bildirelim.",
   },
 ] as const;
