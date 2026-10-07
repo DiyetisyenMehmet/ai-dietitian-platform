@@ -146,85 +146,86 @@ export function DailyJourneyContent({
   const insufficientData = status === "insufficient-data";
   const noActionableStep = status === "no-actionable-step";
   const visibleSteps = visibleJourneySteps(steps, status, expanded);
-  const canToggleDetails =
-    steps.length > 0 && (expanded || visibleSteps.length !== steps.length);
+  const canToggleDetails = steps.length > 0 && (expanded || visibleSteps.length !== steps.length);
   const detailsId = "daily-journey-steps";
+  const detailsControl = canToggleDetails ? (
+    <button
+      type="button"
+      aria-label={expanded ? "Yolculuk detaylarını daralt" : "Yolculuk detaylarını aç"}
+      aria-expanded={expanded}
+      aria-controls={detailsId}
+      data-journey-details-toggle
+      onClick={() => onExpandedChange(!expanded)}
+      className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-xl text-primary transition-colors hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+    >
+      {expanded ? (
+        <ChevronUp className="size-4" aria-hidden="true" />
+      ) : (
+        <ChevronDown className="size-4" aria-hidden="true" />
+      )}
+    </button>
+  ) : null;
 
   return (
     <section
-      className="space-y-3"
+      className="space-y-2"
       data-daily-journey-section
       data-journey-status={status}
       data-journey-expanded={expanded ? "true" : "false"}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-base font-semibold">Bugünkü Yolculuğun</h3>
+        <h3 className="text-base font-semibold">Bugünkü Yolculuğum</h3>
         <span className="text-xs font-medium text-muted-foreground">
           {insufficientData ? "Veri bekleniyor" : `${completed}/${total} adım`}
         </span>
       </div>
 
       <Card data-daily-journey-card>
-        <CardContent className="space-y-3 p-4">
+        <CardContent className="space-y-2 p-3">
           {insufficientData ? (
-            <div className="rounded-xl bg-muted/40 p-3">
-              <p className="text-sm font-medium">
-                Bugünkü öneriyi netleştirmek için bazı takip verileri henüz hazır değil.
-              </p>
-              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                Verilerin geldikçe yolculuğun otomatik güncellenecek.
-              </p>
+            <div className="flex items-start gap-2 rounded-xl bg-muted/40 p-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium">
+                  Bugünkü öneriyi netleştirmek için bazı takip verileri henüz hazır değil.
+                </p>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  Verilerin geldikçe yolculuğun otomatik güncellenecek.
+                </p>
+              </div>
+              {detailsControl}
             </div>
           ) : (
-            <div>
-              <div className="mb-1.5 flex items-center justify-between gap-3 text-xs">
-                <span className="text-muted-foreground">
-                  {allDone ? "Bugünün yolculuğunu tamamladın! 🎉" : "Günlük yolculuğun"}
-                </span>
-                <span className="shrink-0 font-semibold">%{percent}</span>
+            <div className="flex items-center gap-2" data-journey-progress-area>
+              <div className="min-w-0 max-w-md flex-1">
+                <div className="mb-1.5 flex items-center justify-between gap-3 text-xs">
+                  <span className="text-muted-foreground">
+                    {allDone ? "Bugünün yolculuğunu tamamladın! 🎉" : "Günlük yolculuğun"}
+                  </span>
+                  <span className="shrink-0 font-semibold">%{percent}</span>
+                </div>
+                {noActionableStep && (
+                  <p className="mb-2 text-xs leading-relaxed text-muted-foreground">
+                    Şu an açılacak yeni bir adım yok. Günlük ilerlemeni burada takip edebilirsin.
+                  </p>
+                )}
+                <ProgressBar value={percent} />
               </div>
-              {noActionableStep && (
-                <p className="mb-2 text-xs leading-relaxed text-muted-foreground">
-                  Şu an açılacak yeni bir adım yok. Günlük ilerlemeni burada takip edebilirsin.
-                </p>
-              )}
-              <ProgressBar value={percent} />
+              {detailsControl}
             </div>
           )}
 
-          {visibleSteps.length > 0 && (
+          {(visibleSteps.length > 0 || canToggleDetails) && (
             <ul
               id={detailsId}
+              hidden={visibleSteps.length === 0}
               className="space-y-2"
               data-daily-journey-steps
               data-visible-journey-steps={visibleSteps.length}
             >
               {visibleSteps.map((step, index) => (
-                <StepRow
-                  key={step.kind}
-                  step={step}
-                  last={index === visibleSteps.length - 1}
-                />
+                <StepRow key={step.kind} step={step} last={index === visibleSteps.length - 1} />
               ))}
             </ul>
-          )}
-
-          {canToggleDetails && (
-            <button
-              type="button"
-              aria-expanded={expanded}
-              aria-controls={detailsId}
-              data-journey-details-toggle
-              onClick={() => onExpandedChange(!expanded)}
-              className="flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-primary transition-colors hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-            >
-              <span>{expanded ? "Daralt" : "Tümünü göster"}</span>
-              {expanded ? (
-                <ChevronUp className="size-4" aria-hidden="true" />
-              ) : (
-                <ChevronDown className="size-4" aria-hidden="true" />
-              )}
-            </button>
           )}
         </CardContent>
       </Card>

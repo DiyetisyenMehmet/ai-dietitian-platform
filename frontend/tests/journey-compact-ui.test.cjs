@@ -39,7 +39,8 @@ test("compact actionable view exposes only the engine recommendation", async () 
   );
   assert.match(html, /data-visible-journey-steps="1"/);
   assert.match(html, /aria-expanded="false"/);
-  assert.match(html, /Tümünü göster/);
+  assert.match(html, /aria-label="Yolculuk detaylarını aç"/);
+  assert.doesNotMatch(html, /Tümünü göster/);
   assert.match(html, /Öğle yemeği/);
   assert.doesNotMatch(html, /Kahvaltı/);
   assert.doesNotMatch(html, /Akşam yemeği/);
@@ -80,7 +81,8 @@ test("all-done collapses to success while expanded detail retains completed rows
   );
   assert.match(html, /Bugünün yolculuğunu tamamladın! 🎉/);
   assert.match(html, /%100/);
-  assert.match(html, /Tümünü göster/);
+  assert.match(html, /aria-label="Yolculuk detaylarını aç"/);
+  assert.doesNotMatch(html, /Tümünü göster/);
   assert.doesNotMatch(html, /data-journey-row/);
 });
 

@@ -6,6 +6,7 @@ on:
       - fix/production-hardening
       - feature/android-native-scanner
       - feature/staging-preview
+      - feature/workmode2-dashboard-journey-compact-text-a1
   workflow_dispatch:
 
 permissions:

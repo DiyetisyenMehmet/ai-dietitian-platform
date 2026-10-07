@@ -325,7 +325,7 @@ for (const theme of ["light", "dark"])
         })),
       );
       await edit(page);
-      await expect(page.getByText("Kartları tutup sürükleyerek sıralayabilirsin")).toBeVisible();
+      await expect(page.getByText("Kartları basılı tutup sıralayabilirsin.")).toBeVisible();
       const checks = await cards(page).evaluateAll((nodes) =>
         nodes.map((node) => {
           const eye = node.querySelector("[data-dashboard-card-hide]")!.getBoundingClientRect();
