@@ -77,7 +77,7 @@ export function DashboardHomeHeader({ userName }: DashboardHomeHeaderProps) {
       data-dashboard-home-header
     >
       <div className="flex min-w-0 items-center justify-between gap-1.5">
-        <h1 className="min-w-0 flex-1 whitespace-nowrap py-0.5 pr-1 text-[19px] font-bold leading-[1.2] tracking-tight min-[400px]:text-[20px] min-[430px]:text-[21px] sm:text-[28px]" data-dashboard-greeting>
+        <h1 className="min-w-0 flex-1 whitespace-nowrap py-0.5 pr-1 text-[16px] font-bold leading-[1.2] tracking-tight min-[360px]:text-[19px] min-[400px]:text-[20px] min-[430px]:text-[21px] sm:text-[28px]" data-dashboard-greeting>
           {now ? getGreeting(now) : "Merhaba"}, {displayName} <span className="inline-block translate-y-[0.03em] text-[0.95em] leading-none" data-dashboard-greeting-emoji aria-hidden="true">👋</span>
         </h1>
 
