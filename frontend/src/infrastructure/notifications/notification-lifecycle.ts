@@ -1,3 +1,8 @@
+import {
+  effectiveWaterTimes,
+  isWaterReminderSchedule,
+} from "../../domain/account/water-reminder-plan";
+
 const SAFE_NOTIFICATION_TARGETS = new Set([
   "/dashboard",
   "/ai",
@@ -74,7 +79,9 @@ export function mergeNotificationCenterItems(
   }));
   const byServerId = new Map(
     items
-      .filter((item): item is NotificationCenterItem & { serverId: string } => Boolean(item.serverId))
+      .filter((item): item is NotificationCenterItem & { serverId: string } =>
+        Boolean(item.serverId),
+      )
       .map((item) => [item.serverId, item]),
   );
 
@@ -100,8 +107,7 @@ export function mergeNotificationCenterItems(
   }
 
   return items.sort(
-    (left, right) =>
-      new Date(right.occurredAt).getTime() - new Date(left.occurredAt).getTime(),
+    (left, right) => new Date(right.occurredAt).getTime() - new Date(left.occurredAt).getTime(),
   );
 }
 
@@ -110,6 +116,7 @@ export interface WellnessPreferenceLike {
   activityReminders: boolean;
   sleepReminders: boolean;
   waterReminderTime: string;
+  waterReminderSchedule?: unknown;
   activityReminderTime: string;
   sleepReminderTime: string;
 }
@@ -127,8 +134,13 @@ function dateAt(base: Date, time: string): Date {
   return result;
 }
 
-/** Builds a 30-day local schedule. Weekly summaries are intentionally remote-only. */
-export function buildWellnessReminderSchedule(
+// Device budget belongs to the existing Android adapter, never the account model.
+const ANDROID_WATER_WINDOW_DAYS = 7;
+
+/** Materializes the existing Android bridge's queue. Eight daily water times
+ * over seven rolling days (56), plus unchanged activity/sleep entries (60),
+ * fit below its 128-entry cap. Legacy water retains its 30-day behavior. */
+export function buildAndroidWellnessReminderSchedule(
   preferences: WellnessPreferenceLike,
   now: Date = new Date(),
 ): WellnessReminderEntry[] {
@@ -136,22 +148,27 @@ export function buildWellnessReminderSchedule(
   for (let day = 0; day < 30; day += 1) {
     const date = new Date(now);
     date.setDate(now.getDate() + day);
-    const add = (
-      enabled: boolean,
-      time: string,
-      type: WellnessReminderEntry["type"],
-    ) => {
+    const add = (enabled: boolean, time: string, type: WellnessReminderEntry["type"]) => {
       if (!enabled) return;
       const at = dateAt(date, time);
       if (at.getTime() > now.getTime()) {
         schedule.push({ id: `${type}-${at.toISOString()}`, at: at.getTime(), type });
       }
     };
-    add(preferences.waterReminders, preferences.waterReminderTime, "water");
+    if (preferences.waterReminderSchedule == null) {
+      add(preferences.waterReminders, preferences.waterReminderTime, "water");
+    } else if (
+      day < ANDROID_WATER_WINDOW_DAYS &&
+      isWaterReminderSchedule(preferences.waterReminderSchedule)
+    ) {
+      for (const time of effectiveWaterTimes(preferences.waterReminderSchedule, date.getDay())) {
+        add(preferences.waterReminders, time, "water");
+      }
+    }
     add(preferences.activityReminders, preferences.activityReminderTime, "activity");
     add(preferences.sleepReminders, preferences.sleepReminderTime, "sleep");
   }
-  return schedule;
+  return schedule.sort((a, b) => a.at - b.at || a.id.localeCompare(b.id));
 }
 
 /** Stable idempotency key: any token rotation or account switch changes it. */

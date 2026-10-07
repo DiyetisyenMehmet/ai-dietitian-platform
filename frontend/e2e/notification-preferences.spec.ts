@@ -165,10 +165,23 @@ for (const width of [390, 412, 430])
         await card(page, key)
           .getByRole("button", { name: `${label} detayları` })
           .click();
-        await expect(page.getByRole("dialog").getByRole("heading", { name: label })).toBeVisible();
-        await fit(page);
-        await page.getByRole("dialog").getByRole("button", { name: "Kapat", exact: true }).click();
-        await expect(page.getByRole("dialog")).toHaveCount(0);
+        if (key === "waterReminders") {
+          await expect(page.locator("[data-water-reminders]")).toBeVisible();
+          await expect(page.getByLabel("Her gün 1. saat")).toHaveValue("13:55");
+          await fit(page);
+          await page.getByRole("button", { name: "Geri", exact: true }).click();
+          await ready(page);
+        } else {
+          await expect(
+            page.getByRole("dialog").getByRole("heading", { name: label }),
+          ).toBeVisible();
+          await fit(page);
+          await page
+            .getByRole("dialog")
+            .getByRole("button", { name: "Kapat", exact: true })
+            .click();
+          await expect(page.getByRole("dialog")).toHaveCount(0);
+        }
       }
       await expect(card(page, "waterReminders")).toContainText("Her gün · 13:55");
       await expect(card(page, "weeklySummary")).toContainText("Çarşamba · 11:40");
@@ -341,5 +354,5 @@ test("all categories off still show saved program and editable entries", async (
   await card(page, "waterReminders")
     .getByRole("button", { name: "Su hatırlatmaları detayları" })
     .click();
-  await expect(page.getByRole("dialog")).toContainText("Hatırlatmalar kapalı");
+  await expect(page.locator("[data-water-reminders]")).toContainText("Hatırlatmalar kapalı");
 });

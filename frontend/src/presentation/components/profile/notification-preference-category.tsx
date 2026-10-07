@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 
 import type { NotificationPreferenceMeta, NotificationPreferences } from "@/domain/account/types";
+import { waterPlanSummary, waterReminderPlan } from "@/domain/account/water-reminder-plan";
 import { Button } from "@/presentation/components/ui/button";
 import { Card } from "@/presentation/components/ui/card";
 import { Input } from "@/presentation/components/ui/input";
@@ -48,6 +49,10 @@ export function notificationPlanSummary(
   key: ToggleKey,
   preferences: NotificationPreferences,
 ): string {
+  if (key === "waterReminders" && preferences.waterReminderSchedule)
+    return waterPlanSummary(
+      waterReminderPlan(preferences.waterReminderSchedule, preferences.waterReminderTime),
+    );
   const timeField = TIME_FIELDS[key];
   if (timeField) {
     const day = key === "weeklySummary" ? DAYS[preferences.weeklySummaryDay] : "Her gün";
@@ -68,7 +73,7 @@ function CategoryIcon({ category }: { category: ToggleKey }) {
   );
 }
 
-function PreferenceSwitch({
+export function PreferenceSwitch({
   label,
   enabled,
   busy,

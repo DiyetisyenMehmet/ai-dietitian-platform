@@ -1,3 +1,5 @@
+import type { WaterReminderSchedule } from "./water-reminder-plan";
+
 /**
  * Account-management domain types: persisted notification preferences and
  * client-side account presentation state.
@@ -16,6 +18,7 @@ export interface NotificationPreferences {
   bloodTestReminders: boolean;
   productUpdates: boolean;
   waterReminderTime: string;
+  waterReminderSchedule?: WaterReminderSchedule | null;
   activityReminderTime: string;
   sleepReminderTime: string;
   weeklySummaryDay: number;

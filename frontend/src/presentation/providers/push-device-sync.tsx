@@ -6,7 +6,7 @@ import { toast } from "sonner";
 
 import { useAuth } from "@/application/auth/auth-store";
 import {
-  buildWellnessReminderSchedule,
+  buildAndroidWellnessReminderSchedule,
   notificationRegistrationKey,
   resolvePendingNotificationTarget,
 } from "@/infrastructure/notifications/notification-lifecycle";
@@ -34,25 +34,23 @@ interface NativePushBridge {
 function bridge(): NativePushBridge | undefined {
   if (typeof window === "undefined") return undefined;
   try {
-    const value = (
-      window as typeof window & { DiewishReminders?: Partial<NativePushBridge> }
-    ).DiewishReminders;
+    const value = (window as typeof window & { DiewishReminders?: Partial<NativePushBridge> })
+      .DiewishReminders;
     if (
       !value ||
       typeof value.isAvailable !== "function" ||
       typeof value.pushToken !== "function" ||
       typeof value.ensurePushToken !== "function" ||
       typeof value.appVersion !== "function"
-    ) return undefined;
+    )
+      return undefined;
     return value as NativePushBridge;
   } catch {
     return undefined;
   }
 }
 
-function isNativePushAvailable(
-  native: NativePushBridge | undefined,
-): native is NativePushBridge {
+function isNativePushAvailable(native: NativePushBridge | undefined): native is NativePushBridge {
   if (!native) return false;
   try {
     return native.isAvailable();
@@ -124,7 +122,8 @@ export function PushDeviceSync() {
         wellnessSyncing ||
         typeof native.replaceWellnessSchedule !== "function" ||
         typeof native.cancelWellness !== "function"
-      ) return;
+      )
+        return;
       wellnessSyncing = true;
       try {
         let { preferences } = await notificationClient.getPreferences();
@@ -136,9 +135,7 @@ export function PushDeviceSync() {
         let exactAlarmStatus = "legacy";
         try {
           exactAlarmStatus =
-            typeof native.exactAlarmStatus === "function"
-              ? native.exactAlarmStatus()
-              : "legacy";
+            typeof native.exactAlarmStatus === "function" ? native.exactAlarmStatus() : "legacy";
         } catch {
           exactAlarmStatus = "legacy";
         }
@@ -148,6 +145,10 @@ export function PushDeviceSync() {
           exactAlarmStatus,
           preferences.waterReminders,
           preferences.waterReminderTime,
+          preferences.waterReminderSchedule,
+          // A rolling water plan is renewed on the next active day, even when
+          // the user's settings have not changed.
+          preferences.waterReminderSchedule ? new Date().toDateString() : null,
           preferences.activityReminders,
           preferences.activityReminderTime,
           preferences.sleepReminders,
@@ -155,7 +156,7 @@ export function PushDeviceSync() {
         ]);
         if (signature === lastWellnessSync) return;
 
-        const schedule = buildWellnessReminderSchedule(preferences);
+        const schedule = buildAndroidWellnessReminderSchedule(preferences);
         if (schedule.length === 0) native.cancelWellness?.();
         else native.replaceWellnessSchedule?.(JSON.stringify(schedule));
         lastWellnessSync = signature;
@@ -196,7 +197,11 @@ export function PushDeviceSync() {
       return;
     }
     const native = bridge();
-    if (isNativePushAvailable(native) || !isWebPushSupported() || webPushPermissionStatus() !== "granted") {
+    if (
+      isNativePushAvailable(native) ||
+      !isWebPushSupported() ||
+      webPushPermissionStatus() !== "granted"
+    ) {
       return;
     }
 
@@ -269,7 +274,8 @@ export function PushDeviceSync() {
       !isNativePushAvailable(native) ||
       typeof native.pendingNotificationPath !== "function" ||
       typeof native.clearPendingNotificationPath !== "function"
-    ) return;
+    )
+      return;
 
     const consumePendingTarget = () => {
       try {

@@ -211,7 +211,10 @@ test("concurrent dispatchers claim a due notification only once", async (t) => {
     notificationService.dispatchDue(now),
     notificationService.dispatchDue(now),
   ]);
-  assert.equal(results.reduce((sum, value) => sum + value, 0), 1);
+  assert.equal(
+    results.reduce((sum, value) => sum + value, 0),
+    1,
+  );
   assert.equal(provider.calls, 1);
 
   const stored = await prisma.notification.findUniqueOrThrow({ where: { id: notification.id } });
@@ -291,7 +294,6 @@ test("weekly summary time converts the browser timezone offset to UTC", () => {
   assert.equal(scheduled.toISOString(), "2026-09-20T07:00:00.000Z");
 });
 
-
 test("notification device registration accepts Android and Web only", () => {
   const token = "t".repeat(32);
   assert.equal(
@@ -345,7 +347,6 @@ test("FCM envelopes stay data-only and apply platform-specific transport config"
   assert.equal("notification" in web, false);
 });
 
-
 test("remote notification copy never forwards stored personalized body text", () => {
   const weekly = privacySafeRemoteCopy("WEEKLY_REVIEW");
   assert.equal(weekly.title, "Haftalık özet");
@@ -354,4 +355,72 @@ test("remote notification copy never forwards stored personalized body text", ()
   const risk = privacySafeRemoteCopy("RISK_ALERT");
   assert.equal(risk.title, "Diewish");
   assert.equal(risk.body, "Diewish'te yeni bir bilgilendirme var.");
+});
+
+test("water weekly plans persist per owner and preserve other category preferences", async (t) => {
+  const [first, second] = await Promise.all([
+    createUser("water-weekly-a"),
+    createUser("water-weekly-b"),
+  ]);
+  t.after(async () => {
+    await prisma.user.deleteMany({ where: { id: { in: [first.id, second.id] } } });
+  });
+  await notificationService.updatePreferences(first.id, {
+    activityReminders: true,
+    activityReminderTime: "17:35",
+    sleepReminders: true,
+    sleepReminderTime: "23:20",
+    weeklySummary: true,
+    weeklySummaryDay: 4,
+    weeklySummaryTime: "12:25",
+    coachTips: true,
+    mealReminders: true,
+  });
+  const plan = {
+    version: 1 as const,
+    mode: "custom" as const,
+    dailyTimes: ["09:00"],
+    days: Array.from({ length: 7 }, (_, day) => ({
+      day,
+      enabled: day !== 0,
+      times: ["09:00", "14:00", "18:00", "21:00"],
+    })),
+  };
+  const saved = await notificationService.updatePreferences(first.id, {
+    waterReminders: true,
+    waterReminderSchedule: plan,
+  });
+  assert.deepEqual(saved.waterReminderSchedule, plan);
+  assert.equal(saved.waterReminderTime, "09:00");
+  const reloaded = await notificationService.getPreferences(first.id);
+  assert.deepEqual(
+    "waterReminderSchedule" in reloaded ? reloaded.waterReminderSchedule : undefined,
+    plan,
+  );
+  assert.equal(reloaded.activityReminderTime, "17:35");
+  assert.equal(reloaded.sleepReminderTime, "23:20");
+  assert.equal(reloaded.weeklySummaryDay, 4);
+  assert.equal(reloaded.weeklySummaryTime, "12:25");
+  assert.equal(reloaded.mealReminders, true);
+  assert.equal(reloaded.coachTips, true);
+  const other = await notificationService.getPreferences(second.id);
+  assert.equal(other.waterReminders, false);
+  assert.ok(!("waterReminderSchedule" in other) || other.waterReminderSchedule == null);
+  const off = await notificationService.updatePreferences(first.id, { waterReminders: false });
+  assert.deepEqual(off.waterReminderSchedule, plan);
+  const clearedPlan = {
+    ...plan,
+    dailyTimes: [],
+    days: plan.days.map((day) => ({ ...day, times: [] })),
+  };
+  const cleared = await notificationService.updatePreferences(first.id, {
+    waterReminderSchedule: clearedPlan,
+  });
+  assert.deepEqual(cleared.waterReminderSchedule, clearedPlan);
+  const legacy = await notificationService.updatePreferences(first.id, {
+    waterReminderTime: "13:55",
+  });
+  assert.equal(legacy.waterReminderSchedule, null);
+  assert.equal(legacy.waterReminderTime, "13:55");
+  assert.equal(legacy.activityReminderTime, "17:35");
 });

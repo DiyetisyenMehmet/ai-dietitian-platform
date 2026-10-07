@@ -1,18 +1,12 @@
 import { randomUUID } from "node:crypto";
 
-import type {
-  Notification,
-  NotificationPreference,
-  NotificationType,
-  Prisma,
-} from "@prisma/client";
+import { Prisma } from "@prisma/client";
+
+import type { Notification, NotificationPreference, NotificationType } from "@prisma/client";
 
 import { logger } from "../../lib/logger";
 import { prisma } from "../../lib/prisma";
-import {
-  getNotificationProvider,
-  type NotificationDeliveryResult,
-} from "./notification.provider";
+import { getNotificationProvider, type NotificationDeliveryResult } from "./notification.provider";
 import type { UpdateNotificationPreferencesInput } from "./notification.schemas";
 
 const DEFAULT_PREFERENCES = {
@@ -34,7 +28,14 @@ const DEFAULT_PREFERENCES = {
 
 const MAX_DELIVERY_ATTEMPTS = 6;
 const CLAIM_LEASE_MS = 3 * 60 * 1000;
-const RETRY_DELAYS_MS = [60_000, 5 * 60_000, 15 * 60_000, 60 * 60_000, 3 * 60 * 60_000, 12 * 60 * 60_000] as const;
+const RETRY_DELAYS_MS = [
+  60_000,
+  5 * 60_000,
+  15 * 60_000,
+  60 * 60_000,
+  3 * 60 * 60_000,
+  12 * 60 * 60_000,
+] as const;
 
 type PreferenceLike = NotificationPreference | typeof DEFAULT_PREFERENCES;
 
@@ -88,7 +89,10 @@ function retryAt(attempts: number, now: Date): Date {
   return new Date(now.getTime() + RETRY_DELAYS_MS[index]);
 }
 
-async function claimNotification(notificationId: string, now: Date): Promise<ClaimedNotification | null> {
+async function claimNotification(
+  notificationId: string,
+  now: Date,
+): Promise<ClaimedNotification | null> {
   const claimId = randomUUID();
   const claimedUntil = new Date(now.getTime() + CLAIM_LEASE_MS);
 
@@ -241,8 +245,7 @@ export const notificationService = {
     userId: string,
   ): Promise<NotificationPreference | typeof DEFAULT_PREFERENCES> {
     return (
-      (await prisma.notificationPreference.findUnique({ where: { userId } })) ??
-      DEFAULT_PREFERENCES
+      (await prisma.notificationPreference.findUnique({ where: { userId } })) ?? DEFAULT_PREFERENCES
     );
   },
 
@@ -250,10 +253,25 @@ export const notificationService = {
     userId: string,
     input: UpdateNotificationPreferencesInput,
   ): Promise<NotificationPreference> {
+    const data = { ...input };
+    const plan = input.waterReminderSchedule;
+    const firstTime =
+      plan?.mode === "same"
+        ? plan.dailyTimes[0]
+        : plan?.days.find((day) => day.enabled && day.times.length)?.times[0];
+    if (firstTime) data.waterReminderTime = firstTime;
+    // Legacy clients can still explicitly replace a single water reminder time.
+    // Clearing the extended plan prevents an invisible stale custom schedule.
+    const persisted = {
+      ...data,
+      ...(input.waterReminderTime !== undefined && !plan
+        ? { waterReminderSchedule: Prisma.DbNull }
+        : {}),
+    };
     return prisma.notificationPreference.upsert({
       where: { userId },
-      create: { userId, ...DEFAULT_PREFERENCES, ...input },
-      update: input,
+      create: { userId, ...DEFAULT_PREFERENCES, ...persisted },
+      update: persisted,
     });
   },
 
@@ -392,10 +410,7 @@ export const notificationService = {
 
         let result: NotificationDeliveryResult;
         try {
-          result = await provider.send(
-            claim.notification,
-            new Set(claim.deliveredDeviceKeys),
-          );
+          result = await provider.send(claim.notification, new Set(claim.deliveredDeviceKeys));
         } catch (error) {
           logger.warn(
             { err: error, notificationId: claim.notification.id },

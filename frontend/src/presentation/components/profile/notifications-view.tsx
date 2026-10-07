@@ -1,10 +1,12 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { BellRing, Info, Smartphone } from "lucide-react";
 import { toast } from "sonner";
 
 import { NOTIFICATION_PREFERENCES, type NotificationPreferences } from "@/domain/account/types";
+import { syncWellnessReminderSchedule } from "@/infrastructure/notifications/native-wellness";
 import { notificationClient } from "@/infrastructure/notifications/notification-client";
 import {
   ensureWebPushToken,
@@ -32,12 +34,6 @@ interface NativeReminderBridge {
   replaceWellnessSchedule(scheduleJson: string): number;
   cancelWellness(): void;
   showTestNotification(): boolean;
-}
-
-interface ReminderEntry {
-  id: string;
-  at: number;
-  type: "water" | "activity" | "sleep";
 }
 
 function nativeBridge(): NativeReminderBridge | undefined {
@@ -95,34 +91,8 @@ function scheduleNativeTestReminder(
   }
 }
 
-function dateAt(base: Date, time: string): Date {
-  const [hour, minute] = time.split(":").map(Number);
-  const result = new Date(base);
-  result.setHours(hour, minute, 0, 0);
-  return result;
-}
-
-function buildSchedule(preferences: NotificationPreferences): ReminderEntry[] {
-  const schedule: ReminderEntry[] = [];
-  const now = new Date();
-  for (let day = 0; day < 30; day += 1) {
-    const date = new Date(now);
-    date.setDate(now.getDate() + day);
-    const add = (enabled: boolean, time: string, type: ReminderEntry["type"]) => {
-      if (!enabled) return;
-      const at = dateAt(date, time);
-      if (at.getTime() > now.getTime()) {
-        schedule.push({ id: `${type}-${at.toISOString()}`, at: at.getTime(), type });
-      }
-    };
-    add(preferences.waterReminders, preferences.waterReminderTime, "water");
-    add(preferences.activityReminders, preferences.activityReminderTime, "activity");
-    add(preferences.sleepReminders, preferences.sleepReminderTime, "sleep");
-  }
-  return schedule;
-}
-
 export function NotificationsView() {
+  const router = useRouter();
   const [preferences, setPreferences] = React.useState<NotificationPreferences | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [loadAttempt, setLoadAttempt] = React.useState(0);
@@ -138,17 +108,7 @@ export function NotificationsView() {
   const [webAvailable, setWebAvailable] = React.useState(false);
   const [webPermission, setWebPermission] = React.useState<WebPushPermission>("unsupported");
 
-  const syncNative = React.useCallback((next: NotificationPreferences) => {
-    try {
-      const bridge = nativeBridge();
-      if (!bridge || !bridge.isAvailable()) return;
-      const entries = buildSchedule(next);
-      if (entries.length === 0) bridge.cancelWellness();
-      else bridge.replaceWellnessSchedule(JSON.stringify(entries));
-    } catch {
-      // A stale/partial Android bridge must never crash the web settings page.
-    }
-  }, []);
+  const syncNative = syncWellnessReminderSchedule;
 
   const refreshPermission = React.useCallback(() => {
     try {
@@ -352,7 +312,8 @@ export function NotificationsView() {
             onToggle={() => void toggle(item.key)}
             onOpen={() => {
               setSaveError(null);
-              setSelectedKey(item.key);
+              if (item.key === "waterReminders") router.push("/profile/notifications/water");
+              else setSelectedKey(item.key);
             }}
           />
         ))}
