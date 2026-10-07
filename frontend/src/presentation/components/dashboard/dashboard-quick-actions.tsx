@@ -21,7 +21,7 @@ import { Input } from "@/presentation/components/ui/input";
 import { cn } from "@/shared/lib/utils";
 
 const tileClass =
-  "flex min-h-20 w-full min-w-0 flex-col items-center justify-center gap-1.5 rounded-2xl border border-border/70 px-1.5 py-2.5 text-center shadow-sm transition hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-24 sm:gap-2 sm:px-2 sm:py-3";
+  "flex min-h-[72px] w-full min-w-0 flex-col items-center justify-center gap-1 rounded-2xl border border-border/70 px-1 py-2 text-center shadow-sm transition hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-20 sm:gap-1.5 sm:px-1.5 sm:py-2.5";
 
 type QuickAction = "water" | "activity" | "weight" | "sleep";
 type WaterUnit = "ml" | "L";
@@ -302,15 +302,15 @@ export function DashboardQuickActions({
 
   return (
     <section
-      className="space-y-2"
+      className="space-y-1.5"
       aria-labelledby="dashboard-quick-actions-heading"
       data-dashboard-quick-actions
       data-dashboard-edit-mode={editing ? "true" : "false"}
     >
-      <div className="flex min-w-0 items-center justify-between gap-2">
+      <div className="flex min-w-0 items-center justify-between gap-1.5">
         <h2
           id="dashboard-quick-actions-heading"
-          className="min-w-0 text-[18px] font-bold leading-tight sm:text-xl"
+          className="min-w-0 text-[16px] font-semibold leading-tight sm:text-lg"
         >
           Bugün için hızlı işlemler
         </h2>
@@ -321,13 +321,18 @@ export function DashboardQuickActions({
             aria-pressed={editing}
             disabled={savingPreferences}
             onClick={onToggleEditing}
-            className={cn(
-              "flex size-10 shrink-0 items-center justify-center rounded-full border border-border/70 bg-card text-muted-foreground shadow-sm transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              editing && "border-primary/30 bg-primary/10 text-primary",
-            )}
+            className="flex size-10 shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             data-dashboard-edit-toggle
           >
-            <SlidersHorizontal className="size-[17px]" aria-hidden="true" />
+            <span
+              className={cn(
+                "flex size-8 items-center justify-center rounded-full border border-border/70 bg-card shadow-sm transition",
+                editing && "border-primary/30 bg-primary/10 text-primary",
+              )}
+              aria-hidden="true"
+            >
+              <SlidersHorizontal className="size-[15px]" />
+            </span>
           </button>
         )}
       </div>

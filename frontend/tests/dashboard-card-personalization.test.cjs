@@ -227,31 +227,36 @@ test("dashboard home compact refinement keeps the approved scope and geometry", 
   assert.match(header, /data-dashboard-home-header/);
   assert.match(header, /data-dashboard-header-info/);
   assert.match(header, /data-dashboard-greeting/);
-  assert.match(header, /overflow-hidden text-ellipsis whitespace-nowrap.*text-\[20px\].*min-\[400px\]:text-\[21px\].*sm:text-\[28px\]/);
+  assert.match(header, /normalizedName \? normalizedName\.split\(\/\\s\+\/\)\[0\] : "Diewish"/);
+  assert.match(header, /whitespace-nowrap py-0\.5.*text-\[16px\].*min-\[360px\]:text-\[19px\].*min-\[400px\]:text-\[20px\].*min-\[430px\]:text-\[21px\].*sm:text-\[28px\]/);
+  assert.match(header, /data-dashboard-greeting-emoji/);
+  assert.doesNotMatch(header, /overflow-hidden|text-ellipsis/);
   assert.match(header, /data-dashboard-header-actions/);
   assert.match(header, /flex size-9.*sm:size-10/);
-  assert.match(header, /Bell className="size-\[18px\]"/);
+  assert.match(header, /Bell className="size-4"/);
   assert.match(header, /min-w-4\.5.*text-\[10px\]/);
   assert.doesNotMatch(header, /UserRound|href="\/profile"|Profilini aç/);
-  assert.match(header, /text-\[10px\].*text-muted-foreground\/55/);
+  assert.match(header, /text-\[9px\].*text-muted-foreground\/55/);
 
   assert.match(journey, /data-journey-card-heading/);
-  assert.match(journey, /<h3 className="min-w-0 text-base font-semibold leading-tight">/);
+  assert.match(journey, /<h3 className="min-w-0 text-\[15px\] font-semibold leading-\[1\.15\] sm:text-base">/);
   assert.match(journey, /\$\{completed\}\/\$\{total\} adım/);
-  assert.match(journey, /space-y-1\.5 p-2 sm:space-y-2 sm:p-2\.5/);
+  assert.match(journey, /space-y-1 p-1\.5 sm:space-y-1\.5 sm:p-2/);
   assert.match(journey, /min-h-10 min-w-10/);
-  assert.match(journey, /gap-2 rounded-xl border p-2/);
+  assert.match(journey, /gap-1\.5 rounded-xl border p-1\.5/);
   assert.doesNotMatch(journey, /Günlük yolculuğun/);
 
   assert.match(metrics, /data-dashboard-metrics/);
-  assert.match(metrics, /max-w-\[66px\].*sm:max-w-\[86px\]/);
-  assert.match(metrics, /px-2 py-2\.5.*sm:px-3\.5 sm:py-3/);
+  assert.match(metrics, /max-w-\[62px\].*sm:max-w-\[80px\]/);
+  assert.match(metrics, /px-2 py-2.*sm:px-3 sm:py-2\.5/);
   assert.match(metrics, /flex min-w-0 h-full flex-col items-center text-center/);
 
-  assert.match(quick, /text-\[18px\] font-bold leading-tight sm:text-xl/);
+  assert.match(quick, /text-\[16px\] font-semibold leading-tight sm:text-lg/);
+  assert.match(quick, /min-h-\[72px\].*sm:min-h-20/);
   assert.match(quick, /flex size-10 shrink-0 items-center justify-center rounded-full/);
-  assert.match(quick, /SlidersHorizontal className="size-\[17px\]"/);
+  assert.match(quick, /flex size-8 items-center justify-center rounded-full border/);
+  assert.match(quick, /SlidersHorizontal className="size-\[15px\]"/);
 
-  assert.match(view, /data-daily-journey-section\]\]:!mt-2/);
-  assert.match(view, /data-dashboard-personalization\]\]:!mt-2/);
+  assert.match(view, /data-daily-journey-section\]\]:!mt-1\.5/);
+  assert.match(view, /data-dashboard-personalization\]\]:!mt-1\.5/);
 });

@@ -81,9 +81,14 @@ test("Journey stays compact by default and expands/collapses with keyboard contr
         const box = document.querySelector("[data-dashboard-edit-toggle]")!.getBoundingClientRect();
         return { width: box.width, height: box.height };
       })(),
-      firstCardTop:
-        document.querySelector("[data-dashboard-card-slot]")?.getBoundingClientRect().top ??
-        Number.POSITIVE_INFINITY,
+      firstCard: (() => {
+        const box = document.querySelector("[data-dashboard-card-slot]")?.getBoundingClientRect();
+        if (!box) return { top: Number.POSITIVE_INFINITY, visible: 0 };
+        return {
+          top: box.top,
+          visible: Math.max(0, Math.min(innerHeight, box.bottom) - Math.max(0, box.top)),
+        };
+      })(),
       viewportHeight: innerHeight,
       greeting: (() => {
         const element = document.querySelector("[data-dashboard-greeting]") as HTMLElement;
@@ -94,7 +99,24 @@ test("Journey stays compact by default and expands/collapses with keyboard contr
           scrollWidth: element.scrollWidth,
           whiteSpace: getComputedStyle(element).whiteSpace,
           fontSize: getComputedStyle(element).fontSize,
+          lineHeight: getComputedStyle(element).lineHeight,
           right: box.right,
+          top: box.top,
+          bottom: box.bottom,
+        };
+      })(),
+      greetingEmoji: (() => {
+        const box = document.querySelector("[data-dashboard-greeting-emoji]")!.getBoundingClientRect();
+        return { top: box.top, bottom: box.bottom, height: box.height };
+      })(),
+      headerInfo: (() => {
+        const element = document.querySelector("[data-dashboard-header-info]") as HTMLElement;
+        const box = element.getBoundingClientRect();
+        return {
+          height: box.height,
+          scrollWidth: element.scrollWidth,
+          clientWidth: element.clientWidth,
+          whiteSpace: getComputedStyle(element).whiteSpace,
         };
       })(),
       headerActionsLeft:
@@ -114,37 +136,50 @@ test("Journey stays compact by default and expands/collapses with keyboard contr
       metricLabelTops: Array.from(
         document.querySelectorAll("[data-dashboard-metrics] > div > div > p"),
       ).map((element) => (element as HTMLElement).getBoundingClientRect().top),
+      quickTileSizes: Array.from(
+        document.querySelectorAll("[data-quick-action-slot] > a, [data-quick-action-slot] > button"),
+      ).map((element) => {
+        const box = (element as HTMLElement).getBoundingClientRect();
+        return { width: box.width, height: box.height };
+      }),
     }));
     expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.clientWidth + 1);
-    expect(geometry.cardHeight).toBeLessThanOrEqual(300);
-    if (width >= 390) expect(geometry.cardHeight).toBeLessThanOrEqual(205);
+    expect(geometry.cardHeight).toBeLessThanOrEqual(285);
+    if (width >= 390) expect(geometry.cardHeight).toBeLessThanOrEqual(190);
     expect(geometry.progressWidth).toBeLessThan(geometry.progressAreaWidth - 40);
     expect(geometry.toggleLeft).toBeGreaterThanOrEqual(geometry.progressRight);
-    expect(geometry.titleFont).toBe("16px");
+    expect(geometry.titleFont).toBe(width < 640 ? "15px" : "16px");
     expect(geometry.hintFont).toBe("12px");
-    expect(geometry.metricsGap).toBeCloseTo(8, 3);
-    expect(geometry.actionsGap).toBeCloseTo(8, 3);
+    expect(geometry.metricsGap).toBeCloseTo(6, 3);
+    expect(geometry.actionsGap).toBeCloseTo(6, 3);
     expect(geometry.editButton.width).toBeGreaterThanOrEqual(40);
     expect(geometry.editButton.height).toBeGreaterThanOrEqual(40);
     expect(geometry.topProfileCount).toBe(0);
     expect(geometry.headerActionCount).toBe(2);
     expect(geometry.greeting.whiteSpace).toBe("nowrap");
-    expect(geometry.greeting.right).toBeLessThanOrEqual(geometry.headerActionsLeft - 7);
+    expect(geometry.greeting.right).toBeLessThanOrEqual(geometry.headerActionsLeft - 5);
+    expect(geometry.greetingEmoji.top).toBeGreaterThanOrEqual(geometry.greeting.top - 0.5);
+    expect(geometry.greetingEmoji.bottom).toBeLessThanOrEqual(geometry.greeting.bottom + 0.5);
+    if (width >= 360) expect(geometry.headerInfo.whiteSpace).toBe("nowrap");
+    expect(geometry.headerInfo.scrollWidth).toBeLessThanOrEqual(geometry.headerInfo.clientWidth + 1);
     for (const size of geometry.headerActionSizes) {
       expect(size.width).toBeGreaterThanOrEqual(36);
       expect(size.height).toBeGreaterThanOrEqual(36);
     }
     expect(Math.max(...geometry.metricRingWidths) - Math.min(...geometry.metricRingWidths)).toBeLessThanOrEqual(0.5);
     expect(Math.max(...geometry.metricLabelTops) - Math.min(...geometry.metricLabelTops)).toBeLessThanOrEqual(0.5);
+    expect(geometry.quickTileSizes).toHaveLength(4);
+    expect(Math.max(...geometry.quickTileSizes.map((item) => item.height)) - Math.min(...geometry.quickTileSizes.map((item) => item.height))).toBeLessThanOrEqual(0.5);
     if (width < 640) {
-      expect(geometry.headerHeight).toBeLessThanOrEqual(95);
-      expect(geometry.metricsHeight).toBeLessThanOrEqual(108);
-      expect(geometry.quickHeadingFont).toBe("18px");
-      expect(geometry.greeting.height).toBeLessThanOrEqual(24);
+      expect(geometry.headerHeight).toBeLessThanOrEqual(88);
+      expect(geometry.metricsHeight).toBeLessThanOrEqual(98);
+      expect(geometry.quickHeadingFont).toBe("16px");
+      expect(geometry.greeting.height).toBeLessThanOrEqual(30);
+      expect(Math.max(...geometry.quickTileSizes.map((item) => item.height))).toBeLessThanOrEqual(73);
     }
-    if (width >= 390 && width <= 430) {
-      expect(geometry.firstCardTop).toBeLessThanOrEqual(geometry.viewportHeight - 12);
-    }
+    if (width === 390) expect(geometry.firstCard.visible).toBeGreaterThanOrEqual(72);
+    if (width === 412) expect(geometry.firstCard.visible).toBeGreaterThanOrEqual(88);
+    if (width === 430) expect(geometry.firstCard.visible).toBeGreaterThanOrEqual(92);
   }
 
   for (const [width, height] of [
@@ -162,15 +197,27 @@ test("Journey stays compact by default and expands/collapses with keyboard contr
           document.querySelector("[data-dashboard-greeting]")!,
         ).whiteSpace,
         profileCount: document.querySelectorAll('a[aria-label="Profilini aç"]').length,
-        firstCardTop:
-          document.querySelector("[data-dashboard-card-slot]")?.getBoundingClientRect().top ??
-          Number.POSITIVE_INFINITY,
-        viewportHeight: innerHeight,
+        firstCardVisible: (() => {
+          const box = document.querySelector("[data-dashboard-card-slot]")?.getBoundingClientRect();
+          if (!box) return 0;
+          return Math.max(0, Math.min(innerHeight, box.bottom) - Math.max(0, box.top));
+        })(),
+        greetingEmojiContained: (() => {
+          const greeting = document.querySelector("[data-dashboard-greeting]")!.getBoundingClientRect();
+          const emoji = document.querySelector("[data-dashboard-greeting-emoji]")!.getBoundingClientRect();
+          return emoji.top >= greeting.top - 0.5 && emoji.bottom <= greeting.bottom + 0.5;
+        })(),
       }));
       expect(themeGeometry.scrollWidth).toBeLessThanOrEqual(themeGeometry.clientWidth + 1);
       expect(themeGeometry.greetingWhiteSpace).toBe("nowrap");
+      expect(themeGeometry.greetingEmojiContained).toBe(true);
       expect(themeGeometry.profileCount).toBe(0);
-      expect(themeGeometry.firstCardTop).toBeLessThanOrEqual(themeGeometry.viewportHeight - 12);
+      const minimumVisible = width === 390 ? 72 : width === 412 ? 88 : 92;
+      expect(themeGeometry.firstCardVisible).toBeGreaterThanOrEqual(minimumVisible);
+      await page.screenshot({
+        path: testInfo.outputPath(`dashboard-compact-${width}x${height}-${theme}.png`),
+        fullPage: false,
+      });
     }
   }
 

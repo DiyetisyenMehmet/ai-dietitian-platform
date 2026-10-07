@@ -64,7 +64,7 @@ export function DashboardQuickActionIcon({
     return (
       <svg
         viewBox="0 0 24 24"
-        className={cn("size-6 sm:size-7", item.iconClass, className)}
+        className={cn("size-[21px] sm:size-6", item.iconClass, className)}
         fill="none"
         stroke="currentColor"
         strokeWidth="1.8"
@@ -82,6 +82,6 @@ export function DashboardQuickActionIcon({
 
   const Icon = item.Icon;
   return Icon ? (
-    <Icon className={cn("size-6 sm:size-7", item.iconClass, className)} aria-hidden="true" />
+    <Icon className={cn("size-[21px] sm:size-6", item.iconClass, className)} aria-hidden="true" />
   ) : null;
 }
