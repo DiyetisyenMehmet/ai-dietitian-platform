@@ -67,6 +67,22 @@ const config: Config = {
         sans: ["var(--font-sans)", "system-ui", "sans-serif"],
       },
       keyframes: {
+        "modal-center-in": {
+          from: { opacity: "0", transform: "translate(-50%, -50%) scale(0.96)" },
+          to: { opacity: "1", transform: "translate(-50%, -50%) scale(1)" },
+        },
+        "modal-center-out": {
+          from: { opacity: "1", transform: "translate(-50%, -50%) scale(1)" },
+          to: { opacity: "0", transform: "translate(-50%, -50%) scale(0.96)" },
+        },
+        "panel-left-in": {
+          from: { transform: "translateX(-100%)" },
+          to: { transform: "translateX(0)" },
+        },
+        "panel-left-out": {
+          from: { transform: "translateX(0)" },
+          to: { transform: "translateX(-100%)" },
+        },
         "accordion-down": {
           from: { height: "0" },
           to: { height: "var(--radix-accordion-content-height)" },
@@ -92,6 +108,10 @@ const config: Config = {
         },
       },
       animation: {
+        "modal-center-in": "modal-center-in 180ms cubic-bezier(0.16, 1, 0.3, 1)",
+        "modal-center-out": "modal-center-out 140ms ease-in",
+        "panel-left-in": "panel-left-in 220ms cubic-bezier(0.16, 1, 0.3, 1)",
+        "panel-left-out": "panel-left-out 180ms ease-in",
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
         "fade-in": "fade-in 0.3s ease-out",

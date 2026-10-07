@@ -252,6 +252,7 @@ export function DashboardPersonalizationSection() {
   const [editing, setEditing] = React.useState(false);
   const [hiddenOpen, setHiddenOpen] = React.useState(false);
   const [confirmExit, setConfirmExit] = React.useState(false);
+  const continueEditingRef = React.useRef<HTMLButtonElement>(null);
   const [saveFailed, setSaveFailed] = React.useState(false);
   const saveInFlight = React.useRef(false);
   const accountRef = React.useRef(user?.id);
@@ -359,6 +360,7 @@ export function DashboardPersonalizationSection() {
       return;
     }
     setHiddenOpen(false);
+    setConfirmExit(false);
     setEditing(false);
     toast.success("Ana ekran düzeni kaydedildi.");
   }, [save, saving, loading, loadError, user?.id]);
@@ -451,15 +453,17 @@ export function DashboardPersonalizationSection() {
           Düzen kaydedilemedi. Değişikliklerin korunuyor; tekrar Kaydet’e basabilirsin.
         </p>
       )}
-      <Modal open={confirmExit} onOpenChange={setConfirmExit}>
-        <ModalContent className="max-w-sm">
-          <ModalHeader>
-            <ModalTitle>Değişiklikleri kaydetmeden çıkmak istiyor musun?</ModalTitle>
-            <ModalDescription>Kaydetmediğin düzenlemeler uygulanmayacak.</ModalDescription>
+      <Modal open={confirmExit} onOpenChange={(open) => { if (!saving && !saveInFlight.current) setConfirmExit(open); }}>
+        <ModalContent variant="centered" closeDisabled={saving} className="max-w-sm gap-5 rounded-3xl p-5 sm:p-6" onOpenAutoFocus={(event) => { event.preventDefault(); continueEditingRef.current?.focus(); }} data-dashboard-exit-dialog>
+          <ModalHeader className="px-2 pt-8 text-center">
+            <ModalTitle className="text-xl leading-snug">Değişiklikleri kaydetmeden çıkmak istiyor musun?</ModalTitle>
+            <ModalDescription className="pt-1 leading-relaxed">Kaydetmediğin düzenlemeler uygulanmayacak.</ModalDescription>
           </ModalHeader>
-          <div className="flex flex-col gap-2">
-            <Button onClick={() => setConfirmExit(false)}>Düzenlemeye devam et</Button>
-            <Button variant="outline" onClick={discardAndClose}>
+          {saveFailed && <p role="alert" className="text-center text-sm text-destructive">Düzen kaydedilemedi. Değişikliklerin korunuyor; tekrar deneyebilirsin.</p>}
+          <div className="flex flex-col gap-2.5">
+            <Button type="button" className="min-h-11 rounded-full" isLoading={saving} disabled={loading} onClick={() => void saveAndClose()}>Kaydet</Button>
+            <Button type="button" ref={continueEditingRef} variant="secondary" className="min-h-11 rounded-full bg-primary/10 text-primary hover:bg-primary/15" disabled={saving} onClick={() => setConfirmExit(false)}>Düzenlemeye devam et</Button>
+            <Button type="button" variant="outline" className="min-h-11 rounded-full" disabled={saving} onClick={discardAndClose}>
               Kaydetmeden çık
             </Button>
           </div>
