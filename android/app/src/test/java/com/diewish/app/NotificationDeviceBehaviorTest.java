@@ -25,7 +25,7 @@ import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowSystemClock;
 
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = 33, application = Application.class)
+@Config(sdk = 33, application = Application.class, instrumentedPackages = {"com.diewish.app"})
 public final class NotificationDeviceBehaviorTest {
     private Application app;
     private NotificationManager manager;
@@ -91,41 +91,41 @@ public final class NotificationDeviceBehaviorTest {
         assertEquals(old, NotificationAlertStore.get(app, "water").toString());
     }
     @Test public void waterRenewsBeyondSevenDaysAndRejectsDuplicateOrCancelledBroadcasts() throws Exception {
-        long due = System.currentTimeMillis() + 60000;
+        long due = ShadowSystemClock.currentTimeMillis() + 60000;
         WellnessReminderScheduler.replace(app, new JSONArray().put(row("seed", "water", due, true)).toString());
         ShadowSystemClock.advanceBy(Duration.ofMinutes(2));
         assertTrue(WellnessReminderScheduler.consume(app, "seed", "water", due));
         long next = stored().getJSONObject(0).getLong("at");
-        assertTrue(next > System.currentTimeMillis());
+        assertTrue(next > ShadowSystemClock.currentTimeMillis());
         assertFalse(WellnessReminderScheduler.consume(app, "seed", "water", due));
         ShadowSystemClock.advanceBy(Duration.ofDays(8));
         WellnessReminderScheduler.rescheduleStored(app);
-        assertTrue(stored().getJSONObject(0).getLong("at") > System.currentTimeMillis());
+        assertTrue(stored().getJSONObject(0).getLong("at") > ShadowSystemClock.currentTimeMillis());
         WellnessReminderScheduler.cancelAll(app);
         assertFalse(WellnessReminderScheduler.consume(app, "seed", "water", next));
         assertEquals(0, shadowOf(alarms).getScheduledAlarms().size());
     }
     @Test public void rebootRecoversExpiredWaterButDoesNotReplayExpiredActivityOrSleep() throws Exception {
-        long due = System.currentTimeMillis() + 60000;
+        long due = ShadowSystemClock.currentTimeMillis() + 60000;
         WellnessReminderScheduler.replace(app, new JSONArray().put(row("water", "water", due, true)).put(row("activity", "activity", due, false)).put(row("sleep", "sleep", due, false)).toString());
         ShadowSystemClock.advanceBy(Duration.ofDays(22));
         new NutritionReminderBootReceiver().onReceive(app, new Intent(Intent.ACTION_BOOT_COMPLETED));
         assertEquals(1, stored().length());
         assertEquals("water", stored().getJSONObject(0).getString("type"));
-        assertTrue(stored().getJSONObject(0).getLong("at") > System.currentTimeMillis());
+        assertTrue(stored().getJSONObject(0).getLong("at") > ShadowSystemClock.currentTimeMillis());
         assertEquals(0, shadowOf(manager).getAllNotifications().size());
     }
     @Test public void deniedPermissionStillRenewsWaterWithoutDisplayingAlert() throws Exception {
-        long due = System.currentTimeMillis() + 60000;
+        long due = ShadowSystemClock.currentTimeMillis() + 60000;
         WellnessReminderScheduler.replace(app, new JSONArray().put(row("seed", "water", due, true)).toString());
         ShadowSystemClock.advanceBy(Duration.ofMinutes(2));
         shadowOf(app).denyPermissions(Manifest.permission.POST_NOTIFICATIONS);
         new WellnessReminderReceiver().onReceive(app, new Intent().putExtra("reminderId", "seed").putExtra("reminderType", "water").putExtra("reminderAt", due));
-        assertTrue(stored().getJSONObject(0).getLong("at") > System.currentTimeMillis());
+        assertTrue(stored().getJSONObject(0).getLong("at") > ShadowSystemClock.currentTimeMillis());
         assertEquals(0, shadowOf(manager).getAllNotifications().size());
     }
     @Test public void wellnessLimitFailureAndCategoryOperationsPreserveNutritionQueue() throws Exception {
-        long due = System.currentTimeMillis() + 60000;
+        long due = ShadowSystemClock.currentTimeMillis() + 60000;
         NutritionReminderScheduler.replace(app, "[{\"id\":\"meal\",\"at\":" + due + "}]");
         String nutrition = app.getSharedPreferences("diewish_nutrition_reminders", 0).getString("schedule", "");
         WellnessReminderScheduler.replace(app, new JSONArray().put(row("keep", "water", due, true)).toString());
@@ -157,5 +157,12 @@ public final class NotificationDeviceBehaviorTest {
         shadowOf(manager).setNotificationsEnabled(false);
         assertEquals("denied", bridge.permissionStatus());
         assertEquals("unavailable", new DiewishReminderBridge(activity, () -> false).permissionStatus());
+    }
+    @Test public void repeatedScheduledTestsAreBoundedAndCancelledAtLogout() {
+        assertTrue(WellnessReminderScheduler.scheduleTest(app, 60));
+        assertTrue(WellnessReminderScheduler.scheduleTest(app, 120));
+        assertEquals(1, shadowOf(alarms).getScheduledAlarms().size());
+        WellnessReminderScheduler.cancelAll(app);
+        assertEquals(0, shadowOf(alarms).getScheduledAlarms().size());
     }
 }

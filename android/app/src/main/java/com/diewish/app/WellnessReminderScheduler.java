@@ -31,6 +31,8 @@ public final class WellnessReminderScheduler {
 
     public static synchronized void cancelAll(Context context) {
         cancelStored(context);
+        AlarmManager alarms = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+        if (alarms != null) alarms.cancel(pendingIntent(context, "manual-test", "test", 0));
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(KEY_SCHEDULE).apply();
     }
 
@@ -132,7 +134,7 @@ public final class WellnessReminderScheduler {
         if (alarms == null) return false;
         int boundedDelay = Math.max(10, Math.min(delaySeconds, 300));
         long triggerAt = System.currentTimeMillis() + boundedDelay * 1000L;
-        String id = "manual-test-" + triggerAt;
+        String id = "manual-test";
         ReminderAlarmPolicy.schedule(
             alarms,
             triggerAt,
