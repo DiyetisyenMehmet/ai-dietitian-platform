@@ -4,6 +4,8 @@ Worker: 💼 Çalışma Modu 2. Work branch: `feature/workmode2-dashboard-and-co
 Source staging HEAD: `3aeed8f2a682e598d7850261642d48fd5a0bb52c`.
 Source TREE: `19076bd6eca6b5a65a31e261eea4ca2f5a081ed2`.
 
+**Historical checkpoint:** resumed and completed; see [completion report](dashboard-and-coach-modal-polish-a1.md) for current status and this task's verification.
+
 The user requested resumption after one hour. This checkpoint is unfinished and untested. Do not merge or deploy it without completing the task and verification.
 
 ## Started

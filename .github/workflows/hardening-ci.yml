@@ -7,6 +7,7 @@ on:
       - feature/android-native-scanner
       - feature/staging-preview
       - feature/workmode2-dashboard-journey-compact-text-a1
+      - feature/workmode2-dashboard-and-coach-modal-polish-a1
   workflow_dispatch:
 
 permissions:
@@ -326,6 +327,7 @@ jobs:
           npx playwright test
           e2e/dashboard-card-personalization.spec.ts
           e2e/dashboard-edit-polish.spec.ts
+          e2e/dashboard-and-coach-modal-polish.spec.ts
           e2e/dashboard-edit-sanity.spec.ts
           --workers=1 --reporter=line
       - name: Run browser smoke

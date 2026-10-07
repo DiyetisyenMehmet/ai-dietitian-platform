@@ -20,6 +20,8 @@ export function ChatView({ initialPrompt }: { initialPrompt?: string | null }) {
   const conversation = useActiveConversation();
   const profile = useHealthProfile();
   const { isResponding, isLoading, error } = useChatState();
+  const sidebarTriggerRef = React.useRef<HTMLButtonElement>(null);
+  const closeSidebar = React.useCallback(() => setSidebarOpen(false), []);
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const [showScrollButton, setShowScrollButton] = React.useState(false);
   const router = useRouter();
@@ -66,6 +68,8 @@ export function ChatView({ initialPrompt }: { initialPrompt?: string | null }) {
         <button
           type="button"
           onClick={() => setSidebarOpen(true)}
+          ref={sidebarTriggerRef}
+          aria-expanded={sidebarOpen}
           aria-label="Sohbet geçmişi"
           className="flex size-9 items-center justify-center rounded-full text-muted-foreground hover:bg-accent lg:hidden"
         >
@@ -76,7 +80,11 @@ export function ChatView({ initialPrompt }: { initialPrompt?: string | null }) {
           <div className="leading-tight">
             <p className="text-sm font-semibold">Diewish Koç</p>
             <p className="text-[11px] text-muted-foreground">
-              {isResponding ? "Yanıt hazırlanıyor..." : isLoading ? "Sohbetler yükleniyor..." : "Hazır"}
+              {isResponding
+                ? "Yanıt hazırlanıyor..."
+                : isLoading
+                  ? "Sohbetler yükleniyor..."
+                  : "Hazır"}
             </p>
           </div>
         </div>
@@ -91,7 +99,7 @@ export function ChatView({ initialPrompt }: { initialPrompt?: string | null }) {
       )}
 
       <div className="flex flex-1 overflow-hidden">
-        <ChatSidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+        <ChatSidebar open={sidebarOpen} onClose={closeSidebar} triggerRef={sidebarTriggerRef} />
 
         <div className="relative flex flex-1 flex-col overflow-hidden">
           <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto">

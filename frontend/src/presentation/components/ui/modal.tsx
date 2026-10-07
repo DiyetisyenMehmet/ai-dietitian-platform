@@ -17,6 +17,7 @@ const ModalOverlay = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Overlay
     ref={ref}
+    data-modal-overlay
     className={cn(
       "fixed inset-0 z-50 bg-black/50 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
       className,
@@ -26,6 +27,8 @@ const ModalOverlay = React.forwardRef<
 ));
 ModalOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
+// Keep animation names with a 1ms reduced-motion duration so Radix Presence
+// receives the exit event even when the preference changes during dismissal.
 const ModalContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
@@ -34,17 +37,25 @@ const ModalContent = React.forwardRef<
   }
 >(({ className, children, variant = "default", closeDisabled = false, ...props }, ref) => (
   <ModalPortal>
-    <ModalOverlay className={variant !== "default" ? "duration-180 motion-reduce:animate-none" : undefined} />
+    <ModalOverlay
+      className={
+        variant === "drawer"
+          ? "data-[state=closed]:[animation-duration:180ms] data-[state=open]:[animation-duration:220ms] motion-reduce:![animation-delay:0ms] motion-reduce:![animation-duration:1ms]"
+          : variant === "centered"
+            ? "data-[state=closed]:[animation-duration:140ms] data-[state=open]:[animation-duration:180ms] motion-reduce:![animation-delay:0ms] motion-reduce:![animation-duration:1ms]"
+            : undefined
+      }
+    />
     <DialogPrimitive.Content
       ref={ref}
       data-modal-variant={variant}
       className={cn(
         "fixed z-50 border border-border bg-card shadow-card-hover",
         variant === "drawer"
-          ? "inset-y-0 left-0 flex h-dvh w-[min(22rem,86vw)] flex-col overflow-hidden rounded-r-3xl data-[state=open]:animate-panel-left-in data-[state=closed]:animate-panel-left-out motion-reduce:animate-none"
-          : "left-1/2 top-1/2 grid max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-2xl p-6",
+          ? "inset-y-0 left-0 flex h-dvh w-[min(22rem,86vw)] flex-col overflow-hidden rounded-r-3xl data-[state=closed]:animate-panel-left-out data-[state=open]:animate-panel-left-in motion-reduce:![animation-delay:0ms] motion-reduce:![animation-duration:1ms]"
+          : "left-1/2 top-1/2 grid w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 gap-4 rounded-2xl p-6",
         variant === "centered" &&
-          "data-[state=open]:animate-modal-center-in data-[state=closed]:animate-modal-center-out motion-reduce:animate-none",
+          "max-h-[calc(100dvh-2rem)] overflow-y-auto data-[state=closed]:animate-modal-center-out data-[state=open]:animate-modal-center-in motion-reduce:![animation-delay:0ms] motion-reduce:![animation-duration:1ms]",
         variant === "default" &&
           "duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
         className,
@@ -52,7 +63,13 @@ const ModalContent = React.forwardRef<
       {...props}
     >
       {children}
-      <DialogPrimitive.Close disabled={closeDisabled} className={cn("absolute right-4 top-4 rounded-full opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring disabled:pointer-events-none disabled:opacity-40", variant === "default" ? "p-1" : "flex size-10 items-center justify-center")}>
+      <DialogPrimitive.Close
+        disabled={closeDisabled}
+        className={cn(
+          "absolute right-4 top-4 rounded-full opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring disabled:pointer-events-none disabled:opacity-40",
+          variant === "default" ? "p-1" : "flex size-10 items-center justify-center",
+        )}
+      >
         <X className="size-4" />
         <span className="sr-only">Kapat</span>
       </DialogPrimitive.Close>

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { EyeOff, RotateCcw } from "lucide-react";
+import { EyeOff, RotateCcw, Save } from "lucide-react";
 import { toast } from "sonner";
 
 import { useAuth } from "@/application/auth/auth-store";
@@ -252,6 +252,7 @@ export function DashboardPersonalizationSection() {
   const [editing, setEditing] = React.useState(false);
   const [hiddenOpen, setHiddenOpen] = React.useState(false);
   const [confirmExit, setConfirmExit] = React.useState(false);
+  const personalizationRef = React.useRef<HTMLElement>(null);
   const continueEditingRef = React.useRef<HTMLButtonElement>(null);
   const [saveFailed, setSaveFailed] = React.useState(false);
   const saveInFlight = React.useRef(false);
@@ -369,6 +370,7 @@ export function DashboardPersonalizationSection() {
     <section
       className={cn("space-y-3", editing && "[overflow-anchor:none]")}
       aria-label="Ana ekran kişiselleştirme alanı"
+      ref={personalizationRef}
       data-dashboard-personalization
       data-editing={editing ? "true" : "false"}
       data-saving={saving ? "true" : "false"}
@@ -453,17 +455,69 @@ export function DashboardPersonalizationSection() {
           Düzen kaydedilemedi. Değişikliklerin korunuyor; tekrar Kaydet’e basabilirsin.
         </p>
       )}
-      <Modal open={confirmExit} onOpenChange={(open) => { if (!saving && !saveInFlight.current) setConfirmExit(open); }}>
-        <ModalContent variant="centered" closeDisabled={saving} className="max-w-sm gap-5 rounded-3xl p-5 sm:p-6" onOpenAutoFocus={(event) => { event.preventDefault(); continueEditingRef.current?.focus(); }} data-dashboard-exit-dialog>
+      <Modal
+        open={confirmExit}
+        onOpenChange={(open) => {
+          if (!saving && !saveInFlight.current) setConfirmExit(open);
+        }}
+      >
+        <ModalContent
+          variant="centered"
+          closeDisabled={saving}
+          className="max-w-sm gap-5 rounded-3xl p-5 sm:p-6"
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            continueEditingRef.current?.focus();
+          }}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            personalizationRef.current
+              ?.querySelector<HTMLButtonElement>("[data-dashboard-edit-toggle]")
+              ?.focus();
+          }}
+          data-dashboard-exit-dialog
+        >
           <ModalHeader className="px-2 pt-8 text-center">
-            <ModalTitle className="text-xl leading-snug">Değişiklikleri kaydetmeden çıkmak istiyor musun?</ModalTitle>
-            <ModalDescription className="pt-1 leading-relaxed">Kaydetmediğin düzenlemeler uygulanmayacak.</ModalDescription>
+            <ModalTitle className="text-xl leading-snug">
+              Değişiklikleri kaydetmeden çıkmak istiyor musun?
+            </ModalTitle>
+            <ModalDescription className="pt-1 leading-relaxed">
+              Kaydetmediğin düzenlemeler uygulanmayacak.
+            </ModalDescription>
           </ModalHeader>
-          {saveFailed && <p role="alert" className="text-center text-sm text-destructive">Düzen kaydedilemedi. Değişikliklerin korunuyor; tekrar deneyebilirsin.</p>}
+          {saveFailed && (
+            <p role="alert" className="text-center text-sm text-destructive">
+              Düzen kaydedilemedi. Değişikliklerin korunuyor; tekrar deneyebilirsin.
+            </p>
+          )}
           <div className="flex flex-col gap-2.5">
-            <Button type="button" className="min-h-11 rounded-full" isLoading={saving} disabled={loading} onClick={() => void saveAndClose()}>Kaydet</Button>
-            <Button type="button" ref={continueEditingRef} variant="secondary" className="min-h-11 rounded-full bg-primary/10 text-primary hover:bg-primary/15" disabled={saving} onClick={() => setConfirmExit(false)}>Düzenlemeye devam et</Button>
-            <Button type="button" variant="outline" className="min-h-11 rounded-full" disabled={saving} onClick={discardAndClose}>
+            <Button
+              type="button"
+              className="h-auto min-h-11 whitespace-normal rounded-full px-4 py-3 leading-snug"
+              isLoading={saving}
+              disabled={loading}
+              onClick={() => void saveAndClose()}
+            >
+              {!saving && <Save aria-hidden="true" />}
+              Kaydet
+            </Button>
+            <Button
+              type="button"
+              ref={continueEditingRef}
+              variant="secondary"
+              className="h-auto min-h-11 whitespace-normal rounded-full bg-primary/10 px-4 py-3 leading-snug text-primary hover:bg-primary/15"
+              disabled={saving}
+              onClick={() => setConfirmExit(false)}
+            >
+              Düzenlemeye devam et
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-auto min-h-11 whitespace-normal rounded-full px-4 py-3 leading-snug"
+              disabled={saving}
+              onClick={discardAndClose}
+            >
               Kaydetmeden çık
             </Button>
           </div>
