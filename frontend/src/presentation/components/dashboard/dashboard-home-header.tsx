@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Bell, UserRound } from "lucide-react";
+import { Bell } from "lucide-react";
 
 import { getNotificationCenterSnapshot } from "@/infrastructure/notifications/notification-center";
 import { ThemeToggle } from "@/presentation/components/layout/theme-toggle";
@@ -78,21 +78,21 @@ export function DashboardHomeHeader({ userName }: DashboardHomeHeaderProps) {
       aria-label="Ana sayfa özeti"
       data-dashboard-home-header
     >
-      <div className="flex min-w-0 items-start justify-between gap-2.5">
-        <h1 className="min-w-0 flex-1 break-words pr-1 text-[24px] font-bold leading-[1.12] tracking-tight sm:text-[30px]">
+      <div className="flex min-w-0 items-center justify-between gap-2">
+        <h1 className="min-w-0 flex-1 whitespace-nowrap pr-1 text-[20px] font-bold leading-none tracking-tight min-[400px]:text-[21px] sm:text-[28px]" data-dashboard-greeting>
           {now ? getGreeting(now) : "Merhaba"}, {displayName} <span aria-hidden="true">👋</span>
         </h1>
 
-        <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
-          <div className="flex size-10 items-center justify-center rounded-2xl border border-border bg-card shadow-sm sm:size-11 [&_button]:size-10 [&_button]:rounded-2xl sm:[&_button]:size-11">
+        <div className="flex shrink-0 items-center gap-1" data-dashboard-header-actions>
+          <div className="flex size-9 items-center justify-center rounded-xl border border-border bg-card shadow-sm sm:size-10 [&_button]:size-9 [&_button]:rounded-xl [&_svg]:size-[18px] sm:[&_button]:size-10">
             <ThemeToggle />
           </div>
           <Link
             href="/notifications"
             aria-label={unreadCount > 0 ? `Bildirim Merkezi, ${unreadCount} okunmamış` : "Bildirim Merkezi"}
-            className="relative flex size-10 items-center justify-center rounded-2xl border border-border bg-card text-foreground shadow-sm transition hover:border-primary/30 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:size-11"
+            className="relative flex size-9 items-center justify-center rounded-xl border border-border bg-card text-foreground shadow-sm transition hover:border-primary/30 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:size-10"
           >
-            <Bell className="size-5" aria-hidden="true" />
+            <Bell className="size-[18px]" aria-hidden="true" />
             {unreadCount > 0 && (
               <span
                 className="absolute -right-1 -top-1 flex min-w-4.5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold leading-[18px] text-destructive-foreground shadow-sm"
@@ -102,18 +102,11 @@ export function DashboardHomeHeader({ userName }: DashboardHomeHeaderProps) {
               </span>
             )}
           </Link>
-          <Link
-            href="/profile"
-            aria-label="Profilini aç"
-            className="flex size-10 items-center justify-center rounded-2xl border border-border bg-card text-foreground shadow-sm transition hover:border-primary/30 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:size-11"
-          >
-            <UserRound className="size-5" aria-hidden="true" />
-          </Link>
         </div>
       </div>
 
       <div
-        className="mt-1.5 flex min-w-0 flex-wrap items-center justify-end gap-x-2 gap-y-0.5 text-right"
+        className="mt-1 flex min-w-0 flex-wrap items-center justify-end gap-x-1.5 gap-y-0.5 text-right"
         data-dashboard-header-info
       >
         <p className="text-[11px] font-medium leading-tight text-muted-foreground sm:text-xs">
