@@ -41,6 +41,10 @@ jobs:
         with:
           project_id: ${{ env.PROJECT_ID }}
 
+      - name: Install gcloud beta commands
+        shell: bash
+        run: gcloud components install beta --quiet
+
       - name: Read live staging access posture
         shell: bash
         run: |
