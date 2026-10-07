@@ -48,7 +48,7 @@ function MetricRing({
 
   return (
     <div className="min-w-0 text-center">
-      <div className="relative mx-auto aspect-square w-full max-w-[84px] sm:max-w-[108px]">
+      <div className="relative mx-auto aspect-square w-full max-w-[74px] sm:max-w-[94px]">
         <svg viewBox="0 0 100 100" className="size-full -rotate-90" aria-hidden="true">
           <circle
             cx="50"
@@ -56,7 +56,7 @@ function MetricRing({
             r="42"
             pathLength="100"
             fill="none"
-            strokeWidth="9"
+            strokeWidth="8"
             className={trackClassName}
           />
           <circle
@@ -65,25 +65,25 @@ function MetricRing({
             r="42"
             pathLength="100"
             fill="none"
-            strokeWidth="9"
+            strokeWidth="8"
             strokeLinecap="round"
             strokeDasharray={`${clamped} ${100 - clamped}`}
             className={`${progressClassName} transition-[stroke-dasharray] duration-700 ease-out`}
           />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center px-1">
-          <Icon className={`mb-0.5 size-4 sm:size-5 ${iconClassName}`} aria-hidden="true" />
-          <span className="max-w-full truncate text-[16px] font-bold leading-none tabular-nums sm:text-xl">
+          <Icon className={`mb-0.5 size-3.5 sm:size-[18px] ${iconClassName}`} aria-hidden="true" />
+          <span className="max-w-full truncate text-[15px] font-bold leading-none tabular-nums sm:text-lg">
             {value}
           </span>
           {unit && (
-            <span className="mt-0.5 text-[11px] font-medium leading-none text-muted-foreground sm:text-sm">
+            <span className="mt-0.5 text-[10px] font-medium leading-none text-muted-foreground sm:text-xs">
               {unit}
             </span>
           )}
         </div>
       </div>
-      <p className="mt-1.5 truncate text-[13px] font-semibold text-foreground sm:text-base">{label}</p>
+      <p className="mt-1 truncate text-xs font-semibold text-foreground sm:text-sm">{label}</p>
     </div>
   );
 }
@@ -144,8 +144,12 @@ export function DashboardMetricsSection() {
   const weightPercent = weightAnalysis.status === "no-data" ? 0 : weightAnalysis.progressPercent;
 
   return (
-    <section aria-label="Bugünkü özet" className="rounded-3xl border border-border/70 bg-card/70 px-3 py-4 shadow-sm sm:px-5">
-      <div className="grid grid-cols-4 gap-2 sm:gap-4">
+    <section
+      aria-label="Bugünkü özet"
+      className="rounded-[22px] border border-border/70 bg-card/70 px-2.5 py-3 shadow-sm sm:px-4 sm:py-3.5"
+      data-dashboard-metrics
+    >
+      <div className="grid grid-cols-4 gap-1.5 sm:gap-3">
         <MetricRing
           label="Su"
           value={`%${Math.min(100, Math.round(waterPercent))}`}
