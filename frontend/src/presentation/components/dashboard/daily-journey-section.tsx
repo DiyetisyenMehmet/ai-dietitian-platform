@@ -55,7 +55,7 @@ export function StepRow({ step, last }: { step: JourneyStep; last: boolean }) {
     <div
       data-journey-row
       className={cn(
-        "flex min-w-0 items-center gap-2.5 rounded-xl border p-2.5 transition-colors sm:gap-3 sm:p-3",
+        "flex min-w-0 items-center gap-2 rounded-xl border p-2 transition-colors sm:gap-2.5 sm:p-2.5",
         meta.row,
       )}
     >
@@ -156,7 +156,7 @@ export function DailyJourneyContent({
       aria-controls={detailsId}
       data-journey-details-toggle
       onClick={() => onExpandedChange(!expanded)}
-      className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-xl text-primary transition-colors hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      className="flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded-lg text-primary transition-colors hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
     >
       {expanded ? (
         <ChevronUp className="size-4" aria-hidden="true" />
@@ -174,7 +174,7 @@ export function DailyJourneyContent({
       data-journey-expanded={expanded ? "true" : "false"}
     >
       <Card className="rounded-[22px]" data-daily-journey-card>
-        <CardContent className="space-y-2 p-2.5 sm:p-3">
+        <CardContent className="space-y-1.5 p-2 sm:space-y-2 sm:p-2.5">
           <div
             className="flex min-w-0 items-center justify-between gap-2"
             data-journey-card-heading
@@ -188,7 +188,7 @@ export function DailyJourneyContent({
           </div>
 
           {insufficientData ? (
-            <div className="flex items-start gap-2 rounded-xl bg-muted/40 p-2.5 sm:p-3">
+            <div className="flex items-start gap-2 rounded-xl bg-muted/40 p-2 sm:p-2.5">
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium">
                   Bugünkü öneriyi netleştirmek için bazı takip verileri henüz hazır değil.
@@ -200,7 +200,7 @@ export function DailyJourneyContent({
               {detailsControl}
             </div>
           ) : (
-            <div className="flex items-center gap-2" data-journey-progress-area>
+            <div className="flex items-center gap-1.5" data-journey-progress-area>
               <div className="min-w-0 max-w-md flex-1">
                 {allDone && (
                   <p className="mb-1 text-[11px] leading-tight text-muted-foreground sm:text-xs">
@@ -208,7 +208,7 @@ export function DailyJourneyContent({
                   </p>
                 )}
                 {noActionableStep && (
-                  <p className="mb-1.5 text-xs leading-relaxed text-muted-foreground">
+                  <p className="mb-1 text-xs leading-relaxed text-muted-foreground">
                     Şu an açılacak yeni bir adım yok. Günlük ilerlemeni burada takip edebilirsin.
                   </p>
                 )}
@@ -229,7 +229,7 @@ export function DailyJourneyContent({
             <ul
               id={detailsId}
               hidden={visibleSteps.length === 0}
-              className="space-y-2"
+              className="space-y-1.5 sm:space-y-2"
               data-daily-journey-steps
               data-visible-journey-steps={visibleSteps.length}
             >
