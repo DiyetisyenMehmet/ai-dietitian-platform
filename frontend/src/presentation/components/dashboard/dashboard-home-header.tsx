@@ -67,7 +67,8 @@ export function DashboardHomeHeader({ userName }: DashboardHomeHeaderProps) {
     };
   }, []);
 
-  const displayName = userName.trim() || "Diewish";
+  const normalizedName = userName.trim();
+  const displayName = normalizedName ? normalizedName.split(/\s+/)[0] : "Diewish";
   const buildStampLabel = formatBuildStamp(DASHBOARD_BUILD_STAMP);
 
   return (
