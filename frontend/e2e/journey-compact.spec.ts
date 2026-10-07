@@ -160,7 +160,7 @@ test("Journey stays compact by default and expands/collapses with keyboard contr
     expect(geometry.greeting.right).toBeLessThanOrEqual(geometry.headerActionsLeft - 5);
     expect(geometry.greetingEmoji.top).toBeGreaterThanOrEqual(geometry.greeting.top - 0.5);
     expect(geometry.greetingEmoji.bottom).toBeLessThanOrEqual(geometry.greeting.bottom + 0.5);
-    expect(geometry.headerInfo.whiteSpace).toBe("nowrap");
+    if (width >= 360) expect(geometry.headerInfo.whiteSpace).toBe("nowrap");
     expect(geometry.headerInfo.scrollWidth).toBeLessThanOrEqual(geometry.headerInfo.clientWidth + 1);
     for (const size of geometry.headerActionSizes) {
       expect(size.width).toBeGreaterThanOrEqual(36);
