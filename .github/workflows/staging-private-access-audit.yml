@@ -1,0 +1,127 @@
+name: Staging Private Access Audit
+
+on:
+  push:
+    branches:
+      - feature/staging-preview
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PROJECT_ID: project-a2e260c1-839d-4f1d-b90
+  PROJECT_NUMBER: "730419163638"
+  REGION: europe-west1
+  WIF_PROVIDER: projects/730419163638/locations/global/workloadIdentityPools/github-actions/providers/diewish-staging
+  DEPLOY_SERVICE_ACCOUNT: diewish-staging-deployer@project-a2e260c1-839d-4f1d-b90.iam.gserviceaccount.com
+  FRONTEND_SERVICE: diewish-frontend-staging
+  BACKEND_SERVICE: diewish-backend-staging
+  CUSTOM_FRONTEND_URL: https://staging.diewish.com
+  ADMIN_STAGING_URL: https://admin-staging.diewish.com
+
+jobs:
+  audit:
+    if: ${{ contains(github.event.head_commit.message, '[sec-staging-private-access-audit]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: staging
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to isolated staging Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Install gcloud beta commands
+        shell: bash
+        run: gcloud components install beta --quiet
+
+      - name: Read live staging access posture
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "== Cloud Run frontend =="
+          gcloud run services describe "$FRONTEND_SERVICE"             --project "$PROJECT_ID"             --region "$REGION"             --format='yaml(metadata.name,status.url,metadata.annotations,spec.template.spec.serviceAccountName)'
+
+          echo "== Frontend IAM =="
+          gcloud run services get-iam-policy "$FRONTEND_SERVICE"             --project "$PROJECT_ID"             --region "$REGION"             --format=json
+
+          echo "== Cloud Run backend =="
+          gcloud run services describe "$BACKEND_SERVICE"             --project "$PROJECT_ID"             --region "$REGION"             --format='yaml(metadata.name,status.url,metadata.annotations,spec.template.spec.serviceAccountName)'
+
+          echo "== Backend IAM =="
+          gcloud run services get-iam-policy "$BACKEND_SERVICE"             --project "$PROJECT_ID"             --region "$REGION"             --format=json
+
+          echo "== Custom domain mappings =="
+          for domain in staging.diewish.com admin-staging.diewish.com; do
+            echo "-- $domain"
+            gcloud beta run domain-mappings describe               --domain "$domain"               --project "$PROJECT_ID"               --region "$REGION"               --format='yaml(metadata.name,spec.routeName,status.conditions,status.resourceRecords)'               || echo "DOMAIN_MAPPING_UNAVAILABLE:$domain"
+          done
+
+          echo "== IAP API status =="
+          gcloud services list             --project "$PROJECT_ID"             --enabled             --filter='config.name:iap.googleapis.com'             --format='value(config.name)'             || true
+
+          echo "== IAP policy visibility =="
+          gcloud iap web get-iam-policy             --project "$PROJECT_ID"             --region "$REGION"             --resource-type=cloud-run             --service="$FRONTEND_SERVICE"             --format=json             || echo "IAP_POLICY_UNAVAILABLE"
+
+          echo "== Load balancer visibility =="
+          gcloud compute forwarding-rules list             --project "$PROJECT_ID"             --global             --format='table(name,IPAddress,target)'             || echo "LOAD_BALANCER_VISIBILITY_UNAVAILABLE"
+
+      - name: Verify current unauthenticated exposure
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          probe() {
+            local label="$1"
+            local url="$2"
+            local output
+            output="$(curl --silent --show-error --max-redirs 0               --output /dev/null               --write-out '%{http_code} %{redirect_url}'               "$url" || true)"
+            echo "$label => $output"
+          }
+
+          frontend_url="$(gcloud run services describe "$FRONTEND_SERVICE"             --project "$PROJECT_ID"             --region "$REGION"             --format='value(status.url)')"
+          backend_url="$(gcloud run services describe "$BACKEND_SERVICE"             --project "$PROJECT_ID"             --region "$REGION"             --format='value(status.url)')"
+
+          probe "CUSTOM_FRONTEND" "$CUSTOM_FRONTEND_URL"
+          probe "ADMIN_STAGING" "$ADMIN_STAGING_URL"
+          probe "FRONTEND_RUN_APP" "$frontend_url"
+          probe "BACKEND_HEALTH" "$backend_url/api/health"
+
+      - name: Capture live staging screenshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          chrome="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || true)"
+          if [[ -z "$chrome" ]]; then
+            echo "Chrome/Chromium not available on runner." >&2
+            exit 1
+          fi
+          "$chrome"             --headless=new             --no-sandbox             --disable-gpu             --disable-dev-shm-usage             --hide-scrollbars             --window-size=1440,900             --virtual-time-budget=7000             --screenshot=/tmp/staging-live.png             "$CUSTOM_FRONTEND_URL"
+          test -s /tmp/staging-live.png
+          echo "SCREENSHOT_BASE64_BEGIN"
+          base64 -w0 /tmp/staging-live.png
+          echo
+          echo "SCREENSHOT_BASE64_END"
+
+      - name: Summary
+        shell: bash
+        run: |
+          {
+            echo "## SEC-STAGING-PRIVATE-ACCESS-A1 live preflight"
+            echo
+            echo "- Read-only audit only"
+            echo "- No Cloud Run/IAP/IAM mutation"
+            echo "- No production resource touched"
+            echo "- Source commit: \`\${GITHUB_SHA}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

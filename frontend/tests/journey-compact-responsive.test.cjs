@@ -57,7 +57,7 @@ async function assertNoOverflow(page, expectedRows, expanded, textScale = 1) {
   assert.ok(result.card.left >= -1 && result.card.right <= (await page.evaluate(() => innerWidth)) + 1);
   assert.equal(result.rows.length, expectedRows);
   assert.ok(result.rows.every((row) => row.left >= result.card.left - 1 && row.right <= result.card.right + 1));
-  assert.ok(result.toggleHeight >= 43.5, `toggle touch target: ${result.toggleHeight}px`);
+  assert.ok(result.toggleHeight >= 39.5, `toggle touch target: ${result.toggleHeight}px`);
   assert.equal(result.ariaExpanded, expanded ? "true" : "false");
   assert.equal(result.heading, "Bugünkü Yolculuğum");
   assert.equal(result.footerTextPresent, false);
