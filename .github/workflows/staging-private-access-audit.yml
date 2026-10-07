@@ -98,6 +98,22 @@ jobs:
           probe "FRONTEND_RUN_APP" "$frontend_url"
           probe "BACKEND_HEALTH" "$backend_url/api/health"
 
+      - name: Capture live staging screenshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          chrome="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || true)"
+          if [[ -z "$chrome" ]]; then
+            echo "Chrome/Chromium not available on runner." >&2
+            exit 1
+          fi
+          "$chrome"             --headless=new             --no-sandbox             --disable-gpu             --disable-dev-shm-usage             --hide-scrollbars             --window-size=1440,900             --virtual-time-budget=7000             --screenshot=/tmp/staging-live.png             "$CUSTOM_FRONTEND_URL"
+          test -s /tmp/staging-live.png
+          echo "SCREENSHOT_BASE64_BEGIN"
+          base64 -w0 /tmp/staging-live.png
+          echo
+          echo "SCREENSHOT_BASE64_END"
+
       - name: Summary
         shell: bash
         run: |
