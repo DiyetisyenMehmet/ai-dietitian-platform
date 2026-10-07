@@ -70,6 +70,21 @@ test("Journey stays compact by default and expands/collapses with keyboard contr
       actionsGap: parseFloat(
         getComputedStyle(document.querySelector("[data-dashboard-personalization]")!).marginTop,
       ),
+      headerHeight:
+        document.querySelector("[data-dashboard-home-header]")?.getBoundingClientRect().height ?? 0,
+      metricsHeight:
+        document.querySelector("[data-dashboard-metrics]")?.getBoundingClientRect().height ?? 0,
+      quickHeadingFont: getComputedStyle(
+        document.querySelector("#dashboard-quick-actions-heading")!,
+      ).fontSize,
+      editButton: (() => {
+        const box = document.querySelector("[data-dashboard-edit-toggle]")!.getBoundingClientRect();
+        return { width: box.width, height: box.height };
+      })(),
+      firstCardTop:
+        document.querySelector("[data-dashboard-card-slot]")?.getBoundingClientRect().top ??
+        Number.POSITIVE_INFINITY,
+      viewportHeight: innerHeight,
     }));
     expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.clientWidth + 1);
     expect(geometry.cardHeight).toBeLessThanOrEqual(310);
@@ -78,8 +93,19 @@ test("Journey stays compact by default and expands/collapses with keyboard contr
     expect(geometry.toggleLeft).toBeGreaterThanOrEqual(geometry.progressRight);
     expect(geometry.titleFont).toBe("16px");
     expect(geometry.hintFont).toBe("12px");
-    expect(geometry.metricsGap).toBe(12);
-    expect(geometry.actionsGap).toBe(12);
+    expect(geometry.metricsGap).toBe(10);
+    expect(geometry.actionsGap).toBe(10);
+    expect(geometry.editButton.width).toBeGreaterThanOrEqual(40);
+    expect(geometry.editButton.height).toBeGreaterThanOrEqual(40);
+    if (width < 640) {
+      expect(geometry.headerHeight).toBeLessThanOrEqual(140);
+      expect(geometry.metricsHeight).toBeLessThanOrEqual(122);
+      expect(geometry.quickHeadingFont).toBe("19px");
+    }
+    if (width >= 390 && width <= 430) {
+      expect(geometry.headerHeight).toBeLessThanOrEqual(110);
+      expect(geometry.firstCardTop).toBeLessThan(geometry.viewportHeight);
+    }
   }
 
   await page.setViewportSize({ width: 390, height: 844 });

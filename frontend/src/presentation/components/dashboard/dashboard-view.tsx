@@ -27,7 +27,7 @@ export function DashboardView() {
   const displayName = profile.fullName || user?.fullName || "Diewish";
 
   return (
-    <div className="animate-fade-in space-y-5 [&>[data-daily-journey-section]+*]:!mt-3 [&>[data-dashboard-personalization]]:!mt-3">
+    <div className="animate-fade-in space-y-5 [&>[data-daily-journey-section]]:!mt-2.5 [&>[data-daily-journey-section]+*]:!mt-2.5 [&>[data-dashboard-personalization]]:!mt-2.5">
       <DashboardHomeHeader userName={displayName} />
       <DailyJourneySection />
       <DashboardMetricsSection />

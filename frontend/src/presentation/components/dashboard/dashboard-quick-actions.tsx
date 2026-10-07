@@ -302,15 +302,15 @@ export function DashboardQuickActions({
 
   return (
     <section
-      className="space-y-3"
+      className="space-y-2.5"
       aria-labelledby="dashboard-quick-actions-heading"
       data-dashboard-quick-actions
       data-dashboard-edit-mode={editing ? "true" : "false"}
     >
-      <div className="flex min-w-0 items-center justify-between gap-3">
+      <div className="flex min-w-0 items-center justify-between gap-2.5">
         <h2
           id="dashboard-quick-actions-heading"
-          className="min-w-0 text-[22px] font-bold sm:text-2xl"
+          className="min-w-0 text-[19px] font-bold leading-tight sm:text-xl"
         >
           Bugün için hızlı işlemler
         </h2>
@@ -322,12 +322,12 @@ export function DashboardQuickActions({
             disabled={savingPreferences}
             onClick={onToggleEditing}
             className={cn(
-              "flex size-11 shrink-0 items-center justify-center rounded-full border border-border/70 bg-card text-muted-foreground shadow-sm transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              "flex size-10 shrink-0 items-center justify-center rounded-full border border-border/70 bg-card text-muted-foreground shadow-sm transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               editing && "border-primary/30 bg-primary/10 text-primary",
             )}
             data-dashboard-edit-toggle
           >
-            <SlidersHorizontal className="size-5" aria-hidden="true" />
+            <SlidersHorizontal className="size-[18px]" aria-hidden="true" />
           </button>
         )}
       </div>
