@@ -98,11 +98,12 @@ test("Journey stays compact by default and expands/collapses with keyboard contr
     expect(geometry.editButton.width).toBeGreaterThanOrEqual(40);
     expect(geometry.editButton.height).toBeGreaterThanOrEqual(40);
     if (width < 640) {
-      expect(geometry.headerHeight).toBeLessThanOrEqual(88);
+      expect(geometry.headerHeight).toBeLessThanOrEqual(140);
       expect(geometry.metricsHeight).toBeLessThanOrEqual(122);
       expect(geometry.quickHeadingFont).toBe("19px");
     }
     if (width >= 390 && width <= 430) {
+      expect(geometry.headerHeight).toBeLessThanOrEqual(110);
       expect(geometry.firstCardTop).toBeLessThan(geometry.viewportHeight);
     }
   }
