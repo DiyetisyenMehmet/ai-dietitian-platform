@@ -56,6 +56,6 @@ Faz 4 doğrulaması: 71 bildirim tarayıcı testi (15 yeni ses/titreşim testi d
 
 Android debug derlemesi ve 9 native birim testi (4 yeni eşleme testi dahil) yerel ortamda başarıyla tamamlandı. Bu, gerçek cihazda duyulan ses veya hissedilen titreşim doğrulaması değildir.
 
-Android için yalnız çalışma dalında test/derleme yapan `notification-alerts-native-ci.yml` eklendi. Bu akış staging veya production deploy işlemi yapmaz.
+Android için yalnız çalışma dalında test/derleme yapan `notification-alerts-native-ci.yml` eklendi. Bu akış staging veya production deploy işlemi yapmaz. İlk CI denemesi testlere ulaşmadan SDK kurulumunda, artık yayımlanmayan `tools` paketi nedeniyle durdu. Akış yalnız `platform-tools` kuracak ve yerel derlemede doğrulanan komut satırı araç sürümünü kullanacak şekilde düzeltildi; SDK 36 ve mevcut derleme hedefleri korunur.
 
 Kaynaklar: [Android bildirim kanalları](https://developer.android.com/develop/ui/views/notifications/channels), [Web showNotification seçenekleri](https://developer.mozilla.org/en-US/docs/Web/API/ServiceWorkerRegistration/showNotification).
