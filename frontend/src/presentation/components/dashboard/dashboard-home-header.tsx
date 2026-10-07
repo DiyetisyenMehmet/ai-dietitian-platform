@@ -104,7 +104,7 @@ export function DashboardHomeHeader({ userName }: DashboardHomeHeaderProps) {
       </div>
 
       <div
-        className="mt-0.5 flex min-w-0 flex-nowrap items-center justify-end gap-x-1.5 overflow-visible whitespace-nowrap text-right"
+        className="mt-0.5 flex min-w-0 flex-wrap items-center justify-end gap-x-1.5 gap-y-0.5 text-right min-[360px]:flex-nowrap min-[360px]:whitespace-nowrap"
         data-dashboard-header-info
       >
         <p className="text-[10px] font-medium leading-tight text-muted-foreground sm:text-[11px]">
