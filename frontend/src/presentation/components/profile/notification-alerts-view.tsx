@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { NotificationDeviceNotice } from "./notification-device-notice";
 import Link from "next/link";
 import { Bell, Play, Volume2, Vibrate } from "lucide-react";
 import { toast } from "sonner";
@@ -196,6 +197,7 @@ export function NotificationAlertsView({ category }: { category: AlertCategory }
           <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{item.description}</p>
         </div>
       </div>
+      <NotificationDeviceNotice enabled={preferences[item.key]} />
       <nav
         aria-label="Bildirim ayarları"
         className="grid grid-cols-2 border-b border-border text-center text-sm"

@@ -879,6 +879,10 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
         int[] grantResults
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == DiewishReminderBridge.NOTIFICATION_PERMISSION_REQUEST) {
+            emitNotificationState();
+            return;
+        }
         if (requestCode != CAMERA_PERMISSION_REQUEST) return;
 
         boolean granted = grantResults.length > 0

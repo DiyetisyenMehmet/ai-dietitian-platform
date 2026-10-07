@@ -333,7 +333,7 @@ test("browser denied and unsupported states explain permission without blocking 
   await session(page, { unsupported: true });
   await ready(page);
   await expect(
-    page.getByText("Bu tarayıcı gerçek zamanlı bildirimleri desteklemiyor."),
+    page.getByText("Bu cihazda bildirim desteği doğrulanamadı."),
   ).toBeVisible();
   await expect(card(page, "waterReminders").getByRole("switch")).toBeEnabled();
 });

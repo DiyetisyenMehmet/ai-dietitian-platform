@@ -125,6 +125,8 @@ export interface WellnessReminderEntry {
   id: string;
   at: number;
   type: "water" | "activity" | "sleep";
+  /** Device-only weekly recurrence seed; never an account preference. */
+  repeatDays?: 7;
 }
 
 function dateAt(base: Date, time: string): Date {
@@ -139,12 +141,15 @@ const ANDROID_WATER_WINDOW_DAYS = 7;
 
 /** Materializes the existing Android bridge's queue. Eight daily water times
  * over seven rolling days (56), plus unchanged activity/sleep entries (60),
- * fit below its 128-entry cap. Legacy water retains its 30-day behavior. */
+ * fit below its 128-entry cap. Water seeds renew in the same native scheduler.
+ * Legacy water retains its 30-day behavior. */
 export function buildAndroidWellnessReminderSchedule(
   preferences: WellnessPreferenceLike,
   now: Date = new Date(),
 ): WellnessReminderEntry[] {
   const schedule: WellnessReminderEntry[] = [];
+  const waterWindowEnd = new Date(now);
+  waterWindowEnd.setDate(now.getDate() + ANDROID_WATER_WINDOW_DAYS);
   for (let day = 0; day < 30; day += 1) {
     const date = new Date(now);
     date.setDate(now.getDate() + day);
@@ -158,11 +163,19 @@ export function buildAndroidWellnessReminderSchedule(
     if (preferences.waterReminderSchedule == null) {
       add(preferences.waterReminders, preferences.waterReminderTime, "water");
     } else if (
-      day < ANDROID_WATER_WINDOW_DAYS &&
+      day <= ANDROID_WATER_WINDOW_DAYS &&
       isWaterReminderSchedule(preferences.waterReminderSchedule)
     ) {
       for (const time of effectiveWaterTimes(preferences.waterReminderSchedule, date.getDay())) {
-        add(preferences.waterReminders, time, "water");
+        const at = dateAt(date, time);
+        if (preferences.waterReminders && at.getTime() > now.getTime() && at <= waterWindowEnd) {
+          schedule.push({
+            id: `water-${at.toISOString()}`,
+            at: at.getTime(),
+            type: "water",
+            repeatDays: 7,
+          });
+        }
       }
     }
     add(preferences.activityReminders, preferences.activityReminderTime, "activity");

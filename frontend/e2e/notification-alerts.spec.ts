@@ -363,6 +363,7 @@ test("load error offers retry without invented defaults", async ({ page }) => {
   const api = await session(page, { failLoad: true });
   await page.goto(`${base}/profile/notifications/water/sound`);
   await expect(page.getByRole("radio")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Tekrar dene" })).toBeVisible();
   api.loadFailure(false);
   await page.getByRole("button", { name: "Tekrar dene" }).click();
   await expect(page.getByRole("radio", { name: "Diewish · Damla", exact: true })).toBeChecked();

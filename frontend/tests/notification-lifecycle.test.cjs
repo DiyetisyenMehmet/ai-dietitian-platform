@@ -241,3 +241,22 @@ test('water schedules retain local hours across daylight-saving transitions', ()
   assert.ok(water.every((row) => [8,9,11,14,16,18,20,21].includes(new Date(row.at).getHours())));
   assert.ok(rows.every((row) => row.at > new Date(2026,9,31,0,0).getTime()));
 });
+
+test('afternoon initialization includes each next-week water slot exactly once, within 128',()=>{
+ const {buildAndroidWellnessReminderSchedule}=load();
+ const now=new Date(2026,9,12,15,0);
+ const rows=buildAndroidWellnessReminderSchedule({...wellnessPreferences(),waterReminderSchedule:eightTimePlan()},now);
+ const water=rows.filter(row=>row.type==='water');
+ assert.equal(water.length,56);assert.ok(water.every(row=>row.repeatDays===7));
+ assert.equal(new Set(water.map(row=>`${new Date(row.at).getDay()}:${new Date(row.at).getHours()}`)).size,56);
+ assert.ok(rows.length<=116);assert.ok(rows.filter(row=>row.type!=='water').every(row=>!('repeatDays' in row)));
+});
+
+test('weekly water recurrence metadata stays device-only and disabled water has no seeds',()=>{
+ const {buildAndroidWellnessReminderSchedule}=load();
+ const prefs={...wellnessPreferences(),waterReminderSchedule:eightTimePlan('custom')};
+ const before=JSON.stringify(prefs);
+ buildAndroidWellnessReminderSchedule(prefs,new Date(2026,9,12,20,45));
+ assert.equal(JSON.stringify(prefs),before);
+ assert.equal(buildAndroidWellnessReminderSchedule({...prefs,waterReminders:false}).filter(row=>row.type==='water').length,0);
+});

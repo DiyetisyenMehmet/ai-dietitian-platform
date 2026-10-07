@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { NotificationDeviceNotice } from "./notification-device-notice";
 import Link from "next/link";
 import { CalendarDays, Clock3, Info, Sparkles } from "lucide-react";
 import { toast } from "sonner";
@@ -397,6 +398,7 @@ export function NotificationCategoryView({ category }: { category: NotificationD
           </CardContent>
         </Card>
       )}
+      <NotificationDeviceNotice enabled={enabled} />
       <NotificationAlertsLink category={category} />
       <div className="flex items-start gap-2 rounded-2xl bg-primary/5 p-4 text-xs leading-relaxed text-muted-foreground">
         <Info className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />

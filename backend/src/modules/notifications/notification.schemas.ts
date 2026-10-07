@@ -56,6 +56,7 @@ export const updateNotificationPreferencesSchema = z
     timezoneOffsetMinutes: z.number().int().min(-840).max(840).optional(),
     categoryAlerts: categoryAlertsSchema.optional(),
   })
+  .strict()
   .refine((value) => Object.keys(value).length > 0, "At least one preference must be supplied.");
 
 export const registerNotificationDeviceSchema = z.object({

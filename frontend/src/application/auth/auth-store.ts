@@ -2,10 +2,7 @@
 
 import * as React from "react";
 
-import {
-  setAccessTokenProvider,
-  setUnauthorizedHandler,
-} from "@/infrastructure/api/http-client";
+import { setAccessTokenProvider, setUnauthorizedHandler } from "@/infrastructure/api/http-client";
 import { authClient } from "@/infrastructure/auth/auth-client";
 import type { AuthSession, AuthTokens, AuthUser } from "@/domain/auth/types";
 
@@ -49,12 +46,18 @@ function cancelNativeNutritionReminders(): void {
   try {
     const bridge = (
       window as typeof window & {
-        DiewishReminders?: { cancelAll(): void; clearNotificationInbox?(): void };
+        DiewishReminders?: {
+          cancelAll(): void;
+          clearNotificationInbox?(): void;
+          clearPendingNotificationPath?(): void;
+          deletePushToken?(): void;
+        };
       }
     ).DiewishReminders;
     if (bridge) {
-      bridge.cancelAll();
-      bridge.clearNotificationInbox?.();
+      for (const action of ["cancelAll", "clearNotificationInbox", "clearPendingNotificationPath", "deletePushToken"] as const) {
+        try { bridge[action]?.(); } catch { /* One old bridge method cannot skip the remaining cleanup. */ }
+      }
     }
   } catch {
     // Logout must never be blocked by an optional native capability.

@@ -1,4 +1,4 @@
-name: Notification alerts native checks
+name: Notification preferences platform checks
 
 on:
   push:
@@ -7,6 +7,11 @@ on:
     paths:
       - "android/**"
       - ".github/workflows/notification-alerts-native-ci.yml"
+      - "backend/src/modules/notifications/**"
+      - "backend/src/integration/notification-*.integration.test.ts"
+      - "backend/scripts/prepare-notification-test-db.cjs"
+      - "backend/prisma/migrations/*notification*/**"
+      - "backend/prisma/migrations/*water_reminder*/**"
 
 permissions:
   contents: read
@@ -45,3 +50,44 @@ jobs:
           name: notification-alerts-native-test-results
           path: android/app/build/test-results/testDebugUnitTest/
           if-no-files-found: ignore
+
+  backend-durability:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: notification_test
+          POSTGRES_PASSWORD: isolated-ci-only
+          POSTGRES_DB: notification_phase5_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U notification_test -d notification_phase5_test"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      NODE_ENV: test
+      LOG_LEVEL: silent
+      DATABASE_URL: postgresql://notification_test:isolated-ci-only@127.0.0.1:5432/notification_phase5_test
+      JWT_ACCESS_SECRET: notification-ci-access-test-secret-at-least-32
+      JWT_REFRESH_SECRET: notification-ci-refresh-test-secret-at-least-32
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npx prisma generate
+      - name: Verify additive migrations on real isolated PostgreSQL
+        run: |
+          npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script > "$RUNNER_TEMP/notification-phase5-base.sql"
+          node scripts/prepare-notification-test-db.cjs "$RUNNER_TEMP/notification-phase5-base.sql"
+      - run: npm run type-check
+      - name: Verify account persistence, isolation and existing delivery behavior
+        run: node --import tsx --test --test-concurrency=1 src/integration/notification-preferences.integration.test.ts src/integration/notification-durability.integration.test.ts

@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { NotificationDeviceNotice } from "./notification-device-notice";
 import { useRouter } from "next/navigation";
 import { BellRing, Info, Smartphone } from "lucide-react";
 import { toast } from "sonner";
@@ -13,10 +14,14 @@ import {
   mealReminderGate,
   syncMealReminderPreference,
 } from "@/infrastructure/notifications/native-meals";
+import {
+  notificationAlertCapabilities,
+  previewCategoryNotification,
+} from "@/infrastructure/notifications/notification-alert-adapter";
+import { alertForCategory } from "@/domain/account/notification-alerts";
 import { notificationClient } from "@/infrastructure/notifications/notification-client";
 import {
   ensureWebPushToken,
-  isStagingNotificationHost,
   isWebPushSupported,
   webPushPermissionStatus,
   type WebPushPermission,
@@ -164,8 +169,17 @@ export function NotificationsView() {
 
   React.useEffect(() => {
     const onFocus = () => refreshPermission();
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") onFocus();
+    };
     window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
+    window.addEventListener("diewish:notification-state", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("diewish:notification-state", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, [refreshPermission]);
 
   const patchPreference = async (key: string, update: Partial<NotificationPreferences>) => {
@@ -240,17 +254,20 @@ export function NotificationsView() {
     }
   };
 
-  const sendRemoteTest = async () => {
-    setSavingKey("remote-test");
+  const sendDeviceTest = async () => {
+    setSavingKey("device-test");
     try {
-      const result = await notificationClient.sendTestNotification();
-      if (result.disposition === "delivered") {
-        toast.success("Gerçek test bildirimi FCM tarafından kabul edildi");
-      } else {
-        toast.error(`Test bildirimi teslim edilemedi: ${result.code ?? result.disposition}`);
-      }
-    } catch {
-      toast.error("Gerçek test bildirimi gönderilemedi.");
+      const message = await previewCategoryNotification(
+        "water",
+        alertForCategory(preferences?.categoryAlerts, "water"),
+      );
+      toast.success(message);
+    } catch (failure) {
+      toast.error(
+        failure instanceof Error
+          ? failure.message
+          : "Test bildirimi gösterilemedi. Tercihlerin değiştirilmedi.",
+      );
     } finally {
       setSavingKey(null);
     }
@@ -299,6 +316,7 @@ export function NotificationsView() {
           özete dokun.
         </p>
       </div>
+      <NotificationDeviceNotice enabled={NOTIFICATION_PREFERENCES.some(item => preferences[item.key])} />
       {saveError && (
         <p
           role="alert"
@@ -361,7 +379,7 @@ export function NotificationsView() {
                       : webPermission === "denied"
                         ? "Tarayıcı bildirim izni kapalı. Tarayıcının site ayarlarından Diewish bildirimlerine izin verebilirsin."
                         : "Tarayıcı bildirim izni bekleniyor."
-                    : "Bu tarayıcı gerçek zamanlı bildirimleri desteklemiyor."}
+                    : "Bu cihazda bildirim desteği doğrulanamadı."}
               </p>
             </div>
           </div>
@@ -401,42 +419,47 @@ export function NotificationsView() {
               Tam zamanlı hatırlatıcı izni ver
             </Button>
           )}
-          {nativeAvailable && permission === "granted" && (
-            <Button
-              className="w-full"
-              variant="outline"
-              disabled={savingKey !== null}
-              onClick={() => {
-                const shown = nativeBridge()?.showTestNotification();
-                if (shown) toast.success("Anlık yerel bildirim gösterildi");
-                else toast.error("Bildirim gösterilemedi. Android bildirim kanalını kontrol et.");
-              }}
-            >
-              Anlık yerel bildirimi test et
-            </Button>
-          )}
-          {nativeAvailable && permission === "granted" && exactAlarm === "granted" && (
-            <Button
-              className="w-full"
-              variant="outline"
-              disabled={savingKey !== null}
-              onClick={() => {
-                const scheduled = scheduleNativeTestReminder(nativeBridge(), 60);
-                if (scheduled) toast.success("1 dakika sonraya test bildirimi kuruldu");
-                else toast.error("1 dakikalık test bildirimi planlanamadı");
-              }}
-            >
-              1 dk zamanlama testi
-            </Button>
-          )}
-          {isStagingNotificationHost() &&
+          {nativeAvailable &&
+            permission === "granted" &&
+            notificationAlertCapabilities().testNotification && (
+              <Button
+                className="w-full"
+                variant="outline"
+                disabled={savingKey !== null}
+                onClick={() => {
+                  const shown = nativeBridge()?.showTestNotification();
+                  if (shown) toast.success("Anlık yerel bildirim gösterildi");
+                  else toast.error("Bildirim gösterilemedi. Android bildirim kanalını kontrol et.");
+                }}
+              >
+                Anlık yerel bildirimi test et
+              </Button>
+            )}
+          {nativeAvailable &&
+            permission === "granted" &&
+            exactAlarm === "granted" &&
+            notificationAlertCapabilities().testNotification && (
+              <Button
+                className="w-full"
+                variant="outline"
+                disabled={savingKey !== null}
+                onClick={() => {
+                  const scheduled = scheduleNativeTestReminder(nativeBridge(), 60);
+                  if (scheduled) toast.success("1 dakika sonraya test bildirimi kuruldu");
+                  else toast.error("1 dakikalık test bildirimi planlanamadı");
+                }}
+              >
+                1 dk zamanlama testi
+              </Button>
+            )}
+          {notificationAlertCapabilities().testNotification &&
             ((nativeAvailable && permission === "granted") ||
               (!nativeAvailable && webAvailable && webPermission === "granted")) && (
               <Button
                 className="w-full"
                 variant="outline"
                 disabled={savingKey !== null}
-                onClick={() => void sendRemoteTest()}
+                onClick={() => void sendDeviceTest()}
               >
                 Test bildirimi gönder
               </Button>

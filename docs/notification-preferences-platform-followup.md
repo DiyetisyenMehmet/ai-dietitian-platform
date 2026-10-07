@@ -22,7 +22,7 @@ Görev: `WORKMODE-NOTIFICATION-PREFERENCES-A1` — Çalışma Modu 2.
 
 ### Android yenileme ve kuyruk sınırları
 
-- Su çoklu saatleri 7 günlük pencere içinde planlanır; uygulama açılışı/yeniden etkinleşmesiyle mevcut akış yenilenir. Uygulama uzun süre açılmazsa pencere sonunda su bildirimleri tükenebilir. Bu risk çözülmüş sayılmaz.
+- Faz 2/3/4 davranışında çoklu su saatleri yalnız 7 günlük pencereye materialize edildiği için uygulama açılmazsa son kayıtlı saatten sonra tükeniyordu. **Faz 5 bu pencere tükenmesini mevcut Android kuyruğunda haftalık tohum yenilemesiyle giderir; aşağıdaki cihaz/OS istisnaları sürer.**
 - Faz 2'nin günde en çok 8 su saati ürün sınırı korunur. Android wellness adaptörünün 128 kayıt sınırı ortak hesap şemasına taşınmaz. Tam su planının 56 kaydı ve mevcut 30'ar günlük aktivite/uyku kayıtları toplam 116'dır.
 - Mevcut öğün adaptörü ayrı beslenme kuyruğunda 240 kayıt sınırını korur. Genel öğün takvimi bu cihaz sınırıyla kısaltılmaz.
 - Eski köprüde `cancelNutrition` yoksa diğer kategorileri silen `cancelAll` kullanılmaz. Eski APK'da kalan öğün alarmı davranışı gerçek cihazda ayrıca doğrulanmalıdır.
@@ -59,3 +59,37 @@ Android debug derlemesi ve 9 native birim testi (4 yeni eşleme testi dahil) yer
 Android için yalnız çalışma dalında test/derleme yapan `notification-alerts-native-ci.yml` eklendi. Bu akış staging veya production deploy işlemi yapmaz. İlk CI denemesi testlere ulaşmadan SDK kurulumunda, artık yayımlanmayan `tools` paketi nedeniyle durdu. Akış yalnız `platform-tools` kuracak ve yerel derlemede doğrulanan komut satırı araç sürümünü kullanacak şekilde düzeltildi; SDK 36 ve mevcut derleme hedefleri korunur.
 
 Kaynaklar: [Android bildirim kanalları](https://developer.android.com/develop/ui/views/notifications/channels), [Web showNotification seçenekleri](https://developer.mozilla.org/en-US/docs/Web/API/ServiceWorkerRegistration/showNotification).
+
+
+## Faz 5 — Kalıcılık, izinler ve cihaz yaşam döngüsü
+
+### Hesap ve cihaz sınırı
+
+- Altı kategori bayrağı, günlük/haftalık program, çoklu su saatleri ve mantıksal ses/titreşim hesapta kalır. Tercih API'si bilinmeyen alanları artık reddeder: permission, push token, channel, haptic yeteneği ve Android `repeatDays` bu modele eklenmez.
+- Gerçek auth servisinde giriş → tercih kaydı → çıkış → tekrar giriş ve yeni Prisma istemcisiyle okuma testi; tüm kategori değerlerini ve başka hesap izolasyonunu kapsar. Tarayıcı testleri yenileme, yeni oturumda tekrar yükleme ve kayıt hatasında geri dönüşü kapsar.
+- Profil çıkışı eski JS-readable refresh token koşulunu kaldırarak mevcut cookie-session logout servisini her zaman çağırır. Önce cihazın sunucu bağı çözülür, ardından yerel token/ses kopyası temizlenir. Auth store oturum temizliği bütün mevcut native kuyrukları, cihaz geçmişini ve bekleyen açılış hedefini temizler; bir eski köprü metodunun hatası diğer temizleme adımlarını atlamaz. Sunucu unregister ve token silme çevrimdışıyken best-effort olmaya devam eder.
+
+### İzin davranışı
+
+- Detay ve ses ekranları izin durumunu canlı okur. Hesap açık/kapalı seçimi cihaz izniyle karıştırılmaz. İzin kapalı/default/unsupported durumunda tercih kaydı teslim başarısı gibi gösterilmez.
+- Web izin API'si, focus, visibility ve destekleyen tarayıcılarda Permissions API change olayları izlenir. Reddetme site ayarlarına yönlendirir; hiçbir permission değeri hesap PATCH'ine yazılmaz. Desteklenmeyen API sahte granted üretmez.
+- Android runtime izin kontrolü, bildirim yöneticisi ve sadece cihazda saklanan permission-requested işareti kullanılır. Hiç sorulmamış durum user gesture ile istenir; reddedilmiş durum uygulamanın sistem bildirim ayarlarını açar. Eski APK'da istek işareti bulunmuyorsa Android'in public API'si kesin geçmiş ayrımı vermez; UI yalnız iznin gerektiğini söyler. İzin kararı sonrası yeniden okuma yapılır, başarı varsayılmaz.
+- App resume'daki mevcut `diewish:notification-state` olayı UI ve hesap/cihaz eşlemesini yeniler. Native permission/exact alarm değişimi senkronizasyon imzasına dahildir; başarısız kuyruk kabulü başarılı imza gibi önbelleğe alınmaz. Açık uygulamada mevcut 60 saniyelik kontrol su planının gün değişimini de izler.
+
+### Su kuyruğunun yenilenmesi
+
+- Önceki plan, sonraki 7 takvim günü içinde son su alarmından sonra bitiyordu; saatine göre 7 gün dolmadan bitebilirdi. Aynı günün geçmiş saatleri artık sonraki haftanın aynı günündeki ilk gelecek tohum olarak da dahil edilir: her seçili haftalık slot tam bir kez temsil edilir.
+- Yeni Android adaptörü su tohumuna device-only `repeatDays: 7` ekler. Tek mevcut `WellnessReminderScheduler` alarmı tüketirken aynı kayıt/PendingIntent'i sonraki yerel takvim haftasına taşır; kuyruk büyümez. Yeni WorkManager/JobScheduler/başka alarm yenileme sistemi kurulmaz.
+- Yenileme **bildirim izni kontrolünden önce** yapılır. İzin kapalıyken yeni bildirim gösterilmez, hesap tercihi değişmez, su tohumu tükenmez. Yeniden izin verildiğinde gelecekteki saatler kullanılabilir; kaçırılan bildirimler topluca gönderilmez.
+- Cihaz reboot ve exact-alarm erişimi geri verildiğinde mevcut receiver'lar kayıtlı su tohumlarını ilk gelecek haftaya taşır. Launch/resume native tarafta ağ gerektirmeden kayıtlı kuyruğu onarır; authenticated WebView sync güncel hesap ayarlarını yeniden alır. Kapalı/iptal edilmiş veya eski occurrence'a ait bir broadcast bildirim üretemez.
+- Kalender hafta eklemesi yerel saat ve haftanın gününü DST geçişlerinde korur; sabit 168 saat kullanılmaz. Saat dilimi/sistem saati değişince mevcut güvenli iptal davranışı korunur ve hesap programı bir sonraki authenticated resume'da yeniden kurulur.
+- Günde 8 su saati → en çok 56 su tohumu; mevcut 30 aktivite + 30 uyku kaydıyla en çok 116. Native 128 ve ayrı öğün 240 sınırları değişmez. Faz 5 native wellness limit üstü payload'ı eski geçerli kuyruğu bozmadan reddeder.
+- **Kalan sınırlar:** Kullanıcı force-stop yaparsa OS alarm/broadcast çalıştırmayabilir; yeniden launch gerekir. OEM güç yönetimi/gecikme fiziksel cihazda doğrulanmadı. Eski APK yenileme metadata'sını tanımaz; yeni APK'nın güncel hesabı bir kez senkronize etmesi gerekir. Başka cihazdan yapılan opt-out, çevrimdışı native cihaz sunucuya bağlanana kadar bilinemez. Aktivite/uyku mevcut 30 günlük, öğün mevcut plan süresiyle sınırlı davranışını korur.
+
+### Test bildirimi ve migration hazırlığı
+
+- Ana tercihler ekranındaki test artık mevcut kategori/device preview adaptörünü kullanır; `/notifications/test` uzak tanılama yoluna gitmez. Kategori önizlemeleriyle aynı üretim ortamı ve yetenek korumaları geçerlidir.
+- Eski 1 dakikalık native test de ephemeral sunuma yönlenir: inbox/unread/hesap/kuyruk kaydı bırakmaz. Sabit tek PendingIntent ile tekrar testler birikmez; logout/cancelAll bunu iptal eder. Haftalık özet/Koç yeni yerel alarm veya server queue satırı oluşturmaz.
+- Faz 5 schema veya migration eklemez. Faz 2 `20261007124500_water_reminder_schedule`, ardından Faz 4 `20261007160000_notification_category_alerts` gerçek SQL'i, eski kullanıcı verisi ve nullable alanlarla izole ortamda uygulandı. Bayraklar/saatler korundu, yeni alanlar NULL kaldı.
+- Entegrasyon sırasında mevcut `start:migrate` giriş noktası migration'ları yeni backend trafik almadan önce sıralı uygular. Yeni kodun migration'dan önce başlaması yeni sütun bulunamadı hatasına neden olur. Şema geri alınırken JSON sütunları DROP edilmez; eski uygulama bu ek sütunları görmezden gelebilir. DROP veri kaybına yol açar. Staging/production migration uygulanmadı.
+- Native iOS adaptörü ve native cihaz kayıt/delivery hattı eklenmedi. Ortak tercih modeli cihaz sınırları veya Android kanal ID'si içermediği için gelecekte iOS adaptörü tarafından kullanılabilir. **Native iOS hattı henüz mevcut değil / doğrulanmadı.**

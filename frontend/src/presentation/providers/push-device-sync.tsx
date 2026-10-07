@@ -31,6 +31,7 @@ interface NativePushBridge {
   exactAlarmStatus?(): string;
   replaceWellnessSchedule?(scheduleJson: string): number;
   cancelWellness?(): void;
+  permissionStatus?(): string;
 }
 
 function bridge(): NativePushBridge | undefined {
@@ -150,6 +151,7 @@ export function PushDeviceSync() {
           user.id,
           timezoneOffsetMinutes,
           exactAlarmStatus,
+          native.permissionStatus?.() ?? "unavailable",
           preferences.waterReminders,
           preferences.waterReminderTime,
           preferences.waterReminderSchedule,
@@ -165,7 +167,8 @@ export function PushDeviceSync() {
 
         const schedule = buildAndroidWellnessReminderSchedule(preferences);
         if (schedule.length === 0) native.cancelWellness?.();
-        else native.replaceWellnessSchedule?.(JSON.stringify(schedule));
+        else if (native.replaceWellnessSchedule?.(JSON.stringify(schedule)) !== schedule.length)
+          return;
         lastWellnessSync = signature;
       } catch {
         // A network failure leaves the last valid native schedule untouched.
@@ -186,12 +189,14 @@ export function PushDeviceSync() {
     void syncToken();
     void syncWellness();
     window.addEventListener("focus", syncOnResume);
+    window.addEventListener("diewish:notification-state", syncOnResume);
     document.addEventListener("visibilitychange", syncOnVisibility);
-    const refreshTimer = window.setInterval(() => void syncToken(), 60_000);
+    const refreshTimer = window.setInterval(syncOnResume, 60_000);
 
     return () => {
       cancelled = true;
       window.removeEventListener("focus", syncOnResume);
+      window.removeEventListener("diewish:notification-state", syncOnResume);
       document.removeEventListener("visibilitychange", syncOnVisibility);
       window.clearInterval(refreshTimer);
       if (timer !== undefined) window.clearTimeout(timer);

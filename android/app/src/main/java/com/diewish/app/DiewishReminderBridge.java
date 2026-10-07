@@ -20,7 +20,7 @@ import java.util.function.BooleanSupplier;
 
 /** Narrow trusted-origin bridge for scheduling local reminders and syncing push registration. */
 public final class DiewishReminderBridge {
-    private static final int NOTIFICATION_PERMISSION_REQUEST = 4207;
+    static final int NOTIFICATION_PERMISSION_REQUEST = 4207;
 
     private final Activity activity;
     private final BooleanSupplier trustedPage;
