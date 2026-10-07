@@ -226,22 +226,32 @@ test("dashboard home compact refinement keeps the approved scope and geometry", 
 
   assert.match(header, /data-dashboard-home-header/);
   assert.match(header, /data-dashboard-header-info/);
-  assert.match(header, /text-\[24px\].*sm:text-\[30px\]/);
+  assert.match(header, /data-dashboard-greeting/);
+  assert.match(header, /overflow-hidden text-ellipsis whitespace-nowrap.*text-\[20px\].*min-\[400px\]:text-\[21px\].*sm:text-\[28px\]/);
+  assert.match(header, /data-dashboard-header-actions/);
+  assert.match(header, /flex size-9.*sm:size-10/);
+  assert.match(header, /Bell className="size-\[18px\]"/);
+  assert.match(header, /min-w-4\.5.*text-\[10px\]/);
+  assert.doesNotMatch(header, /UserRound|href="\/profile"|Profilini aç/);
   assert.match(header, /text-\[10px\].*text-muted-foreground\/55/);
 
   assert.match(journey, /data-journey-card-heading/);
   assert.match(journey, /<h3 className="min-w-0 text-base font-semibold leading-tight">/);
   assert.match(journey, /\$\{completed\}\/\$\{total\} adım/);
+  assert.match(journey, /space-y-1\.5 p-2 sm:space-y-2 sm:p-2\.5/);
+  assert.match(journey, /min-h-10 min-w-10/);
+  assert.match(journey, /gap-2 rounded-xl border p-2/);
   assert.doesNotMatch(journey, /Günlük yolculuğun/);
 
   assert.match(metrics, /data-dashboard-metrics/);
-  assert.match(metrics, /max-w-\[74px\].*sm:max-w-\[94px\]/);
-  assert.match(metrics, /px-2\.5 py-3.*sm:px-4 sm:py-3\.5/);
+  assert.match(metrics, /max-w-\[66px\].*sm:max-w-\[86px\]/);
+  assert.match(metrics, /px-2 py-2\.5.*sm:px-3\.5 sm:py-3/);
+  assert.match(metrics, /flex min-w-0 h-full flex-col items-center text-center/);
 
-  assert.match(quick, /text-\[19px\] font-bold leading-tight sm:text-xl/);
+  assert.match(quick, /text-\[18px\] font-bold leading-tight sm:text-xl/);
   assert.match(quick, /flex size-10 shrink-0 items-center justify-center rounded-full/);
-  assert.match(quick, /SlidersHorizontal className="size-\[18px\]"/);
+  assert.match(quick, /SlidersHorizontal className="size-\[17px\]"/);
 
-  assert.match(view, /data-daily-journey-section\]\]:!mt-2\.5/);
-  assert.match(view, /data-dashboard-personalization\]\]:!mt-2\.5/);
+  assert.match(view, /data-daily-journey-section\]\]:!mt-2/);
+  assert.match(view, /data-dashboard-personalization\]\]:!mt-2/);
 });

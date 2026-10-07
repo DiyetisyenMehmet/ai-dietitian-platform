@@ -85,26 +85,92 @@ test("Journey stays compact by default and expands/collapses with keyboard contr
         document.querySelector("[data-dashboard-card-slot]")?.getBoundingClientRect().top ??
         Number.POSITIVE_INFINITY,
       viewportHeight: innerHeight,
+      greeting: (() => {
+        const element = document.querySelector("[data-dashboard-greeting]") as HTMLElement;
+        const box = element.getBoundingClientRect();
+        return {
+          height: box.height,
+          width: box.width,
+          scrollWidth: element.scrollWidth,
+          whiteSpace: getComputedStyle(element).whiteSpace,
+          fontSize: getComputedStyle(element).fontSize,
+          right: box.right,
+        };
+      })(),
+      headerActionsLeft:
+        document.querySelector("[data-dashboard-header-actions]")?.getBoundingClientRect().left ??
+        Number.POSITIVE_INFINITY,
+      topProfileCount: document.querySelectorAll('a[aria-label="Profilini aç"]').length,
+      headerActionCount: document.querySelector("[data-dashboard-header-actions]")?.children.length ?? 0,
+      headerActionSizes: Array.from(
+        document.querySelector("[data-dashboard-header-actions]")?.children ?? [],
+      ).map((element) => {
+        const box = (element as HTMLElement).getBoundingClientRect();
+        return { width: box.width, height: box.height };
+      }),
+      metricRingWidths: Array.from(
+        document.querySelectorAll("[data-dashboard-metrics] > div > div > div:first-child"),
+      ).map((element) => (element as HTMLElement).getBoundingClientRect().width),
+      metricLabelTops: Array.from(
+        document.querySelectorAll("[data-dashboard-metrics] > div > div > p"),
+      ).map((element) => (element as HTMLElement).getBoundingClientRect().top),
     }));
     expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.clientWidth + 1);
-    expect(geometry.cardHeight).toBeLessThanOrEqual(310);
-    if (width >= 390) expect(geometry.cardHeight).toBeLessThanOrEqual(220);
+    expect(geometry.cardHeight).toBeLessThanOrEqual(300);
+    if (width >= 390) expect(geometry.cardHeight).toBeLessThanOrEqual(205);
     expect(geometry.progressWidth).toBeLessThan(geometry.progressAreaWidth - 40);
     expect(geometry.toggleLeft).toBeGreaterThanOrEqual(geometry.progressRight);
     expect(geometry.titleFont).toBe("16px");
     expect(geometry.hintFont).toBe("12px");
-    expect(geometry.metricsGap).toBe(10);
-    expect(geometry.actionsGap).toBe(10);
+    expect(geometry.metricsGap).toBeCloseTo(8, 3);
+    expect(geometry.actionsGap).toBeCloseTo(8, 3);
     expect(geometry.editButton.width).toBeGreaterThanOrEqual(40);
     expect(geometry.editButton.height).toBeGreaterThanOrEqual(40);
+    expect(geometry.topProfileCount).toBe(0);
+    expect(geometry.headerActionCount).toBe(2);
+    expect(geometry.greeting.whiteSpace).toBe("nowrap");
+    expect(geometry.greeting.right).toBeLessThanOrEqual(geometry.headerActionsLeft - 7);
+    for (const size of geometry.headerActionSizes) {
+      expect(size.width).toBeGreaterThanOrEqual(36);
+      expect(size.height).toBeGreaterThanOrEqual(36);
+    }
+    expect(Math.max(...geometry.metricRingWidths) - Math.min(...geometry.metricRingWidths)).toBeLessThanOrEqual(0.5);
+    expect(Math.max(...geometry.metricLabelTops) - Math.min(...geometry.metricLabelTops)).toBeLessThanOrEqual(0.5);
     if (width < 640) {
-      expect(geometry.headerHeight).toBeLessThanOrEqual(140);
-      expect(geometry.metricsHeight).toBeLessThanOrEqual(122);
-      expect(geometry.quickHeadingFont).toBe("19px");
+      expect(geometry.headerHeight).toBeLessThanOrEqual(95);
+      expect(geometry.metricsHeight).toBeLessThanOrEqual(108);
+      expect(geometry.quickHeadingFont).toBe("18px");
+      expect(geometry.greeting.height).toBeLessThanOrEqual(24);
     }
     if (width >= 390 && width <= 430) {
-      expect(geometry.headerHeight).toBeLessThanOrEqual(110);
-      expect(geometry.firstCardTop).toBeLessThan(geometry.viewportHeight);
+      expect(geometry.firstCardTop).toBeLessThanOrEqual(geometry.viewportHeight - 12);
+    }
+  }
+
+  for (const [width, height] of [
+    [390, 844],
+    [412, 915],
+    [430, 932],
+  ]) {
+    await page.setViewportSize({ width, height });
+    for (const theme of ["dark", "light"] as const) {
+      await setDashboardTheme(page, theme);
+      const themeGeometry = await page.evaluate(() => ({
+        scrollWidth: document.documentElement.scrollWidth,
+        clientWidth: document.documentElement.clientWidth,
+        greetingWhiteSpace: getComputedStyle(
+          document.querySelector("[data-dashboard-greeting]")!,
+        ).whiteSpace,
+        profileCount: document.querySelectorAll('a[aria-label="Profilini aç"]').length,
+        firstCardTop:
+          document.querySelector("[data-dashboard-card-slot]")?.getBoundingClientRect().top ??
+          Number.POSITIVE_INFINITY,
+        viewportHeight: innerHeight,
+      }));
+      expect(themeGeometry.scrollWidth).toBeLessThanOrEqual(themeGeometry.clientWidth + 1);
+      expect(themeGeometry.greetingWhiteSpace).toBe("nowrap");
+      expect(themeGeometry.profileCount).toBe(0);
+      expect(themeGeometry.firstCardTop).toBeLessThanOrEqual(themeGeometry.viewportHeight - 12);
     }
   }
 

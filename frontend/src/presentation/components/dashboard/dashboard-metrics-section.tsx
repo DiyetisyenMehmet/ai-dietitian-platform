@@ -47,8 +47,8 @@ function MetricRing({
   const clamped = Math.min(100, Math.max(0, percent));
 
   return (
-    <div className="min-w-0 text-center">
-      <div className="relative mx-auto aspect-square w-full max-w-[74px] sm:max-w-[94px]">
+    <div className="flex min-w-0 h-full flex-col items-center text-center">
+      <div className="relative mx-auto aspect-square w-full max-w-[66px] sm:max-w-[86px]">
         <svg viewBox="0 0 100 100" className="size-full -rotate-90" aria-hidden="true">
           <circle
             cx="50"
@@ -72,18 +72,18 @@ function MetricRing({
           />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center px-1">
-          <Icon className={`mb-0.5 size-3.5 sm:size-[18px] ${iconClassName}`} aria-hidden="true" />
-          <span className="max-w-full truncate text-[15px] font-bold leading-none tabular-nums sm:text-lg">
+          <Icon className={`mb-0.5 size-3 sm:size-4 ${iconClassName}`} aria-hidden="true" />
+          <span className="max-w-full truncate text-[14px] font-bold leading-none tabular-nums sm:text-[17px]">
             {value}
           </span>
           {unit && (
-            <span className="mt-0.5 text-[10px] font-medium leading-none text-muted-foreground sm:text-xs">
+            <span className="mt-0.5 text-[9px] font-medium leading-none text-muted-foreground sm:text-[11px]">
               {unit}
             </span>
           )}
         </div>
       </div>
-      <p className="mt-1 truncate text-xs font-semibold text-foreground sm:text-sm">{label}</p>
+      <p className="mt-1 truncate text-[11px] font-semibold leading-none text-foreground sm:text-[13px]">{label}</p>
     </div>
   );
 }
@@ -146,7 +146,7 @@ export function DashboardMetricsSection() {
   return (
     <section
       aria-label="Bugünkü özet"
-      className="rounded-[22px] border border-border/70 bg-card/70 px-2.5 py-3 shadow-sm sm:px-4 sm:py-3.5"
+      className="rounded-[22px] border border-border/70 bg-card/70 px-2 py-2.5 shadow-sm sm:px-3.5 sm:py-3"
       data-dashboard-metrics
     >
       <div className="grid grid-cols-4 gap-1.5 sm:gap-3">

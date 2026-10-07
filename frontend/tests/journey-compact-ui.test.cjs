@@ -126,7 +126,7 @@ test("compact control is a real accessible local-state button", () => {
   assert.match(source, /aria-controls=\{detailsId\}/);
   assert.match(source, /onClick=\{\(\) => onExpandedChange\(!expanded\)\}/);
   assert.match(source, /focus-visible:ring-2/);
-  assert.match(source, /min-h-11/);
+  assert.match(source, /min-h-10 min-w-10/);
   assert.match(source, /React\.useState\(false\)/);
 });
 
