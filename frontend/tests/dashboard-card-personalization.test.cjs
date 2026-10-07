@@ -227,7 +227,7 @@ test("dashboard home compact refinement keeps the approved scope and geometry", 
   assert.match(header, /data-dashboard-home-header/);
   assert.match(header, /data-dashboard-header-info/);
   assert.match(header, /data-dashboard-greeting/);
-  assert.match(header, /whitespace-nowrap py-0\.5.*text-\[19px\].*min-\[400px\]:text-\[20px\].*min-\[430px\]:text-\[21px\].*sm:text-\[28px\]/);
+  assert.match(header, /whitespace-nowrap py-0\.5.*text-\[16px\].*min-\[360px\]:text-\[19px\].*min-\[400px\]:text-\[20px\].*min-\[430px\]:text-\[21px\].*sm:text-\[28px\]/);
   assert.match(header, /data-dashboard-greeting-emoji/);
   assert.doesNotMatch(header, /overflow-hidden|text-ellipsis/);
   assert.match(header, /data-dashboard-header-actions/);
@@ -252,7 +252,8 @@ test("dashboard home compact refinement keeps the approved scope and geometry", 
 
   assert.match(quick, /text-\[16px\] font-semibold leading-tight sm:text-lg/);
   assert.match(quick, /min-h-\[72px\].*sm:min-h-20/);
-  assert.match(quick, /relative flex size-9 shrink-0 items-center justify-center rounded-full/);
+  assert.match(quick, /flex size-10 shrink-0 items-center justify-center rounded-full/);
+  assert.match(quick, /flex size-8 items-center justify-center rounded-full border/);
   assert.match(quick, /SlidersHorizontal className="size-\[15px\]"/);
 
   assert.match(view, /data-daily-journey-section\]\]:!mt-1\.5/);
