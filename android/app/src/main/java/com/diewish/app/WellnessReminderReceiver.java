@@ -17,11 +17,16 @@ public final class WellnessReminderReceiver extends BroadcastReceiver {
 
     @Override
     public void onReceive(Context context, Intent intent) {
-        show(
-            context,
-            intent == null ? null : intent.getStringExtra("reminderType"),
-            intent == null ? null : intent.getStringExtra("reminderId")
-        );
+        if (intent == null) return;
+        String type = intent.getStringExtra("reminderType");
+        String id = intent.getStringExtra("reminderId");
+        if ("test".equals(type)) {
+            NotificationAlertPresentation.preview(context, "water", NotificationAlertStore.get(context, "water").toString());
+            return;
+        }
+        long at = intent.getLongExtra("reminderAt", 0);
+        if (!WellnessReminderScheduler.consume(context, id, type, at)) return;
+        show(context, type, at > 0 ? id + ":" + at : id);
     }
 
     public static boolean show(Context context, String type, String id) {

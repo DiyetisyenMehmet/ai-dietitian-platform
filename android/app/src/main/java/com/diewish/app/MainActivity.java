@@ -290,6 +290,7 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
     @Override
     protected void onResume() {
         super.onResume();
+        WellnessReminderScheduler.rescheduleStored(getApplicationContext());
         emitNotificationState();
         emitPendingNotificationOpen();
     }

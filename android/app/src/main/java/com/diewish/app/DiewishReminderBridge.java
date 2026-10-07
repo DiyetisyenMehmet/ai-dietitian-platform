@@ -107,7 +107,14 @@ public final class DiewishReminderBridge {
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
                 && activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
                     != PackageManager.PERMISSION_GRANTED
-        ) return "denied";
+        ) {
+            boolean requested = activity.getSharedPreferences("diewish_notification_device", Activity.MODE_PRIVATE)
+                .getBoolean("permission_requested", false);
+            int flags = activity.getPackageManager().getPermissionFlags(
+                Manifest.permission.POST_NOTIFICATIONS, activity.getPackageName(), android.os.Process.myUserHandle());
+            return requested || (flags & (PackageManager.FLAG_PERMISSION_USER_SET | PackageManager.FLAG_PERMISSION_USER_FIXED)) != 0
+                ? "denied" : "default";
+        }
 
         NotificationManager manager =
             (NotificationManager) activity.getSystemService(Activity.NOTIFICATION_SERVICE);
@@ -147,10 +154,30 @@ public final class DiewishReminderBridge {
     @JavascriptInterface
     public void requestPermission() {
         if (!trustedPage.getAsBoolean() || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return;
+        if ("denied".equals(permissionStatus())) {
+            openNotificationSettings();
+            return;
+        }
+        activity.getSharedPreferences("diewish_notification_device", Activity.MODE_PRIVATE).edit()
+            .putBoolean("permission_requested", true).apply();
         activity.runOnUiThread(() -> activity.requestPermissions(
             new String[] { Manifest.permission.POST_NOTIFICATIONS },
             NOTIFICATION_PERMISSION_REQUEST
         ));
+    }
+
+    @JavascriptInterface
+    public void openNotificationSettings() {
+        if (!trustedPage.getAsBoolean()) return;
+        activity.runOnUiThread(() -> {
+            try {
+                activity.startActivity(new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                    .putExtra(Settings.EXTRA_APP_PACKAGE, activity.getPackageName()));
+            } catch (ActivityNotFoundException ignored) {
+                activity.startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.parse("package:" + activity.getPackageName())));
+            }
+        });
     }
 
     @JavascriptInterface
@@ -221,7 +248,7 @@ public final class DiewishReminderBridge {
 
     @JavascriptInterface
     public boolean scheduleTestReminder(int delaySeconds) {
-        if (!trustedPage.getAsBoolean()) return false;
+        if (!trustedPage.getAsBoolean() || !"staging".equals(BuildConfig.APP_ENVIRONMENT) || !"granted".equals(permissionStatus())) return false;
         if (!"granted".equals(ReminderAlarmPolicy.status(activity.getApplicationContext()))) {
             return false;
         }
