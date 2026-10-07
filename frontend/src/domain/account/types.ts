@@ -89,6 +89,6 @@ export const NOTIFICATION_PREFERENCES: readonly NotificationPreferenceMeta[] = [
   {
     key: "coachTips",
     label: "Diewish Koç bildirimleri",
-    description: "Seçtiğin hedeflere göre önemli koç önerilerini telefona bildirelim.",
+    description: "Hedeflerine göre hazırlanan Koç önerilerinden haberdar ol.",
   },
 ] as const;

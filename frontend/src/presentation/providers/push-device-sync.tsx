@@ -10,6 +10,7 @@ import {
   notificationRegistrationKey,
   resolvePendingNotificationTarget,
 } from "@/infrastructure/notifications/notification-lifecycle";
+import { syncMealReminderPreference } from "@/infrastructure/notifications/native-meals";
 import { notificationClient } from "@/infrastructure/notifications/notification-client";
 import {
   ensureWebPushToken,
@@ -132,6 +133,9 @@ export function PushDeviceSync() {
           ({ preferences } = await notificationClient.updatePreferences({ timezoneOffsetMinutes }));
         }
 
+        // Apply a remote opt-out only to the existing nutrition queue, even
+        // when the wellness signature itself has not changed.
+        if (!preferences.mealReminders) syncMealReminderPreference(preferences);
         let exactAlarmStatus = "legacy";
         try {
           exactAlarmStatus =

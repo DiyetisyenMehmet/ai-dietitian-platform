@@ -7,6 +7,12 @@ import { toast } from "sonner";
 
 import { NOTIFICATION_PREFERENCES, type NotificationPreferences } from "@/domain/account/types";
 import { syncWellnessReminderSchedule } from "@/infrastructure/notifications/native-wellness";
+import { notificationDetailHref } from "@/domain/account/notification-category";
+import {
+  loadMealReminderContext,
+  mealReminderGate,
+  syncMealReminderPreference,
+} from "@/infrastructure/notifications/native-meals";
 import { notificationClient } from "@/infrastructure/notifications/notification-client";
 import {
   ensureWebPushToken,
@@ -17,12 +23,7 @@ import {
 } from "@/infrastructure/notifications/web-push";
 import { Button } from "@/presentation/components/ui/button";
 import { Card, CardContent } from "@/presentation/components/ui/card";
-import { Modal, ModalContent } from "@/presentation/components/ui/modal";
-import {
-  NotificationPreferenceCard,
-  NotificationPreferenceDetail,
-  type ToggleKey,
-} from "./notification-preference-category";
+import { NotificationPreferenceCard, type ToggleKey } from "./notification-preference-category";
 
 interface NativeReminderBridge {
   isAvailable(): boolean;
@@ -98,7 +99,6 @@ export function NotificationsView() {
   const [loadAttempt, setLoadAttempt] = React.useState(0);
   const [loadError, setLoadError] = React.useState<string | null>(null);
   const [saveError, setSaveError] = React.useState<string | null>(null);
-  const [selectedKey, setSelectedKey] = React.useState<ToggleKey | null>(null);
   const saveLock = React.useRef(false);
   const [savingKey, setSavingKey] = React.useState<string | null>(null);
   const [savedKey, setSavedKey] = React.useState<string | null>(null);
@@ -175,7 +175,22 @@ export function NotificationsView() {
     setSavedKey(null);
     setSavingKey(key);
     try {
+      const mealContext =
+        update.mealReminders === true ? await loadMealReminderContext() : undefined;
+      const gate = mealContext ? mealReminderGate(mealContext) : null;
+      if (gate) {
+        setSaveError(gate);
+        toast.message(gate);
+        return false;
+      }
       const { preferences: next } = await notificationClient.updatePreferences(update);
+      if (
+        Object.entries(update).some(
+          ([field, value]) => next[field as keyof NotificationPreferences] !== value,
+        )
+      )
+        throw new Error("Preferences were not persisted");
+      if (update.mealReminders !== undefined) syncMealReminderPreference(next, mealContext);
       setPreferences(next);
       syncNative(next);
       setSavedKey(key);
@@ -275,8 +290,6 @@ export function NotificationsView() {
     );
   }
 
-  const selectedItem = NOTIFICATION_PREFERENCES.find((item) => item.key === selectedKey);
-
   return (
     <div className="space-y-4" data-notification-preferences>
       <div className="flex items-start gap-3 rounded-2xl bg-primary/5 p-4">
@@ -312,8 +325,7 @@ export function NotificationsView() {
             onToggle={() => void toggle(item.key)}
             onOpen={() => {
               setSaveError(null);
-              if (item.key === "waterReminders") router.push("/profile/notifications/water");
-              else setSelectedKey(item.key);
+              router.push(notificationDetailHref(item.key));
             }}
           />
         ))}
@@ -325,26 +337,6 @@ export function NotificationsView() {
           de açık olması gerekir.
         </p>
       </div>
-      <Modal
-        open={Boolean(selectedItem)}
-        onOpenChange={(open) => {
-          if (!open) setSelectedKey(null);
-        }}
-      >
-        <ModalContent variant="centered">
-          {selectedItem && (
-            <NotificationPreferenceDetail
-              key={selectedItem.key}
-              item={selectedItem}
-              preferences={preferences}
-              busy={savingKey !== null}
-              error={saveError}
-              onToggle={() => void toggle(selectedItem.key)}
-              onSave={(update) => patchPreference(selectedItem.key, update)}
-            />
-          )}
-        </ModalContent>
-      </Modal>
 
       <Card>
         <CardContent className="space-y-3 p-5">

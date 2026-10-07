@@ -165,23 +165,17 @@ for (const width of [390, 412, 430])
         await card(page, key)
           .getByRole("button", { name: `${label} detayları` })
           .click();
-        if (key === "waterReminders") {
-          await expect(page.locator("[data-water-reminders]")).toBeVisible();
+        await expect(page.getByRole("heading", { name: label, level: 1 })).toBeVisible();
+        await expect(
+          page.locator(
+            key === "waterReminders" ? "[data-water-reminders]" : "[data-notification-detail]",
+          ),
+        ).toBeVisible();
+        if (key === "waterReminders")
           await expect(page.getByLabel("Her gün 1. saat")).toHaveValue("13:55");
-          await fit(page);
-          await page.getByRole("button", { name: "Geri", exact: true }).click();
-          await ready(page);
-        } else {
-          await expect(
-            page.getByRole("dialog").getByRole("heading", { name: label }),
-          ).toBeVisible();
-          await fit(page);
-          await page
-            .getByRole("dialog")
-            .getByRole("button", { name: "Kapat", exact: true })
-            .click();
-          await expect(page.getByRole("dialog")).toHaveCount(0);
-        }
+        await fit(page);
+        await page.getByRole("button", { name: "Geri", exact: true }).click();
+        await ready(page);
       }
       await expect(card(page, "waterReminders")).toContainText("Her gün · 13:55");
       await expect(card(page, "weeklySummary")).toContainText("Çarşamba · 11:40");
@@ -248,22 +242,34 @@ test("existing time/day editing updates summaries only after success and survive
   await card(page, "weeklySummary")
     .getByRole("button", { name: "Haftalık özet detayları" })
     .click();
-  const dialog = page.getByRole("dialog");
-  await dialog.getByLabel("Hatırlatma saati").fill("12:15");
-  await dialog.getByLabel("Özet günü").selectOption("6");
+  const detail = page.locator('[data-notification-detail="weekly"]');
+  await detail.getByLabel("Özet saati").fill("12:15");
+  await detail.getByRole("button", { name: "Cumartesi", exact: true }).click();
   s.failSave(true);
-  await dialog.getByRole("button", { name: "Kaydet", exact: true }).click();
-  await expect(dialog.getByRole("alert")).toBeVisible();
-  await expect(dialog).toContainText("Çarşamba · 11:40");
+  await detail.getByRole("button", { name: "Kaydet", exact: true }).click();
+  await expect(detail.getByRole("alert")).toBeVisible();
+  await expect(detail).toContainText("Çarşamba · 11:40");
   s.failSave(false);
-  await dialog.getByRole("button", { name: "Kaydet", exact: true }).click();
-  await expect(dialog).toContainText("Cumartesi · 12:15");
-  await expect(dialog.getByRole("button", { name: "Kaydet", exact: true })).toBeDisabled();
+  await detail.getByLabel("Özet saati").fill("12:15");
+  await detail.getByRole("button", { name: "Cumartesi", exact: true }).click();
+  await detail.getByRole("button", { name: "Kaydet", exact: true }).click();
+  await expect(detail).toContainText("Cumartesi · 12:15");
+  await expect(detail.getByRole("button", { name: "Kaydet", exact: true })).toBeDisabled();
   expect(s.writes).toEqual([
-    { weeklySummaryTime: "12:15", weeklySummaryDay: 6 },
-    { weeklySummaryTime: "12:15", weeklySummaryDay: 6 },
+    {
+      weeklySummary: true,
+      weeklySummaryTime: "12:15",
+      weeklySummaryDay: 6,
+      timezoneOffsetMinutes: 0,
+    },
+    {
+      weeklySummary: true,
+      weeklySummaryTime: "12:15",
+      weeklySummaryDay: 6,
+      timezoneOffsetMinutes: 0,
+    },
   ]);
-  await dialog.getByRole("button", { name: "Kapat", exact: true }).click();
+  await page.getByRole("button", { name: "Geri", exact: true }).click();
   await page.reload();
   await ready(page);
   await expect(card(page, "weeklySummary")).toContainText("Cumartesi · 12:15");
@@ -340,7 +346,7 @@ test("320px view and off categories retain configured program", async ({ page })
   await card(page, "activityReminders")
     .getByRole("button", { name: "Aktivite hatırlatmaları detayları" })
     .click();
-  await expect(page.getByRole("dialog")).toContainText("Hatırlatmalar kapalı");
+  await expect(page.locator("[data-notification-detail]")).toContainText("Hatırlatmalar kapalı");
   await fit(page);
 });
 

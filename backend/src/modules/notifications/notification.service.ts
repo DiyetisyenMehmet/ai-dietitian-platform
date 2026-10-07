@@ -268,10 +268,39 @@ export const notificationService = {
         ? { waterReminderSchedule: Prisma.DbNull }
         : {}),
     };
-    return prisma.notificationPreference.upsert({
-      where: { userId },
-      create: { userId, ...DEFAULT_PREFERENCES, ...persisted },
-      update: persisted,
+    return prisma.$transaction(async (tx) => {
+      const hasTimingUpdate =
+        input.weeklySummaryDay !== undefined ||
+        input.weeklySummaryTime !== undefined ||
+        input.timezoneOffsetMinutes !== undefined;
+      const previous = hasTimingUpdate
+        ? await tx.notificationPreference.findUnique({ where: { userId } })
+        : null;
+      const preferences = await tx.notificationPreference.upsert({
+        where: { userId },
+        create: { userId, ...DEFAULT_PREFERENCES, ...persisted },
+        update: persisted,
+      });
+      if (
+        (input.weeklySummaryDay !== undefined &&
+          input.weeklySummaryDay !==
+            (previous?.weeklySummaryDay ?? DEFAULT_PREFERENCES.weeklySummaryDay)) ||
+        (input.weeklySummaryTime !== undefined &&
+          input.weeklySummaryTime !==
+            (previous?.weeklySummaryTime ?? DEFAULT_PREFERENCES.weeklySummaryTime)) ||
+        (input.timezoneOffsetMinutes !== undefined &&
+          input.timezoneOffsetMinutes !==
+            (previous?.timezoneOffsetMinutes ?? DEFAULT_PREFERENCES.timezoneOffsetMinutes))
+      ) {
+        const now = new Date();
+        // Reschedule only future, undelivered weekly reviews in the existing
+        // server queue. Never create a duplicate or alter sent/monthly/coach rows.
+        await tx.notification.updateMany({
+          where: { userId, type: "WEEKLY_REVIEW", deliveredAt: null, scheduledFor: { gt: now } },
+          data: { scheduledFor: nextWeeklySummaryAt(preferences, now) },
+        });
+      }
+      return preferences;
     });
   },
 
