@@ -33,6 +33,10 @@ jobs:
     if: github.ref == 'refs/heads/feature/workmode4-crossplatform-qa-infra-a1' || github.ref == 'refs/heads/feature/staging-preview'
     runs-on: ubuntu-latest
     timeout-minutes: 8
+    outputs:
+      web: ${{ steps.scope.outputs.web }}
+      android: ${{ steps.scope.outputs.android }}
+      ios: ${{ steps.scope.outputs.ios }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -40,13 +44,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: Bound expensive runtime jobs
+        id: scope
+        if: github.event_name == 'push'
+        run: python3 qa/platform/ci-scope.py
       - run: node --test qa/platform/*.test.cjs
       - run: python3 -m unittest discover -s qa/platform -p '*_test.py'
       - run: bash -n qa/platform/ios-run.sh
 
   web:
     needs: contracts
-    if: github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == 'web'
+    if: (github.event_name == 'push' && needs.contracts.outputs.web == 'true') || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'web'))
     runs-on: ubuntu-latest
     environment: ${{ inputs.authenticated && 'staging' || '' }}
     timeout-minutes: 15
@@ -89,7 +97,7 @@ jobs:
 
   android:
     needs: contracts
-    if: github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == 'android'
+    if: (github.event_name == 'push' && needs.contracts.outputs.android == 'true') || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'android'))
     runs-on: ubuntu-latest
     environment: ${{ inputs.authenticated && 'staging' || '' }}
     timeout-minutes: 30
@@ -151,7 +159,7 @@ jobs:
 
   ios:
     needs: contracts
-    if: github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == 'ios'
+    if: (github.event_name == 'push' && needs.contracts.outputs.ios == 'true') || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'ios'))
     runs-on: macos-15
     environment: ${{ inputs.authenticated && 'staging' || '' }}
     timeout-minutes: 25
