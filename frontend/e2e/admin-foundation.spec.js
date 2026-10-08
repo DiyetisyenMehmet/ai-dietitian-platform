@@ -275,7 +275,7 @@ test("Admin reset page accepts Firebase oobCode and rejects unrelated modes", as
     });
   });
   await page.getByRole("button", { name: "Şifreyi güncelle" }).click();
-  expect(resetPayload).toEqual({ token: "test-reset-code", newPassword: "NewAdminPass123!" });
+  await expect.poll(() => resetPayload).toEqual({ token: "test-reset-code", newPassword: "NewAdminPass123!" });
 
   await page.goto(`${WEB_BASE_URL}/admin/reset-password?mode=verifyEmail&oobCode=not-a-reset`);
   await page.getByLabel("Yeni şifre", { exact: true }).fill("NewAdminPass123!");
