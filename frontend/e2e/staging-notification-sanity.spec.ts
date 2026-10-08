@@ -52,6 +52,16 @@ test("deployed notification preferences: real persistence, water editor, Web cap
   request,
 }, info) => {
   test.setTimeout(600_000);
+  // Status/path only: never log tokens, cookie headers or account response bodies.
+  page.on("response", (response) => {
+    const path = new URL(response.url()).pathname;
+    if (path.startsWith("/api/") && response.status() >= 400)
+      console.log(`STAGING_API_ERROR: ${response.status()} ${path}`);
+  });
+  page.on("requestfailed", (request) => {
+    const path = new URL(request.url()).pathname;
+    if (path.startsWith("/api/")) console.log(`STAGING_API_ABORT: ${request.method()} ${path}`);
+  });
   await page.setViewportSize({ width: 390, height: 844 });
   const account = await createDashboardSession(page, request);
   const headers = { authorization: `Bearer ${account.token}` };
@@ -231,6 +241,9 @@ test("deployed notification preferences: real persistence, water editor, Web cap
           height: width === 412 ? 915 : width === 430 ? 932 : 844,
         });
         await page.goto(`${web}/dashboard`);
+        // Complete authenticated hydration before another hard navigation can
+        // abort a rotating HttpOnly refresh-cookie response.
+        await expect(page.locator("[data-quick-action-slot]")).toHaveCount(4);
         await setDashboardTheme(page, theme);
         await fit(page);
         for (const [slug] of categories) {
