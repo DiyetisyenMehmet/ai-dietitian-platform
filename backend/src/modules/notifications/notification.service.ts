@@ -1,19 +1,14 @@
 import { randomUUID } from "node:crypto";
 
-import type {
-  Notification,
-  NotificationPreference,
-  NotificationType,
-  Prisma,
-} from "@prisma/client";
+import { Prisma } from "@prisma/client";
+
+import type { Notification, NotificationPreference, NotificationType } from "@prisma/client";
 
 import { logger } from "../../lib/logger";
 import { prisma } from "../../lib/prisma";
-import {
-  getNotificationProvider,
-  type NotificationDeliveryResult,
-} from "./notification.provider";
+import { getNotificationProvider, type NotificationDeliveryResult } from "./notification.provider";
 import type { UpdateNotificationPreferencesInput } from "./notification.schemas";
+import { normalizedCategoryAlerts } from "./notification-alerts";
 
 const DEFAULT_PREFERENCES = {
   mealReminders: false,
@@ -34,7 +29,14 @@ const DEFAULT_PREFERENCES = {
 
 const MAX_DELIVERY_ATTEMPTS = 6;
 const CLAIM_LEASE_MS = 3 * 60 * 1000;
-const RETRY_DELAYS_MS = [60_000, 5 * 60_000, 15 * 60_000, 60 * 60_000, 3 * 60 * 60_000, 12 * 60 * 60_000] as const;
+const RETRY_DELAYS_MS = [
+  60_000,
+  5 * 60_000,
+  15 * 60_000,
+  60 * 60_000,
+  3 * 60 * 60_000,
+  12 * 60 * 60_000,
+] as const;
 
 type PreferenceLike = NotificationPreference | typeof DEFAULT_PREFERENCES;
 
@@ -88,7 +90,10 @@ function retryAt(attempts: number, now: Date): Date {
   return new Date(now.getTime() + RETRY_DELAYS_MS[index]);
 }
 
-async function claimNotification(notificationId: string, now: Date): Promise<ClaimedNotification | null> {
+async function claimNotification(
+  notificationId: string,
+  now: Date,
+): Promise<ClaimedNotification | null> {
   const claimId = randomUUID();
   const claimedUntil = new Date(now.getTime() + CLAIM_LEASE_MS);
 
@@ -241,8 +246,7 @@ export const notificationService = {
     userId: string,
   ): Promise<NotificationPreference | typeof DEFAULT_PREFERENCES> {
     return (
-      (await prisma.notificationPreference.findUnique({ where: { userId } })) ??
-      DEFAULT_PREFERENCES
+      (await prisma.notificationPreference.findUnique({ where: { userId } })) ?? DEFAULT_PREFERENCES
     );
   },
 
@@ -250,10 +254,68 @@ export const notificationService = {
     userId: string,
     input: UpdateNotificationPreferencesInput,
   ): Promise<NotificationPreference> {
-    return prisma.notificationPreference.upsert({
-      where: { userId },
-      create: { userId, ...DEFAULT_PREFERENCES, ...input },
-      update: input,
+    const data = { ...input };
+    const plan = input.waterReminderSchedule;
+    const firstTime =
+      plan?.mode === "same"
+        ? plan.dailyTimes[0]
+        : plan?.days.find((day) => day.enabled && day.times.length)?.times[0];
+    if (firstTime) data.waterReminderTime = firstTime;
+    // Legacy clients can still explicitly replace a single water reminder time.
+    // Clearing the extended plan prevents an invisible stale custom schedule.
+    const persisted = {
+      ...data,
+      ...(input.waterReminderTime !== undefined && !plan
+        ? { waterReminderSchedule: Prisma.DbNull }
+        : {}),
+    };
+    return prisma.$transaction(async (tx) => {
+      const hasTimingUpdate =
+        input.weeklySummaryDay !== undefined ||
+        input.weeklySummaryTime !== undefined ||
+        input.timezoneOffsetMinutes !== undefined;
+      // Serialize account edits so two devices cannot overwrite another
+      // category while merging the small shared preference map.
+      if (input.categoryAlerts)
+        await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`;
+      const previous =
+        hasTimingUpdate || input.categoryAlerts
+          ? await tx.notificationPreference.findUnique({ where: { userId } })
+          : null;
+      const merged = input.categoryAlerts
+        ? {
+            ...persisted,
+            categoryAlerts: {
+              ...normalizedCategoryAlerts(previous?.categoryAlerts),
+              ...input.categoryAlerts,
+            },
+          }
+        : persisted;
+      const preferences = await tx.notificationPreference.upsert({
+        where: { userId },
+        create: { userId, ...DEFAULT_PREFERENCES, ...merged },
+        update: merged,
+      });
+      if (
+        (input.weeklySummaryDay !== undefined &&
+          input.weeklySummaryDay !==
+            (previous?.weeklySummaryDay ?? DEFAULT_PREFERENCES.weeklySummaryDay)) ||
+        (input.weeklySummaryTime !== undefined &&
+          input.weeklySummaryTime !==
+            (previous?.weeklySummaryTime ?? DEFAULT_PREFERENCES.weeklySummaryTime)) ||
+        (input.timezoneOffsetMinutes !== undefined &&
+          input.timezoneOffsetMinutes !==
+            (previous?.timezoneOffsetMinutes ?? DEFAULT_PREFERENCES.timezoneOffsetMinutes))
+      ) {
+        const now = new Date();
+        // Reschedule only future, undelivered weekly reviews in the existing
+        // server queue. Never create a duplicate or alter sent/monthly/coach rows.
+        await tx.notification.updateMany({
+          where: { userId, type: "WEEKLY_REVIEW", deliveredAt: null, scheduledFor: { gt: now } },
+          data: { scheduledFor: nextWeeklySummaryAt(preferences, now) },
+        });
+      }
+      return preferences;
     });
   },
 
@@ -395,6 +457,7 @@ export const notificationService = {
           result = await provider.send(
             claim.notification,
             new Set(claim.deliveredDeviceKeys),
+            "categoryAlerts" in preferences ? preferences.categoryAlerts : null,
           );
         } catch (error) {
           logger.warn(

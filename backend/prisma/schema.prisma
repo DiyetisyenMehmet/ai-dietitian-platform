@@ -807,6 +807,8 @@ model NotificationPreference {
   bloodTestReminders    Boolean  @default(false)
   productUpdates        Boolean  @default(false)
   waterReminderTime     String   @default("10:00")
+  waterReminderSchedule Json?
+  categoryAlerts        Json?
   activityReminderTime  String   @default("18:00")
   sleepReminderTime     String   @default("22:30")
   weeklySummaryDay      Int      @default(0)

@@ -1,24 +1,34 @@
 "use client";
 
 import * as React from "react";
-import { BellRing, Check, Smartphone } from "lucide-react";
+import { NotificationDeviceNotice } from "./notification-device-notice";
+import { useRouter } from "next/navigation";
+import { BellRing, Info, Smartphone } from "lucide-react";
 import { toast } from "sonner";
 
 import { NOTIFICATION_PREFERENCES, type NotificationPreferences } from "@/domain/account/types";
+import { syncWellnessReminderSchedule } from "@/infrastructure/notifications/native-wellness";
+import { notificationDetailHref } from "@/domain/account/notification-category";
+import {
+  loadMealReminderContext,
+  mealReminderGate,
+  syncMealReminderPreference,
+} from "@/infrastructure/notifications/native-meals";
+import {
+  notificationAlertCapabilities,
+  previewCategoryNotification,
+} from "@/infrastructure/notifications/notification-alert-adapter";
+import { alertForCategory } from "@/domain/account/notification-alerts";
 import { notificationClient } from "@/infrastructure/notifications/notification-client";
 import {
   ensureWebPushToken,
-  isStagingNotificationHost,
   isWebPushSupported,
   webPushPermissionStatus,
   type WebPushPermission,
 } from "@/infrastructure/notifications/web-push";
 import { Button } from "@/presentation/components/ui/button";
 import { Card, CardContent } from "@/presentation/components/ui/card";
-import { Input } from "@/presentation/components/ui/input";
-
-type ToggleKey = (typeof NOTIFICATION_PREFERENCES)[number]["key"];
-type TimedKey = "waterReminders" | "activityReminders" | "sleepReminders" | "weeklySummary";
+import { NotificationPreferenceCard, type ToggleKey } from "./notification-preference-category";
 
 interface NativeReminderBridge {
   isAvailable(): boolean;
@@ -32,28 +42,14 @@ interface NativeReminderBridge {
   showTestNotification(): boolean;
 }
 
-interface ReminderEntry {
-  id: string;
-  at: number;
-  type: "water" | "activity" | "sleep";
-}
-
-const TIME_FIELDS: Partial<Record<TimedKey, keyof NotificationPreferences>> = {
-  waterReminders: "waterReminderTime",
-  activityReminders: "activityReminderTime",
-  sleepReminders: "sleepReminderTime",
-  weeklySummary: "weeklySummaryTime",
-};
-
 function nativeBridge(): NativeReminderBridge | undefined {
   if (typeof window === "undefined") return undefined;
   try {
     // Android WebView exposes JavaScriptInterface objects through a proxy. Older
     // Diewish APKs do not contain the wellness methods and may throw while an
     // unknown method is inspected, so capability detection itself must be safe.
-    const bridge = (
-      window as typeof window & { DiewishReminders?: Partial<NativeReminderBridge> }
-    ).DiewishReminders;
+    const bridge = (window as typeof window & { DiewishReminders?: Partial<NativeReminderBridge> })
+      .DiewishReminders;
     if (
       !bridge ||
       typeof bridge.isAvailable !== "function" ||
@@ -101,40 +97,14 @@ function scheduleNativeTestReminder(
   }
 }
 
-function dateAt(base: Date, time: string): Date {
-  const [hour, minute] = time.split(":").map(Number);
-  const result = new Date(base);
-  result.setHours(hour, minute, 0, 0);
-  return result;
-}
-
-function buildSchedule(preferences: NotificationPreferences): ReminderEntry[] {
-  const schedule: ReminderEntry[] = [];
-  const now = new Date();
-  for (let day = 0; day < 30; day += 1) {
-    const date = new Date(now);
-    date.setDate(now.getDate() + day);
-    const add = (enabled: boolean, time: string, type: ReminderEntry["type"]) => {
-      if (!enabled) return;
-      const at = dateAt(date, time);
-      if (at.getTime() > now.getTime()) {
-        schedule.push({ id: `${type}-${at.toISOString()}`, at: at.getTime(), type });
-      }
-    };
-    add(preferences.waterReminders, preferences.waterReminderTime, "water");
-    add(preferences.activityReminders, preferences.activityReminderTime, "activity");
-    add(preferences.sleepReminders, preferences.sleepReminderTime, "sleep");
-  }
-  return schedule;
-}
-
-function isTimedKey(key: ToggleKey): key is TimedKey {
-  return key in TIME_FIELDS;
-}
-
 export function NotificationsView() {
+  const router = useRouter();
   const [preferences, setPreferences] = React.useState<NotificationPreferences | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const [loadAttempt, setLoadAttempt] = React.useState(0);
+  const [loadError, setLoadError] = React.useState<string | null>(null);
+  const [saveError, setSaveError] = React.useState<string | null>(null);
+  const saveLock = React.useRef(false);
   const [savingKey, setSavingKey] = React.useState<string | null>(null);
   const [savedKey, setSavedKey] = React.useState<string | null>(null);
   const [nativeAvailable, setNativeAvailable] = React.useState(false);
@@ -143,17 +113,7 @@ export function NotificationsView() {
   const [webAvailable, setWebAvailable] = React.useState(false);
   const [webPermission, setWebPermission] = React.useState<WebPushPermission>("unsupported");
 
-  const syncNative = React.useCallback((next: NotificationPreferences) => {
-    try {
-      const bridge = nativeBridge();
-      if (!bridge || !bridge.isAvailable()) return;
-      const entries = buildSchedule(next);
-      if (entries.length === 0) bridge.cancelWellness();
-      else bridge.replaceWellnessSchedule(JSON.stringify(entries));
-    } catch {
-      // A stale/partial Android bridge must never crash the web settings page.
-    }
-  }, []);
+  const syncNative = syncWellnessReminderSchedule;
 
   const refreshPermission = React.useCallback(() => {
     try {
@@ -176,6 +136,9 @@ export function NotificationsView() {
   }, []);
 
   React.useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setLoadError(null);
     refreshPermission();
     void notificationClient
       .getPreferences()
@@ -186,24 +149,62 @@ export function NotificationsView() {
             ? loaded
             : (await notificationClient.updatePreferences({ timezoneOffsetMinutes: offset }))
                 .preferences;
+        if (cancelled) return;
         setPreferences(next);
         syncNative(next);
       })
-      .catch(() => toast.error("Bildirim tercihleri yüklenemedi."))
-      .finally(() => setLoading(false));
-  }, [refreshPermission, syncNative]);
+      .catch(() => {
+        if (!cancelled)
+          setLoadError(
+            "Bildirim tercihleri yüklenemedi. Bağlantını kontrol edip tekrar deneyebilirsin.",
+          );
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshPermission, syncNative, loadAttempt]);
 
   React.useEffect(() => {
     const onFocus = () => refreshPermission();
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") onFocus();
+    };
     window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
+    window.addEventListener("diewish:notification-state", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("diewish:notification-state", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, [refreshPermission]);
 
   const patchPreference = async (key: string, update: Partial<NotificationPreferences>) => {
-    if (!preferences) return;
+    if (!preferences || saveLock.current) return false;
+    saveLock.current = true;
+    setSaveError(null);
+    setSavedKey(null);
     setSavingKey(key);
     try {
+      const mealContext =
+        update.mealReminders === true ? await loadMealReminderContext() : undefined;
+      const gate = mealContext ? mealReminderGate(mealContext) : null;
+      if (gate) {
+        setSaveError(gate);
+        toast.message(gate);
+        return false;
+      }
       const { preferences: next } = await notificationClient.updatePreferences(update);
+      if (
+        Object.entries(update).some(
+          ([field, value]) => next[field as keyof NotificationPreferences] !== value,
+        )
+      )
+        throw new Error("Preferences were not persisted");
+      if (update.mealReminders !== undefined) syncMealReminderPreference(next, mealContext);
       setPreferences(next);
       syncNative(next);
       setSavedKey(key);
@@ -211,18 +212,28 @@ export function NotificationsView() {
         setSavedKey((current) => (current === key ? null : current));
       }, 2200);
       toast.success("Bildirim tercihi kaydedildi");
+      return true;
     } catch {
+      setSaveError("Tercihin kaydedilemedi. Kayıtlı ayarın korundu; tekrar deneyebilirsin.");
       toast.error("Bildirim tercihi kaydedilemedi.");
+      return false;
     } finally {
+      saveLock.current = false;
       setSavingKey(null);
     }
   };
 
   const toggle = async (key: ToggleKey) => {
-    if (!preferences) return;
+    if (!preferences || saveLock.current || savingKey !== null) return;
     const enabled = !preferences[key];
-    if (enabled && nativeAvailable && permission !== "granted") nativeBridge()?.requestPermission();
-    await patchPreference(key, { [key]: enabled });
+    const saved = await patchPreference(key, { [key]: enabled });
+    if (saved && enabled && nativeAvailable && permission !== "granted") {
+      try {
+        nativeBridge()?.requestPermission();
+      } catch {
+        refreshPermission();
+      }
+    }
   };
 
   const enableWebPush = async () => {
@@ -243,17 +254,20 @@ export function NotificationsView() {
     }
   };
 
-  const sendRemoteTest = async () => {
-    setSavingKey("remote-test");
+  const sendDeviceTest = async () => {
+    setSavingKey("device-test");
     try {
-      const result = await notificationClient.sendTestNotification();
-      if (result.disposition === "delivered") {
-        toast.success("Gerçek test bildirimi FCM tarafından kabul edildi");
-      } else {
-        toast.error(`Test bildirimi teslim edilemedi: ${result.code ?? result.disposition}`);
-      }
-    } catch {
-      toast.error("Gerçek test bildirimi gönderilemedi.");
+      const message = await previewCategoryNotification(
+        "water",
+        alertForCategory(preferences?.categoryAlerts, "water"),
+      );
+      toast.success(message);
+    } catch (failure) {
+      toast.error(
+        failure instanceof Error
+          ? failure.message
+          : "Test bildirimi gösterilemedi. Tercihlerin değiştirilmedi.",
+      );
     } finally {
       setSavingKey(null);
     }
@@ -261,123 +275,86 @@ export function NotificationsView() {
 
   if (loading) {
     return (
-      <Card>
-        <CardContent className="p-5 text-sm text-muted-foreground">
-          Bildirim tercihleri yükleniyor…
-        </CardContent>
-      </Card>
+      <div role="status" aria-busy="true" className="space-y-3">
+        <p className="text-sm text-muted-foreground">Bildirim tercihleri yükleniyor…</p>
+        {Array.from({ length: 6 }, (_, index) => (
+          <div
+            key={index}
+            aria-hidden="true"
+            className="h-32 animate-pulse rounded-2xl border border-border bg-muted/50 motion-reduce:animate-none"
+          />
+        ))}
+      </div>
     );
   }
   if (!preferences) {
     return (
       <Card>
-        <CardContent className="p-5 text-sm text-destructive">
-          Bildirim tercihleri şu anda kullanılamıyor.
+        <CardContent className="space-y-3 p-5">
+          <p role="alert" className="text-sm leading-relaxed text-destructive">
+            {loadError ?? "Bildirim tercihleri şu anda kullanılamıyor."}
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            onClick={() => setLoadAttempt((attempt) => attempt + 1)}
+          >
+            Tekrar dene
+          </Button>
         </CardContent>
       </Card>
     );
   }
 
   return (
-    <div className="space-y-4">
-      <Card>
-        <CardContent className="space-y-3 p-5">
-          <div className="flex items-start gap-3">
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <BellRing className="size-5" aria-hidden="true" />
-            </span>
-            <div>
-              <h2 className="text-sm font-semibold">Bildirim tercihleri</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Yalnızca açtığın hatırlatmalar gönderilir. Tercihlerin Diewish hesabında saklanır.
-              </p>
-            </div>
-          </div>
-
-          {NOTIFICATION_PREFERENCES.map((item) => {
-            const enabled = preferences[item.key];
-            const timeField = isTimedKey(item.key) ? TIME_FIELDS[item.key] : undefined;
-            return (
-              <div key={item.key} className="rounded-2xl border border-border p-4">
-                <div className="flex items-start gap-3">
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={enabled}
-                    aria-label={item.label}
-                    disabled={savingKey !== null}
-                    onClick={() => void toggle(item.key)}
-                    className={`mt-0.5 flex h-7 w-12 shrink-0 items-center rounded-full p-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${enabled ? "bg-primary" : "bg-muted-foreground/30"}`}
-                  >
-                    <span
-                      className={`flex size-5 items-center justify-center rounded-full bg-white transition-transform ${enabled ? "translate-x-5" : "translate-x-0"}`}
-                    >
-                      {enabled && <Check className="size-3 text-primary" aria-hidden="true" />}
-                    </span>
-                  </button>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold">{item.label}</p>
-                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                      {item.description}
-                    </p>
-                    {enabled && timeField && (
-                      <div className="mt-3 flex flex-wrap items-center gap-2">
-                        <label className="text-xs font-medium" htmlFor={`time-${item.key}`}>
-                          Saat
-                        </label>
-                        <Input
-                          id={`time-${item.key}`}
-                          type="time"
-                          className="h-9 w-32"
-                          value={String(preferences[timeField])}
-                          disabled={savingKey !== null}
-                          onChange={(event) => {
-                            const value = event.target.value;
-                            setPreferences({ ...preferences, [timeField]: value });
-                            void patchPreference(String(timeField), {
-                              [timeField]: value,
-                            });
-                          }}
-                        />
-                        <span
-                          className="min-w-20 text-[11px] font-medium text-muted-foreground"
-                          aria-live="polite"
-                        >
-                          {savingKey === String(timeField)
-                            ? "Kaydediliyor…"
-                            : savedKey === String(timeField)
-                              ? "✓ Kaydedildi"
-                              : ""}
-                        </span>
-                        {item.key === "weeklySummary" && (
-                          <select
-                            aria-label="Haftalık özet günü"
-                            className="h-9 rounded-xl border border-input bg-background px-2 text-xs"
-                            value={preferences.weeklySummaryDay}
-                            onChange={(event) =>
-                              void patchPreference("weeklySummaryDay", {
-                                weeklySummaryDay: Number(event.target.value),
-                              })
-                            }
-                          >
-                            <option value={0}>Pazar</option>
-                            <option value={1}>Pazartesi</option>
-                            <option value={2}>Salı</option>
-                            <option value={3}>Çarşamba</option>
-                            <option value={4}>Perşembe</option>
-                            <option value={5}>Cuma</option>
-                            <option value={6}>Cumartesi</option>
-                          </select>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </CardContent>
-      </Card>
+    <div className="space-y-4" data-notification-preferences>
+      <div className="flex items-start gap-3 rounded-2xl bg-primary/5 p-4">
+        <BellRing className="mt-0.5 size-5 shrink-0 text-primary" aria-hidden="true" />
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          Yalnızca istediğin hatırlatmaları aç. Programı görmek ve düzenlemek için kartın altındaki
+          özete dokun.
+        </p>
+      </div>
+      <NotificationDeviceNotice enabled={NOTIFICATION_PREFERENCES.some(item => preferences[item.key])} />
+      {saveError && (
+        <p
+          role="alert"
+          className="rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-xs leading-relaxed text-destructive"
+        >
+          {saveError}
+        </p>
+      )}
+      <p role="status" aria-live="polite" className="sr-only">
+        {savingKey
+          ? "Bildirim tercihi kaydediliyor…"
+          : savedKey
+            ? "Bildirim tercihi kaydedildi."
+            : ""}
+      </p>
+      <div className="space-y-3" aria-label="Bildirim kategorileri">
+        {NOTIFICATION_PREFERENCES.map((item) => (
+          <NotificationPreferenceCard
+            key={item.key}
+            item={item}
+            preferences={preferences}
+            busy={savingKey !== null}
+            saving={savingKey === item.key}
+            onToggle={() => void toggle(item.key)}
+            onOpen={() => {
+              setSaveError(null);
+              router.push(notificationDetailHref(item.key));
+            }}
+          />
+        ))}
+      </div>
+      <div className="flex items-start gap-2 rounded-2xl bg-primary/5 p-4 text-xs leading-relaxed text-muted-foreground">
+        <Info className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
+        <p>
+          Tercihlerin Diewish hesabında saklanır. Cihazında bildirim alabilmek için bildirim izninin
+          de açık olması gerekir.
+        </p>
+      </div>
 
       <Card>
         <CardContent className="space-y-3 p-5">
@@ -393,14 +370,16 @@ export function NotificationsView() {
                       : exactAlarm === "granted"
                         ? "Android bildirim ve tam zamanlı hatırlatıcı izinleri açık."
                         : "Android bildirim izni açık."
-                    : "Android bildirim izni bekleniyor."
+                    : permission === "denied"
+                      ? "Android bildirim izni kapalı. Cihaz ayarlarından Diewish bildirimlerine izin verebilirsin."
+                      : "Android bildirim izni bekleniyor."
                   : webAvailable
                     ? webPermission === "granted"
                       ? "Tarayıcı bildirim izni açık."
                       : webPermission === "denied"
-                        ? "Tarayıcı bildirim izni engellenmiş."
+                        ? "Tarayıcı bildirim izni kapalı. Tarayıcının site ayarlarından Diewish bildirimlerine izin verebilirsin."
                         : "Tarayıcı bildirim izni bekleniyor."
-                    : "Bu tarayıcı gerçek zamanlı bildirimleri desteklemiyor."}
+                    : "Bu cihazda bildirim desteği doğrulanamadı."}
               </p>
             </div>
           </div>
@@ -409,9 +388,15 @@ export function NotificationsView() {
               className="w-full"
               variant="outline"
               disabled={savingKey !== null}
-              onClick={() => nativeBridge()?.requestPermission()}
+              onClick={() => {
+                try {
+                  nativeBridge()?.requestPermission();
+                } catch {
+                  refreshPermission();
+                }
+              }}
             >
-              Bildirim izni ver
+              {permission === "denied" ? "Bildirim iznini kontrol et" : "Bildirim izni ver"}
             </Button>
           )}
           {!nativeAvailable && webAvailable && webPermission !== "granted" && (
@@ -434,44 +419,49 @@ export function NotificationsView() {
               Tam zamanlı hatırlatıcı izni ver
             </Button>
           )}
-          {nativeAvailable && permission === "granted" && (
-            <Button
-              className="w-full"
-              variant="outline"
-              disabled={savingKey !== null}
-              onClick={() => {
-                const shown = nativeBridge()?.showTestNotification();
-                if (shown) toast.success("Anlık yerel bildirim gösterildi");
-                else toast.error("Bildirim gösterilemedi. Android bildirim kanalını kontrol et.");
-              }}
-            >
-              Anlık yerel bildirimi test et
-            </Button>
-          )}
-          {nativeAvailable && permission === "granted" && exactAlarm === "granted" && (
-            <Button
-              className="w-full"
-              variant="outline"
-              disabled={savingKey !== null}
-              onClick={() => {
-                const scheduled = scheduleNativeTestReminder(nativeBridge(), 60);
-                if (scheduled) toast.success("1 dakika sonraya test bildirimi kuruldu");
-                else toast.error("1 dakikalık test bildirimi planlanamadı");
-              }}
-            >
-              1 dk zamanlama testi
-            </Button>
-          )}
-          {isStagingNotificationHost() &&
+          {nativeAvailable &&
+            permission === "granted" &&
+            notificationAlertCapabilities().testNotification && (
+              <Button
+                className="w-full"
+                variant="outline"
+                disabled={savingKey !== null}
+                onClick={() => {
+                  const shown = nativeBridge()?.showTestNotification();
+                  if (shown) toast.success("Anlık yerel bildirim gösterildi");
+                  else toast.error("Bildirim gösterilemedi. Android bildirim kanalını kontrol et.");
+                }}
+              >
+                Anlık yerel bildirimi test et
+              </Button>
+            )}
+          {nativeAvailable &&
+            permission === "granted" &&
+            exactAlarm === "granted" &&
+            notificationAlertCapabilities().testNotification && (
+              <Button
+                className="w-full"
+                variant="outline"
+                disabled={savingKey !== null}
+                onClick={() => {
+                  const scheduled = scheduleNativeTestReminder(nativeBridge(), 60);
+                  if (scheduled) toast.success("1 dakika sonraya test bildirimi kuruldu");
+                  else toast.error("1 dakikalık test bildirimi planlanamadı");
+                }}
+              >
+                1 dk zamanlama testi
+              </Button>
+            )}
+          {notificationAlertCapabilities().testNotification &&
             ((nativeAvailable && permission === "granted") ||
               (!nativeAvailable && webAvailable && webPermission === "granted")) && (
               <Button
                 className="w-full"
                 variant="outline"
                 disabled={savingKey !== null}
-                onClick={() => void sendRemoteTest()}
+                onClick={() => void sendDeviceTest()}
               >
-                Gerçek FCM test bildirimi gönder
+                Test bildirimi gönder
               </Button>
             )}
         </CardContent>

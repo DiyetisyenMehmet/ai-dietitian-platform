@@ -92,6 +92,12 @@ self.addEventListener("push", (event) => {
         body,
         tag,
         renotify: false,
+        silent: data.soundPreset === "silent",
+        // A browser cannot select our custom notification audio. Non-silent
+        // presets use its system sound; do not simulate it with page audio.
+        ...(data.soundPreset === "silent"
+          ? {}
+          : { vibrate: data.vibrationPreset === "off" ? [] : undefined }),
         data: { target },
       });
     })(),

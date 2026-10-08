@@ -1,6 +1,35 @@
 import { z } from "zod";
+import { categoryAlertsSchema } from "./notification-alerts";
 
 const localTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Expected a 24-hour HH:MM time.");
+export const MAX_WATER_TIMES_PER_DAY = 8;
+const waterTimes = z
+  .array(localTime)
+  .max(MAX_WATER_TIMES_PER_DAY)
+  .refine(
+    (times) => new Set(times).size === times.length,
+    "Duplicate reminder times are not allowed.",
+  )
+  .transform((times) => [...times].sort());
+export const waterReminderScheduleSchema = z
+  .object({
+    version: z.literal(1),
+    mode: z.enum(["same", "custom"]),
+    dailyTimes: waterTimes,
+    days: z
+      .array(
+        z
+          .object({ day: z.number().int().min(0).max(6), enabled: z.boolean(), times: waterTimes })
+          .strict(),
+      )
+      .length(7)
+      .refine(
+        (days) => new Set(days.map((day) => day.day)).size === 7,
+        "Every week day must appear exactly once.",
+      )
+      .transform((days) => [...days].sort((a, b) => a.day - b.day)),
+  })
+  .strict();
 const pushToken = z
   .string()
   .trim()
@@ -19,12 +48,15 @@ export const updateNotificationPreferencesSchema = z
     bloodTestReminders: z.boolean().optional(),
     productUpdates: z.boolean().optional(),
     waterReminderTime: localTime.optional(),
+    waterReminderSchedule: waterReminderScheduleSchema.optional(),
     activityReminderTime: localTime.optional(),
     sleepReminderTime: localTime.optional(),
     weeklySummaryDay: z.number().int().min(0).max(6).optional(),
     weeklySummaryTime: localTime.optional(),
     timezoneOffsetMinutes: z.number().int().min(-840).max(840).optional(),
+    categoryAlerts: categoryAlertsSchema.optional(),
   })
+  .strict()
   .refine((value) => Object.keys(value).length > 0, "At least one preference must be supplied.");
 
 export const registerNotificationDeviceSchema = z.object({

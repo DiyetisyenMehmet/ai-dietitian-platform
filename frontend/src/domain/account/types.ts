@@ -1,3 +1,6 @@
+import type { WaterReminderSchedule } from "./water-reminder-plan";
+import type { CategoryAlertPreferences } from "./notification-alerts";
+
 /**
  * Account-management domain types: persisted notification preferences and
  * client-side account presentation state.
@@ -16,6 +19,8 @@ export interface NotificationPreferences {
   bloodTestReminders: boolean;
   productUpdates: boolean;
   waterReminderTime: string;
+  waterReminderSchedule?: WaterReminderSchedule | null;
+  categoryAlerts?: CategoryAlertPreferences | null;
   activityReminderTime: string;
   sleepReminderTime: string;
   weeklySummaryDay: number;
@@ -61,7 +66,7 @@ export const NOTIFICATION_PREFERENCES: readonly NotificationPreferenceMeta[] = [
   {
     key: "mealReminders",
     label: "Öğün hatırlatmaları",
-    description: "Öğünlerini kaydetmeyi unuttuğunda nazikçe hatırlatalım.",
+    description: "Planındaki öğün saatlerini nazikçe hatırlatalım.",
   },
   {
     key: "waterReminders",
@@ -85,7 +90,7 @@ export const NOTIFICATION_PREFERENCES: readonly NotificationPreferenceMeta[] = [
   },
   {
     key: "coachTips",
-    label: "Diewish koç bildirimleri",
-    description: "Seçtiğin hedeflere göre önemli koç önerilerini telefona bildirelim.",
+    label: "Diewish Koç bildirimleri",
+    description: "Hedeflerine göre hazırlanan Koç önerilerinden haberdar ol.",
   },
 ] as const;

@@ -55,7 +55,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          required=("Hardening CI" "Staging Config CI")
+          required=("Hardening CI" "Staging Config CI" "Notification preferences platform checks")
 
           for attempt in {1..180}; do
             runs="$(curl --fail --silent --show-error \

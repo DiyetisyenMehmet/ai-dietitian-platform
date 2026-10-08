@@ -16,6 +16,7 @@ import com.google.firebase.messaging.RemoteMessage;
 
 import org.json.JSONArray;
 import org.json.JSONException;
+import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -47,15 +48,12 @@ public final class DiewishMessagingService extends FirebaseMessagingService {
 
         NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         if (manager == null) return;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationChannel channel = new NotificationChannel(
-                CHANNEL_ID,
-                "Diewish bildirimleri",
-                NotificationManager.IMPORTANCE_DEFAULT
-            );
-            channel.setDescription("Diewish hesap bildirimleri ve koç güncellemeleri");
-            manager.createNotificationChannel(channel);
-        }
+        String category = NotificationAlertPolicy.remoteCategory(type);
+        JSONObject preference;
+        try { preference = NotificationAlertStore.preference(new JSONObject(data)); }
+        catch (JSONException ignored) { preference = NotificationAlertStore.get(this, category); }
+        NotificationChannel channel = NotificationAlertPresentation.channel(this, category, preference);
+        if (!NotificationAlertPresentation.canPost(this, channel, CHANNEL_ID)) return;
 
         String unreadId = "remote:" + id;
         PendingIntent pendingIntent = NotificationTapReceiver.pendingIntent(
@@ -69,7 +67,7 @@ public final class DiewishMessagingService extends FirebaseMessagingService {
             id.hashCode(),
             unreadId
         );
-        Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
+        Notification notification = new NotificationCompat.Builder(this, channel.getId())
             .setSmallIcon(R.drawable.ic_launcher)
             .setContentTitle(title)
             .setContentText(body)

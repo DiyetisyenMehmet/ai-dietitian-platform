@@ -27,21 +27,8 @@ public final class NutritionReminderReceiver extends BroadcastReceiver {
             (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
         if (manager == null) return;
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationChannel channel = new NotificationChannel(
-                CHANNEL_ID,
-                "Öğün hatırlatmaları",
-                NotificationManager.IMPORTANCE_DEFAULT
-            );
-            channel.setDescription("Diewish öğün planı saat hatırlatmaları");
-            manager.createNotificationChannel(channel);
-            NotificationChannel activeChannel = manager.getNotificationChannel(CHANNEL_ID);
-            if (
-                activeChannel != null
-                    && activeChannel.getImportance() == NotificationManager.IMPORTANCE_NONE
-            ) return;
-        }
-        if (!manager.areNotificationsEnabled()) return;
+        NotificationChannel channel = NotificationAlertPresentation.channel(context, "meals", NotificationAlertStore.get(context, "meals"));
+        if (!NotificationAlertPresentation.canPost(context, channel, CHANNEL_ID)) return;
 
         String id = intent == null ? null : intent.getStringExtra("reminderId");
         int requestCode = id == null ? 41 : id.hashCode();
@@ -58,9 +45,7 @@ public final class NutritionReminderReceiver extends BroadcastReceiver {
             unreadId
         );
 
-        Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
-            ? new Notification.Builder(context, CHANNEL_ID)
-            : new Notification.Builder(context);
+        Notification.Builder builder = new Notification.Builder(context, channel.getId());
         Notification notification = builder
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("Diewish")

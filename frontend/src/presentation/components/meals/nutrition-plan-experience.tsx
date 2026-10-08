@@ -4,61 +4,23 @@ import * as React from "react";
 import Link from "next/link";
 import { History } from "lucide-react";
 
-import {
-  nutritionPlanStore,
-  useNutritionPlan,
-} from "@/application/health/nutrition-plan-store";
-import {
-  useWeightCheckInStatus,
-  weightStore,
-} from "@/application/health/weight-store";
+import { nutritionPlanStore, useNutritionPlan } from "@/application/health/nutrition-plan-store";
+import { useWeightCheckInStatus, weightStore } from "@/application/health/weight-store";
 import type { NutritionPlanRecord } from "@/infrastructure/nutrition/nutrition-plan-client";
 import { NutritionPlanHungerCoach } from "@/presentation/components/meals/nutrition-plan-hunger-coach";
-import {
-  NutritionPlanReminders,
-  type NutritionReminderEntry,
-} from "@/presentation/components/meals/nutrition-plan-reminders";
+import { NutritionPlanReminders } from "@/presentation/components/meals/nutrition-plan-reminders";
 import { NutritionPlanShareButton } from "@/presentation/components/meals/nutrition-plan-share-button";
 import { NutritionPlanView } from "@/presentation/components/meals/nutrition-plan-view";
 import { Button } from "@/presentation/components/ui/button";
 import { Card, CardContent } from "@/presentation/components/ui/card";
 
-function startDate(plan: NutritionPlanRecord): Date {
-  const dateOnly = plan.startDate?.slice(0, 10);
-  if (dateOnly && /^\d{4}-\d{2}-\d{2}$/.test(dateOnly)) {
-    const [year, month, day] = dateOnly.split("-").map(Number);
-    return new Date(year, month - 1, day, 12, 0, 0, 0);
-  }
-  const fallback = new Date(plan.createdAt);
-  return Number.isNaN(fallback.getTime()) ? new Date() : fallback;
-}
-
-function dateForDay(plan: NutritionPlanRecord, dayNumber: number): Date {
-  const date = startDate(plan);
-  const mapping = plan.dailyPlans?.calendar?.find((item) => item.dayNumber === dayNumber);
-  const offset = Math.max(0, Math.trunc(mapping?.dateOffsetDays ?? 0));
-  date.setHours(12, 0, 0, 0);
-  date.setDate(date.getDate() + dayNumber - 1 + offset);
-  return date;
-}
-
-function mealTime(value: string): { hour: number; minute: number } | null {
-  const match = value.trim().match(/^(\d{1,2}):(\d{2})$/);
-  if (!match) return null;
-  const hour = Number(match[1]);
-  const minute = Number(match[2]);
-  if (
-    !Number.isInteger(hour) ||
-    !Number.isInteger(minute) ||
-    hour < 0 ||
-    hour > 23 ||
-    minute < 0 ||
-    minute > 59
-  ) {
-    return null;
-  }
-  return { hour, minute };
-}
+import {
+  buildMealReminderEntries as reminderEntries,
+  dateForMealPlanDay as dateForDay,
+  parseMealReminderTime as mealTime,
+  hasFutureMealReminders,
+} from "@/domain/account/meal-reminder-plan";
+import { cancelMealReminderSchedule } from "@/infrastructure/notifications/native-meals";
 
 function localDateYmd(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -104,36 +66,6 @@ function currentPlanDayNumber(plan: NutritionPlanRecord, now = new Date()): numb
   return null;
 }
 
-function reminderEntries(plan: NutritionPlanRecord): NutritionReminderEntry[] {
-  const content = plan.dailyPlans;
-  if (!content?.cycle?.length) return [];
-  const entries: NutritionReminderEntry[] = [];
-
-  for (let dayNumber = 1; dayNumber <= content.durationDays; dayNumber += 1) {
-    const mapping = content.calendar?.find((item) => item.dayNumber === dayNumber);
-    const cycleIndex = mapping?.cycleIndex ?? dayNumber - 1;
-    const day = content.cycle[cycleIndex];
-    if (!day) continue;
-    const date = dateForDay(plan, dayNumber);
-    let previousMinutes = -1;
-    let dayOffset = 0;
-
-    day.meals.forEach((meal, mealIndex) => {
-      const time = mealTime(meal.time);
-      if (!time) return;
-      const minutes = time.hour * 60 + time.minute;
-      if (previousMinutes >= 0 && minutes <= previousMinutes) dayOffset += 1;
-      previousMinutes = minutes;
-      const at = new Date(date);
-      at.setDate(at.getDate() + dayOffset);
-      at.setHours(time.hour, time.minute, 0, 0);
-      entries.push({ id: `${plan.id}:${dayNumber}:${mealIndex}`, at: at.getTime() });
-    });
-  }
-
-  return entries;
-}
-
 function shareableDays(plan: NutritionPlanRecord) {
   const content = plan.dailyPlans;
   if (!content?.cycle?.length) return [];
@@ -146,7 +78,7 @@ function shareableDays(plan: NutritionPlanRecord) {
   return Array.from({ length: content.durationDays }, (_, index) => index + 1).flatMap(
     (dayNumber) => {
       const mapping = content.calendar?.find((item) => item.dayNumber === dayNumber);
-      const cycleIndex = mapping?.cycleIndex ?? ((dayNumber - 1) % content.cycle.length);
+      const cycleIndex = mapping?.cycleIndex ?? (dayNumber - 1) % content.cycle.length;
       const day = content.cycle[cycleIndex];
       if (!day) return [];
       return [{ dayNumber, dateLabel: formatter.format(dateForDay(plan, dayNumber)), day }];
@@ -159,7 +91,7 @@ function completed(plan: NutritionPlanRecord): boolean {
   if (days <= 0) return true;
   const last = dateForDay(plan, days);
   last.setHours(23, 59, 59, 999);
-  return Date.now() > last.getTime();
+  return Date.now() > last.getTime() && !hasFutureMealReminders(plan);
 }
 
 function PantryPlanningCard({ value }: { value: string }) {
@@ -227,7 +159,7 @@ export function NutritionPlanExperience() {
   React.useEffect(() => {
     if (activePlan) return;
     try {
-      window.DiewishReminders?.cancelAll();
+      cancelMealReminderSchedule();
     } catch {
       // An optional native capability must never break the web plan experience.
     }
