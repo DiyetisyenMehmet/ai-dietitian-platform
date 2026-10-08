@@ -148,8 +148,8 @@ test("JSONB key order preserves successful water saves and refresh without a fal
   const s = await session(page, { databaseKeyOrder: true });
   await ready(page);
   await page.getByLabel("Her gün 1. saat").fill("08:15");
+  await page.getByLabel("Her gün yeni saat").fill("13:20");
   await page.getByRole("button", { name: "Saat ekle", exact: true }).click();
-  await page.getByLabel("Her gün 2. saat").fill("13:20");
   await save(page).click();
   await expect(page.getByText("✓ Kaydedildi", { exact: true })).toBeVisible();
   await expect(page.getByText(/Plan kaydedilemedi/)).toHaveCount(0);
