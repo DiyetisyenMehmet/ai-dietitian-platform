@@ -1,5 +1,5 @@
 staging notification preferences integration
 task=WORKMODE-NOTIFICATION-PREFERENCES-A1-INTEGRATE
-verified_source_sha=90974a89957186cfc002636d359060486b188fd5
+verified_source_sha=3fb8093849994626f19a85e5a09193cdd1741370
 approved_notification_sha=c140c7570d9a2ee18d7bb47e9d7145672cbef564
-purpose=additive migrations, staging deploy and isolated real-runtime sanity
+purpose=canonical water JSONB persistence fix, exact-SHA gates and real-runtime sanity

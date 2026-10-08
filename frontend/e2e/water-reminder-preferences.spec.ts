@@ -22,6 +22,7 @@ async function session(
     loadDelay?: number;
     native?: boolean;
     omitSavedPlan?: boolean;
+    databaseKeyOrder?: boolean;
   } = {},
 ) {
   let preferences: Record<string, unknown> = {
@@ -99,6 +100,19 @@ async function session(
           ...patch,
           ...(options.omitSavedPlan ? { waterReminderSchedule: null } : {}),
         };
+        if (options.databaseKeyOrder && preferences.waterReminderSchedule) {
+          const stored = preferences.waterReminderSchedule as ReturnType<typeof customPlan>;
+          preferences.waterReminderSchedule = {
+            days: stored.days.map((day) => ({
+              times: day.times,
+              day: day.day,
+              enabled: day.enabled,
+            })),
+            mode: stored.mode,
+            version: stored.version,
+            dailyTimes: stored.dailyTimes,
+          };
+        }
       } else {
         if (options.loadDelay)
           await new Promise((resolve) => setTimeout(resolve, options.loadDelay));
@@ -128,6 +142,26 @@ const day = (page: Page, number: number) => page.locator(`[data-water-day="${num
 const sheet = (page: Page) => page.locator("[data-water-day-sheet]");
 const operation = (page: Page) => page.locator("[data-water-operation]");
 const save = (page: Page) => page.getByRole("button", { name: "Kaydet", exact: true });
+test("JSONB key order preserves successful water saves and refresh without a false rollback", async ({
+  page,
+}) => {
+  const s = await session(page, { databaseKeyOrder: true });
+  await ready(page);
+  await page.getByLabel("Her gün 1. saat").fill("08:15");
+  await page.getByRole("button", { name: "Saat ekle", exact: true }).click();
+  await page.getByLabel("Her gün 2. saat").fill("13:20");
+  await save(page).click();
+  await expect(page.getByText("✓ Kaydedildi", { exact: true })).toBeVisible();
+  await expect(page.getByText(/Plan kaydedilemedi/)).toHaveCount(0);
+  expect(
+    (s.preferences().waterReminderSchedule as ReturnType<typeof customPlan>).dailyTimes,
+  ).toEqual(["08:15", "13:20"]);
+  await page.reload();
+  await ready(page);
+  await expect(page.getByLabel("Her gün 1. saat")).toHaveValue("08:15");
+  await expect(page.getByLabel("Her gün 2. saat")).toHaveValue("13:20");
+  await expect(save(page)).toBeDisabled();
+});
 async function fit(page: Page, selector?: string) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   if (selector) {

@@ -72,10 +72,12 @@ export function waterReminderPlan(value: unknown, legacyTime: string): WaterRemi
 
 export function cloneWaterPlan(plan: WaterReminderSchedule): WaterReminderSchedule {
   return {
-    ...plan,
+    // JSONB can reorder object keys; canonicalize them for saved/draft comparisons.
+    version: plan.version,
+    mode: plan.mode,
     dailyTimes: [...plan.dailyTimes].sort(),
     days: plan.days
-      .map((day) => ({ ...day, times: [...day.times].sort() }))
+      .map((day) => ({ day: day.day, enabled: day.enabled, times: [...day.times].sort() }))
       .sort((a, b) => a.day - b.day),
   };
 }

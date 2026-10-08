@@ -16,6 +16,22 @@ function load(file, context = {}, stubs = {}) {
   return exports;
 }
 const plan = () => ({ id: 'plan-a', isActive: true, status: 'COMPLETED', duration: 'SEVEN_DAY', updatedAt: '2026-10-07T12:00:00Z', createdAt: '2026-10-07T00:00:00Z', startDate: '2026-10-07', dailyPlans: { durationDays: 2, cycle: [{ meals: [{ name: 'Akşam', time: '20:00' }, { name: 'Gece', time: '02:15' }] }], calendar: [{ dayNumber: 1, cycleIndex: 0, dateOffsetDays: 0 }, { dayNumber: 2, cycleIndex: 0, dateOffsetDays: 2 }] } });
+test('water persistence comparison ignores JSONB key order without hiding changed values', () => {
+  const { cloneWaterPlan, waterReminderPlan } = load('domain/account/water-reminder-plan.ts');
+  const original = waterReminderPlan(null, '13:55');
+  original.dailyTimes = ['13:20', '08:15'];
+  const snapshot = JSON.stringify(original);
+  const stored = {
+    days: original.days.map(day => ({ times: [...day.times], day: day.day, enabled: day.enabled })).reverse(),
+    mode: original.mode,
+    version: original.version,
+    dailyTimes: [...original.dailyTimes].reverse(),
+  };
+  assert.equal(JSON.stringify(cloneWaterPlan(stored)), JSON.stringify(cloneWaterPlan(original)));
+  assert.equal(JSON.stringify(original), snapshot);
+  stored.days[0].enabled = false;
+  assert.notEqual(JSON.stringify(cloneWaterPlan(stored)), JSON.stringify(cloneWaterPlan(original)));
+});
 test('meal entries retain plan identity, calendar postponements and midnight wrap', () => {
   const { buildMealReminderEntries } = load('domain/account/meal-reminder-plan.ts');
   const value = plan(), rows = buildMealReminderEntries(value);
