@@ -4,8 +4,8 @@ umask 077
 cd "$(dirname "$0")/../.."
 [[ "$(uname -s)" == Darwin ]] || { echo 'MACOS_XCODE_REQUIRED'; exit 2; }
 command -v xcodebuild >/dev/null
-if [[ "${QA_AUTHENTICATED_REQUIRED:-NO}" == YES || -n "${QA_EMAIL:-}" ]]; then
-  node qa/platform/account-preflight.cjs
+if [[ ( "${QA_AUTHENTICATED_REQUIRED:-NO}" == YES || -n "${QA_EMAIL:-}" ) && "${QA_ACCOUNT_PREFLIGHT_COMPLETE:-}" != YES ]]; then
+  exec node qa/platform/authenticated-run.cjs ios
 fi
 export QA_RUN_ID="${QA_RUN_ID:-ios-$(date -u +%Y%m%d%H%M%S)}"
 private="$(mktemp -d "${TMPDIR:-/tmp}/diewish-ios.XXXXXX")"

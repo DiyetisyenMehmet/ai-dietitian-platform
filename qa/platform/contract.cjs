@@ -5,17 +5,27 @@ const crypto = require('node:crypto');
 const { execFileSync } = require('node:child_process');
 const ROOT = path.resolve(__dirname, '../..');
 const ORIGIN = 'https://staging.diewish.com';
+const AUTHORIZED_EMAIL_HASH = 'dfd85175029c6ee89c3ef83bf8a2dcc5b6f56a8b25e32f020cf50c24fe6574de';
 const PLATFORMS = { web: ['chromium', 'webkit'], android: ['android-emulator', 'android-physical'], ios: ['ios-simulator', 'ios-physical'] };
 class Blocked extends Error { constructor(code) { super(code); this.code = code; } }
 function stagingOrigin(value = ORIGIN) {
   if (value !== ORIGIN) throw new Blocked('STAGING_ORIGIN_REQUIRED');
   return value;
 }
-function credentials(env = process.env) {
-  if (!env.QA_EMAIL || !env.QA_PASSWORD || !env.QA_ACCOUNT_ID || !env.QA_ACCOUNT_HMAC_KEY) throw new Blocked('TEST_ACCOUNT_SECRETS_REQUIRED');
+function authorizedEmail(email, expectedHash = AUTHORIZED_EMAIL_HASH) {
+  return typeof email === 'string' && crypto.createHash('sha256').update(email.toLowerCase()).digest('hex') === expectedHash;
+}
+function loginCredentials(env = process.env, expectedHash = AUTHORIZED_EMAIL_HASH) {
+  if (!env.QA_EMAIL || !env.QA_PASSWORD) throw new Blocked('TEST_ACCOUNT_SECRETS_REQUIRED');
+  if (!authorizedEmail(env.QA_EMAIL, expectedHash)) throw new Blocked('AUTHORIZED_QA_ACCOUNT_REQUIRED');
   if (env.QA_SYNTHETIC_ACCOUNT !== 'YES') throw new Blocked('SYNTHETIC_ACCOUNT_ATTESTATION_REQUIRED');
+  return { email: env.QA_EMAIL, password: env.QA_PASSWORD, id: env.QA_ACCOUNT_ID || null };
+}
+function credentials(env = process.env, expectedHash = AUTHORIZED_EMAIL_HASH) {
+  const user = loginCredentials(env, expectedHash);
+  if (!user.id || !env.QA_ACCOUNT_HMAC_KEY) throw new Blocked('TEST_ACCOUNT_SECRETS_REQUIRED');
   if (env.QA_ACCOUNT_HMAC_KEY.length < 32) throw new Blocked('ACCOUNT_HMAC_KEY_TOO_SHORT');
-  return { email: env.QA_EMAIL, password: env.QA_PASSWORD, id: env.QA_ACCOUNT_ID };
+  return user;
 }
 function accountAlias(id, key = process.env.QA_ACCOUNT_HMAC_KEY) {
   if (!id || !key || key.length < 32) throw new Blocked('ACCOUNT_HMAC_KEY_REQUIRED');
@@ -69,4 +79,4 @@ function errorCode(error) {
   if (error instanceof TypeError) return 'HARNESS_TYPE_ERROR';
   return 'RUNTIME_OPERATION_FAILED';
 }
-module.exports = { ROOT, ORIGIN, PLATFORMS, Blocked, stagingOrigin, credentials, accountAlias, gitSha, safeName, createEvidence, errorCode };
+module.exports = { ROOT, ORIGIN, AUTHORIZED_EMAIL_HASH, authorizedEmail, PLATFORMS, Blocked, stagingOrigin, loginCredentials, credentials, accountAlias, gitSha, safeName, createEvidence, errorCode };

@@ -49,6 +49,7 @@ async function login(page) {
   if (!response.ok()) throw new c.Blocked('LOGIN_OR_STAGING_ACCESS_DENIED');
   const payload = await response.json();
   if (payload?.data?.user?.id !== user.id) throw new c.Blocked('TEST_ACCOUNT_ID_MISMATCH');
+  if (!c.authorizedEmail(payload?.data?.user?.email)) throw new c.Blocked('AUTHORIZED_QA_ACCOUNT_REQUIRED');
   await page.waitForURL(c.ORIGIN + '/dashboard', { timeout: 45000 });
   return c.accountAlias(user.id);
 }
@@ -120,6 +121,7 @@ async function main() {
         await page.goto(c.ORIGIN + s.path, { waitUntil: 'domcontentloaded' });
         await page.waitForURL(c.ORIGIN + s.path);
         await page.locator(s.anchor).first().waitFor({ state: 'visible' });
+        if (s.title) await page.getByText(s.title, { exact: true }).first().waitFor({ state: 'visible' });
         if (s.openCoachList) await openList(page);
         activeEvidence.record(s.name, 'PASS', { alias, appVersion: version, screenshot: await capture(runtime, activeEvidence, s.name), viewport: await page.evaluate(() => ({ width: innerWidth, height: innerHeight })) });
       } catch (error) { activeEvidence.record(s.name, 'FAIL', { code: c.errorCode(error), alias }); process.exitCode = 1; }

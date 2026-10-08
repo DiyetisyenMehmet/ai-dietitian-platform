@@ -9,8 +9,10 @@ test('production and lookalike origins fail closed', () => {
 });
 test('credentials require synthetic attestation and all secret fields', () => {
   const env = { QA_EMAIL: 'synthetic@example.invalid', QA_PASSWORD: 'synthetic', QA_ACCOUNT_ID: 'id', QA_ACCOUNT_HMAC_KEY: 'x'.repeat(32), QA_SYNTHETIC_ACCOUNT: 'YES' };
-  assert.equal(c.credentials(env).id, 'id');
-  for (const field of Object.keys(env)) assert.throws(() => c.credentials({ ...env, [field]: '' }));
+  const hash = require('node:crypto').createHash('sha256').update(env.QA_EMAIL).digest('hex');
+  assert.throws(() => c.credentials(env));
+  assert.equal(c.credentials(env, hash).id, 'id');
+  for (const field of Object.keys(env)) assert.throws(() => c.credentials({ ...env, [field]: '' }, hash));
 });
 test('same identity uses keyed alias across runtimes', () => {
   assert.equal(c.accountAlias('id', 'x'.repeat(32)), c.accountAlias('id', 'x'.repeat(32)));

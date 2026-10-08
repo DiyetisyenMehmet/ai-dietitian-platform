@@ -15,12 +15,20 @@ on:
         type: choice
         options: [all, web, android, ios]
         default: all
+  workflow_call:
+    inputs:
+      authenticated:
+        type: boolean
+        required: true
+      platform:
+        type: string
+        required: true
 
 permissions:
   contents: read
 
 concurrency:
-  group: qa-infra-${{ github.ref }}
+  group: qa-infra-${{ inputs.authenticated && 'authenticated' || 'public' }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -54,7 +62,7 @@ jobs:
 
   web:
     needs: contracts
-    if: (github.event_name == 'push' && needs.contracts.outputs.web == 'true') || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'web'))
+    if: (github.event_name == 'push' && !inputs.authenticated && needs.contracts.outputs.web == 'true') || ((inputs.authenticated || github.event_name == 'workflow_dispatch') && (inputs.platform == 'all' || inputs.platform == 'web'))
     runs-on: ubuntu-latest
     environment: ${{ inputs.authenticated && 'staging' || '' }}
     timeout-minutes: 15
@@ -85,7 +93,7 @@ jobs:
           QA_ACCOUNT_HMAC_KEY: ${{ inputs.authenticated && secrets.QA_ACCOUNT_HMAC_KEY || '' }}
           QA_SYNTHETIC_ACCOUNT: ${{ inputs.authenticated && 'YES' || '' }}
           QA_AUTHENTICATED_REQUIRED: ${{ inputs.authenticated && 'YES' || 'NO' }}
-        run: node qa/platform/runtime.cjs web ${{ matrix.engine }}
+        run: node qa/platform/authenticated-run.cjs web ${{ matrix.engine }}
       - name: Validate export safety
         id: export-safety
         if: always()
@@ -101,7 +109,7 @@ jobs:
 
   android:
     needs: contracts
-    if: (github.event_name == 'push' && needs.contracts.outputs.android == 'true') || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'android'))
+    if: (github.event_name == 'push' && !inputs.authenticated && needs.contracts.outputs.android == 'true') || ((inputs.authenticated || github.event_name == 'workflow_dispatch') && (inputs.platform == 'all' || inputs.platform == 'android'))
     runs-on: ubuntu-latest
     environment: ${{ inputs.authenticated && 'staging' || '' }}
     timeout-minutes: 30
@@ -149,7 +157,7 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back emulated
           script: |
             adb install -r android/app/build/outputs/apk/debug/app-debug.apk
-            node qa/platform/runtime.cjs android
+            node qa/platform/authenticated-run.cjs android
       - name: Validate export safety
         id: export-safety
         if: always()
@@ -165,7 +173,7 @@ jobs:
 
   ios:
     needs: contracts
-    if: (github.event_name == 'push' && needs.contracts.outputs.ios == 'true') || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'ios'))
+    if: (github.event_name == 'push' && !inputs.authenticated && needs.contracts.outputs.ios == 'true') || ((inputs.authenticated || github.event_name == 'workflow_dispatch') && (inputs.platform == 'all' || inputs.platform == 'ios'))
     runs-on: macos-15
     environment: ${{ inputs.authenticated && 'staging' || '' }}
     timeout-minutes: 25
@@ -184,7 +192,7 @@ jobs:
           QA_ACCOUNT_HMAC_KEY: ${{ inputs.authenticated && secrets.QA_ACCOUNT_HMAC_KEY || '' }}
           QA_SYNTHETIC_ACCOUNT: ${{ inputs.authenticated && 'YES' || '' }}
           QA_AUTHENTICATED_REQUIRED: ${{ inputs.authenticated && 'YES' || 'NO' }}
-        run: bash qa/platform/ios-run.sh
+        run: node qa/platform/authenticated-run.cjs ios
       - name: Validate export safety
         id: export-safety
         if: always()

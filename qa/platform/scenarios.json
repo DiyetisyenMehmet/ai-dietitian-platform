@@ -1,6 +1,6 @@
 [
-  {"name":"dashboard","path":"/dashboard","anchor":"main"},
+  {"name":"dashboard","path":"/dashboard","anchor":"main","title":"Bugünkü Yolculuğum"},
   {"name":"coach-list","path":"/ai","anchor":"[aria-label='Mesaj']","openCoachList":true},
-  {"name":"notification-preferences","path":"/profile/notifications","anchor":"main"},
-  {"name":"profile","path":"/profile","anchor":"main"}
+  {"name":"notification-preferences","path":"/profile/notifications","anchor":"main","title":"Bildirim Tercihleri"},
+  {"name":"profile","path":"/profile","anchor":"main","title":"Sağlık Profilim"}
 ]

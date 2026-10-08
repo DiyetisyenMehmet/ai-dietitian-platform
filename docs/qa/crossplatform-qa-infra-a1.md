@@ -20,12 +20,16 @@ Configure the following in the existing approved **staging GitHub environment**,
 
 | Secret / variable               | Purpose                                                        |
 | ------------------------------- | -------------------------------------------------------------- |
-| `QA_EMAIL`                      | Dedicated synthetic staging account login                      |
-| `QA_PASSWORD`                   | Dedicated test account password                                |
-| `QA_ACCOUNT_ID`                 | Expected server account ID; never written to evidence          |
-| `QA_ACCOUNT_HMAC_KEY`           | Same random key of at least 32 characters across runtime jobs  |
+| `QA_EMAIL`                      | Existing authorized staging account login                      |
+| `QA_PASSWORD`                   | Existing authorized account password                                |
+| `QA_ACCOUNT_ID`                 | Optional expected ID; otherwise derived from verified login          |
+| `QA_ACCOUNT_HMAC_KEY`           | Optional shared key; otherwise random 32-byte in-memory job key  |
 | `QA_SYNTHETIC_ACCOUNT=YES`      | Operator attests dedicated account with minimal synthetic data |
 | `QA_AUTHENTICATED_REQUIRED=YES` | Fail closed if full authenticated smoke cannot run             |
+
+Only the existing user-authorized account is accepted; its email is pinned by SHA-256 in the harness. No account is created and the staging access allowlist is unchanged.
+
+`authenticated-run.cjs` verifies the ordinary staging login and completed onboarding, derives the ID from its trusted response, checks any supplied expected ID, revokes only that extra preflight session, and passes the ID/key through process memory to the runtime. When no HMAC secret is supplied, it generates 32 cryptographically random bytes. The ephemeral keys are scoped to one job/process tree: aliases across separate jobs are intentionally not comparable. Use one prepared process tree or an existing shared protected HMAC secret for simultaneous sync. Never transfer generated keys through GitHub outputs, artifacts or env files.
 
 Do not paste credentials into chat, Git, command-line arguments, reports or screenshots. Load them through protected environment injection. The account must already have required consents, completed onboarding and staging entitlement/access. The harness does not grant consent, create users, modify subscription, bypass safety or create a new access identity. Read-only feature screens require minimal prepared synthetic data. Coach sync creates only a neutral synthetic conversation/message and may consume the test account's ordinary Coach allowance; it does not delete/revoke all sessions afterwards.
 
@@ -36,8 +40,8 @@ Web/Android verify the account ID from the actual successful UI login response, 
 ```bash
 npm ci --prefix frontend
 (cd frontend && npx playwright install --with-deps chromium webkit)
-node qa/platform/runtime.cjs web chromium
-node qa/platform/runtime.cjs web webkit
+node qa/platform/authenticated-run.cjs web chromium
+node qa/platform/authenticated-run.cjs web webkit
 ```
 
 Both launch real browser engines at 390×844 and Europe/Istanbul. WebKit is a browser rendering check, not a native iOS test. `QA_TIMEZONE=UTC` selects an independent browser context for UTC. `QA_CHROMIUM_EXECUTABLE` supports an installed official Chromium executable. `QA_PROXY_URL` is an optional existing operator network proxy; it does not bypass staging auth or TLS. Local proxy CA trust must be installed by the environment; certificate errors stay fatal.
@@ -60,7 +64,7 @@ gradle --no-daemon -p android :app:testDebugUnitTest :app:assembleDebug \
   -PDIEWISH_WEB_BASE_URL=https://staging.diewish.com
 adb devices
 adb install -r android/app/build/outputs/apk/debug/app-debug.apk
-node qa/platform/runtime.cjs android
+node qa/platform/authenticated-run.cjs android
 ```
 
 One authenticated ADB device must be present, or set `QA_ANDROID_SERIAL` to the observed serial. Debug WebView inspection already exists in MainActivity; no product-side QA hook was added. Playwright attaches to the **installed native app's WebView**, while screenshots come from the whole actual device. A relaunch force-stops only com.diewish.app and reopens it, retaining the existing WebView data.
@@ -76,7 +80,7 @@ Architecture decision and missing native capabilities: `crossplatform-ios-adr.md
 On a Mac with installed Xcode and a compatible iOS simulator:
 
 ```bash
-bash qa/platform/ios-run.sh
+node qa/platform/authenticated-run.cjs ios
 ```
 
 The script selects a real installed iPhone/device/runtime compatible with the **active Xcode simulator SDK**, creates an isolated device, boots, builds with local ad-hoc signing for ARM64 Simulator, verifies install/launch, runs XCTest, exports only named approved PNGs and safe JSON, then removes its temporary simulator and private logs. Ad-hoc signing uses no Apple account, developer subscription, provisioning profile or production certificate. Native project: `ios/DiewishQA.xcodeproj`, shared scheme DiewishQA, simulator-only com.diewish.qa.
@@ -91,12 +95,12 @@ XCTest secrets are injected into a mode-0600 **temporary xctestrun**; XCTest res
 
 | Direction     | Automation                                     |
 | ------------- | ---------------------------------------------- |
-| Android → Web | `node qa/platform/sync-auto.cjs android web`   |
-| Web → Android | `node qa/platform/sync-auto.cjs web android`   |
-| Android → iOS | `node qa/platform/sync-manual.cjs android ios` |
-| Web → iOS     | `node qa/platform/sync-manual.cjs web ios`     |
-| iOS → Android | `node qa/platform/sync-manual.cjs ios android` |
-| iOS → Web     | `node qa/platform/sync-manual.cjs ios web`     |
+| Android → Web | `node qa/platform/authenticated-run.cjs sync android web`   |
+| Web → Android | `node qa/platform/authenticated-run.cjs sync web android`   |
+| Android → iOS | `node qa/platform/authenticated-run.cjs sync-manual android ios` |
+| Web → iOS     | `node qa/platform/authenticated-run.cjs sync-manual web ios`     |
+| iOS → Android | `node qa/platform/authenticated-run.cjs sync-manual ios android` |
+| iOS → Web     | `node qa/platform/authenticated-run.cjs sync-manual ios web`     |
 
 Run on a machine that can actually reach all selected runtimes at the same time. Separate GitHub Linux/macOS jobs are **smoke jobs**, not evidence of simultaneous synchronization. For all-platform sync, a Mac + Android emulator/ADB device + browser is the simplest single-machine topology. iOS-involving tests are intentionally semi-automatic, not advertised as fully automated.
 
@@ -130,7 +134,7 @@ Use the observed serial, not an assumed 5554. Timezone/root controls require a r
 
 ## CI and evidence safety
 
-Workflow: `.github/workflows/crossplatform-qa-infra.yml`. Push triggers are restricted to the A1 branch and relevant infra paths; expensive jobs are scoped to changed platform/shared files. Manual dispatch can select one platform or all. Authenticated runs require the existing staging environment and its configured secrets. There is no PR/fork secret flow, pull_request_target trigger, write permission or deploy action. Obsolete runs of this workflow on this branch may be canceled to avoid cost; other workers' workflows are unaffected.
+Workflow: `.github/workflows/crossplatform-qa-infra.yml`. The reusable entry point `.github/workflows/crossplatform-qa-authenticated.yml` explicitly passes `authenticated=true` and `platform=all`, still using the existing protected `staging` environment. Its branch/path-restricted push trigger starts the authorized run when dispatch is unavailable; there is no alternative credential transport. Push triggers are restricted to the A1 branch and relevant infra paths; expensive jobs are scoped to changed platform/shared files. Manual dispatch can select one platform or all. Authenticated runs require the existing staging environment and its configured secrets. There is no PR/fork secret flow, pull_request_target trigger, write permission or deploy action. Obsolete runs of this workflow on this branch may be canceled to avoid cost; other workers' workflows are unaffected.
 
 Artifacts expire after 3 days. Upload runs only when the export safety step succeeds. The safety step rejects symlinks, unknown file types, malformed PNGs, unexpected JSON fields, raw email, bearer/JWT strings and invalid runtime classifications. `.qa-artifacts` and `.qa-private` are ignored in Git. Only the approved test account is permitted; health fixtures must remain synthetic and minimal. Raw log files, APKs, xcresult, xctestrun, cookie/session storage and traces are not artifacts of this workflow.
 
