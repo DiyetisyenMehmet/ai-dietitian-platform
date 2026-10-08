@@ -7,6 +7,8 @@ on:
       [
         ".github/workflows/crossplatform-qa-regression.yml",
         "qa/regression.cjs",
+        "frontend/**",
+        "backend/**",
       ]
   workflow_dispatch:
 

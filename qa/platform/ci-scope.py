@@ -14,7 +14,7 @@ else:
 common = any(p in {".github/workflows/crossplatform-qa-infra.yml", "qa/platform/contract.cjs", "qa/platform/verify-artifacts.cjs", "qa/platform/account-preflight.cjs"} for p in files)
 web = common or any(p.startswith("frontend/") or p in {"qa/platform/runtime.cjs", "qa/platform/scenarios.json"} for p in files)
 android = common or any(p.startswith("android/") or p in {"qa/platform/runtime.cjs", "qa/platform/scenarios.json"} for p in files)
-ios = common or any(p.startswith("ios/") or p.startswith("qa/platform/ios-") or p == "qa/platform/ios-private.py" for p in files)
+ios = common or any(p.startswith("ios/") or p.startswith("frontend/") or p.startswith("qa/platform/ios-") or p == "qa/platform/ios-private.py" for p in files)
 with open(os.environ["GITHUB_OUTPUT"], "a") as output:
     for key, value in {"web": web, "android": android, "ios": ios}.items():
         print(f"{key}={str(value).lower()}", file=output)

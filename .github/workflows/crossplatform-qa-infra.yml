@@ -3,7 +3,7 @@ name: Cross-platform QA Infrastructure
 on:
   push:
     branches: [feature/workmode4-crossplatform-qa-infra-a1]
-    paths: ["qa/platform/**", "ios/**", ".github/workflows/crossplatform-qa-infra.yml"]
+    paths: ["qa/platform/**", "ios/**", "frontend/**", "android/**", ".github/workflows/crossplatform-qa-infra.yml"]
   workflow_dispatch:
     inputs:
       authenticated:

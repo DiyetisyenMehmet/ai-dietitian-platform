@@ -1,0 +1,166 @@
+name: Notification preferences platform checks
+
+on:
+  push:
+    branches:
+      - feature/workmode-notification-preferences-a1
+      - feature/staging-preview
+    paths:
+      - ".github/staging-deploy-trigger"
+      - "android/**"
+      - ".github/workflows/notification-alerts-native-ci.yml"
+      - "backend/src/modules/notifications/**"
+      - "backend/src/integration/notification-*.integration.test.ts"
+      - "backend/scripts/prepare-notification-test-db.mjs"
+      - "backend/prisma/migrations/*notification*/**"
+      - "backend/prisma/migrations/*water_reminder*/**"
+      - "frontend/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: notification-alerts-native-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+        with:
+          cmdline-tools-version: "13114758"
+          # The obsolete "tools" package is no longer in Google's repository.
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - name: Install the existing Android SDK target
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.6.0"
+      - name: Test mappings and build the staging debug application
+        run: gradle --no-daemon -p android :app:testDebugUnitTest :app:assembleDebug -PDIEWISH_WEB_BASE_URL=https://staging.diewish.com
+      - name: Retain native test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: notification-alerts-native-test-results
+          path: android/app/build/test-results/testDebugUnitTest/
+          if-no-files-found: ignore
+
+  backend-durability:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: notification_test
+          POSTGRES_PASSWORD: isolated-ci-only
+          POSTGRES_DB: notification_phase5_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U notification_test -d notification_phase5_test"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      NODE_ENV: test
+      LOG_LEVEL: silent
+      DATABASE_URL: postgresql://notification_test:isolated-ci-only@127.0.0.1:5432/notification_phase5_test
+      JWT_ACCESS_SECRET: notification-ci-access-test-secret-at-least-32
+      JWT_REFRESH_SECRET: notification-ci-refresh-test-secret-at-least-32
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm audit --omit=dev
+      - run: npx prisma generate
+      - name: Verify additive migrations on real isolated PostgreSQL
+        run: node scripts/prepare-notification-test-db.mjs
+      - run: npm run type-check
+      - name: Lint migration validation and notification modules
+        run: npx eslint scripts/prepare-notification-test-db.mjs src/modules/notifications src/integration/notification-*.integration.test.ts
+      - run: npm test
+      - name: Verify account persistence, isolation and existing delivery behavior
+        run: >-
+          node --import tsx --test --test-concurrency=1
+          src/integration/notification-preferences.integration.test.ts
+          src/integration/notification-durability.integration.test.ts
+          src/integration/auth-security.integration.test.ts
+          src/integration/identity-lifecycle.integration.test.ts
+          src/integration/dashboard-card-preferences.integration.test.ts
+          src/integration/ai-chat.integration.test.ts
+
+  frontend-quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      NEXT_PUBLIC_API_BASE_URL: http://127.0.0.1:4000/api
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm audit --omit=dev
+      - run: npm run type-check
+      - name: Install the real Chromium test engine
+        run: |
+          sudo find /etc/apt/sources.list.d -maxdepth 1 -type f -iname '*google*chrome*' -delete
+          npx playwright install --with-deps chromium
+      - name: Run frontend regression contracts
+        run: node --test tests/*.test.cjs
+      - name: Lint notification and account lifecycle changes
+        run: >-
+          npx eslint src/infrastructure/notifications
+          src/presentation/components/profile/notification*
+          src/presentation/components/profile/water-reminders-view.tsx
+          src/presentation/components/profile/profile-view.tsx
+          src/presentation/components/meals/nutrition-plan-reminders.tsx
+          src/presentation/providers/push-device-sync.tsx
+          src/application/auth/auth-store.ts
+      - run: npm run build
+      - name: Run notification and Dashboard browser regressions
+        env:
+          E2E_WEB_BASE_URL: http://127.0.0.1:3000
+        run: |
+          npm start -- -H 127.0.0.1 -p 3000 > /tmp/notification-frontend.log 2>&1 &
+          frontend_pid=$!
+          trap 'kill "$frontend_pid" || true' EXIT
+          for attempt in {1..45}; do
+            if curl --fail --silent http://127.0.0.1:3000/register > /dev/null; then
+              break
+            fi
+            if [[ "$attempt" == "45" ]]; then
+              cat /tmp/notification-frontend.log
+              exit 1
+            fi
+            sleep 1
+          done
+          npx playwright test --config=playwright.notification.config.ts
+      - name: Retain browser regression evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: notification-browser-test-results
+          path: frontend/test-results/
+          if-no-files-found: ignore

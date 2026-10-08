@@ -6,11 +6,13 @@ import { toast } from "sonner";
 
 import { useAuth } from "@/application/auth/auth-store";
 import {
-  buildWellnessReminderSchedule,
+  buildAndroidWellnessReminderSchedule,
   notificationRegistrationKey,
   resolvePendingNotificationTarget,
 } from "@/infrastructure/notifications/notification-lifecycle";
+import { syncMealReminderPreference } from "@/infrastructure/notifications/native-meals";
 import { notificationClient } from "@/infrastructure/notifications/notification-client";
+import { syncNotificationAlertPreferences } from "@/infrastructure/notifications/notification-alert-adapter";
 import {
   ensureWebPushToken,
   isWebPushSupported,
@@ -29,30 +31,29 @@ interface NativePushBridge {
   exactAlarmStatus?(): string;
   replaceWellnessSchedule?(scheduleJson: string): number;
   cancelWellness?(): void;
+  permissionStatus?(): string;
 }
 
 function bridge(): NativePushBridge | undefined {
   if (typeof window === "undefined") return undefined;
   try {
-    const value = (
-      window as typeof window & { DiewishReminders?: Partial<NativePushBridge> }
-    ).DiewishReminders;
+    const value = (window as typeof window & { DiewishReminders?: Partial<NativePushBridge> })
+      .DiewishReminders;
     if (
       !value ||
       typeof value.isAvailable !== "function" ||
       typeof value.pushToken !== "function" ||
       typeof value.ensurePushToken !== "function" ||
       typeof value.appVersion !== "function"
-    ) return undefined;
+    )
+      return undefined;
     return value as NativePushBridge;
   } catch {
     return undefined;
   }
 }
 
-function isNativePushAvailable(
-  native: NativePushBridge | undefined,
-): native is NativePushBridge {
+function isNativePushAvailable(native: NativePushBridge | undefined): native is NativePushBridge {
   if (!native) return false;
   try {
     return native.isAvailable();
@@ -124,7 +125,8 @@ export function PushDeviceSync() {
         wellnessSyncing ||
         typeof native.replaceWellnessSchedule !== "function" ||
         typeof native.cancelWellness !== "function"
-      ) return;
+      )
+        return;
       wellnessSyncing = true;
       try {
         let { preferences } = await notificationClient.getPreferences();
@@ -133,12 +135,15 @@ export function PushDeviceSync() {
           ({ preferences } = await notificationClient.updatePreferences({ timezoneOffsetMinutes }));
         }
 
+        // Apply a remote opt-out only to the existing nutrition queue, even
+        // when the wellness signature itself has not changed.
+        if (cancelled) return;
+        syncNotificationAlertPreferences(preferences.categoryAlerts);
+        if (!preferences.mealReminders) syncMealReminderPreference(preferences);
         let exactAlarmStatus = "legacy";
         try {
           exactAlarmStatus =
-            typeof native.exactAlarmStatus === "function"
-              ? native.exactAlarmStatus()
-              : "legacy";
+            typeof native.exactAlarmStatus === "function" ? native.exactAlarmStatus() : "legacy";
         } catch {
           exactAlarmStatus = "legacy";
         }
@@ -146,8 +151,13 @@ export function PushDeviceSync() {
           user.id,
           timezoneOffsetMinutes,
           exactAlarmStatus,
+          native.permissionStatus?.() ?? "unavailable",
           preferences.waterReminders,
           preferences.waterReminderTime,
+          preferences.waterReminderSchedule,
+          // A rolling water plan is renewed on the next active day, even when
+          // the user's settings have not changed.
+          preferences.waterReminderSchedule ? new Date().toDateString() : null,
           preferences.activityReminders,
           preferences.activityReminderTime,
           preferences.sleepReminders,
@@ -155,9 +165,10 @@ export function PushDeviceSync() {
         ]);
         if (signature === lastWellnessSync) return;
 
-        const schedule = buildWellnessReminderSchedule(preferences);
+        const schedule = buildAndroidWellnessReminderSchedule(preferences);
         if (schedule.length === 0) native.cancelWellness?.();
-        else native.replaceWellnessSchedule?.(JSON.stringify(schedule));
+        else if (native.replaceWellnessSchedule?.(JSON.stringify(schedule)) !== schedule.length)
+          return;
         lastWellnessSync = signature;
       } catch {
         // A network failure leaves the last valid native schedule untouched.
@@ -178,12 +189,14 @@ export function PushDeviceSync() {
     void syncToken();
     void syncWellness();
     window.addEventListener("focus", syncOnResume);
+    window.addEventListener("diewish:notification-state", syncOnResume);
     document.addEventListener("visibilitychange", syncOnVisibility);
-    const refreshTimer = window.setInterval(() => void syncToken(), 60_000);
+    const refreshTimer = window.setInterval(syncOnResume, 60_000);
 
     return () => {
       cancelled = true;
       window.removeEventListener("focus", syncOnResume);
+      window.removeEventListener("diewish:notification-state", syncOnResume);
       document.removeEventListener("visibilitychange", syncOnVisibility);
       window.clearInterval(refreshTimer);
       if (timer !== undefined) window.clearTimeout(timer);
@@ -196,7 +209,11 @@ export function PushDeviceSync() {
       return;
     }
     const native = bridge();
-    if (isNativePushAvailable(native) || !isWebPushSupported() || webPushPermissionStatus() !== "granted") {
+    if (
+      isNativePushAvailable(native) ||
+      !isWebPushSupported() ||
+      webPushPermissionStatus() !== "granted"
+    ) {
       return;
     }
 
@@ -269,7 +286,8 @@ export function PushDeviceSync() {
       !isNativePushAvailable(native) ||
       typeof native.pendingNotificationPath !== "function" ||
       typeof native.clearPendingNotificationPath !== "function"
-    ) return;
+    )
+      return;
 
     const consumePendingTarget = () => {
       try {

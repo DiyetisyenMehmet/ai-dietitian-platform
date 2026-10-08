@@ -55,7 +55,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          required=("Hardening CI" "Staging Config CI")
+          required=("Hardening CI" "Staging Config CI" "Notification preferences platform checks")
 
           for attempt in {1..180}; do
             runs="$(curl --fail --silent --show-error \
@@ -536,7 +536,7 @@ jobs:
           npm ci
           sudo find /etc/apt/sources.list.d -maxdepth 1 -type f -iname '*google*chrome*' -delete
           npx playwright install --with-deps chromium
-          npx playwright test e2e/dashboard-edit-sanity.spec.ts e2e/journey-compact.spec.ts --workers=1 --reporter=line
+          npx playwright test e2e/dashboard-edit-sanity.spec.ts e2e/journey-compact.spec.ts e2e/staging-notification-sanity.spec.ts --workers=1 --reporter=line
 
       - name: Upload Dashboard staging sanity evidence
         if: always()

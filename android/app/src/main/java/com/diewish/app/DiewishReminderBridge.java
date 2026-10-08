@@ -20,7 +20,7 @@ import java.util.function.BooleanSupplier;
 
 /** Narrow trusted-origin bridge for scheduling local reminders and syncing push registration. */
 public final class DiewishReminderBridge {
-    private static final int NOTIFICATION_PERMISSION_REQUEST = 4207;
+    static final int NOTIFICATION_PERMISSION_REQUEST = 4207;
 
     private final Activity activity;
     private final BooleanSupplier trustedPage;
@@ -58,6 +58,7 @@ public final class DiewishReminderBridge {
     public void deletePushToken() {
         if (!trustedPage.getAsBoolean()) return;
         DiewishPushTokenStore.clear(activity.getApplicationContext());
+        NotificationAlertStore.clear(activity.getApplicationContext());
         if (FirebaseApp.getApps(activity).isEmpty()) return;
         FirebaseMessaging.getInstance().deleteToken();
     }
@@ -106,7 +107,12 @@ public final class DiewishReminderBridge {
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
                 && activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
                     != PackageManager.PERMISSION_GRANTED
-        ) return "denied";
+        ) {
+            boolean requested = activity.getSharedPreferences("diewish_notification_device", Activity.MODE_PRIVATE)
+                .getBoolean("permission_requested", false);
+            return requested || activity.shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS)
+                ? "denied" : "default";
+        }
 
         NotificationManager manager =
             (NotificationManager) activity.getSystemService(Activity.NOTIFICATION_SERVICE);
@@ -146,10 +152,30 @@ public final class DiewishReminderBridge {
     @JavascriptInterface
     public void requestPermission() {
         if (!trustedPage.getAsBoolean() || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return;
+        if ("denied".equals(permissionStatus())) {
+            openNotificationSettings();
+            return;
+        }
+        activity.getSharedPreferences("diewish_notification_device", Activity.MODE_PRIVATE).edit()
+            .putBoolean("permission_requested", true).apply();
         activity.runOnUiThread(() -> activity.requestPermissions(
             new String[] { Manifest.permission.POST_NOTIFICATIONS },
             NOTIFICATION_PERMISSION_REQUEST
         ));
+    }
+
+    @JavascriptInterface
+    public void openNotificationSettings() {
+        if (!trustedPage.getAsBoolean()) return;
+        activity.runOnUiThread(() -> {
+            try {
+                activity.startActivity(new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                    .putExtra(Settings.EXTRA_APP_PACKAGE, activity.getPackageName()));
+            } catch (ActivityNotFoundException ignored) {
+                activity.startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.parse("package:" + activity.getPackageName())));
+            }
+        });
     }
 
     @JavascriptInterface
@@ -194,16 +220,33 @@ public final class DiewishReminderBridge {
     @JavascriptInterface
     public boolean showTestNotification() {
         if (!trustedPage.getAsBoolean()) return false;
-        return WellnessReminderReceiver.show(
-            activity.getApplicationContext(),
-            "test",
-            "wellness-test"
-        );
+        return NotificationAlertPresentation.preview(activity.getApplicationContext(), "water", "{}").startsWith("posted");
+    }
+
+    @JavascriptInterface
+    public String notificationAlertCapabilities() {
+        if (!trustedPage.getAsBoolean()) return "{}";
+        return "{\"version\":1,\"customSounds\":true,\"vibration\":" + NotificationAlertPresentation.hasVibration(activity) + ",\"testNotification\":" + "staging".equals(BuildConfig.APP_ENVIRONMENT) + "}";
+    }
+
+    @JavascriptInterface
+    public boolean setNotificationAlertPreferences(String json) {
+        return trustedPage.getAsBoolean() && NotificationAlertStore.replace(activity.getApplicationContext(), json);
+    }
+
+    @JavascriptInterface
+    public String previewNotification(String category, String json) {
+        return trustedPage.getAsBoolean() ? NotificationAlertPresentation.preview(activity.getApplicationContext(), category, json) : "unavailable";
+    }
+
+    @JavascriptInterface
+    public boolean previewNotificationSound(String preset) {
+        return trustedPage.getAsBoolean() && NotificationAlertPresentation.previewSound(activity.getApplicationContext(), preset);
     }
 
     @JavascriptInterface
     public boolean scheduleTestReminder(int delaySeconds) {
-        if (!trustedPage.getAsBoolean()) return false;
+        if (!trustedPage.getAsBoolean() || !"staging".equals(BuildConfig.APP_ENVIRONMENT) || !"granted".equals(permissionStatus())) return false;
         if (!"granted".equals(ReminderAlarmPolicy.status(activity.getApplicationContext()))) {
             return false;
         }

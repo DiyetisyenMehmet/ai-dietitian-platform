@@ -79,7 +79,7 @@ On a Mac with installed Xcode and a compatible iOS simulator:
 bash qa/platform/ios-run.sh
 ```
 
-The script selects a real installed iPhone/device/runtime compatible with the **active Xcode simulator SDK**, creates an isolated device, boots, builds for testing without signing, runs XCTest, exports only named approved PNGs and safe JSON, then removes its temporary simulator and private logs. No Apple account, developer subscription or signing identity is required. Native project: `ios/DiewishQA.xcodeproj`, shared scheme DiewishQA, simulator-only com.diewish.qa.
+The script selects a real installed iPhone/device/runtime compatible with the **active Xcode simulator SDK**, creates an isolated device, boots, builds with local ad-hoc signing for ARM64 Simulator, verifies install/launch, runs XCTest, exports only named approved PNGs and safe JSON, then removes its temporary simulator and private logs. Ad-hoc signing uses no Apple account, developer subscription, provisioning profile or production certificate. Native project: `ios/DiewishQA.xcodeproj`, shared scheme DiewishQA, simulator-only com.diewish.qa.
 
 For live multi-runtime manual sessions, open the project in Xcode, choose an installed iPhone simulator and run the same scheme. Keep it open together with Web/Android, log in through the standard existing staging login, and obtain its UDID from `xcrun simctl list devices booted`. Use the QA toolbar for Dashboard/Coach/preferences/profile/back/refresh. The toolbar is QA host UI and must not be mistaken for production iOS UX.
 

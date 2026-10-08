@@ -14,7 +14,13 @@ function load() {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
   }).outputText;
   const exports = {};
-  vm.runInNewContext(code, { exports, console, require });
+  vm.runInNewContext(code, { exports, console, require: (id) => {
+    if (!id.includes('water-reminder-plan')) return require(id);
+    const waterSource = fs.readFileSync(path.join(__dirname, '../src/domain/account/water-reminder-plan.ts'), 'utf8');
+    const waterExports = {};
+    vm.runInNewContext(ts.transpileModule(waterSource, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText, { exports: waterExports, require });
+    return waterExports;
+  } });
   return exports;
 }
 
@@ -154,4 +160,103 @@ test('dashboard bell opens the center and the center reuses existing preferences
   assert.doesNotMatch(dashboard, /href="\/profile\/notifications"/);
   assert.match(centerPage, /href="\/profile\/notifications"/);
   assert.match(centerPage, /Bildirim Merkezi/);
+});
+
+function loadWaterPlan() {
+  const source = fs.readFileSync(path.join(__dirname, '../src/domain/account/water-reminder-plan.ts'), 'utf8');
+  const exports = {};
+  vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText, { exports, require });
+  return exports;
+}
+const wellnessPreferences = () => ({ waterReminders: true, waterReminderTime: '10:00', activityReminders: true, activityReminderTime: '18:00', sleepReminders: true, sleepReminderTime: '22:30' });
+const eightTimePlan = (mode = 'same') => ({ version: 1, mode, dailyTimes: ['08:00','09:00','11:00','14:00','16:00','18:00','20:00','21:00'], days: Array.from({ length: 7 }, (_, day) => ({ day, enabled: true, times: ['08:00','09:00','11:00','14:00','16:00','18:00','20:00','21:00'] })) });
+
+test('legacy wellness preferences keep exactly 30 days for all three types', () => {
+  const { buildAndroidWellnessReminderSchedule } = load();
+  const rows = buildAndroidWellnessReminderSchedule(wellnessPreferences(), new Date(2026,9,12,0,0));
+  assert.equal(rows.length, 90);
+  for (const type of ['water','activity','sleep']) assert.equal(rows.filter((row) => row.type === type).length, 30);
+});
+
+test('maximum water plan never exceeds Android cap and preserves other categories', () => {
+  const { buildAndroidWellnessReminderSchedule } = load();
+  const prefs = { ...wellnessPreferences(), waterReminderSchedule: eightTimePlan() };
+  const now = new Date(2026,9,12,0,0);
+  const rows = buildAndroidWellnessReminderSchedule(prefs, now);
+  assert.equal(rows.length, 116);
+  assert.ok(rows.length < 128);
+  assert.equal(new Set(rows.map((row) => row.id)).size, rows.length);
+  assert.equal(rows.filter((row) => row.type === 'water').length, 56);
+  const before = buildAndroidWellnessReminderSchedule(wellnessPreferences(), now).filter((row) => row.type !== 'water').map((row) => row.id).sort();
+  const after = rows.filter((row) => row.type !== 'water').map((row) => row.id).sort();
+  assert.equal(JSON.stringify(after), JSON.stringify(before));
+  assert.ok(rows.every((row, index) => index === 0 || row.at >= rows[index-1].at));
+});
+
+test('custom weekday schedule respects closed days, empty hours and global off', () => {
+  const { buildAndroidWellnessReminderSchedule } = load();
+  const plan = eightTimePlan('custom');
+  plan.days[0].enabled = false;
+  plan.days[6].times = [];
+  const prefs = { ...wellnessPreferences(), waterReminderSchedule: plan };
+  const rows = buildAndroidWellnessReminderSchedule(prefs, new Date(2026,9,12,0,0));
+  const water = rows.filter((row) => row.type === 'water');
+  assert.equal(water.length, 40);
+  assert.ok(water.every((row) => ![0,6].includes(new Date(row.at).getDay())));
+  assert.equal(buildAndroidWellnessReminderSchedule({ ...prefs, waterReminders: false }, new Date(2026,9,12,0,0)).filter((row) => row.type === 'water').length, 0);
+});
+
+test('empty and invalid multi-time plans do not resurrect legacy water time', () => {
+  const { buildAndroidWellnessReminderSchedule } = load();
+  const empty = { ...eightTimePlan(), dailyTimes: [] };
+  const invalid = { ...eightTimePlan(), dailyTimes: ['09:00','09:00'] };
+  for (const waterReminderSchedule of [empty,invalid]) {
+    const rows = buildAndroidWellnessReminderSchedule({ ...wellnessPreferences(), waterReminderSchedule }, new Date(2026,9,12,0,0));
+    assert.equal(rows.filter((row) => row.type === 'water').length, 0);
+    assert.equal(rows.length, 60);
+  }
+});
+
+test('water copy preserves unselected and closed days unless explicitly opened', () => {
+  const { copyWaterDay } = loadWaterPlan();
+  const original = eightTimePlan('custom');
+  original.days[1].times = ['12:15']; original.days[0].enabled = false;
+  const result = copyWaterDay(original, 1, [2,6,0]);
+  assert.equal(result.days[2].times[0], '12:15');
+  assert.equal(result.days[6].times[0], '12:15');
+  assert.equal(result.days[0].enabled, false);
+  assert.equal(result.days[0].times.length, 8);
+  assert.equal(result.days[3].times.length, 8);
+  assert.equal(original.days[2].times.length, 8);
+  const opened = copyWaterDay(original, 1, [0], true);
+  assert.equal(opened.days[0].enabled, true);
+  assert.equal(opened.days[0].times[0], '12:15');
+});
+
+test('water schedules retain local hours across daylight-saving transitions', () => {
+  const { buildAndroidWellnessReminderSchedule } = load();
+  const rows = buildAndroidWellnessReminderSchedule({ ...wellnessPreferences(), waterReminderSchedule: eightTimePlan() }, new Date(2026,9,31,0,0));
+  const water = rows.filter((row) => row.type === 'water');
+  assert.equal(water.length, 56);
+  assert.ok(water.every((row) => [8,9,11,14,16,18,20,21].includes(new Date(row.at).getHours())));
+  assert.ok(rows.every((row) => row.at > new Date(2026,9,31,0,0).getTime()));
+});
+
+test('afternoon initialization includes each next-week water slot exactly once, within 128',()=>{
+ const {buildAndroidWellnessReminderSchedule}=load();
+ const now=new Date(2026,9,12,15,0);
+ const rows=buildAndroidWellnessReminderSchedule({...wellnessPreferences(),waterReminderSchedule:eightTimePlan()},now);
+ const water=rows.filter(row=>row.type==='water');
+ assert.equal(water.length,56);assert.ok(water.every(row=>row.repeatDays===7));
+ assert.equal(new Set(water.map(row=>`${new Date(row.at).getDay()}:${new Date(row.at).getHours()}`)).size,56);
+ assert.ok(rows.length<=116);assert.ok(rows.filter(row=>row.type!=='water').every(row=>!('repeatDays' in row)));
+});
+
+test('weekly water recurrence metadata stays device-only and disabled water has no seeds',()=>{
+ const {buildAndroidWellnessReminderSchedule}=load();
+ const prefs={...wellnessPreferences(),waterReminderSchedule:eightTimePlan('custom')};
+ const before=JSON.stringify(prefs);
+ buildAndroidWellnessReminderSchedule(prefs,new Date(2026,9,12,20,45));
+ assert.equal(JSON.stringify(prefs),before);
+ assert.equal(buildAndroidWellnessReminderSchedule({...prefs,waterReminders:false}).filter(row=>row.type==='water').length,0);
 });

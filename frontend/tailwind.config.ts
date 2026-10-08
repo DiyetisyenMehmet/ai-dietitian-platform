@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import animate from "tailwindcss-animate";
 
 const config: Config = {
   darkMode: ["class"],
@@ -67,6 +68,14 @@ const config: Config = {
         sans: ["var(--font-sans)", "system-ui", "sans-serif"],
       },
       keyframes: {
+        "modal-sheet-in": {
+          from: { opacity: "0", transform: "translate(-50%, 1.5rem)" },
+          to: { opacity: "1", transform: "translate(-50%, 0)" },
+        },
+        "modal-sheet-out": {
+          from: { opacity: "1", transform: "translate(-50%, 0)" },
+          to: { opacity: "0", transform: "translate(-50%, 1.5rem)" },
+        },
         "modal-center-in": {
           from: { opacity: "0", transform: "translate(-50%, -50%) scale(0.96)" },
           to: { opacity: "1", transform: "translate(-50%, -50%) scale(1)" },
@@ -108,6 +117,8 @@ const config: Config = {
         },
       },
       animation: {
+        "modal-sheet-in": "modal-sheet-in 180ms cubic-bezier(0.16, 1, 0.3, 1)",
+        "modal-sheet-out": "modal-sheet-out 140ms ease-in",
         "modal-center-in": "modal-center-in 180ms cubic-bezier(0.16, 1, 0.3, 1)",
         "modal-center-out": "modal-center-out 140ms ease-in",
         "panel-left-in": "panel-left-in 220ms cubic-bezier(0.16, 1, 0.3, 1)",
@@ -120,7 +131,7 @@ const config: Config = {
       },
     },
   },
-  plugins: [require("tailwindcss-animate")],
+  plugins: [animate],
 };
 
 export default config;

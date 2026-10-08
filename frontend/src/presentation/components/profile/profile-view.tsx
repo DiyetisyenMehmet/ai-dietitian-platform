@@ -77,7 +77,9 @@ export function ProfileView() {
 
   const displayName = profile.fullName || user?.fullName || "Diewish";
   const initial = displayName.trim().charAt(0).toUpperCase() || "D";
-  const unlockedCount = achievements.filter((achievement) => achievement.unlockedAt !== null).length;
+  const unlockedCount = achievements.filter(
+    (achievement) => achievement.unlockedAt !== null,
+  ).length;
   const planName = planForTier(subscription.tier).name;
   const email = user?.email ?? "";
   const memberSince = user?.createdAt ? formatLongDate(new Date(user.createdAt)) : null;
@@ -104,9 +106,8 @@ export function ProfileView() {
 
   const onLogout = React.useCallback(async () => {
     setLoggingOut(true);
-    const refreshToken = authStore.getRefreshToken();
     try {
-      if (refreshToken) await authService.logout(refreshToken);
+      await authService.logout();
     } catch {
       // Best-effort server revoke; local sign-out still proceeds.
     }
@@ -146,7 +147,9 @@ export function ProfileView() {
             <h2 className="truncate text-lg font-bold">{displayName}</h2>
             {email && <p className="truncate text-sm text-muted-foreground">{email}</p>}
             {memberSince && (
-              <p className="mt-0.5 text-xs text-muted-foreground">{memberSince} tarihinden beri üye</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {memberSince} tarihinden beri üye
+              </p>
             )}
           </div>
         </div>

@@ -1,0 +1,14 @@
+{
+  "diewish_drop": {
+    "sha256": "451357967de01c7ed21656b6d882ca4993a6d34271787a6b2306f4f6ee205578",
+    "sampleRate": 22050,
+    "frames": 11907,
+    "origin": "Original procedural synthesis; Diewish project asset"
+  },
+  "diewish_gentle": {
+    "sha256": "691e8cfc88811ae3168b3cf1677cc210241ba58f3907104d5b3c6b9da9337fb9",
+    "sampleRate": 22050,
+    "frames": 25138,
+    "origin": "Original procedural synthesis; Diewish project asset"
+  }
+}

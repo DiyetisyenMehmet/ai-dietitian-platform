@@ -32,7 +32,7 @@ ModalOverlay.displayName = DialogPrimitive.Overlay.displayName;
 const ModalContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
-    variant?: "default" | "centered" | "drawer";
+    variant?: "default" | "centered" | "drawer" | "sheet";
     closeDisabled?: boolean;
   }
 >(({ className, children, variant = "default", closeDisabled = false, ...props }, ref) => (
@@ -41,7 +41,7 @@ const ModalContent = React.forwardRef<
       className={
         variant === "drawer"
           ? "data-[state=closed]:[animation-duration:180ms] data-[state=open]:[animation-duration:220ms] motion-reduce:![animation-delay:0ms] motion-reduce:![animation-duration:1ms]"
-          : variant === "centered"
+          : variant === "centered" || variant === "sheet"
             ? "data-[state=closed]:[animation-duration:140ms] data-[state=open]:[animation-duration:180ms] motion-reduce:![animation-delay:0ms] motion-reduce:![animation-duration:1ms]"
             : undefined
       }
@@ -53,7 +53,9 @@ const ModalContent = React.forwardRef<
         "fixed z-50 border border-border bg-card shadow-card-hover",
         variant === "drawer"
           ? "inset-y-0 left-0 flex h-dvh w-[min(22rem,86vw)] flex-col overflow-hidden rounded-r-3xl data-[state=closed]:animate-panel-left-out data-[state=open]:animate-panel-left-in motion-reduce:![animation-delay:0ms] motion-reduce:![animation-duration:1ms]"
-          : "left-1/2 top-1/2 grid w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 gap-4 rounded-2xl p-6",
+          : variant === "sheet"
+            ? "bottom-0 left-1/2 grid max-h-[85dvh] w-full max-w-md -translate-x-1/2 gap-4 overflow-y-auto rounded-t-3xl p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] data-[state=closed]:animate-modal-sheet-out data-[state=open]:animate-modal-sheet-in motion-reduce:![animation-delay:0ms] motion-reduce:![animation-duration:1ms]"
+            : "left-1/2 top-1/2 grid w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 gap-4 rounded-2xl p-6",
         variant === "centered" &&
           "max-h-[calc(100dvh-2rem)] overflow-y-auto data-[state=closed]:animate-modal-center-out data-[state=open]:animate-modal-center-in motion-reduce:![animation-delay:0ms] motion-reduce:![animation-duration:1ms]",
         variant === "default" &&
