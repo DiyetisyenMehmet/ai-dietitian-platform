@@ -113,12 +113,22 @@ export function NutritionPlanReminders({ entries, completed }: NutritionPlanRemi
   ]);
 
   React.useEffect(() => {
-    if (!enabled || permission === "granted" || !available) return;
+    if (!available) return;
     const refresh = () => syncPermission();
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
     window.addEventListener("focus", refresh);
-    const timers = [800, 1800, 3500].map((delay) => window.setTimeout(refresh, delay));
+    window.addEventListener("diewish:notification-state", refresh);
+    document.addEventListener("visibilitychange", onVisibility);
+    const timers =
+      enabled && permission !== "granted"
+        ? [800, 1800, 3500].map((delay) => window.setTimeout(refresh, delay))
+        : [];
     return () => {
       window.removeEventListener("focus", refresh);
+      window.removeEventListener("diewish:notification-state", refresh);
+      document.removeEventListener("visibilitychange", onVisibility);
       timers.forEach((timer) => window.clearTimeout(timer));
     };
   }, [available, enabled, permission, syncPermission]);

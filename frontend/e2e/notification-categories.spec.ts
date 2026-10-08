@@ -551,3 +551,36 @@ test("the existing meal-plan toggle keeps alarms on failed saves and never clear
   expect((await log(page)).allCancels).toBe(0);
   expect(s.otherWrites).toEqual([]);
 });
+
+test("meal-plan reminders observe permission revocation and restoration without account writes", async ({
+  page,
+}) => {
+  const s = await session(page, "meals", { mealEnabled: true });
+  await ready(page);
+  await page.getByRole("link", { name: "Öğün planını aç", exact: true }).click();
+  const reminders = page.locator("[data-nutrition-reminders]");
+  await expect(reminders).toContainText("bu cihazda yerel bildirimler açık");
+  await expect.poll(async () => (await log(page)).meals.length).toBeGreaterThan(0);
+  const before = await log(page);
+  await page.evaluate(() => {
+    window.DiewishReminders!.permissionStatus = () => "denied";
+    window.dispatchEvent(new Event("diewish:notification-state"));
+  });
+  await expect(reminders).toContainText("bildirim izni bekleniyor");
+  await expect
+    .poll(async () => (await log(page)).nutritionCancels)
+    .toBeGreaterThan(before.nutritionCancels);
+  const denied = await log(page);
+  await page.evaluate(() => {
+    window.DiewishReminders!.permissionStatus = () => "granted";
+    window.dispatchEvent(new Event("focus"));
+  });
+  await expect(reminders).toContainText("bu cihazda yerel bildirimler açık");
+  await expect
+    .poll(async () => (await log(page)).meals.length)
+    .toBeGreaterThan(denied.meals.length);
+  expect((await log(page)).allCancels).toBe(0);
+  expect((await log(page)).wellness).toEqual(before.wellness);
+  expect(s.writes).toEqual([]);
+  expect(s.otherWrites).toEqual([]);
+});

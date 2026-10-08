@@ -1,4 +1,4 @@
-/* Ephemeral CI database only: execute the real migrations against legacy rows. */
+/* Ephemeral CI databases only: validate full clean history and legacy upgrades. */
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -9,6 +9,16 @@ const url = new URL(process.env.DATABASE_URL || "");
 if (!["localhost", "127.0.0.1"].includes(url.hostname) || url.pathname !== "/notification_phase5_test") {
   throw new Error("Refusing to initialize anything except the local ephemeral notification_phase5_test database.");
 }
+// Also prove the complete migration history on an empty database. The URL
+// guard above runs before either database can be created or changed.
+const cleanUrl = new URL(url);
+cleanUrl.pathname = "/notification_phase6_clean_test";
+function run(command, args, env = process.env) {
+  const result = spawnSync(command, args, { stdio: "inherit", env });
+  if (result.status !== 0) throw new Error(`Isolated validation failed: ${command}`);
+}
+run("psql", [url.href, "-v", "ON_ERROR_STOP=1", "-c", 'CREATE DATABASE notification_phase6_clean_test']);
+run("npx", ["prisma", "migrate", "deploy"], { ...process.env, DATABASE_URL: cleanUrl.href });
 const base = fs.readFileSync(process.argv[2], "utf8")
   .replace(/\s*"waterReminderSchedule" JSONB,/, "")
   .replace(/\s*"categoryAlerts" JSONB,/, "");
@@ -28,6 +38,25 @@ const result = spawnSync("psql", [process.env.DATABASE_URL, "-v", "ON_ERROR_STOP
 fs.rmSync(temporary, { recursive: true });
 if (result.status !== 0) throw new Error("Isolated migration setup failed.");
 (async () => {
+  const clean = new PrismaClient({ datasources: { db: { url: cleanUrl.href } } });
+  try {
+    const columns = await clean.$queryRaw`SELECT column_name, is_nullable, data_type FROM information_schema.columns WHERE table_name = 'notification_preferences' AND column_name IN ('waterReminderSchedule', 'categoryAlerts') ORDER BY column_name`;
+    assert.equal(columns.length, 2);
+    for (const column of columns) {
+      assert.equal(column.is_nullable, "YES");
+      assert.equal(column.data_type, "jsonb");
+    }
+    const count = await clean.$queryRaw`SELECT COUNT(*) AS count FROM "_prisma_migrations" WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL`;
+    const expected = fs.readdirSync(path.join(__dirname, "../prisma/migrations"))
+      .filter(name => fs.existsSync(path.join(__dirname, "../prisma/migrations", name, "migration.sql"))).length;
+    assert.equal(Number(count[0].count), expected);
+    const user = await clean.user.create({ data: { email: "clean-phase6@example.invalid", passwordHash: "isolated-test-only" } });
+    const preference = await clean.notificationPreference.create({ data: { userId: user.id } });
+    assert.equal(preference.waterReminderSchedule, null);
+    assert.equal(preference.categoryAlerts, null);
+    await clean.user.delete({ where: { id: user.id } });
+    console.log(`Real PostgreSQL: all ${expected} migrations apply on a clean database; nullable account preferences work.`);
+  } finally { await clean.$disconnect(); }
   const prisma = new PrismaClient();
   try {
     const old = await prisma.notificationPreference.findUniqueOrThrow({ where: { id: "legacy-pref" } });

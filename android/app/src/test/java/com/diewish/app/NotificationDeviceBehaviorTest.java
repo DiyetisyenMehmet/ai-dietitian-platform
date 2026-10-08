@@ -165,4 +165,27 @@ public final class NotificationDeviceBehaviorTest {
         WellnessReminderScheduler.cancelAll(app);
         assertEquals(0, shadowOf(alarms).getScheduledAlarms().size());
     }
+    @Test public void replacingNutritionPlanAndEnforcing240NeverRemovesWellnessAlarms() throws Exception {
+        long due = ShadowSystemClock.currentTimeMillis() + 60000;
+        WellnessReminderScheduler.replace(app, new JSONArray()
+            .put(row("water", "water", due, true))
+            .put(row("activity", "activity", due, false))
+            .put(row("sleep", "sleep", due, false)).toString());
+        String wellness = stored().toString();
+        JSONArray meals = new JSONArray();
+        for (int i = 0; i < 245; i++) meals.put(new JSONObject().put("id", "old-plan:" + i).put("at", due + i * 60000L));
+        assertEquals(240, NutritionReminderScheduler.replace(app, meals.toString()));
+        assertEquals(243, shadowOf(alarms).getScheduledAlarms().size());
+        assertEquals(wellness, stored().toString());
+        assertEquals(1, NutritionReminderScheduler.replace(app,
+            new JSONArray().put(new JSONObject().put("id", "new-plan:0").put("at", due)).toString()));
+        assertEquals(4, shadowOf(alarms).getScheduledAlarms().size());
+        String nutrition = app.getSharedPreferences("diewish_nutrition_reminders", 0).getString("schedule", "");
+        assertFalse(nutrition.contains("old-plan:"));
+        assertTrue(nutrition.contains("new-plan:0"));
+        assertEquals(wellness, stored().toString());
+        NutritionReminderScheduler.cancelAll(app);
+        assertEquals(3, shadowOf(alarms).getScheduledAlarms().size());
+        assertEquals(wellness, stored().toString());
+    }
 }

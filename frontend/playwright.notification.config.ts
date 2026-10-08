@@ -2,7 +2,7 @@ import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "./e2e",
   testMatch:
-    /(?:notification-(?:preferences|categories|alerts|durability)|water-reminder-preferences)\.spec\.ts/,
+    /(?:notification-(?:preferences|categories|alerts|durability)|water-reminder-preferences|dashboard-and-coach-modal-polish|auth-entry-points)\.spec\.(?:ts|js)/,
   workers: 1,
   timeout: 60000,
   reporter: "list",
