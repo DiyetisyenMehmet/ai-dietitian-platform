@@ -3,7 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const c = require('./contract.cjs');
-const keys = new Set(['schemaVersion', 'platform', 'runtime', 'scenario', 'status', 'code', 'accountAlias', 'observed', 'productVerdict', 'timestamp', 'harnessGitSha', 'deployedGitSha', 'appVersion', 'device', 'viewport', 'screenshot', 'log', 'stagingOrigin']);
+const keys = new Set(['schemaVersion', 'platform', 'runtime', 'scenario', 'status', 'code', 'accountAlias', 'observed', 'productVerdict', 'timestamp', 'harnessGitSha', 'deployedGitSha', 'appVersion', 'device', 'viewport', 'screenshot', 'log', 'stagingOrigin', 'conversationId', 'direction']);
 const textSecrets = ['QA_EMAIL', 'QA_PASSWORD', 'QA_ACCOUNT_ID', 'QA_ACCOUNT_HMAC_KEY'].map(k => process.env[k]).filter(Boolean);
 function verify(dir) {
   if (!fs.existsSync(dir)) throw new Error('EVIDENCE_DIRECTORY_MISSING');

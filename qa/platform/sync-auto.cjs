@@ -1,0 +1,60 @@
+'use strict';
+const c = require('./contract.cjs');
+const { openRuntime, login, logout, openList, capture } = require('./runtime.cjs');
+const { syncPlan, CHECKPOINTS } = require('./sync-plan.cjs');
+const { randomBytes } = require('node:crypto');
+async function newCoachConversation(runtime, marker) {
+  const page = runtime.page;
+  await page.goto(c.ORIGIN + '/ai');
+  await openList(page);
+  await page.getByRole('button', { name: 'Yeni Sohbet', exact: true }).click();
+  await page.getByLabel('Mesaj', { exact: true }).fill(marker + ' — Merhaba, yalnız kısa bir selamlama yanıtı ver.');
+  const pending = page.waitForResponse(r => new URL(r.url()).pathname === '/api/ai-chat/messages' && r.request().method() === 'POST', { timeout: 120000 });
+  await page.getByRole('button', { name: 'Gönder', exact: true }).click();
+  const response = await pending;
+  if (!response.ok()) throw new c.Blocked('COACH_MESSAGE_NOT_SUCCESSFUL');
+  const payload = await response.json();
+  const id = payload?.data?.conversationId;
+  if (!/^[a-zA-Z0-9_-]{1,120}$/.test(id || '') || !payload?.data?.message) throw new c.Blocked('SERVER_CONVERSATION_ID_REQUIRED');
+  return id;
+}
+async function main() {
+  const sourceName = process.argv[2] || 'android';
+  const targetName = process.argv[3] || 'web';
+  if (![sourceName, targetName].every(p => ['web', 'android'].includes(p)) || sourceName === targetName) throw new c.Blocked('USE_MANUAL_HARNESS_FOR_IOS');
+  c.credentials();
+  process.env.QA_RUN_ID ||= 'sync-' + randomBytes(8).toString('hex');
+  let source, target;
+  try {
+    source = await openRuntime(sourceName);
+    target = await openRuntime(targetName);
+    const sourceAlias = await login(source.page);
+    const targetAlias = await login(target.page);
+    if (sourceAlias !== targetAlias) throw new c.Blocked('CROSS_PLATFORM_ACCOUNT_MISMATCH');
+    const plan = syncPlan(sourceName, targetName, sourceAlias);
+    const e = c.createEvidence(target.platform, target.runtime, target.device);
+    await target.page.goto(c.ORIGIN + '/ai');
+    await openList(target.page);
+    // Target is open before the source mutation. Do not refresh it first.
+    const id = await newCoachConversation(source, plan.marker);
+    const sourceEvidence = c.createEvidence(source.platform, source.runtime, source.device);
+    sourceEvidence.record('sync-source-created', 'PASS', { alias: sourceAlias, conversationId: id, direction: sourceName + '-to-' + targetName, screenshot: await capture(source, sourceEvidence, 'sync-source-created') });
+    for (const checkpoint of CHECKPOINTS) {
+      if (checkpoint === 'already-open') await target.page.waitForTimeout(10000);
+      if (checkpoint === 'list-reopen') {
+        const close = target.page.getByRole('button', { name: /Kapat/ }).first();
+        if (await close.isVisible()) await close.click();
+        else await target.page.keyboard.press('Escape');
+        await openList(target.page);
+      }
+      if (checkpoint === 'refresh') { await target.refresh(target.page); await openList(target.page); }
+      if (checkpoint === 'relaunch') { target.page = await target.relaunch(); await openList(target.page); }
+      if (checkpoint === 'logout-login') { await logout(target.page); if (await login(target.page) !== sourceAlias) throw new c.Blocked('CROSS_PLATFORM_ACCOUNT_MISMATCH'); await target.page.goto(c.ORIGIN + '/ai'); await openList(target.page); }
+      // An absence is an observation, not a product verdict by this worker.
+      const observed = await target.page.locator('nav[aria-label="Sohbetler"]').getByText(plan.marker, { exact: false }).count() > 0;
+      e.record('sync-' + checkpoint, 'PASS', { alias: targetAlias, observed, conversationId: id, direction: sourceName + '-to-' + targetName, screenshot: await capture(target, e, 'sync-' + checkpoint) });
+    }
+  } finally { if (source) await source.close(); if (target) await target.close(); }
+}
+if (require.main === module) main().catch(error => { console.error(c.errorCode(error)); process.exitCode = 2; });
+module.exports = { newCoachConversation };

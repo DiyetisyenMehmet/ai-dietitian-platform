@@ -11,6 +11,7 @@ async function openRuntime(platform, engine = 'chromium') {
   if (platform === 'web') {
     if (!['chromium', 'webkit'].includes(engine)) throw new c.Blocked('UNSUPPORTED_BROWSER_ENGINE');
     const opts = { headless: true };
+    if (process.env.QA_PROXY_URL) opts.proxy = { server: process.env.QA_PROXY_URL };
     if (engine === 'chromium' && process.env.QA_CHROMIUM_EXECUTABLE) opts.executablePath = process.env.QA_CHROMIUM_EXECUTABLE;
     const browser = await pw[engine].launch(opts);
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, timezoneId: process.env.QA_TIMEZONE || 'Europe/Istanbul', locale: 'tr-TR', acceptDownloads: false });
@@ -105,7 +106,7 @@ async function main() {
     await runtime.page.waitForURL(c.ORIGIN + '/ai', { timeout: 45000 });
     await runtime.page.getByLabel('Mesaj', { exact: true }).waitFor();
     activeEvidence.record('session-relaunch', 'PASS', { alias, screenshot: await capture(runtime, activeEvidence, 'session-relaunch') });
-  } catch (error) { evidence.record('runtime-start', error instanceof c.Blocked ? 'BLOCKED' : 'FAIL', { code: c.errorCode(error) }); process.exitCode = 1; }
+  } catch (error) { console.error(c.errorCode(error)); evidence.record('runtime-start', error instanceof c.Blocked ? 'BLOCKED' : 'FAIL', { code: c.errorCode(error) }); process.exitCode = 1; }
   finally { if (runtime) await runtime.close(); }
 }
 if (require.main === module) main().catch(() => { process.exitCode = 1; });

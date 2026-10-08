@@ -31,7 +31,7 @@ function createEvidence(platform, runtime, device) {
   const records = [];
   return {
     dir, run,
-    record(scenario, status, { code = 'NONE', screenshot = null, alias = null, observed = null, appVersion = 'unknown', deployedGitSha = null, viewport = null } = {}) {
+    record(scenario, status, { code = 'NONE', screenshot = null, alias = null, observed = null, appVersion = 'unknown', deployedGitSha = null, viewport = null, conversationId = null, direction = null } = {}) {
       safeName(scenario);
       if (!['PASS', 'FAIL', 'BLOCKED'].includes(status)) throw new Error('INVALID_STATUS');
       if (!/^[A-Z][A-Z0-9_]*$/.test(code)) throw new Error('UNSAFE_ERROR_CODE');
@@ -41,8 +41,10 @@ function createEvidence(platform, runtime, device) {
       if (typeof appVersion !== 'string' || !/^[a-zA-Z0-9._-]{1,80}$/.test(appVersion)) throw new Error('UNSAFE_APP_VERSION');
       if (observed !== null && typeof observed !== 'boolean') throw new Error('INVALID_OBSERVATION');
       if (viewport !== null && (!Number.isInteger(viewport.width) || !Number.isInteger(viewport.height))) throw new Error('INVALID_VIEWPORT');
+      if (conversationId !== null && !/^[a-zA-Z0-9_-]{1,120}$/.test(conversationId)) throw new Error('UNSAFE_CONVERSATION_ID');
+      if (direction !== null && !/^(web|android|ios)-to-(web|android|ios)$/.test(direction)) throw new Error('INVALID_SYNC_DIRECTION');
       const row = { schemaVersion: 1, platform, runtime, scenario, status, code, accountAlias: alias, observed,
-        productVerdict: 'NOT_ASSESSED', timestamp: new Date().toISOString(), harnessGitSha: gitSha(), deployedGitSha,
+        productVerdict: 'NOT_ASSESSED', conversationId, direction, timestamp: new Date().toISOString(), harnessGitSha: gitSha(), deployedGitSha,
         appVersion, device, viewport, screenshot, log: scenario + '.json', stagingOrigin: ORIGIN };
       fs.writeFileSync(path.join(dir, scenario + '.json'), JSON.stringify(row, null, 2));
       records.push(row);
@@ -51,5 +53,16 @@ function createEvidence(platform, runtime, device) {
     },
   };
 }
-function errorCode(error) { return error instanceof Blocked ? error.code : 'RUNTIME_OPERATION_FAILED'; }
+function errorCode(error) {
+  if (error instanceof Blocked) return error.code;
+  const message = String(error?.message || '');
+  if (/ERR_CERT|certificate|TLS/i.test(message)) return 'TLS_CERTIFICATE_VALIDATION_FAILED';
+  if (/Executable.*exist|browser.*install/i.test(message)) return 'BROWSER_EXECUTABLE_REQUIRED';
+  if (/Host system is missing dependencies|shared libraries|cannot open shared object/i.test(message)) return 'HOST_RUNTIME_DEPENDENCIES_REQUIRED';
+  if (/ERR_NAME_NOT_RESOLVED/i.test(message)) return 'STAGING_DNS_FAILED';
+  if (/ERR_CONNECTION|ERR_PROXY|ECONNREFUSED/i.test(message)) return 'STAGING_NETWORK_UNREACHABLE';
+  if (error?.name === 'TimeoutError') return 'RUNTIME_WAIT_TIMEOUT';
+  if (error instanceof TypeError) return 'HARNESS_TYPE_ERROR';
+  return 'RUNTIME_OPERATION_FAILED';
+}
 module.exports = { ROOT, ORIGIN, PLATFORMS, Blocked, stagingOrigin, credentials, accountAlias, gitSha, safeName, createEvidence, errorCode };
