@@ -87,9 +87,7 @@ jobs:
       - run: npm audit --omit=dev
       - run: npx prisma generate
       - name: Verify additive migrations on real isolated PostgreSQL
-        run: |
-          npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script > "$RUNNER_TEMP/notification-phase5-base.sql"
-          node scripts/prepare-notification-test-db.cjs "$RUNNER_TEMP/notification-phase5-base.sql"
+        run: node scripts/prepare-notification-test-db.cjs
       - run: npm run type-check
       - run: npm test
       - name: Verify account persistence, isolation and existing delivery behavior
