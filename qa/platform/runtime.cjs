@@ -55,14 +55,16 @@ async function openList(page) {
   const b = page.getByRole('button', { name: 'Sohbet geçmişi', exact: true });
   if (await b.isVisible()) await b.click();
   await page.locator('nav[aria-label="Sohbetler"]').waitFor({ state: 'visible' });
+  await page.getByText('Sohbetler yükleniyor...', { exact: true }).first().waitFor({ state: 'hidden' });
+}
+async function assertCredentialScreenshotSafe(page) {
+  const values = await page.locator('input[type="email"],input[type="password"],input[name="email"],input[name="password"]').evaluateAll(nodes => nodes.some(n => n.value));
+  if (values) throw new c.Blocked('CREDENTIAL_SCREENSHOT_REFUSED');
 }
 async function capture(runtime, evidence, name) {
   const page = runtime.page;
   if (new URL(page.url()).origin !== c.ORIGIN) throw new c.Blocked('UNTRUSTED_SCREENSHOT_ORIGIN');
-  if (await page.locator('input[type="password"]').count()) {
-    const values = await page.locator('input').evaluateAll(nodes => nodes.some(n => n.value));
-    if (values) throw new c.Blocked('CREDENTIAL_SCREENSHOT_REFUSED');
-  }
+  await assertCredentialScreenshotSafe(page);
   // Identity masking affects only the evidence capture, never persisted app data.
   const mask = page.getByText(process.env.QA_EMAIL || '__no_identity__', { exact: true });
   const file = name + '-' + runtime.runtime + '.png';
@@ -110,4 +112,4 @@ async function main() {
   finally { if (runtime) await runtime.close(); }
 }
 if (require.main === module) main().catch(() => { process.exitCode = 1; });
-module.exports = { openRuntime, login, logout, openList, capture };
+module.exports = { openRuntime, login, logout, openList, capture, assertCredentialScreenshotSafe };

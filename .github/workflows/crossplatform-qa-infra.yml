@@ -21,7 +21,7 @@ permissions:
 
 concurrency:
   group: qa-infra-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
   QA_BASE_URL: https://staging.diewish.com
@@ -73,6 +73,10 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci --prefix frontend
       - run: npx --prefix frontend playwright install --with-deps ${{ matrix.engine }}
+      - name: Credential screenshot guard in a real DOM fixture
+        env:
+          QA_BROWSER_ENGINE: ${{ matrix.engine }}
+        run: node --test qa/platform/credential-screenshot.spec.cjs
       - name: Real browser evidence (no traces, HAR, cookies or storage export)
         env:
           QA_EMAIL: ${{ inputs.authenticated && secrets.QA_EMAIL || '' }}

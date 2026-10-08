@@ -23,3 +23,6 @@ ios/**/*.xcuserstate
 ios/**/xcuserdata/
 
 qa/platform/__pycache__/
+android/.gradle/
+android/build/
+android/app/build/

@@ -2,7 +2,8 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const c = require('./contract.cjs');
-const e = c.createEvidence('ios', 'ios-simulator', 'iPhone-Simulator');
+const device = (process.env.QA_IOS_DEVICE_TYPE || 'iPhone-Simulator').split('.').pop() + '/' + (process.env.QA_IOS_RUNTIME || 'iOS-unknown').split('.').pop();
+const e = c.createEvidence('ios', 'ios-simulator', device);
 if (process.argv[2] === 'build-failed') { e.record('simulator-build', 'FAIL', { code: 'XCODE_BUILD_FAILED' }); process.exit(1); }
 e.record('simulator-build', 'PASS', { appVersion: '0.1.0' });
 const dir = path.resolve(process.argv[2]);
@@ -20,7 +21,7 @@ for (const test of manifest) {
     if (scenario !== 'login' && !alias) continue;
     const name = scenario + '-ios-simulator.png';
     fs.copyFileSync(source, path.join(e.dir, name));
-    e.record(scenario === 'login' ? 'login-surface' : scenario, 'PASS', { appVersion: '0.1.0', alias: scenario === 'login' ? null : alias, screenshot: name });
+    e.record(scenario === 'login' ? 'login-surface' : scenario, 'PASS', { appVersion: '0.1.0', alias: scenario === 'login' ? null : alias, screenshot: name, viewport: { width: fs.readFileSync(source).readUInt32BE(16), height: fs.readFileSync(source).readUInt32BE(20) } });
     seen.add(scenario);
   }
 }
