@@ -1,4 +1,5 @@
 name: Cross-platform QA Authenticated All
+# Protected staging run: credentials are inherited only by the reusable QA workflow.
 
 on:
   push:

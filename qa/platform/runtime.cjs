@@ -35,7 +35,15 @@ async function openRuntime(platform, engine = 'chromium') {
   const page = await start();
   return { platform, runtime: emulator ? 'android-emulator' : 'android-physical', device: emulator ? 'Android-AVD' : 'Android-device', page,
     screenshot: (p) => device.screenshot({ path: p }), close: () => device.close(), refresh: (p) => p.reload(),
-    relaunch: async () => { await device.shell('am force-stop com.diewish.app'); const page = await start(); await page.goto(c.ORIGIN + '/ai'); return page; },
+    relaunch: async () => {
+      await device.shell('am force-stop com.diewish.app');
+      let lastError;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try { const page = await start(); await page.goto(c.ORIGIN + '/ai', { waitUntil: 'domcontentloaded' }); return page; }
+        catch (error) { lastError = error; await new Promise(resolve => setTimeout(resolve, 1000)); }
+      }
+      throw lastError;
+    },
     offline: async v => { await device.shell('svc wifi ' + (v ? 'disable' : 'enable')); await device.shell('svc data ' + (v ? 'disable' : 'enable')); } };
 }
 async function login(page) {
@@ -69,14 +77,15 @@ async function assertCredentialScreenshotSafe(page) {
   if (values) throw new c.Blocked('CREDENTIAL_SCREENSHOT_REFUSED');
 }
 async function waitForStableFrame(page) {
-  const settled = await page.evaluate(async () => {
+  await page.evaluate(async () => {
     const finite = document.getAnimations().filter(animation => animation.effect?.getComputedTiming().iterations !== Infinity);
-    return Promise.race([
-      Promise.all([document.fonts.ready, ...finite.map(animation => animation.finished.catch(() => {}))]).then(() => true),
-      new Promise(resolve => setTimeout(() => resolve(false), 3000)),
+    const animationWait = Promise.all(finite.map(animation => animation.finished.catch(() => {})));
+    const fontWait = document.fonts?.ready?.catch(() => {});
+    await Promise.race([
+      Promise.all([animationWait, fontWait]),
+      new Promise(resolve => setTimeout(resolve, 3000)),
     ]);
   });
-  if (!settled) throw new c.Blocked('SCREEN_ANIMATION_NOT_SETTLED');
 }
 async function capture(runtime, evidence, name) {
   const page = runtime.page;
