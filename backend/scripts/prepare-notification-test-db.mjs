@@ -1,17 +1,18 @@
 /* Ephemeral CI databases only: verify clean history and the real staging upgrade. */
-const fs = require("node:fs");
-const os = require("node:os");
-const path = require("node:path");
-const { spawnSync } = require("node:child_process");
-const assert = require("node:assert/strict");
-const { PrismaClient } = require("@prisma/client");
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { URL, fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
+import assert from "node:assert/strict";
+import { PrismaClient } from "@prisma/client";
 const url = new URL(process.env.DATABASE_URL || "");
 if (!["localhost", "127.0.0.1"].includes(url.hostname) || url.pathname !== "/notification_phase5_test") {
   throw new Error("Refusing anything except the local ephemeral notification_phase5_test database.");
 }
 const cleanUrl = new URL(url);
 cleanUrl.pathname = "/notification_phase6_clean_test";
-const prismaRoot = path.join(__dirname, "../prisma");
+const prismaRoot = fileURLToPath(new URL("../prisma/", import.meta.url));
 const migrations = fs.readdirSync(path.join(prismaRoot, "migrations"))
   .filter(name => fs.existsSync(path.join(prismaRoot, "migrations", name, "migration.sql"))).sort();
 const additions = ["20261007124500_water_reminder_schedule", "20261007160000_notification_category_alerts"];

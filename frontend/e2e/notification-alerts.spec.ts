@@ -209,9 +209,11 @@ for (const width of [390, 412, 430])
         await expect(
           page.getByRole("button", { name: "Test bildirimi gönder", exact: true }),
         ).toBeInViewport();
+        await page.evaluate(() => window.scrollTo(0, 0));
         await page.screenshot({
           path: info.outputPath(`${category}-${width}-${theme}.png`),
           fullPage: true,
+          animations: "disabled",
         });
       }
     });

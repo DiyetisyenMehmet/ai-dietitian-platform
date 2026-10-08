@@ -9,7 +9,7 @@ on:
       - ".github/workflows/notification-alerts-native-ci.yml"
       - "backend/src/modules/notifications/**"
       - "backend/src/integration/notification-*.integration.test.ts"
-      - "backend/scripts/prepare-notification-test-db.cjs"
+      - "backend/scripts/prepare-notification-test-db.mjs"
       - "backend/prisma/migrations/*notification*/**"
       - "backend/prisma/migrations/*water_reminder*/**"
       - "frontend/**"
@@ -87,8 +87,10 @@ jobs:
       - run: npm audit --omit=dev
       - run: npx prisma generate
       - name: Verify additive migrations on real isolated PostgreSQL
-        run: node scripts/prepare-notification-test-db.cjs
+        run: node scripts/prepare-notification-test-db.mjs
       - run: npm run type-check
+      - name: Lint migration validation and notification modules
+        run: npx eslint scripts/prepare-notification-test-db.mjs src/modules/notifications src/integration/notification-*.integration.test.ts
       - run: npm test
       - name: Verify account persistence, isolation and existing delivery behavior
         run: >-
