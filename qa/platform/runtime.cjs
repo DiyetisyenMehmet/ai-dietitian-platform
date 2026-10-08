@@ -6,16 +6,7 @@ const { execFileSync } = require('node:child_process');
 const c = require('./contract.cjs');
 const pw = createRequire(path.join(c.ROOT, 'frontend/package.json'))('playwright');
 const scenarios = require('./scenarios.json');
-async function navigate(page, url) {
-  c.stagingOrigin(new URL(url).origin);
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try { await page.goto(url, { waitUntil: 'domcontentloaded' }); return; }
-    catch (error) {
-      if (c.errorCode(error) !== 'RUNTIME_NAVIGATION_INTERRUPTED' || attempt === 2) throw error;
-      await page.waitForTimeout(250);
-    }
-  }
-}
+const { navigate } = require('./navigation.cjs');
 async function openRuntime(platform, engine = 'chromium') {
   c.stagingOrigin(process.env.QA_BASE_URL || c.ORIGIN);
   if (platform === 'web') {

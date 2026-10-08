@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { navigate } = require('./runtime.cjs');
+const { navigate } = require('./navigation.cjs');
 test('only an interrupted staging GET navigation is retried, with a strict bound', async () => {
   let attempts = 0;
   const page = { goto: async () => { attempts++; if (attempts < 2) throw new Error('net::ERR_ABORTED'); }, waitForTimeout: async () => {} };
