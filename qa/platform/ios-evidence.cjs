@@ -2,6 +2,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const c = require("./contract.cjs");
+const { NAMES, scenarioName } = require('./ios-attachment-names.cjs');
 const device =
   (process.env.QA_IOS_DEVICE_TYPE || "iPhone-Simulator").split(".").pop() +
   "/" +
@@ -22,24 +23,14 @@ try {
 } catch {
   /* Public runtime only. */
 }
-const names = new Set([
-  "login",
-  "dashboard",
-  "coach-list",
-  "notification-preferences",
-  "profile",
-  "session-relaunch",
-  "login-runtime-diagnostic",
-]);
+const names = new Set(NAMES);
 const seen = new Set();
+let attachmentCount = 0;
 for (const test of manifest) {
   for (const attachment of test.attachments || []) {
+    attachmentCount++;
     const human = attachment.suggestedHumanReadableName || "";
-    const scenario = [...names].find(
-      (n) =>
-        human === n + "-ios-simulator" ||
-        human.startsWith(n + "-ios-simulator."),
-    );
+    const scenario = scenarioName(human);
     const source = path.resolve(dir, attachment.exportedFileName || "");
     if (
       !scenario ||
@@ -63,6 +54,7 @@ for (const test of manifest) {
     seen.add(scenario);
   }
 }
+console.log('IOS_ATTACHMENT_COUNT:', attachmentCount, 'APPROVED_CAPTURE_COUNT:', seen.size);
 if (!alias && !seen.has("login"))
   e.record("login-surface", "FAIL", { code: "IOS_LOGIN_EVIDENCE_MISSING" });
 for (const name of [...names].filter((n) => n !== "login" && n !== "login-runtime-diagnostic" && !seen.has(n)))
