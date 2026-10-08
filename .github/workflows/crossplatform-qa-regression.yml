@@ -1,0 +1,106 @@
+name: Cross-platform QA Regression Baseline
+
+on:
+  push:
+    branches: [feature/workmode4-crossplatform-qa-infra-a1]
+    paths:
+      [
+        ".github/workflows/crossplatform-qa-regression.yml",
+        "qa/regression.cjs",
+      ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+concurrency:
+  group: qa-regression-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    if: github.ref == 'refs/heads/feature/workmode4-crossplatform-qa-infra-a1' || github.ref == 'refs/heads/feature/staging-preview'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --prefix frontend
+      - run: npx --prefix frontend playwright install --with-deps chromium
+      - name: Frontend regression (safe result summary; no raw artifact logs)
+        run: node qa/regression.cjs frontend
+
+  backend:
+    if: github.ref == 'refs/heads/feature/workmode4-crossplatform-qa-infra-a1' || github.ref == 'refs/heads/feature/staging-preview'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: qa
+          POSTGRES_PASSWORD: disposable-qa-only
+          POSTGRES_DB: diewish_qa
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U qa -d diewish_qa"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      NODE_ENV: test
+      DIEWISH_ENVIRONMENT: test
+      DATABASE_URL: postgresql://qa:disposable-qa-only@localhost:5432/diewish_qa?schema=public
+      JWT_ACCESS_SECRET: disposable-qa-access-not-a-real-secret-01234567890123456789
+      JWT_REFRESH_SECRET: disposable-qa-refresh-not-a-real-secret-01234567890123456789
+      LOG_LEVEL: silent
+      BCRYPT_ROUNDS: 10
+      RATE_LIMIT_MAX: 1000
+      AUTH_RATE_LIMIT_MAX: 1000
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci --prefix backend
+      - name: Generate and migrate only disposable test database
+        working-directory: backend
+        run: |
+          npx prisma validate
+          npx prisma generate
+          npx prisma migrate deploy
+      - name: Backend regression (safe result summary; no raw artifact logs)
+        run: node qa/regression.cjs backend
+
+  dependency-safety:
+    if: github.ref == 'refs/heads/feature/workmode4-crossplatform-qa-infra-a1' || github.ref == 'refs/heads/feature/staging-preview'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Audit unchanged product lockfiles (counts only)
+        run: |
+          python3 - <<'PY'
+          import json, subprocess
+          failed = False
+          for directory in ('frontend', 'backend'):
+              result = subprocess.run(['npm', 'audit', '--omit=dev', '--audit-level=high', '--json'], cwd=directory, capture_output=True, text=True)
+              data = json.loads(result.stdout)
+              counts = data.get('metadata', {}).get('vulnerabilities')
+              print(directory, json.dumps(counts))
+              if counts is None or result.returncode != 0:
+                  failed = True
+          raise SystemExit(1 if failed else 0)
+          PY
