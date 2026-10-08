@@ -1,3 +1,5 @@
-staging web preview trigger
-source_sha=77e3063a06b82152abc277472d9ef3160f36e647
-purpose=notification tap routing + unread badge physical Android validation
+staging notification preferences integration
+task=WORKMODE-NOTIFICATION-PREFERENCES-A1-INTEGRATE
+verified_source_sha=90974a89957186cfc002636d359060486b188fd5
+approved_notification_sha=c140c7570d9a2ee18d7bb47e9d7145672cbef564
+purpose=additive migrations, staging deploy and isolated real-runtime sanity
