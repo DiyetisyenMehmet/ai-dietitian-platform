@@ -234,6 +234,11 @@ test("deployed notification preferences: real persistence, water editor, Web cap
     expect(await read("/notifications")).toEqual(inboxBefore);
     expect(await read("/notifications/scheduled")).toEqual(scheduledBefore);
 
+    // The deployed staging API intentionally keeps its 600/minute global
+    // abuse budget. Let the high-volume responsive pass start in a fresh
+    // window instead of turning a valid account session into a 429 failure.
+    await page.waitForTimeout(65_000);
+
     for (const width of [390, 412, 430])
       for (const theme of ["light", "dark"] as const) {
         await page.setViewportSize({
