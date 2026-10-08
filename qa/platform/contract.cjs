@@ -60,6 +60,10 @@ function errorCode(error) {
   if (/Executable.*exist|browser.*install/i.test(message)) return 'BROWSER_EXECUTABLE_REQUIRED';
   if (/Host system is missing dependencies|shared libraries|cannot open shared object/i.test(message)) return 'HOST_RUNTIME_DEPENDENCIES_REQUIRED';
   if (/ERR_NAME_NOT_RESOLVED/i.test(message)) return 'STAGING_DNS_FAILED';
+  if (/ERR_ABORTED|interrupted by another navigation/i.test(message)) return 'RUNTIME_NAVIGATION_INTERRUPTED';
+  if (/Target.*closed|WebView.*closed/i.test(message)) return 'NATIVE_WEBVIEW_CLOSED';
+  if (/Protocol error/i.test(message)) return 'NATIVE_WEBVIEW_PROTOCOL_ERROR';
+  if (/socket|ECONNRESET|EPIPE/i.test(message)) return 'NATIVE_RUNTIME_CONNECTION_FAILED';
   if (/ERR_CONNECTION|ERR_PROXY|ECONNREFUSED/i.test(message)) return 'STAGING_NETWORK_UNREACHABLE';
   if (error?.name === 'TimeoutError') return 'RUNTIME_WAIT_TIMEOUT';
   if (error instanceof TypeError) return 'HARNESS_TYPE_ERROR';

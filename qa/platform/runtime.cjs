@@ -6,6 +6,16 @@ const { execFileSync } = require('node:child_process');
 const c = require('./contract.cjs');
 const pw = createRequire(path.join(c.ROOT, 'frontend/package.json'))('playwright');
 const scenarios = require('./scenarios.json');
+async function navigate(page, url) {
+  c.stagingOrigin(new URL(url).origin);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try { await page.goto(url, { waitUntil: 'domcontentloaded' }); return; }
+    catch (error) {
+      if (c.errorCode(error) !== 'RUNTIME_NAVIGATION_INTERRUPTED' || attempt === 2) throw error;
+      await page.waitForTimeout(250);
+    }
+  }
+}
 async function openRuntime(platform, engine = 'chromium') {
   c.stagingOrigin(process.env.QA_BASE_URL || c.ORIGIN);
   if (platform === 'web') {
@@ -25,7 +35,12 @@ async function openRuntime(platform, engine = 'chromium') {
   const emulator = device.serial().startsWith('emulator-');
   if (!emulator && process.env.QA_ALLOW_PHYSICAL !== 'YES') { await device.close(); throw new c.Blocked('PHYSICAL_DEVICE_OPT_IN_REQUIRED'); }
   device.setDefaultTimeout(45000);
-  const start = async () => { await device.shell('am start -n com.diewish.app/.MainActivity'); return (await device.webView({ pkg: 'com.diewish.app' })).page(); };
+  const start = async () => {
+    await device.shell('am start -n com.diewish.app/.MainActivity');
+    const page = await (await device.webView({ pkg: 'com.diewish.app' })).page();
+    await page.waitForURL(url => url.origin === c.ORIGIN, { waitUntil: 'domcontentloaded', timeout: 45000 });
+    return page;
+  };
   const page = await start();
   return { platform, runtime: emulator ? 'android-emulator' : 'android-physical', device: emulator ? 'Android-AVD' : 'Android-device', page,
     screenshot: (p) => device.screenshot({ path: p }), close: () => device.close(), refresh: (p) => p.reload(),
@@ -61,10 +76,21 @@ async function assertCredentialScreenshotSafe(page) {
   const values = await page.locator('input[type="email"],input[type="password"],input[name="email"],input[name="password"]').evaluateAll(nodes => nodes.some(n => n.value));
   if (values) throw new c.Blocked('CREDENTIAL_SCREENSHOT_REFUSED');
 }
+async function waitForStableFrame(page) {
+  const settled = await page.evaluate(async () => {
+    const finite = document.getAnimations().filter(animation => animation.effect?.getComputedTiming().iterations !== Infinity);
+    return Promise.race([
+      Promise.all([document.fonts.ready, ...finite.map(animation => animation.finished.catch(() => {}))]).then(() => true),
+      new Promise(resolve => setTimeout(() => resolve(false), 3000)),
+    ]);
+  });
+  if (!settled) throw new c.Blocked('SCREEN_ANIMATION_NOT_SETTLED');
+}
 async function capture(runtime, evidence, name) {
   const page = runtime.page;
   if (new URL(page.url()).origin !== c.ORIGIN) throw new c.Blocked('UNTRUSTED_SCREENSHOT_ORIGIN');
   await assertCredentialScreenshotSafe(page);
+  await waitForStableFrame(page);
   // Identity masking affects only the evidence capture, never persisted app data.
   const mask = page.getByText(process.env.QA_EMAIL || '__no_identity__', { exact: true });
   const file = name + '-' + runtime.runtime + '.png';
@@ -80,6 +106,7 @@ async function main() {
   const platform = process.argv[2] || 'web';
   const engine = process.argv[3] || 'chromium';
   let runtime;
+  let phase = 'RUNTIME_OPEN';
   const fallback = platform === 'android' ? 'android-emulator' : engine;
   const evidence = c.createEvidence(platform, fallback, platform === 'web' ? 'browser-390x844' : 'Android-AVD');
   try {
@@ -87,8 +114,10 @@ async function main() {
     const activeEvidence = runtime.runtime === fallback ? evidence : c.createEvidence(platform, runtime.runtime, runtime.device);
     const page = runtime.page;
     page.setDefaultTimeout(30000);
-    await page.goto(c.ORIGIN + '/login', { waitUntil: 'domcontentloaded' });
+    phase = 'LOGIN_NAVIGATION';
+    await navigate(page, c.ORIGIN + '/login');
     await page.getByRole('button', { name: 'Giriş Yap', exact: true }).waitFor();
+    phase = 'LOGIN_CAPTURE';
     const screenshot = await capture(runtime, activeEvidence, 'login');
     const version = platform === 'android' ? await page.evaluate(() => navigator.userAgent.match(/DiewishAndroid\/([^ ]+)/)?.[1] || 'unknown') : 'unknown';
     activeEvidence.record('login-surface', 'PASS', { screenshot, appVersion: version, viewport: await page.evaluate(() => ({ width: innerWidth, height: innerHeight })) });
@@ -108,8 +137,8 @@ async function main() {
     await runtime.page.waitForURL(c.ORIGIN + '/ai', { timeout: 45000 });
     await runtime.page.getByLabel('Mesaj', { exact: true }).waitFor();
     activeEvidence.record('session-relaunch', 'PASS', { alias, screenshot: await capture(runtime, activeEvidence, 'session-relaunch') });
-  } catch (error) { console.error(c.errorCode(error)); evidence.record('runtime-start', error instanceof c.Blocked ? 'BLOCKED' : 'FAIL', { code: c.errorCode(error) }); process.exitCode = 1; }
+  } catch (error) { const code = c.errorCode(error); console.error(code, 'RUNTIME_PHASE_' + phase); evidence.record('runtime-start', error instanceof c.Blocked ? 'BLOCKED' : 'FAIL', { code: code === 'RUNTIME_OPERATION_FAILED' ? phase + '_FAILED' : code }); process.exitCode = 1; }
   finally { if (runtime) await runtime.close(); }
 }
 if (require.main === module) main().catch(() => { process.exitCode = 1; });
-module.exports = { openRuntime, login, logout, openList, capture, assertCredentialScreenshotSafe };
+module.exports = { openRuntime, login, logout, openList, capture, assertCredentialScreenshotSafe, waitForStableFrame, navigate };

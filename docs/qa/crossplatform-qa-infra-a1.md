@@ -49,7 +49,7 @@ node --test qa/platform/credential-screenshot.spec.cjs
 QA_BROWSER_ENGINE=webkit node --test qa/platform/credential-screenshot.spec.cjs
 ```
 
-No trace/HAR/storageState/video/raw console dump is enabled. Login screenshots are refused if email/password fields are populated; checkbox defaults do not trigger this guard. Authenticated web evidence masks the exact test email. Android capture temporarily masks the matching rendered identity only during capture and restores it immediately.
+No trace/HAR/storageState/video/raw console dump is enabled. Capture waits for finite UI animations and font loading to settle, failing rather than recording a faded transitional screen. Login screenshots are refused if email/password fields are populated; checkbox defaults do not trigger this guard. Authenticated web evidence masks the exact test email. Android capture temporarily masks the matching rendered identity only during capture and restores it immediately.
 
 ## Android
 
