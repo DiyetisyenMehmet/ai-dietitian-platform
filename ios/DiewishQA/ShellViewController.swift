@@ -1,5 +1,6 @@
 import UIKit
 import WebKit
+import CryptoKit
 
 /// Staging-only QA host. The existing web application owns all domain logic.
 private final class WeakMessageHandler: NSObject, WKScriptMessageHandler {
@@ -13,6 +14,9 @@ final class ShellViewController: UIViewController, WKNavigationDelegate, WKUIDel
     private var webView: WKWebView!
     private let routes = ["login": "/login", "dashboard": "/dashboard", "coach-list": "/ai", "notification-preferences": "/profile/notifications", "profile": "/profile"]
     private var contentController: WKUserContentController!
+    private var evidenceButton: UIButton!
+    private var verifiedAlias: String?
+    private var identityFile: URL { FileManager.default.temporaryDirectory.appendingPathComponent("qa-runtime-identity.json") }
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -25,6 +29,30 @@ final class ShellViewController: UIViewController, WKNavigationDelegate, WKUIDel
         contentController = WKUserContentController()
         config.userContentController = contentController
         contentController.add(WeakMessageHandler(self), name: "diewishIOS")
+        try? FileManager.default.removeItem(at: identityFile)
+        // Observe normal successful auth responses. No token crosses this QA channel.
+        contentController.addUserScript(WKUserScript(source: """
+        (() => {
+          const original = window.fetch;
+          window.fetch = function(...args) {
+            const result = Reflect.apply(original, this, args);
+            try {
+              const url = new URL(typeof args[0] === 'string' ? args[0] : args[0].url, location.href);
+              const auth = ['/api/auth/login', '/api/auth/me', '/api/auth/refresh-token'];
+              if (url.origin === location.origin && auth.includes(url.pathname)) {
+                result.then(response => { if (response.status === 401) window.webkit.messageHandlers.diewishIOS.postMessage({version:1,operation:'qa-logout'}); if (response.ok) response.clone().json().then(body => {
+                  const id = body?.data?.user?.id;
+                  if (typeof id === 'string') window.webkit.messageHandlers.diewishIOS.postMessage({version:1,operation:'qa-account',id});
+                }).catch(() => {}); }).catch(() => {});
+              }
+              if (url.origin === location.origin && url.pathname === '/api/auth/logout') {
+                result.then(response => { if (response.ok) window.webkit.messageHandlers.diewishIOS.postMessage({version:1,operation:'qa-logout'}); }).catch(() => {});
+              }
+            } catch (_) {}
+            return result;
+          };
+        })();
+        """, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         config.applicationNameForUserAgent = "DiewishIOSQA/0.1.0"
         webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = self
@@ -39,11 +67,12 @@ final class ShellViewController: UIViewController, WKNavigationDelegate, WKUIDel
         toolbar.distribution = .fillEqually
         toolbar.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(toolbar)
-        let controls = [("Giriş", "qa-login"), ("←", "qa-back"), ("↻", "qa-refresh"), ("Ana", "qa-dashboard"), ("Koç", "qa-coach-list"), ("Bildirim", "qa-notification-preferences"), ("Profil", "qa-profile")]
+        let controls = [("Giriş", "qa-login"), ("←", "qa-back"), ("↻", "qa-refresh"), ("Ana", "qa-dashboard"), ("Koç", "qa-coach-list"), ("Bildirim", "qa-notification-preferences"), ("Profil", "qa-profile"), ("QA", "qa-evidence")]
         for (title, identifier) in controls {
             let button = UIButton(type: .system)
             button.setTitle(title, for: .normal)
             button.accessibilityIdentifier = identifier
+            if identifier == "qa-evidence" { evidenceButton = button }
             button.addAction(UIAction { [weak self] _ in self?.navigate(identifier) }, for: .touchUpInside)
             toolbar.addArrangedSubview(button)
         }
@@ -64,11 +93,51 @@ final class ShellViewController: UIViewController, WKNavigationDelegate, WKUIDel
     }
 
     private func navigate(_ identifier: String) {
+        if identifier == "qa-evidence" { prepareEvidence(); return }
         if identifier == "qa-back" { if webView.canGoBack { webView.goBack() }; return }
         if identifier == "qa-refresh" { webView.reload(); return }
         let key = String(identifier.dropFirst(3))
         guard let route = routes[key] else { return }
         webView.load(URLRequest(url: URL(string: route, relativeTo: origin)!.absoluteURL))
+    }
+
+    private func prepareEvidence() {
+        evidenceButton.accessibilityValue = "WAITING"
+        let authenticated = ProcessInfo.processInfo.environment["QA_SYNTHETIC_ACCOUNT"] == "YES"
+        guard trusted(webView.url), !authenticated || verifiedAlias != nil else {
+            evidenceButton.accessibilityValue = "ACCOUNT_UNVERIFIED"; return
+        }
+        webView.evaluateJavaScript("""
+        (() => {
+          if ([...document.querySelectorAll('input[type=email],input[type=password]')].some(n => n.value)) return false;
+          document.querySelectorAll('p,span,div,a').forEach(n => {
+            if (!n.children.length && /[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}/i.test(n.textContent)) n.textContent = '[QA identity]';
+          });
+          return true;
+        })()
+        """) { [weak self] value, error in
+            guard let self else { return }
+            let ready = error == nil && (value as? Bool) == true
+            self.evidenceButton.accessibilityValue = ready ? "READY" : "CAPTURE_REFUSED"
+            if ready, let alias = self.verifiedAlias,
+               let data = try? JSONSerialization.data(withJSONObject: ["accountAlias": alias, "captureReadyAt": Date().timeIntervalSince1970]) {
+                try? data.write(to: self.identityFile, options: .atomic)
+            }
+        }
+    }
+
+    private func recordIdentity(_ id: String) {
+        let env = ProcessInfo.processInfo.environment
+        guard env["QA_SYNTHETIC_ACCOUNT"] == "YES", id == env["QA_ACCOUNT_ID"],
+              let key = env["QA_ACCOUNT_HMAC_KEY"], key.count >= 32 else {
+            verifiedAlias = nil; try? FileManager.default.removeItem(at: identityFile); return
+        }
+        let digest = HMAC<SHA256>.authenticationCode(for: Data(id.utf8), using: SymmetricKey(data: Data(key.utf8)))
+        let alias = "qa-" + String(digest.map { String(format: "%02x", $0) }.joined().prefix(24))
+        verifiedAlias = String(alias)
+        if let data = try? JSONSerialization.data(withJSONObject: ["accountAlias": String(alias), "verifiedAt": Date().timeIntervalSince1970]) {
+            try? data.write(to: identityFile, options: .atomic)
+        }
     }
 
     private func trusted(_ url: URL?) -> Bool {
@@ -91,12 +160,20 @@ final class ShellViewController: UIViewController, WKNavigationDelegate, WKUIDel
 
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { webView.reload() }
 
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        verifiedAlias = nil
+        try? FileManager.default.removeItem(at: identityFile)
+    }
+
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
         let source = message.frameInfo.securityOrigin
         guard message.frameInfo.isMainFrame, source.protocol == "https", source.host == origin.host,
               source.port == 443 || source.port == 0, trusted(webView.url),
               let body = message.body as? [String: Any], body["version"] as? Int == 1,
-              body["operation"] as? String == "capabilities" else { return }
+              let operation = body["operation"] as? String else { return }
+        if operation == "qa-account", let id = body["id"] as? String { recordIdentity(id); return }
+        if operation == "qa-logout" { verifiedAlias = nil; try? FileManager.default.removeItem(at: identityFile); return }
+        guard operation == "capabilities" else { return }
         // A capability contract, not Android bridge impersonation. Unsupported
         // operations stay unavailable; no auth tokens or arbitrary JS are accepted.
         webView.evaluateJavaScript("window.dispatchEvent(new CustomEvent('diewish:ios-capabilities',{detail:{version:1,runtime:'wkwebview',camera:false,barcode:false,localNotifications:false,push:false,deepLink:false}}))", completionHandler: nil)

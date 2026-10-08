@@ -4,10 +4,23 @@ final class RuntimeTests: XCTestCase {
     override func setUpWithError() throws { continueAfterFailure = false }
 
     private func screenshot(_ app: XCUIApplication, _ name: String) {
+        let guardButton = app.buttons["qa-evidence"]
+        guardButton.tap()
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == 'READY'"), object: guardButton)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 10), .completed, "ACCOUNT_OR_SCREENSHOT_PRIVACY_UNVERIFIED")
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = name + "-ios-simulator"
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    private func configuredApp() -> XCUIApplication {
+        let app = XCUIApplication()
+        let env = ProcessInfo.processInfo.environment
+        for key in ["QA_SYNTHETIC_ACCOUNT", "QA_ACCOUNT_ID", "QA_ACCOUNT_HMAC_KEY"] {
+            if let value = env[key] { app.launchEnvironment[key] = value }
+        }
+        return app
     }
 
     private func login(_ app: XCUIApplication) throws {
@@ -30,14 +43,14 @@ final class RuntimeTests: XCTestCase {
         if app.keyboards.count > 0 { app.webViews.firstMatch.swipeUp() }
         XCTAssertTrue(submit.waitForExistence(timeout: 15), "LOGIN_SUBMIT_UNAVAILABLE")
         submit.tap()
-        XCTAssertTrue(app.webViews.staticTexts["Bugünkü Yolculuğun"].waitForExistence(timeout: 60), "AUTHENTICATED_DASHBOARD_UNAVAILABLE")
+        XCTAssertTrue(app.webViews.staticTexts["Bugünkü Yolculuğum"].waitForExistence(timeout: 60), "AUTHENTICATED_DASHBOARD_UNAVAILABLE")
     }
 
     func testPublicLoginRuntime() throws {
         if ProcessInfo.processInfo.environment["QA_SYNTHETIC_ACCOUNT"] == "YES" {
             throw XCTSkip("PUBLIC_LOGIN_SURFACE_RECORDED_IN_PUBLIC_MODE")
         }
-        let app = XCUIApplication()
+        let app = configuredApp()
         app.launch()
         app.buttons["qa-login"].tap()
         let ready = app.webViews.buttons["Giriş Yap"].waitForExistence(timeout: 60)
@@ -47,7 +60,7 @@ final class RuntimeTests: XCTestCase {
     }
 
     func testAuthenticatedScreensAndRelaunch() throws {
-        let app = XCUIApplication()
+        let app = configuredApp()
         app.launch()
         try login(app)
         screenshot(app, "dashboard")
@@ -65,7 +78,7 @@ final class RuntimeTests: XCTestCase {
         screenshot(app, "profile")
         app.terminate()
         app.launch()
-        XCTAssertTrue(app.webViews.staticTexts["Bugünkü Yolculuğun"].waitForExistence(timeout: 60), "SESSION_RELAUNCH_UNAVAILABLE")
+        XCTAssertTrue(app.webViews.staticTexts["Bugünkü Yolculuğum"].waitForExistence(timeout: 60), "SESSION_RELAUNCH_UNAVAILABLE")
         screenshot(app, "session-relaunch")
     }
 }

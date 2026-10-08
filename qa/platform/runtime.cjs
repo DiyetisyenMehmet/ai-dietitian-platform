@@ -10,7 +10,7 @@ async function openRuntime(platform, engine = 'chromium') {
   c.stagingOrigin(process.env.QA_BASE_URL || c.ORIGIN);
   if (platform === 'web') {
     if (!['chromium', 'webkit'].includes(engine)) throw new c.Blocked('UNSUPPORTED_BROWSER_ENGINE');
-    const opts = { headless: true };
+    const opts = { headless: process.env.QA_HEADLESS !== 'NO' };
     if (process.env.QA_PROXY_URL) opts.proxy = { server: process.env.QA_PROXY_URL };
     if (engine === 'chromium' && process.env.QA_CHROMIUM_EXECUTABLE) opts.executablePath = process.env.QA_CHROMIUM_EXECUTABLE;
     const browser = await pw[engine].launch(opts);
@@ -54,7 +54,7 @@ async function logout(page) {
 async function openList(page) {
   const b = page.getByRole('button', { name: 'Sohbet geçmişi', exact: true });
   if (await b.isVisible()) await b.click();
-  await page.locator('nav[aria-label="Sohbetler"]').waitFor({ state: 'visible' });
+  await page.locator('nav[aria-label="Sohbetler"]:visible').first().waitFor({ state: 'visible' });
   await page.getByText('Sohbetler yükleniyor...', { exact: true }).first().waitFor({ state: 'hidden' });
 }
 async function assertCredentialScreenshotSafe(page) {

@@ -4,7 +4,7 @@ import plistlib
 import sys
 from pathlib import Path
 
-SECRET_KEYS = ("QA_EMAIL", "QA_PASSWORD", "QA_SYNTHETIC_ACCOUNT")
+SECRET_KEYS = ("QA_EMAIL", "QA_PASSWORD", "QA_SYNTHETIC_ACCOUNT", "QA_ACCOUNT_ID", "QA_ACCOUNT_HMAC_KEY")
 
 def inject(directory):
     files = list(Path(directory).glob("Build/Products/*.xctestrun"))

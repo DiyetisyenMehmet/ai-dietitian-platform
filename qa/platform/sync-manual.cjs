@@ -8,6 +8,8 @@ const readline = require('node:readline/promises');
 const c = require('./contract.cjs');
 const { syncPlan, CHECKPOINTS } = require('./sync-plan.cjs');
 const { openRuntime, login, openList, capture } = require('./runtime.cjs');
+const { performCheckpoint } = require('./sync-auto.cjs');
+const { verifyIOSIdentity } = require('./ios-identity.cjs');
 async function main() {
   const [source, target] = process.argv.slice(2);
   const user = c.credentials();
@@ -16,6 +18,7 @@ async function main() {
   await require('./account-preflight.cjs').preflight();
   process.env.QA_RUN_ID ||= plan.id;
   const io = readline.createInterface({ input: process.stdin, output: process.stdout });
+  if (target === 'web') process.env.QA_HEADLESS = 'NO';
   const runtime = target === 'ios' ? null : await openRuntime(target);
   if (runtime) { const alias = await login(runtime.page); if (alias !== plan.alias) throw new c.Blocked('CROSS_PLATFORM_ACCOUNT_MISMATCH'); await runtime.page.goto(c.ORIGIN + '/ai'); await openList(runtime.page); }
   const e = c.createEvidence(target, runtime?.runtime || 'ios-simulator', runtime?.device || 'iPhone-Simulator');
@@ -25,13 +28,17 @@ async function main() {
     console.log('On iOS, use the same approved QA account; verify the account privately. Do not paste a token, email or password.');
     const id = (await io.question('After a successful SOURCE message, enter only the server conversation ID: ')).trim();
     if (!/^[a-zA-Z0-9_-]{1,120}$/.test(id)) throw new c.Blocked('SERVER_CONVERSATION_ID_REQUIRED');
+    if (source === 'ios') verifyIOSIdentity(plan.alias);
     for (const checkpoint of CHECKPOINTS) {
+      if (runtime) await performCheckpoint(runtime, checkpoint, plan.alias);
       console.log('Perform target checkpoint: ' + checkpoint + '. For already-open, do not reload/reopen first.');
+      if (target === 'ios') console.log('Press the native QA toolbar button before answering; this verifies identity and protects the screenshot.');
       const answer = (await io.question('Is the marker visible? yes / no / blocked: ')).trim();
       if (!['yes', 'no', 'blocked'].includes(answer)) throw new c.Blocked('INVALID_OBSERVATION');
       if (answer === 'blocked') { e.record('sync-' + checkpoint, 'BLOCKED', { alias: plan.alias, conversationId: id, direction: source + '-to-' + target, code: 'OPERATOR_CHECKPOINT_BLOCKED' }); continue; }
       let screenshot;
       if (target === 'ios') {
+        verifyIOSIdentity(plan.alias, true);
         const udid = process.env.QA_IOS_UDID;
         if (!/^[A-Fa-f0-9-]{36}$/.test(udid || '') || process.platform !== 'darwin') throw new c.Blocked('BOOTED_IOS_SIMULATOR_REQUIRED');
         screenshot = 'sync-' + checkpoint + '-ios-simulator.png';

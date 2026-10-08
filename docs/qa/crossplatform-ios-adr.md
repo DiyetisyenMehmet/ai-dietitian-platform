@@ -19,7 +19,7 @@ Only `iphonesimulator` is supported. HTTPS ATS remains enabled; only the exact s
 
 A small QA toolbar supplies deterministic back/refresh/route controls. Screenshots therefore prove the QA shell, not an App Store production layout. This toolbar occupies 36 points; visual comparisons must exclude it and compare the web content region. It does not impersonate Android native capabilities.
 
-Bridge foundation: `window.webkit.messageHandlers.diewishIOS.postMessage({version:1, operation:'capabilities'})`; only the main frame from staging HTTPS port 443 is accepted. The response is `diewish:ios-capabilities`; unsupported capabilities explicitly return false. A weak handler avoids retaining the view controller. Debug-only Web Inspector is enabled; no arbitrary JS/native operation dispatch exists.
+Bridge foundation: `window.webkit.messageHandlers.diewishIOS.postMessage({version:1, operation:'capabilities'})`; only the main frame from staging HTTPS port 443 is accepted. The response is `diewish:ios-capabilities`; unsupported capabilities explicitly return false. The QA-only account observer also accepts only account ID/logout observations from ordinary successful web auth responses; tokens never cross the bridge. It compares a protected expected ID and writes only its HMAC alias for the manual evidence runner. The QA button refuses populated credentials and masks displayed email identities for capture. These are test-host controls, not product auth or permission changes. A weak handler avoids retaining the view controller. Debug-only Web Inspector is enabled; no arbitrary JS/native operation dispatch exists.
 
 ## Capability gaps
 
