@@ -1,0 +1,55 @@
+'use strict';
+const fs = require('node:fs');
+const path = require('node:path');
+const crypto = require('node:crypto');
+const { execFileSync } = require('node:child_process');
+const ROOT = path.resolve(__dirname, '../..');
+const ORIGIN = 'https://staging.diewish.com';
+const PLATFORMS = { web: ['chromium', 'webkit'], android: ['android-emulator', 'android-physical'], ios: ['ios-simulator', 'ios-physical'] };
+class Blocked extends Error { constructor(code) { super(code); this.code = code; } }
+function stagingOrigin(value = ORIGIN) {
+  if (value !== ORIGIN) throw new Blocked('STAGING_ORIGIN_REQUIRED');
+  return value;
+}
+function credentials(env = process.env) {
+  if (!env.QA_EMAIL || !env.QA_PASSWORD || !env.QA_ACCOUNT_ID || !env.QA_ACCOUNT_HMAC_KEY) throw new Blocked('TEST_ACCOUNT_SECRETS_REQUIRED');
+  if (env.QA_SYNTHETIC_ACCOUNT !== 'YES') throw new Blocked('SYNTHETIC_ACCOUNT_ATTESTATION_REQUIRED');
+  if (env.QA_ACCOUNT_HMAC_KEY.length < 32) throw new Blocked('ACCOUNT_HMAC_KEY_TOO_SHORT');
+  return { email: env.QA_EMAIL, password: env.QA_PASSWORD, id: env.QA_ACCOUNT_ID };
+}
+function accountAlias(id, key = process.env.QA_ACCOUNT_HMAC_KEY) {
+  if (!id || !key || key.length < 32) throw new Blocked('ACCOUNT_HMAC_KEY_REQUIRED');
+  return 'qa-' + crypto.createHmac('sha256', key).update(id).digest('hex').slice(0, 24);
+}
+function gitSha() { return execFileSync('git', ['rev-parse', 'HEAD'], { cwd: ROOT, encoding: 'utf8' }).trim(); }
+function safeName(s) { if (!/^[a-z0-9][a-z0-9_-]{0,100}$/.test(s)) throw new Error('INVALID_ARTIFACT_NAME'); return s; }
+function createEvidence(platform, runtime, device) {
+  if (!PLATFORMS[platform]?.includes(runtime)) throw new Error('INVALID_RUNTIME_CLASSIFICATION');
+  const run = safeName(process.env.QA_RUN_ID || new Date().toISOString().replace(/[^0-9]/g, '') + '-' + crypto.randomBytes(4).toString('hex'));
+  const dir = path.join(ROOT, '.qa-artifacts', run, platform, runtime);
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const records = [];
+  return {
+    dir, run,
+    record(scenario, status, { code = 'NONE', screenshot = null, alias = null, observed = null, appVersion = 'unknown', deployedGitSha = null, viewport = null } = {}) {
+      safeName(scenario);
+      if (!['PASS', 'FAIL', 'BLOCKED'].includes(status)) throw new Error('INVALID_STATUS');
+      if (!/^[A-Z][A-Z0-9_]*$/.test(code)) throw new Error('UNSAFE_ERROR_CODE');
+      if (alias !== null && !/^qa-[a-f0-9]{24}$/.test(alias)) throw new Error('UNSAFE_ACCOUNT_ALIAS');
+      if (screenshot !== null && (!/^[a-z0-9_-]+\.png$/.test(screenshot) || !fs.existsSync(path.join(dir, screenshot)))) throw new Error('SCREENSHOT_MISSING_OR_UNSAFE');
+      if (deployedGitSha !== null && !/^[a-f0-9]{40}$/.test(deployedGitSha)) throw new Error('INVALID_DEPLOYED_SHA');
+      if (typeof appVersion !== 'string' || !/^[a-zA-Z0-9._-]{1,80}$/.test(appVersion)) throw new Error('UNSAFE_APP_VERSION');
+      if (observed !== null && typeof observed !== 'boolean') throw new Error('INVALID_OBSERVATION');
+      if (viewport !== null && (!Number.isInteger(viewport.width) || !Number.isInteger(viewport.height))) throw new Error('INVALID_VIEWPORT');
+      const row = { schemaVersion: 1, platform, runtime, scenario, status, code, accountAlias: alias, observed,
+        productVerdict: 'NOT_ASSESSED', timestamp: new Date().toISOString(), harnessGitSha: gitSha(), deployedGitSha,
+        appVersion, device, viewport, screenshot, log: scenario + '.json', stagingOrigin: ORIGIN };
+      fs.writeFileSync(path.join(dir, scenario + '.json'), JSON.stringify(row, null, 2));
+      records.push(row);
+      fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify({ schemaVersion: 1, run, records }, null, 2));
+      return row;
+    },
+  };
+}
+function errorCode(error) { return error instanceof Blocked ? error.code : 'RUNTIME_OPERATION_FAILED'; }
+module.exports = { ROOT, ORIGIN, PLATFORMS, Blocked, stagingOrigin, credentials, accountAlias, gitSha, safeName, createEvidence, errorCode };

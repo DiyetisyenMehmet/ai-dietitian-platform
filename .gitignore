@@ -14,3 +14,12 @@
 
 # Logs
 *.log
+
+# Cross-platform QA: evidence and private session material never enter Git.
+.qa-artifacts/
+.qa-private/
+ios/build/
+ios/**/*.xcuserstate
+ios/**/xcuserdata/
+
+qa/platform/__pycache__/

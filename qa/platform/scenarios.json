@@ -1,0 +1,6 @@
+[
+  {"name":"dashboard","path":"/dashboard","anchor":"main"},
+  {"name":"coach-list","path":"/ai","anchor":"[aria-label='Mesaj']","openCoachList":true},
+  {"name":"notification-preferences","path":"/profile/notifications","anchor":"main"},
+  {"name":"profile","path":"/profile","anchor":"main"}
+]
