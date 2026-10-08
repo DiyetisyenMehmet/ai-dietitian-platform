@@ -325,7 +325,7 @@ test("controlled clear keeps flags, cancellation keeps hours, and empty plans sc
   await operation(page).getByRole("button", { name: "Temizle", exact: true }).click();
   await expect(day(page, 0).getByRole("switch")).toHaveAttribute("aria-checked", "false");
   await save(page).click();
-  await expect(save(page)).toBeDisabled();
+  await expect(page.getByText("✓ Kaydedildi", { exact: true })).toBeVisible();
   const plan = s.preferences().waterReminderSchedule as ReturnType<typeof customPlan>;
   expect(plan.days.every((d) => d.times.length === 0)).toBe(true);
   expect(
