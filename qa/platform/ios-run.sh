@@ -47,6 +47,7 @@ xcodebuild test-without-building -xctestrun "$private/qa.xctestrun" -destination
   -maximum-concurrent-test-simulator-destinations 1 CODE_SIGNING_ALLOWED=NO >"$private/test.log" 2>&1
 result=$?
 set -e
+python3 qa/platform/ios-result-summary.py "$private/result.xcresult"
 echo EXTRACTING_APPROVED_SCREENSHOTS
 xcrun xcresulttool export attachments --path "$private/result.xcresult" --output-path "$private/attachments" >/dev/null
 node qa/platform/ios-evidence.cjs "$private/attachments" "$result"

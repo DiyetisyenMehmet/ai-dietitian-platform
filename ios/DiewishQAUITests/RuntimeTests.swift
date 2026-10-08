@@ -16,6 +16,7 @@ final class RuntimeTests: XCTestCase {
               let password = env["QA_PASSWORD"], !password.isEmpty else {
             throw XCTSkip("TEST_ACCOUNT_SECRETS_REQUIRED")
         }
+        app.buttons["qa-login"].tap()
         let emailInput = app.webViews.textFields.firstMatch
         XCTAssertTrue(emailInput.waitForExistence(timeout: 45), "LOGIN_SURFACE_UNAVAILABLE")
         emailInput.tap()
@@ -25,16 +26,23 @@ final class RuntimeTests: XCTestCase {
         passwordInput.tap()
         passwordInput.typeText(password)
         let submit = app.webViews.buttons["Giriş Yap"]
-        // WKWebView submit button may sit under the keyboard. Return dismisses it.
-        if app.keyboards.count > 0 { passwordInput.typeText("\n") }
-        if submit.exists && submit.isHittable { submit.tap() }
+        // Drag dismisses the keyboard without implicitly submitting twice.
+        if app.keyboards.count > 0 { app.webViews.firstMatch.swipeUp() }
+        XCTAssertTrue(submit.waitForExistence(timeout: 15), "LOGIN_SUBMIT_UNAVAILABLE")
+        submit.tap()
         XCTAssertTrue(app.webViews.staticTexts["Bugünkü Yolculuğun"].waitForExistence(timeout: 60), "AUTHENTICATED_DASHBOARD_UNAVAILABLE")
     }
 
-    func testPublicLoginRuntime() {
+    func testPublicLoginRuntime() throws {
+        if ProcessInfo.processInfo.environment["QA_SYNTHETIC_ACCOUNT"] == "YES" {
+            throw XCTSkip("PUBLIC_LOGIN_SURFACE_RECORDED_IN_PUBLIC_MODE")
+        }
         let app = XCUIApplication()
         app.launch()
-        XCTAssertTrue(app.webViews.buttons["Giriş Yap"].waitForExistence(timeout: 60), "LOGIN_SURFACE_UNAVAILABLE")
+        app.buttons["qa-login"].tap()
+        let ready = app.webViews.buttons["Giriş Yap"].waitForExistence(timeout: 60)
+        if !ready { screenshot(app, "login-runtime-diagnostic") }
+        XCTAssertTrue(ready, "LOGIN_SURFACE_UNAVAILABLE")
         screenshot(app, "login")
     }
 

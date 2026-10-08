@@ -11,7 +11,7 @@ private final class WeakMessageHandler: NSObject, WKScriptMessageHandler {
 final class ShellViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
     private let origin = URL(string: "https://staging.diewish.com")!
     private var webView: WKWebView!
-    private let routes = ["dashboard": "/dashboard", "coach-list": "/ai", "notification-preferences": "/profile/notifications", "profile": "/profile"]
+    private let routes = ["login": "/login", "dashboard": "/dashboard", "coach-list": "/ai", "notification-preferences": "/profile/notifications", "profile": "/profile"]
     private var contentController: WKUserContentController!
 
     override func viewDidLoad() {
@@ -31,6 +31,7 @@ final class ShellViewController: UIViewController, WKNavigationDelegate, WKUIDel
         webView.uiDelegate = self
         webView.customUserAgent = nil
         webView.allowsBackForwardNavigationGestures = true
+        webView.scrollView.keyboardDismissMode = .onDrag
         webView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(webView)
         let toolbar = UIStackView()
@@ -38,7 +39,7 @@ final class ShellViewController: UIViewController, WKNavigationDelegate, WKUIDel
         toolbar.distribution = .fillEqually
         toolbar.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(toolbar)
-        let controls = [("←", "qa-back"), ("↻", "qa-refresh"), ("Ana", "qa-dashboard"), ("Koç", "qa-coach-list"), ("Bildirim", "qa-notification-preferences"), ("Profil", "qa-profile")]
+        let controls = [("Giriş", "qa-login"), ("←", "qa-back"), ("↻", "qa-refresh"), ("Ana", "qa-dashboard"), ("Koç", "qa-coach-list"), ("Bildirim", "qa-notification-preferences"), ("Profil", "qa-profile")]
         for (title, identifier) in controls {
             let button = UIButton(type: .system)
             button.setTitle(title, for: .normal)
