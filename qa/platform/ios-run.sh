@@ -35,19 +35,25 @@ echo SIMULATOR_BOOTED
 xcrun simctl status_bar "$simulator" override --time 9:41 --batteryState charged --batteryLevel 100
 echo BUILDING_SIMULATOR_APP
 xcodebuild -project ios/DiewishQA.xcodeproj -scheme DiewishQA -configuration Debug -sdk iphonesimulator \
-  -destination "id=$simulator" -derivedDataPath "$private/build" CODE_SIGNING_ALLOWED=NO \
+  -destination "id=$simulator" -derivedDataPath "$private/build" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- \
   build-for-testing >"$private/build.log" 2>&1 || { python3 qa/platform/ios-build-diagnostics.py "$private/build.log"; node qa/platform/ios-evidence.cjs build-failed; exit 1; }
 echo SIMULATOR_BUILD_OK
+# Local ad-hoc signing supports ARM64 Simulator execution without an Apple account.
+xcrun simctl install "$simulator" "$private/build/Build/Products/Debug-iphonesimulator/DiewishQA.app" >"$private/install.log" 2>&1 || { python3 qa/platform/ios-result-summary.py --log "$private/install.log"; exit 1; }
+echo SIMULATOR_INSTALL_OK
+xcrun simctl launch "$simulator" com.diewish.qa >"$private/launch.log" 2>&1 || { python3 qa/platform/ios-result-summary.py --log "$private/launch.log"; exit 1; }
+echo SIMULATOR_LAUNCH_OK
 # Keep only sanitized compile diagnostics; UI actions and credentials never leave the temp directory.
 python3 qa/platform/ios-private.py inject "$private/build"
 echo RUNNING_UI_TESTS
 set +e
 xcodebuild test-without-building -xctestrun "$private/qa.xctestrun" -destination "id=$simulator" \
   -resultBundlePath "$private/result.xcresult" -parallel-testing-enabled NO \
-  -maximum-concurrent-test-simulator-destinations 1 CODE_SIGNING_ALLOWED=NO >"$private/test.log" 2>&1
+  -maximum-concurrent-test-simulator-destinations 1 CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- >"$private/test.log" 2>&1
 result=$?
 set -e
 python3 qa/platform/ios-result-summary.py "$private/result.xcresult"
+if [[ "$result" != 0 ]]; then python3 qa/platform/ios-result-summary.py --log "$private/test.log"; fi
 echo EXTRACTING_APPROVED_SCREENSHOTS
 xcrun xcresulttool export attachments --path "$private/result.xcresult" --output-path "$private/attachments" >/dev/null
 node qa/platform/ios-evidence.cjs "$private/attachments" "$result"
