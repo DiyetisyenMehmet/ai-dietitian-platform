@@ -100,6 +100,8 @@ android {
 dependencies {
     implementation("androidx.core:core:1.17.0")
     implementation("androidx.activity:activity:1.13.0")
+    // Install the session cookie checkpoint before startup's first fetch.
+    implementation("androidx.webkit:webkit:1.17.1")
 
     // CameraX owns Diewish capture/scanning UX consistently across vendors.
     val cameraXVersion = "1.6.2"

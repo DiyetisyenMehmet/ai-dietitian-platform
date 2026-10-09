@@ -131,3 +131,67 @@ test("HttpOnly refresh cookie rotation is atomic, origin-bound and replay-safe",
   });
   assert.equal(activeTokens, 0);
 });
+
+test("cookie restore respects logout, expiry, server revoke and account isolation", async (t) => {
+  const prefix = `auth.restore.${Date.now()}`;
+  const password = "LocalRestorePass123";
+  const { server, baseUrl } = await startServer();
+  t.after(async () => {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await prisma.user.deleteMany({ where: { email: { startsWith: prefix } } });
+    await prisma.$disconnect();
+  });
+  const post = (path: string, body: unknown, cookie?: string) => fetch(`${baseUrl}/api/auth/${path}`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json", origin: "http://localhost:3000",
+      "user-agent": "diewish-auth-integration", ...(cookie ? { cookie } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+  const accounts: Array<{ id: string; cookie: string }> = [];
+  for (const suffix of ["a", "b"]) {
+    const email = `${prefix}.${suffix}@example.com`;
+    const registered = await post("register", { email, password, fullName: "Local Restore" });
+    assert.equal(registered.status, 201);
+    const login = await post("login", { email, password });
+    assert.equal(login.status, 200);
+    const envelope = await readEnvelope<AuthPayload>(login);
+    assert.equal(envelope.success, true);
+    if (!envelope.success) throw new Error("Local login failed");
+    assert.equal("refreshToken" in envelope.data.tokens, false);
+    accounts.push({ id: envelope.data.user.id, cookie: cookiePair(login) });
+  }
+  const a = accounts[0]!;
+  const b = accounts[1]!;
+  const restored = await refresh(baseUrl, a.cookie);
+  assert.equal(restored.status, 200);
+  const restoredBody = await readEnvelope<AuthPayload>(restored);
+  assert.equal(restoredBody.success, true);
+  if (!restoredBody.success) throw new Error("Local restore failed");
+  assert.equal(restoredBody.data.user.id === a.id, true);
+  assert.equal(restoredBody.data.user.id === b.id, false);
+  const current = cookiePair(restored);
+  const logout = await post("logout", {}, current);
+  assert.equal(logout.status, 200);
+  const cleared = logout.headers.get("set-cookie") ?? "";
+  assert.equal(/HttpOnly/i.test(cleared), true);
+  assert.equal(/Expires=Thu, 01 Jan 1970/i.test(cleared), true);
+  assert.equal((await refresh(baseUrl, current)).status, 401);
+  assert.equal((await post("refresh-token", {})).status, 401);
+  const bRestored = await refresh(baseUrl, b.cookie);
+  assert.equal(bRestored.status, 200);
+  const bCookie = cookiePair(bRestored);
+  await prisma.refreshToken.updateMany({
+    where: { userId: b.id, revokedAt: null }, data: { expiresAt: new Date(Date.now() - 1000) },
+  });
+  assert.equal((await refresh(baseUrl, bCookie)).status, 401);
+  const fresh = await post("login", { email: `${prefix}.a@example.com`, password });
+  assert.equal(fresh.status, 200);
+  const freshCookie = cookiePair(fresh);
+  await prisma.refreshToken.updateMany({ where: { userId: a.id, revokedAt: null }, data: { revokedAt: new Date() } });
+  const revoked = await refresh(baseUrl, freshCookie);
+  assert.equal(revoked.status, 401);
+  assert.equal(revoked.headers.has("set-cookie"), false);
+});
