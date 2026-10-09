@@ -16,6 +16,9 @@ async function rejectPreparationShield(bytes) {
   // This is a narrow paint-integrity check, not OCR or semantic health scanning.
   const sharp=require('../../frontend/node_modules/sharp');
   const {data,info}=await sharp(bytes).removeAlpha().raw().toBuffer({resolveWithObject:true});
+  return rejectShieldPixels(data,info);
+}
+function rejectShieldPixels(data,info) {
   let shield=0;
   for(let i=0;i<data.length;i+=info.channels) if(data[i]===38 && data[i+1]===59 && data[i+2]===53) shield++;
   if(shield>info.width*info.height*0.8) throw failClosed();
@@ -49,4 +52,4 @@ async function guardedCapture(page,file,screenshot) {
   fs.writeFileSync(file,bytes,{mode:0o600}); prove(file);
   console.log('HEALTH_DATA_SCREENSHOT_GUARD PASS');
 }
-module.exports={guardedCapture,prove,proven,failClosed,rejectPreparationShield};
+module.exports={guardedCapture,prove,proven,failClosed,rejectPreparationShield,rejectShieldPixels};

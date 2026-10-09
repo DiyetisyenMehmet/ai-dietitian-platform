@@ -108,3 +108,12 @@ test('loaded CSS font faces remain guarded across actual engine screenshot plumb
   await page.evaluate(()=>document.fonts.ready);
   await guardedCapture(page,path.join(dir,'font-face.png'),()=>page.screenshot({caret:'initial'}));
 }));
+
+test('preparation-shield image bytes are refused before filesystem export',async()=>fixture(async(page,dir)=>{
+  await page.setContent('<style>body{background:#263b35}</style>');
+  const file=path.join(dir,'shield-refused.png');
+  try {
+    await assert.rejects(()=>guardedCapture(page,file,()=>page.screenshot({caret:'initial'})),{code:'HEALTH_DATA_SCREENSHOT_GUARD_FAIL'});
+    assert.equal(fs.existsSync(file),false);
+  } finally {fs.rmSync(path.join(c.ROOT,'.qa-artifacts','.health-guard-failed'),{force:true});}
+}));
