@@ -80,8 +80,9 @@ jobs:
         if: inputs.android_operation == 'smoke' || !inputs.android_operation
         run: |
           npm ci --prefix frontend
-          npx --prefix frontend playwright install --with-deps chromium
+          npx --prefix frontend playwright install --with-deps chromium webkit
           node --test qa/platform/health-screenshot.spec.cjs
+          QA_BROWSER_ENGINE=webkit node --test qa/platform/health-screenshot.spec.cjs
 
   web:
     needs: contracts
@@ -107,7 +108,7 @@ jobs:
       - name: Credential screenshot guard in a real DOM fixture
         env:
           QA_BROWSER_ENGINE: ${{ matrix.engine }}
-        run: node --test qa/platform/credential-screenshot.spec.cjs qa/platform/health-screenshot.spec.cjs
+        run: node --test qa/platform/credential-screenshot.spec.cjs
       - name: Real browser evidence (no traces, HAR, cookies or storage export)
         env:
           QA_EMAIL: ${{ inputs.authenticated && secrets.QA_EMAIL || '' }}

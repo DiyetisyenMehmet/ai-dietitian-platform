@@ -39,13 +39,22 @@
     removeEventListener('scroll', invalidate, true);
     document.fonts.removeEventListener('loading', fontsChanged);
     document.fonts.removeEventListener('loadingdone', fontsChanged);
+    const restored=new Set();
+    for (const [element,saved] of state.styleStates) {
+      if(element.getAttribute('style')===saved.masked) {
+        if(saved.original===null) element.removeAttribute('style'); else element.setAttribute('style',saved.original);
+        restored.add(element);
+      }
+    }
     for (const edit of state.edits) {
+      if(restored.has(edit.element)) continue;
       // Restore only our own temporary property; never overwrite a later app edit.
       if (edit.element.style.getPropertyValue(edit.property)===edit.masked && edit.element.style.getPropertyPriority(edit.property)==='important') {
         if(edit.value) edit.element.style.setProperty(edit.property,edit.value,edit.priority);
         else edit.element.style.removeProperty(edit.property);
       }
     }
+    for(const [element,saved] of state.styleStates) if(saved.original===null && element.style.length===0) element.removeAttribute('style');
     state.host.remove(); state.style.remove(); state = null;
     return true;
   }
@@ -87,10 +96,12 @@
     const style = document.createElement('style');
     style.textContent = '*{animation:none!important;transition:none!important;caret-color:transparent!important}';
     document.head.appendChild(style); document.documentElement.appendChild(host); shadow.appendChild(shield);
-    state = {host,shield,style,ready:false,frame:0,observer:null,checks:[],edits:[]};
+    state = {host,shield,style,ready:false,frame:0,observer:null,checks:[],edits:[],styleStates:new Map()};
     function maskStyle(element,property,masked) {
+      if(!state.styleStates.has(element)) state.styleStates.set(element,{original:element.getAttribute('style'),masked:null});
       state.edits.push({element,property,masked,value:element.style.getPropertyValue(property),priority:element.style.getPropertyPriority(property)});
       element.style.setProperty(property,masked,'important');
+      state.styleStates.get(element).masked=element.getAttribute('style');
       if (getComputedStyle(element).getPropertyValue(property)!==masked) throw new Error('STYLE_MASK_FAILED');
     }
     function cover(rect) {

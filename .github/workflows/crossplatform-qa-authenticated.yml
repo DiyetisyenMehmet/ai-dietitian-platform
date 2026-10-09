@@ -3,6 +3,7 @@ name: Cross-platform QA Authenticated All
 # Settle hydration before measuring private-value masks; never ignore capture-time changes.
 # Accept only WebKit's declaration-free screenshot plumbing; audit private-value geometry.
 # Hide private visual layers without covering the card labels above them.
+# Restore original inline styles exactly; validate both engines before all runtime jobs.
 
 on:
   push:
