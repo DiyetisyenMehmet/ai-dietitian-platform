@@ -5,28 +5,34 @@ final class RuntimeTests: XCTestCase {
 
     private func screenshot(_ app: XCUIApplication, _ name: String) {
         let guardButton = app.buttons["qa-evidence"]
+        print("IOS_STAGE HEALTH_GUARD_PREPARE RUNNING")
         guardButton.tap()
         let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == 'READY'"), object: guardButton)
         guard XCTWaiter.wait(for: [ready], timeout: 20) == .completed else {
+            print("IOS_STAGE HEALTH_GUARD FAIL")
             XCTFail("HEALTH_DATA_SCREENSHOT_GUARD_FAIL"); return
         }
+        print("IOS_STAGE HEALTH_GUARD_PREPARE PASS")
         let snapshot = app.screenshot()
         let check = app.buttons["qa-check-evidence"]
         check.tap()
         let checked = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == 'READY'"), object: check)
         guard XCTWaiter.wait(for: [checked], timeout: 10) == .completed else {
+            print("IOS_STAGE HEALTH_GUARD FAIL")
             XCTFail("HEALTH_DATA_SCREENSHOT_GUARD_FAIL"); return
         }
         let restore = app.buttons["qa-restore-evidence"]
         restore.tap()
         let restored = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == 'RESTORED'"), object: restore)
         guard XCTWaiter.wait(for: [restored], timeout: 10) == .completed else {
+            print("IOS_STAGE HEALTH_GUARD FAIL")
             XCTFail("HEALTH_DATA_SCREENSHOT_GUARD_FAIL"); return
         }
         let attachment = XCTAttachment(screenshot: snapshot)
         attachment.name = name + "-ios-simulator-guarded-health-v1"
         attachment.lifetime = .keepAlways
         add(attachment)
+        print("IOS_STAGE HEALTH_GUARD_CAPTURE PASS")
     }
 
     private func configuredApp() -> XCUIApplication {
@@ -77,7 +83,9 @@ final class RuntimeTests: XCTestCase {
     func testAuthenticatedScreensAndRelaunch() throws {
         let app = configuredApp()
         app.launch()
+        print("IOS_STAGE AUTH_LOGIN RUNNING")
         try login(app)
+        print("IOS_STAGE AUTH_LOGIN PASS")
         screenshot(app, "dashboard")
         app.buttons["qa-coach-list"].tap()
         XCTAssertTrue(app.webViews.textViews["Mesaj"].waitForExistence(timeout: 45), "COACH_UNAVAILABLE")

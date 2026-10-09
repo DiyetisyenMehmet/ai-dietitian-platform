@@ -5,6 +5,7 @@ name: Cross-platform QA Authenticated All
 # Hide private visual layers without covering the card labels above them.
 # Restore original inline styles exactly; validate both engines before all runtime jobs.
 
+# Settle overlay fonts before arming; cover rounded native viewport dimensions.
 on:
   push:
     branches: [feature/workmode4-crossplatform-qa-infra-a1]

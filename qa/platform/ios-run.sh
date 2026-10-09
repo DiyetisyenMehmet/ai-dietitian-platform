@@ -52,6 +52,13 @@ xcodebuild test-without-building -xctestrun "$private/qa.xctestrun" -destination
   -maximum-concurrent-test-simulator-destinations 1 CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- >"$private/test.log" 2>&1
 result=$?
 set -e
+# Emit only allowlisted stage words, never XCTest actions or argument values.
+python3 - "$private/test.log" <<'PYLOG'
+import re,sys
+from pathlib import Path
+for stage,status in re.findall(r'IOS_STAGE (AUTH_LOGIN|HEALTH_GUARD_PREPARE|HEALTH_GUARD_CAPTURE|HEALTH_GUARD) (RUNNING|PASS|FAIL)',Path(sys.argv[1]).read_text(errors='replace')):
+    print('IOS_STAGE',stage,status)
+PYLOG
 python3 qa/platform/ios-result-summary.py "$private/result.xcresult"
 if [[ "$result" != 0 ]]; then python3 qa/platform/ios-result-summary.py --log "$private/test.log"; fi
 echo EXTRACTING_APPROVED_SCREENSHOTS

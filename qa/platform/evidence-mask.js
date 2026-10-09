@@ -77,7 +77,7 @@
   const geometry = object => JSON.stringify([...object.getClientRects()].map(r=>[r.left,r.top,r.width,r.height]));
   function active() {
     if (!state || !state.ready || !state.host.isConnected || !state.style.isConnected) { if(reason==='NONE') reason='MASK_NOT_ACTIVE'; return false; }
-    if (state.host.getBoundingClientRect().width !== innerWidth || state.host.getBoundingClientRect().height !== innerHeight) { invalidate('VIEWPORT_CHANGED'); return false; }
+    if (state.viewport.width !== innerWidth || state.viewport.height !== innerHeight || state.host.getBoundingClientRect().width < innerWidth || state.host.getBoundingClientRect().height < innerHeight) { invalidate('VIEWPORT_CHANGED'); return false; }
     if (state.observer.takeRecords().some(relevant)) { invalidate('DOCUMENT_MUTATION'); return false; }
     if (state.checks.some(check=>geometry(check.object)!==check.geometry)) { invalidate('DOCUMENT_MUTATION'); return false; }
     return true;
@@ -145,6 +145,17 @@
         if (field || generated || element.shadowRoot || element.tagName.includes('-')) cover(element.getBoundingClientRect());
         if (visual || field || generated || css.backgroundImage.includes('url(')) state.checks.push({object:element,geometry:geometry(element)});
       }
+      // Painting the overlays can itself request a system font in WebKit. Settle
+      // that request before arming the capture guard; never ignore font changes
+      // once capture is armed. A changed private range requires a fresh attempt.
+      await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('FONT_TIMEOUT')),5000);document.fonts.ready.then(()=>{clearTimeout(timer);resolve();});});
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      if (state.checks.some(check=>geometry(check.object)!==check.geometry)) throw new Error('GEOMETRY_CHANGED');
+      // Android WebView CSS vw can be fractional while innerWidth is rounded.
+      // Use an explicit covering pixel size, and separately watch the viewport.
+      state.viewport={width:innerWidth,height:innerHeight};
+      host.style.setProperty('width',innerWidth+'px','important');
+      host.style.setProperty('height',innerHeight+'px','important');
       state.observer = new MutationObserver(records => { if (records.some(relevant)) invalidate('DOCUMENT_MUTATION'); });
       state.observer.observe(document.documentElement,{subtree:true,childList:true,characterData:true,attributes:true});
       addEventListener('resize',invalidate); addEventListener('scroll',invalidate,true);
