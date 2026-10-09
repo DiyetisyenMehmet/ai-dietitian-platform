@@ -14,16 +14,21 @@ function failClosed() {
 }
 async function guardedCapture(page,file,screenshot) {
   let bytes;
+  let phase='BOOTSTRAP';
   try {
     await page.evaluate(script);
+    phase='PREPARE';
     if (!await page.evaluate(() => window.__diewishEvidenceMask.begin())) throw failClosed();
+    phase='PRE_CAPTURE';
     if (!await page.evaluate(() => window.__diewishEvidenceMask.active())) throw failClosed();
     // No unguarded PNG is ever written. Native APIs return the actual device
     // screenshot bytes; they are committed only after the post-capture check.
-    bytes=await screenshot();
+    phase='CAPTURE'; bytes=await screenshot(); phase='POST_CAPTURE';
     if (!await page.evaluate(() => window.__diewishEvidenceMask.active())) throw failClosed();
     if (!Buffer.isBuffer(bytes)) throw failClosed();
   } catch (error) {
+    const reason=await page.evaluate(()=>window.__diewishEvidenceMask?.reason?.() || 'NONE').catch(()=>'NONE');
+    console.error('HEALTH_DATA_SCREENSHOT_GUARD_PHASE',phase,['NONE','VIEWPORT_CHANGED','DOCUMENT_MUTATION','FONT_CHANGED','MASK_NOT_ACTIVE','PREPARE_FAILED'].includes(reason)?reason:'OTHER');
     fs.rmSync(file,{force:true});
     throw error instanceof c.Blocked && error.code==='CREDENTIAL_SCREENSHOT_REFUSED' ? error : failClosed();
   } finally {

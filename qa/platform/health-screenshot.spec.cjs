@@ -44,8 +44,15 @@ test('DOM update during capture shields the screen, refuses writing and blocks a
   try {
     await assert.rejects(()=>guardedCapture(page,file,async()=>{await page.locator('#value').evaluate(n=>n.textContent='80.0');return page.screenshot({caret:'initial'});}),{code:'HEALTH_DATA_SCREENSHOT_GUARD_FAIL'});
     assert.equal(fs.existsSync(file),false);assert.throws(()=>verify(path.join(c.ROOT,'.qa-artifacts')));
+    assert.equal(fs.existsSync(path.join(c.ROOT,'.qa-artifacts','.health-guard-failed')),true);
     assert.equal(await page.locator('#value').textContent(),'80.0');assert.equal(await page.locator('[data-qa-health-mask]').count(),0);
   } finally {fs.rmSync(path.join(c.ROOT,'.qa-artifacts','.health-guard-failed'),{force:true});}
+}));
+test('late hydration is settled before mask geometry; capture still preserves the latest application state',async()=>fixture(async(page,dir)=>{
+  await page.setContent('<h1>Dashboard</h1><p id="value">79.0</p>');
+  await page.evaluate(()=>setTimeout(()=>document.querySelector('#value').textContent='80.0',100));
+  await guardedCapture(page,path.join(dir,'hydrated.png'),()=>page.screenshot({caret:'initial'}));
+  assert.equal(await page.locator('#value').textContent(),'80.0');
 }));
 test('mask bootstrap failure and populated credential fields never invoke device screenshot',async()=>fixture(async(page,dir)=>{
   await page.setContent('<input type="email" value="synthetic@example.invalid"><input type="password" value="synthetic-only">');
