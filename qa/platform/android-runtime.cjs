@@ -25,6 +25,14 @@ async function pageState(page, label) {
   console.log('ANDROID_STATE', label, 'DOCUMENT', ['STAGING','BLANK','NETWORK_ERROR','OTHER'].includes(state.origin) ? state.origin : 'UNKNOWN',
     'READY', ['loading','interactive','complete'].includes(state.ready) ? state.ready.toUpperCase() : 'UNKNOWN', 'ONLINE', state.online === true ? 'YES' : 'NO');
 }
+async function cookieState(page, label) {
+  const state = await stage('SESSION_COOKIE_METADATA', 5000, async () => {
+    const cookies = await page.context().cookies(c.ORIGIN + '/api/auth/refresh');
+    // Values/names stay in SDK memory; only aggregate presence flags leave it.
+    return { present: cookies.some(cookie => cookie.httpOnly), persistent: cookies.some(cookie => cookie.httpOnly && cookie.expires > Date.now() / 1000) };
+  });
+  console.log('ANDROID_SESSION', label, 'HTTPONLY_PRESENT', state.present ? 'YES' : 'NO', 'PERSISTENT_PRESENT', state.persistent ? 'YES' : 'NO');
+}
 async function openAndroidRuntime(pw) {
   const devices = await stage('DEVICE_DISCOVERY', 15000, () => pw._android.devices());
   const serial = process.env.QA_ANDROID_SERIAL;
@@ -40,7 +48,7 @@ async function openAndroidRuntime(pw) {
     throw new c.Blocked('PHYSICAL_DEVICE_OPT_IN_REQUIRED');
   }
   device.setDefaultTimeout(30000);
-  const start = async () => {
+  const start = async (reopened = false) => {
     await stage('APP_LAUNCH', 20000, () => device.shell('am start -W -n com.diewish.app/.MainActivity'));
     const pid = await stage('APP_PROCESS_READY', 15000, async () => {
       // ActivityManager start and process creation are asynchronous after a
@@ -66,6 +74,13 @@ async function openAndroidRuntime(pw) {
     const page = await stage('WEBVIEW_ATTACH', 45000, () => view.page());
     page.setDefaultTimeout(30000);
     page.setDefaultNavigationTimeout(30000);
+    if (reopened) page.on('response', response => {
+      const url = new URL(response.url());
+      if (url.origin === c.ORIGIN && url.pathname === '/api/auth/refresh' && response.request().method() === 'POST') {
+        const status = response.status();
+        console.log('ANDROID_AUTH', 'REOPEN_REFRESH', response.ok() ? 'SUCCESS' : 'FAIL', Number.isInteger(status) && status >= 100 && status <= 599 ? 'HTTP_' + status : 'HTTP_UNKNOWN');
+      }
+    });
     page.on('requestfailed', request => {
       if (!request.isNavigationRequest()) return;
       const code = request.failure()?.errorText;
@@ -83,28 +98,37 @@ async function openAndroidRuntime(pw) {
     return page;
   };
   try {
-    const page = await start();
+    let page = await start();
     return { platform: 'android', runtime: emulator ? 'android-emulator' : 'android-physical', device: emulator ? 'Android-AVD' : 'Android-device', page,
       screenshot: file => stage('DEVICE_SCREENSHOT', 20000, () => device.screenshot({ path: file })), close,
       refresh: page => stage('PAGE_REFRESH', 35000, () => page.reload({ waitUntil: 'domcontentloaded', timeout: 30000 })),
       relaunch: async () => {
+        await cookieState(page, 'BEFORE_PROCESS_STOP');
         await stage('APP_FORCE_STOP', 15000, () => device.shell('am force-stop com.diewish.app'));
-        const page = await start();
+        const reopenedPage = await start(true);
+        page = reopenedPage;
+        await cookieState(reopenedPage, 'AFTER_PROCESS_REOPEN');
         try {
           // Native onCreate opens Dashboard. Its DOM can be complete while the
           // ordinary auth/session recovery is still in flight. Do not interrupt
           // that recovery with a second full-document navigation.
           await stage('SESSION_RESTORE_DASHBOARD_READY', 60000, async () => {
-            await page.waitForURL(c.ORIGIN + '/dashboard', { timeout: 45000 });
-            await page.getByText('Bugünkü Yolculuğum', { exact: true }).waitFor({ state: 'visible', timeout: 45000 });
+            await reopenedPage.waitForURL(c.ORIGIN + '/dashboard', { timeout: 45000 });
+            await reopenedPage.getByText('Bugünkü Yolculuğum', { exact: true }).waitFor({ state: 'visible', timeout: 45000 });
           });
         } catch (error) {
-          await pageState(page, 'SESSION_RESTORE_FAILED').catch(() => {});
+          await pageState(reopenedPage, 'SESSION_RESTORE_FAILED').catch(() => {});
+          await cookieState(reopenedPage, 'SESSION_RESTORE_FAILED').catch(() => {});
+          // Allow only an empty, trusted login surface to be captured by the
+          // outer runner as failure evidence; never reauthenticate here.
+          if (reopenedPage.url() === c.ORIGIN + '/login') {
+            error.androidFailurePage = reopenedPage;
+          }
           throw error;
         }
-        await pageState(page, 'SESSION_RESTORED');
-        await stage('REOPEN_COACH', 35000, () => page.goto(c.ORIGIN + '/ai', { waitUntil: 'domcontentloaded', timeout: 30000 }));
-        return page;
+        await pageState(reopenedPage, 'SESSION_RESTORED');
+        await stage('REOPEN_COACH', 35000, () => reopenedPage.goto(c.ORIGIN + '/ai', { waitUntil: 'domcontentloaded', timeout: 30000 }));
+        return reopenedPage;
       },
       offline: async value => {
         await stage('NETWORK_CHANGE', 20000, async () => {

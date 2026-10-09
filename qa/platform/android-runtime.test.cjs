@@ -6,7 +6,7 @@ const { stage } = require('./android-stage.cjs');
 const { openAndroidRuntime, originClass } = require('./android-runtime.cjs');
 function fixture(failAttach = false, delayedReopen = false) {
   let closed = 0, staleAttachments = 0, freshAttachments = 0, pid = 222, pendingPid = 0;
-  const page = { setDefaultTimeout() {}, setDefaultNavigationTimeout() {}, on() {}, url:()=>c.ORIGIN+'/login', getByText:()=>({async waitFor(){}}), async evaluate() { return {origin:'STAGING',ready:'complete',online:true}; }, async waitForURL() {}, async waitForLoadState() {}, async goto() {} };
+  const page = { setDefaultTimeout() {}, setDefaultNavigationTimeout() {}, on() {}, url:()=>c.ORIGIN+'/login', context:()=>({async cookies(){return [];}}), getByText:()=>({async waitFor(){}}), async evaluate() { return {origin:'STAGING',ready:'complete',online:true}; }, async waitForURL() {}, async waitForLoadState() {}, async goto() {} };
   const device = { serial: () => 'emulator-5554', setDefaultTimeout() {}, async close() { closed++; },
     async shell(command) { if (command.startsWith('pidof')) return Buffer.from(pendingPid-- > 0 ? '' : String(pid)); if (command.startsWith('am force-stop')) { pid++; if (delayedReopen) pendingPid = 2; } return Buffer.from(''); },
     webViews: () => [

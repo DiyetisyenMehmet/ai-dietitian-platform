@@ -136,7 +136,16 @@ async function main() {
       await runtime.page.getByLabel('Mesaj', { exact: true }).waitFor();
     });
     activeEvidence.record('session-relaunch', 'PASS', { alias, screenshot: await capture(runtime, activeEvidence, 'session-relaunch') });
-  } catch (error) { const code = c.errorCode(error); console.error(code, 'RUNTIME_PHASE_' + phase); evidence.record('runtime-start', error instanceof c.Blocked ? 'BLOCKED' : 'FAIL', { code: code === 'RUNTIME_OPERATION_FAILED' ? phase + '_FAILED' : code }); process.exitCode = 1; }
+  } catch (error) {
+    const code = c.errorCode(error); console.error(code, 'RUNTIME_PHASE_' + phase);
+    let screenshot;
+    if (platform === 'android' && runtime && phase === 'SESSION_RELAUNCH' && error.androidFailurePage) {
+      runtime.page = error.androidFailurePage;
+      try { screenshot = await capture(runtime, evidence, 'session-reopen-failure'); }
+      catch { console.log('ANDROID_STAGE', 'SESSION_FAILURE_EVIDENCE', 'FAIL'); }
+    }
+    evidence.record('runtime-start', error instanceof c.Blocked ? 'BLOCKED' : 'FAIL', { code: code === 'RUNTIME_OPERATION_FAILED' ? phase + '_FAILED' : code, ...(screenshot ? { screenshot } : {}) }); process.exitCode = 1;
+  }
   finally {
     if (runtime) {
       try { await runtime.close(); }
