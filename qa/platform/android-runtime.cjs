@@ -15,6 +15,8 @@ function originClass(value) {
 }
 async function pageState(page, label) {
   console.log('ANDROID_STATE', label, 'FRAME', originClass(page.url()));
+  const route = (() => { try { const url = new URL(page.url()); return url.origin === c.ORIGIN ? ({'/login':'LOGIN','/dashboard':'DASHBOARD','/ai':'COACH'}[url.pathname] || 'OTHER') : 'OTHER'; } catch { return 'UNKNOWN'; } })();
+  console.log('ANDROID_STATE', label, 'ROUTE', route);
   const state = await stage('PAGE_STATE', 5000, () => page.evaluate(origin => ({
     origin: location.origin === origin ? 'STAGING' : location.protocol === 'about:' ? 'BLANK' : location.protocol === 'chrome-error:' ? 'NETWORK_ERROR' : 'OTHER',
     ready: document.readyState,
@@ -88,6 +90,19 @@ async function openAndroidRuntime(pw) {
       relaunch: async () => {
         await stage('APP_FORCE_STOP', 15000, () => device.shell('am force-stop com.diewish.app'));
         const page = await start();
+        try {
+          // Native onCreate opens Dashboard. Its DOM can be complete while the
+          // ordinary auth/session recovery is still in flight. Do not interrupt
+          // that recovery with a second full-document navigation.
+          await stage('SESSION_RESTORE_DASHBOARD_READY', 60000, async () => {
+            await page.waitForURL(c.ORIGIN + '/dashboard', { timeout: 45000 });
+            await page.getByText('Bugünkü Yolculuğum', { exact: true }).waitFor({ state: 'visible', timeout: 45000 });
+          });
+        } catch (error) {
+          await pageState(page, 'SESSION_RESTORE_FAILED').catch(() => {});
+          throw error;
+        }
+        await pageState(page, 'SESSION_RESTORED');
         await stage('REOPEN_COACH', 35000, () => page.goto(c.ORIGIN + '/ai', { waitUntil: 'domcontentloaded', timeout: 30000 }));
         return page;
       },

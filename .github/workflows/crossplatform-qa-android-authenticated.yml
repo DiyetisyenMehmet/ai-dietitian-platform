@@ -1,6 +1,7 @@
 name: Cross-platform QA Authenticated Android
 # Wait for the fresh guest's validated internet before the first native launch.
 # Wait for ActivityManager/process readiness again after a genuine force-stop.
+# Verify the native startup Dashboard before navigating away from auth recovery.
 
 on:
   push:
