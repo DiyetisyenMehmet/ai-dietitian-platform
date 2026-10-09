@@ -6,6 +6,7 @@ name: Cross-platform QA Authenticated All
 # Restore original inline styles exactly; validate both engines before all runtime jobs.
 
 # Settle overlay fonts before arming; cover rounded native viewport dimensions.
+# Audit actual font set/status/geometry; bound Simulator launch readiness.
 on:
   push:
     branches: [feature/workmode4-crossplatform-qa-infra-a1]

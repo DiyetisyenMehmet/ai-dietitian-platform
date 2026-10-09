@@ -19,6 +19,9 @@ PATTERNS = {
     "IOS_SESSION_RELAUNCH_UNAVAILABLE": ("SESSION_RELAUNCH_UNAVAILABLE",),
     "IOS_HEALTH_GUARD_FAILED": ("HEALTH_DATA_SCREENSHOT_GUARD_FAIL",),
     "IOS_ACCOUNT_UNVERIFIED": ("ACCOUNT_UNVERIFIED",),
+    "IOS_SPRINGBOARD_LAUNCH_SERVICE": ("FBSOpenApplicationServiceErrorDomain", "SBMainWorkspace"),
+    "IOS_PROCESS_LAUNCH_SERVICE": ("RBSRequestErrorDomain", "NSPOSIXErrorDomain"),
+    "IOS_SIMULATOR_CONNECTION_INTERRUPTED": ("connection interrupted", "connection invalidated", "Unable to boot"),
     "IOS_TEST_RUNNER_FAILED": ("test runner", "testing failed", "test execute failed"),
 }
 

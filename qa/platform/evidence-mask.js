@@ -16,7 +16,7 @@
     'Gizlilik ve izinler', 'Şifre değiştir', 'Çıkış yap', 'Çıkış', 'Çıkış Yap',
     'Ana Sayfa', 'Profil', 'Bildirimler', 'Yeni Sohbet', 'Yeni sohbet', 'ÖNCEKİ SOHBETLER',
     'Sohbetler', 'Sohbet geçmişi', 'Gönder', 'Kapat', 'Kaydet', 'İptal', 'Düzenle',
-    'Öğün hatırlatmaları', 'Su hatırlatmaları', 'Bu cihazda bildirim izni ver',
+    'Öğün hatırlatmaları', 'Su hatırlatmaları', 'Aktivite hatırlatmaları', 'Uyku hazırlığı', 'Haftalık özet', 'Diewish Koç bildirimleri', 'Cihaz bildirimi', 'Bildirim iznini kontrol et', 'Bildirim izni ver', 'Tarayıcı bildirimlerini etkinleştir', 'Tam zamanlı hatırlatıcı izni ver', 'Anlık yerel bildirimi test et', 'Bu cihazda bildirim izni ver',
     'E-posta', 'Şifre', 'Şifremi unuttum', 'Beni hatırla', 'Giriş Yap', 'Tekrar hoş geldiniz',
     'Hesabınıza giriş yapın', 'veya', 'Google ile devam et', 'Telefon numarası ile devam et',
     'Apple ile devam et', 'Hesabın yok mu?', 'Kayıt ol', 'Hazır', 'Boş', 'kg', 'kcal', 'dk',
@@ -65,7 +65,16 @@
     state.shield.style.display = 'block';
     try { window.webkit?.messageHandlers?.diewishIOS?.postMessage({version:1,operation:'qa-mask-invalid'}); } catch (_) {}
   }
-  function fontsChanged(){invalidate('FONT_CHANGED');}
+  const fontProperties = face => [face.family,face.style,face.weight,face.stretch,face.unicodeRange,face.variant,face.featureSettings,face.status].join('|');
+  function fontSetChanged() {
+    const faces=[...document.fonts];
+    return document.fonts.status!=='loaded' || faces.length!==state.fonts.length || faces.some((face,i)=>face!==state.fonts[i].face || fontProperties(face)!==state.fonts[i].properties);
+  }
+  function fontsChanged(){
+    // WebKit can notify loadingdone without changing any FontFace. Such a
+    // notification cannot alter pixels. Real set/status/geometry changes fail.
+    if(state?.ready && (fontSetChanged() || state.checks.some(check=>geometry(check.object)!==check.geometry))) invalidate('FONT_CHANGED');
+  }
   function relevant(record) {
     if (state?.host.contains(record.target)) return false;
     // WebKit screenshot plumbing adds/removes precisely this empty rule.
@@ -78,6 +87,7 @@
   function active() {
     if (!state || !state.ready || !state.host.isConnected || !state.style.isConnected) { if(reason==='NONE') reason='MASK_NOT_ACTIVE'; return false; }
     if (state.viewport.width !== innerWidth || state.viewport.height !== innerHeight || state.host.getBoundingClientRect().width < innerWidth || state.host.getBoundingClientRect().height < innerHeight) { invalidate('VIEWPORT_CHANGED'); return false; }
+    if (fontSetChanged()) { invalidate('FONT_CHANGED'); return false; }
     if (state.observer.takeRecords().some(relevant)) { invalidate('DOCUMENT_MUTATION'); return false; }
     if (state.checks.some(check=>geometry(check.object)!==check.geometry)) { invalidate('DOCUMENT_MUTATION'); return false; }
     return true;
@@ -153,6 +163,7 @@
       if (state.checks.some(check=>geometry(check.object)!==check.geometry)) throw new Error('GEOMETRY_CHANGED');
       // Android WebView CSS vw can be fractional while innerWidth is rounded.
       // Use an explicit covering pixel size, and separately watch the viewport.
+      state.fonts=[...document.fonts].map(face=>({face,properties:fontProperties(face)}));
       state.viewport={width:innerWidth,height:innerHeight};
       host.style.setProperty('width',innerWidth+'px','important');
       host.style.setProperty('height',innerHeight+'px','important');

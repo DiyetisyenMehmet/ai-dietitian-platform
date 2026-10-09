@@ -90,13 +90,13 @@ test('Android device and iOS QA host use the shared mask before their native cap
   const testSource=fs.readFileSync(path.join(__dirname,'../../ios/DiewishQAUITests/RuntimeTests.swift'),'utf8');assert.ok(testSource.indexOf('HEALTH_DATA_SCREENSHOT_GUARD_FAIL')<testSource.indexOf('app.screenshot()'));assert.match(testSource,/guarded-health-v1/);
 }));
 
-test('font events settle before arming; subsequent font events refuse native/browser export',async()=>fixture(async(page,dir)=>{
+test('unchanged font notification is harmless; actual font set changes refuse native/browser export',async()=>fixture(async(page,dir)=>{
   await page.setContent('<h1>Dashboard</h1><p>79.0</p>');
   await page.evaluate(()=>setTimeout(()=>document.fonts.dispatchEvent(new Event('loadingdone')),100));
-  await guardedCapture(page,path.join(dir,'settled-font.png'),()=>page.screenshot({caret:'initial'}));
+  await guardedCapture(page,path.join(dir,'settled-font.png'),async()=>{await page.evaluate(()=>document.fonts.dispatchEvent(new Event('loadingdone')));return page.screenshot({caret:'initial'});});
   try {
     await assert.rejects(()=>guardedCapture(page,path.join(dir,'font-refused.png'),async()=>{
-      await page.evaluate(()=>document.fonts.dispatchEvent(new Event('loading')));
+      await page.evaluate(()=>document.fonts.add(new FontFace('GuardFixture','local(Arial)')));
       return page.screenshot({caret:'initial'});
     }),{code:'HEALTH_DATA_SCREENSHOT_GUARD_FAIL'});
     assert.equal(fs.existsSync(path.join(dir,'font-refused.png')),false);
