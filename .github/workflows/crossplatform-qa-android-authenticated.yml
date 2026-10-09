@@ -3,6 +3,7 @@ name: Cross-platform QA Authenticated Android
 # Wait for ActivityManager/process readiness again after a genuine force-stop.
 # Verify the native startup Dashboard before navigating away from auth recovery.
 # Export guarded empty-login failure evidence if the real session cannot restore.
+# Android WebView does not support the browser cookie-enumeration protocol.
 
 on:
   push:

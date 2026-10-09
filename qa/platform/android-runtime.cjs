@@ -25,14 +25,6 @@ async function pageState(page, label) {
   console.log('ANDROID_STATE', label, 'DOCUMENT', ['STAGING','BLANK','NETWORK_ERROR','OTHER'].includes(state.origin) ? state.origin : 'UNKNOWN',
     'READY', ['loading','interactive','complete'].includes(state.ready) ? state.ready.toUpperCase() : 'UNKNOWN', 'ONLINE', state.online === true ? 'YES' : 'NO');
 }
-async function cookieState(page, label) {
-  const state = await stage('SESSION_COOKIE_METADATA', 5000, async () => {
-    const cookies = await page.context().cookies(c.ORIGIN + '/api/auth/refresh');
-    // Values/names stay in SDK memory; only aggregate presence flags leave it.
-    return { present: cookies.some(cookie => cookie.httpOnly), persistent: cookies.some(cookie => cookie.httpOnly && cookie.expires > Date.now() / 1000) };
-  });
-  console.log('ANDROID_SESSION', label, 'HTTPONLY_PRESENT', state.present ? 'YES' : 'NO', 'PERSISTENT_PRESENT', state.persistent ? 'YES' : 'NO');
-}
 async function openAndroidRuntime(pw) {
   const devices = await stage('DEVICE_DISCOVERY', 15000, () => pw._android.devices());
   const serial = process.env.QA_ANDROID_SERIAL;
@@ -103,11 +95,9 @@ async function openAndroidRuntime(pw) {
       screenshot: file => stage('DEVICE_SCREENSHOT', 20000, () => device.screenshot({ path: file })), close,
       refresh: page => stage('PAGE_REFRESH', 35000, () => page.reload({ waitUntil: 'domcontentloaded', timeout: 30000 })),
       relaunch: async () => {
-        await cookieState(page, 'BEFORE_PROCESS_STOP');
         await stage('APP_FORCE_STOP', 15000, () => device.shell('am force-stop com.diewish.app'));
         const reopenedPage = await start(true);
         page = reopenedPage;
-        await cookieState(reopenedPage, 'AFTER_PROCESS_REOPEN');
         try {
           // Native onCreate opens Dashboard. Its DOM can be complete while the
           // ordinary auth/session recovery is still in flight. Do not interrupt
@@ -118,7 +108,6 @@ async function openAndroidRuntime(pw) {
           });
         } catch (error) {
           await pageState(reopenedPage, 'SESSION_RESTORE_FAILED').catch(() => {});
-          await cookieState(reopenedPage, 'SESSION_RESTORE_FAILED').catch(() => {});
           // Allow only an empty, trusted login surface to be captured by the
           // outer runner as failure evidence; never reauthenticate here.
           if (reopenedPage.url() === c.ORIGIN + '/login') {
