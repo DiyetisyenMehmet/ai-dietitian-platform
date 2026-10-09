@@ -4,6 +4,7 @@ const { promisify } = require('node:util');
 const exec = promisify(execFile);
 const c = require('./contract.cjs');
 const { stage } = require('./android-stage.cjs');
+const { defaultNetworkReady } = require('./android-network.cjs');
 async function adb(serial, args, timeout = 10000) {
   // Output stays private. adb never receives any credential in its arguments.
   return (await exec('adb', [...(serial ? ['-s', serial] : []), ...args], { timeout, maxBuffer: 1024 * 1024 })).stdout.trim();
@@ -31,6 +32,17 @@ async function main() {
   await stage('APK_INSTALL', 120000, async () => {
     const output = await adb(serial, ['install', '-r', 'android/app/build/outputs/apk/debug/app-debug.apk'], 110000);
     if (!/(^|\n)Success$/.test(output)) throw new c.Blocked('ANDROID_APK_INSTALL_FAILED');
+  });
+  // sys.boot_completed and package readiness precede network validation on a
+  // fresh API-35 AVD. Launching earlier leaves WebView on an offline error page
+  // even when the guest network later comes online. Do not reload around it.
+  await stage('EMULATOR_NETWORK_READY', 120000, async () => {
+    const deadline = Date.now() + 110000;
+    while (Date.now() < deadline) {
+      if (defaultNetworkReady(await adb(serial, ['shell', 'dumpsys', 'connectivity']))) return;
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    throw new c.Blocked('ANDROID_EMULATOR_NETWORK_READY_TIMEOUT');
   });
   await stage('NATIVE_ACTIVITY_READY', 30000, async () => {
     const output = await adb(serial, ['shell', 'am', 'start', '-W', '-n', 'com.diewish.app/.MainActivity'], 25000);

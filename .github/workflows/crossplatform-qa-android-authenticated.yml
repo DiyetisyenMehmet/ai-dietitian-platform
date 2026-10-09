@@ -1,5 +1,5 @@
 name: Cross-platform QA Authenticated Android
-# Diagnose native startup origin using fixed, credential-free state categories.
+# Wait for the fresh guest's validated internet before the first native launch.
 
 on:
   push:
