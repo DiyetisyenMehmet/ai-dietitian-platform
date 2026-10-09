@@ -26,3 +26,11 @@ test('a screenshot cannot be added to a scenario solely because a PNG exists',()
     assert.throws(()=>e.record('fixture','PASS',{screenshot:'fixture.png'}),/HEALTH_DATA_SCREENSHOT_GUARD_FAIL/);
   }finally{fs.rmSync(path.join(c.ROOT,'.qa-artifacts',e.run),{recursive:true,force:true});}
 });
+
+test('opaque preparation shield is rejected as runtime evidence without exporting PNG',async()=>{
+  const sharp=require('../../frontend/node_modules/sharp');
+  const guard=require('./capture-guard.cjs');
+  const shield=await sharp({create:{width:390,height:844,channels:3,background:'#263b35'}}).png().toBuffer();
+  try {await assert.rejects(()=>guard.rejectPreparationShield(shield),{code:'HEALTH_DATA_SCREENSHOT_GUARD_FAIL'});}
+  finally {fs.rmSync(path.join(c.ROOT,'.qa-artifacts','.health-guard-failed'),{force:true});}
+});

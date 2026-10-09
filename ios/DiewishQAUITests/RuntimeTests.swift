@@ -72,7 +72,9 @@ final class RuntimeTests: XCTestCase {
             throw XCTSkip("PUBLIC_LOGIN_SURFACE_RECORDED_IN_PUBLIC_MODE")
         }
         let app = configuredApp()
+        print("IOS_STAGE APP_LAUNCH RUNNING")
         app.launch()
+        print("IOS_STAGE APP_LAUNCH PASS")
         app.buttons["qa-login"].tap()
         let ready = app.webViews.buttons["Giriş Yap"].waitForExistence(timeout: 60)
         if !ready { screenshot(app, "login-runtime-diagnostic") }
@@ -82,7 +84,9 @@ final class RuntimeTests: XCTestCase {
 
     func testAuthenticatedScreensAndRelaunch() throws {
         let app = configuredApp()
+        print("IOS_STAGE APP_LAUNCH RUNNING")
         app.launch()
+        print("IOS_STAGE APP_LAUNCH PASS")
         print("IOS_STAGE AUTH_LOGIN RUNNING")
         try login(app)
         print("IOS_STAGE AUTH_LOGIN PASS")
@@ -100,7 +104,9 @@ final class RuntimeTests: XCTestCase {
         XCTAssertTrue(app.webViews.staticTexts["Sağlık Profilim"].waitForExistence(timeout: 45), "PROFILE_UNAVAILABLE")
         screenshot(app, "profile")
         app.terminate()
+        print("IOS_STAGE APP_LAUNCH RUNNING")
         app.launch()
+        print("IOS_STAGE APP_LAUNCH PASS")
         XCTAssertTrue(app.webViews.staticTexts["Bugünkü Yolculuğum"].waitForExistence(timeout: 60), "SESSION_RELAUNCH_UNAVAILABLE")
         screenshot(app, "session-relaunch")
     }

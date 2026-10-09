@@ -12,6 +12,14 @@ function failClosed() {
   console.error('HEALTH_DATA_SCREENSHOT_GUARD FAIL');
   return new c.Blocked('HEALTH_DATA_SCREENSHOT_GUARD_FAIL');
 }
+async function rejectPreparationShield(bytes) {
+  // This is a narrow paint-integrity check, not OCR or semantic health scanning.
+  const sharp=require('../../frontend/node_modules/sharp');
+  const {data,info}=await sharp(bytes).removeAlpha().raw().toBuffer({resolveWithObject:true});
+  let shield=0;
+  for(let i=0;i<data.length;i+=info.channels) if(data[i]===38 && data[i+1]===59 && data[i+2]===53) shield++;
+  if(shield>info.width*info.height*0.8) throw failClosed();
+}
 async function guardedCapture(page,file,screenshot) {
   let bytes;
   let phase='BOOTSTRAP';
@@ -26,8 +34,11 @@ async function guardedCapture(page,file,screenshot) {
     phase='CAPTURE'; bytes=await screenshot(); phase='POST_CAPTURE';
     if (!await page.evaluate(() => window.__diewishEvidenceMask.active())) throw failClosed();
     if (!Buffer.isBuffer(bytes)) throw failClosed();
+    phase='PAINT_CHECK'; await rejectPreparationShield(bytes);
   } catch (error) {
     const reason=await page.evaluate(()=>window.__diewishEvidenceMask?.reason?.() || 'NONE').catch(()=>'NONE');
+    const fontDetail=await page.evaluate(()=>window.__diewishEvidenceMask?.fontDetail?.() || 'NONE').catch(()=>'NONE');
+    if(['FONT_LOADING','FONT_COUNT','FONT_REFERENCE','FONT_PROPERTIES','FONT_GEOMETRY'].includes(fontDetail)) console.error('HEALTH_GUARD_FONT_DETAIL',fontDetail);
     console.error('HEALTH_DATA_SCREENSHOT_GUARD_PHASE',phase,['NONE','VIEWPORT_CHANGED','DOCUMENT_MUTATION','FONT_CHANGED','MASK_NOT_ACTIVE','PREPARE_FAILED'].includes(reason)?reason:'OTHER');
     fs.rmSync(file,{force:true});
     throw error instanceof c.Blocked && error.code==='CREDENTIAL_SCREENSHOT_REFUSED' ? error : failClosed();
@@ -38,4 +49,4 @@ async function guardedCapture(page,file,screenshot) {
   fs.writeFileSync(file,bytes,{mode:0o600}); prove(file);
   console.log('HEALTH_DATA_SCREENSHOT_GUARD PASS');
 }
-module.exports={guardedCapture,prove,proven,failClosed};
+module.exports={guardedCapture,prove,proven,failClosed,rejectPreparationShield};

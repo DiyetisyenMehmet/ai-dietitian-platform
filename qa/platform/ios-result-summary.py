@@ -22,6 +22,10 @@ PATTERNS = {
     "IOS_SPRINGBOARD_LAUNCH_SERVICE": ("FBSOpenApplicationServiceErrorDomain", "SBMainWorkspace"),
     "IOS_PROCESS_LAUNCH_SERVICE": ("RBSRequestErrorDomain", "NSPOSIXErrorDomain"),
     "IOS_SIMULATOR_CONNECTION_INTERRUPTED": ("connection interrupted", "connection invalidated", "Unable to boot"),
+    "IOS_ACCESSIBILITY_SNAPSHOT_FAILED": ("matching snapshot", "snapshot request", "kAXError", "main window"),
+    "IOS_UI_EVENT_FAILED": ("synthesize event", "No matches found", "Neither element nor"),
+    "IOS_APP_NOT_RUNNING": ("Application is not running", "app is not running"),
+    "IOS_UI_WAIT_TIMEOUT": ("Timed out", "timeout waiting", "Failed to establish"),
     "IOS_TEST_RUNNER_FAILED": ("test runner", "testing failed", "test execute failed"),
 }
 

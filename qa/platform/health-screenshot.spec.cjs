@@ -102,3 +102,9 @@ test('unchanged font notification is harmless; actual font set changes refuse na
     assert.equal(fs.existsSync(path.join(dir,'font-refused.png')),false);
   } finally {fs.rmSync(path.join(c.ROOT,'.qa-artifacts','.health-guard-failed'),{force:true});}
 }));
+
+test('loaded CSS font faces remain guarded across actual engine screenshot plumbing',async()=>fixture(async(page,dir)=>{
+  await page.setContent('<style>@font-face{font-family:GuardLoaded;src:local("DejaVu Sans"),local("Arial")}body{font-family:GuardLoaded,sans-serif}</style><h1>Dashboard</h1><p>79.0</p>');
+  await page.evaluate(()=>document.fonts.ready);
+  await guardedCapture(page,path.join(dir,'font-face.png'),()=>page.screenshot({caret:'initial'}));
+}));

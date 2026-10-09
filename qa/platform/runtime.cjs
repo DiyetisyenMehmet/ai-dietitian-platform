@@ -81,8 +81,11 @@ async function capture(runtime, evidence, name) {
       if (!settled) throw new c.Blocked('ANDROID_FRAME_STABLE_TIMEOUT');
     });
   } else await waitForStableFrame(page);
+  // Evidence-only settling: don't measure private values while the screen's
+  // ordinary fetches are still completing. A timeout refuses capture.
+  await step('EVIDENCE_NETWORK_IDLE',15000,()=>page.waitForLoadState('networkidle',{timeout:12000}));
   const file = name + '-' + runtime.runtime + '.png';
-  await step('HEALTH_DATA_SCREENSHOT_GUARD', 20000, () => require('./capture-guard.cjs').guardedCapture(page,path.join(evidence.dir,file), () => runtime.platform==='web' ? page.screenshot({caret:'initial'}) : runtime.screenshot()));
+  await step('HEALTH_DATA_SCREENSHOT_GUARD', 30000, () => require('./capture-guard.cjs').guardedCapture(page,path.join(evidence.dir,file), () => runtime.platform==='web' ? page.screenshot({caret:'initial'}) : runtime.screenshot()));
   return file;
 }
 async function main() {

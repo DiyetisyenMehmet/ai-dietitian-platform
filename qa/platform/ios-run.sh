@@ -55,6 +55,9 @@ echo 'IOS_STAGE NATIVE_LAUNCH PASS'
 echo SIMULATOR_LAUNCH_OK
 # Keep only sanitized compile diagnostics; UI actions and credentials never leave the temp directory.
 python3 qa/platform/ios-private.py inject "$private/build"
+# Hand launch ownership to XCTest; avoid an already-running unconfigured host.
+xcrun simctl terminate "$simulator" com.diewish.qa >"$private/terminate.log" 2>&1 || { python3 qa/platform/ios-result-summary.py --log "$private/terminate.log"; exit 1; }
+echo 'IOS_STAGE XCODE_LAUNCH_HANDOFF PASS'
 echo RUNNING_UI_TESTS
 set +e
 xcodebuild test-without-building -xctestrun "$private/qa.xctestrun" -destination "id=$simulator" \
@@ -66,7 +69,7 @@ set -e
 python3 - "$private/test.log" <<'PYLOG'
 import re,sys
 from pathlib import Path
-for stage,status in re.findall(r'IOS_STAGE (AUTH_LOGIN|HEALTH_GUARD_PREPARE|HEALTH_GUARD_CAPTURE|HEALTH_GUARD) (RUNNING|PASS|FAIL)',Path(sys.argv[1]).read_text(errors='replace')):
+for stage,status in re.findall(r'IOS_STAGE (APP_LAUNCH|AUTH_LOGIN|HEALTH_GUARD_PREPARE|HEALTH_GUARD_CAPTURE|HEALTH_GUARD) (RUNNING|PASS|FAIL)',Path(sys.argv[1]).read_text(errors='replace')):
     print('IOS_STAGE',stage,status)
 PYLOG
 python3 qa/platform/ios-result-summary.py "$private/result.xcresult"
