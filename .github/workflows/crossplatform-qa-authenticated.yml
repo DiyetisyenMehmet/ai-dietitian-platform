@@ -46,3 +46,5 @@ jobs:
       android_source_ref: d69502cd9c238c7e4958c6a21386de877b4c37d8
       android_operation: ${{ matrix.direction }}
     secrets: inherit
+
+# Inspect private XCTest test details using fixed diagnostic codes only.

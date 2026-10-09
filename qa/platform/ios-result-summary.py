@@ -58,11 +58,12 @@ def emit_legacy(document):
     messages = []
     def visit(value):
         if isinstance(value, dict):
-            message = value.get("message")
-            if isinstance(message, str):
-                messages.append(message)
-            elif isinstance(message, dict) and isinstance(message.get("_value"), str):
-                messages.append(message["_value"])
+            for key in ("message", "failureText", "failureMessage", "failureDescription", "errorMessage"):
+                message = value.get(key)
+                if isinstance(message, str):
+                    messages.append(message)
+                elif isinstance(message, dict) and isinstance(message.get("_value"), str):
+                    messages.append(message["_value"])
             for child in value.values():
                 visit(child)
         elif isinstance(value, list):
@@ -71,6 +72,33 @@ def emit_legacy(document):
     visit(document)
     found = codes("\n".join(messages))
     print("IOS_PRIVATE_ISSUE_CODES:", ",".join(found) or "IOS_UNCLASSIFIED_TEST_ISSUE")
+    print("IOS_PRIVATE_ISSUE_MESSAGE_COUNT:", len(messages))
+    domains = ("XCTestErrorDomain", "XCTest.XCTestError", "NSCocoaErrorDomain",
+               "NSPOSIXErrorDomain", "FBSOpenApplicationServiceErrorDomain",
+               "RBSRequestErrorDomain", "AXError", "DTXProxyChannel")
+    for domain in domains:
+        for number in sorted(set(re.findall(re.escape(domain) + r"(?:\s+error\s+|\s+Code=\s*|\s*,?\s*code\s*[:=]\s*)(-?[0-9]{1,6})", "\n".join(messages)))):
+            print("IOS_FAILURE_DOMAIN_CODE:", domain, int(number))
+    terms = {
+        "TARGET": ("target",), "PATH": ("path",), "BUNDLE": ("bundle",),
+        "INSTALL": ("install",), "PROCESS": ("process",), "PID": ("pid",),
+        "LAUNCH": ("launch",), "APPLICATION": ("application",), "RUNNING": ("running",),
+        "TIMEOUT": ("timeout", "timed out"), "IDLE": ("idle", "quiescence"),
+        "SNAPSHOT": ("snapshot",), "ACCESSIBILITY": ("accessibility",),
+        "ATTRIBUTES": ("attributes",), "ELEMENT": ("element",),
+        "CONNECTION": ("connection",), "INTERRUPTED": ("interrupted",),
+        "CONFIGURATION": ("configuration",), "EXECUTABLE": ("executable",),
+        "CRASH": ("crash",), "TERMINATED": ("terminated",), "PERMISSION": ("permission",),
+        "UNSUPPORTED": ("unsupported", "not supported"), "UNAVAILABLE": ("unavailable",),
+        "PARAMETER": ("parameter",), "ARGUMENT": ("argument",), "ENVIRONMENT": ("environment",),
+        "INVALID": ("invalid",), "SERVER": ("server",), "REQUEST": ("request",),
+        "SIMULATOR": ("simulator",), "DEVICE": ("device",), "MAIN_THREAD": ("main thread",),
+        "ANIMATION": ("animation",), "SCREEN": ("screen",), "DAEMON": ("daemon",),
+        "OPERATION": ("operation",), "ERROR": ("error",), "FAILURE": ("failed", "failure"),
+    }
+    message_text = "\n".join(messages).lower()
+    print("IOS_FAILURE_TERM_CODES:", ",".join(code for code, needles in terms.items()
+          if any(re.search(r"\b" + re.escape(needle) + r"\b", message_text) for needle in needles)) or "NONE")
     lines = sorted(set(re.findall(r"RuntimeTests\.swift(?::|%3A|#StartingLineNumber=)([0-9]{1,5})", text)))
     for line in lines:
         print("IOS_FAILURE_SOURCE_LINE:", int(line))
@@ -99,6 +127,7 @@ def main():
     found = codes(json.dumps(document))
     if found:
         print("IOS_DIAGNOSTIC_CODES:", ",".join(found))
+    emit_legacy(document)
     legacy = subprocess.run(
         ["xcrun", "xcresulttool", "get", "object", "--legacy", "--format", "json", "--path", sys.argv[1]],
         capture_output=True, text=True, timeout=30)
@@ -109,6 +138,17 @@ def main():
             emit_legacy(json.loads(legacy.stdout))
         except (ValueError, TypeError):
             print("IOS_PRIVATE_ISSUE_SUMMARY_UNAVAILABLE")
+    details = subprocess.run(
+        ["xcrun", "xcresulttool", "get", "test-results", "test-details",
+         "--path", sys.argv[1], "--test-id", "RuntimeTests/testAuthenticatedScreensAndRelaunch()"],
+        capture_output=True, text=True, timeout=30)
+    if details.returncode:
+        print("IOS_PRIVATE_TEST_DETAILS_UNAVAILABLE")
+    else:
+        try:
+            emit_legacy(json.loads(details.stdout))
+        except (ValueError, TypeError):
+            print("IOS_PRIVATE_TEST_DETAILS_UNAVAILABLE")
 
 
 if __name__ == "__main__":

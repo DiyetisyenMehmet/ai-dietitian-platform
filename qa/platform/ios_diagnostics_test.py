@@ -33,4 +33,15 @@ class DiagnosticsSafety(unittest.TestCase):
         with redirect_stdout(output):
             module.emit_legacy({"message": "No target application path specified person@example.com password=private",
                                 "url": "file:///private/RuntimeTests.swift#StartingLineNumber=82"})
-        self.assertEqual(output.getvalue(), "IOS_PRIVATE_ISSUE_CODES: IOS_TARGET_PATH_MISSING\nIOS_FAILURE_SOURCE_LINE: 82\n")
+        self.assertIn("IOS_PRIVATE_ISSUE_CODES: IOS_TARGET_PATH_MISSING", output.getvalue())
+        self.assertIn("IOS_FAILURE_SOURCE_LINE: 82", output.getvalue())
+        self.assertNotIn("person@example.com", output.getvalue())
+        self.assertNotIn("password=private", output.getvalue())
+
+    def test_error_codes_and_terms_never_export_raw_message(self):
+        output = io.StringIO()
+        with redirect_stdout(output):
+            module.emit_legacy({"message": {"_value": "XCTest.XCTestError error 6. Invalid environment argument private-secret"}})
+        self.assertIn("IOS_FAILURE_DOMAIN_CODE: XCTest.XCTestError 6", output.getvalue())
+        self.assertIn("ARGUMENT,ENVIRONMENT,INVALID", output.getvalue())
+        self.assertNotIn("private-secret", output.getvalue())
