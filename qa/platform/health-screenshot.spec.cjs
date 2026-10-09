@@ -123,3 +123,15 @@ test('declared unused font faces settle before a screenshot can trigger reflow',
   await guardedCapture(page,path.join(dir,'unused-face.png'),()=>page.screenshot({caret:'initial'}));
   assert.equal(await page.evaluate(()=>[...document.fonts].some(face=>face.status==='unloaded'||face.status==='loading')),false);
 }));
+
+test('real font property changes still refuse export after harmless WebKit reflow',async()=>fixture(async(page,dir)=>{
+  await page.setContent('<style>@font-face{font-family:GuardLoaded;src:local("DejaVu Sans"),local("Arial")}body{font-family:GuardLoaded,sans-serif}</style><h1>Dashboard</h1><p>79.0</p>');
+  const file=path.join(dir,'property-refused.png');
+  try {
+    await assert.rejects(()=>guardedCapture(page,file,async()=>{
+      await page.evaluate(()=>{const style=document.createElement('style');style.textContent='body {}';document.head.appendChild(style);document.documentElement.getBoundingClientRect();style.remove();[...document.fonts][0].weight='900';});
+      return page.screenshot({caret:'initial'});
+    }),{code:'HEALTH_DATA_SCREENSHOT_GUARD_FAIL'});
+    assert.equal(fs.existsSync(file),false);
+  } finally {fs.rmSync(path.join(c.ROOT,'.qa-artifacts','.health-guard-failed'),{force:true});}
+}));

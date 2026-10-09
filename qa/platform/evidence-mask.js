@@ -75,6 +75,12 @@
     for(let i=0;i<faces.length;i++) {
       const before=state.fonts[i].properties.split('|'),after=fontProperties(faces[i]).split('|');
       const index=before.findIndex((value,k)=>value!==after[k]);
+      if(index===7 && before[7]==='loaded' && after[7]==='unloaded' && state.webkitReflowSeen && document.fonts.status==='loaded' && state.checks.every(check=>geometry(check.object)===check.geometry)) {
+        // WebKit rebuilds the cache state of UNUSED CSS faces after the exact
+        // declaration-free screenshot stylesheet. No other font property,
+        // membership, pending load, DOM mutation or geometry is exempt.
+        continue;
+      }
       if(index>=0) {
         fontDetail='FONT_'+['FAMILY','STYLE','WEIGHT','STRETCH','UNICODE_RANGE','VARIANT','FEATURES','STATUS'][index];
         if(index===7 && ['unloaded','loading','loaded','error'].includes(before[index]) && ['unloaded','loading','loaded','error'].includes(after[index])) fontDetail+='_'+before[index].toUpperCase()+'_'+after[index].toUpperCase();
@@ -87,6 +93,7 @@
     // WebKit can notify loadingdone without changing any FontFace. Such a
     // notification cannot alter pixels. Real set/status/geometry changes fail.
     if(!state?.ready) return;
+    if(state.observer.takeRecords().some(relevant)) {invalidate('DOCUMENT_MUTATION');return;}
     if(fontSetChanged()) {invalidate('FONT_CHANGED');return;}
     if(state.checks.some(check=>geometry(check.object)!==check.geometry)) {fontDetail='FONT_GEOMETRY';invalidate('FONT_CHANGED');}
   }
@@ -96,14 +103,16 @@
     // It changes no declaration, text, value or geometry. No other application
     // mutation is exempt, and geometry is checked independently below.
     const nodes=[...record.addedNodes,...record.removedNodes];
-    return !(record.type==='childList' && record.target===document.head && nodes.length && nodes.every(n=>n.nodeType===1 && n.tagName==='STYLE' && n.attributes.length===0 && n.textContent==='body {}'));
+    const plumbing=record.type==='childList' && record.target===document.head && nodes.length && nodes.every(n=>n.nodeType===1 && n.tagName==='STYLE' && n.attributes.length===0 && n.textContent==='body {}');
+    if(plumbing) state.webkitReflowSeen=true;
+    return !plumbing;
   }
   const geometry = object => JSON.stringify([...object.getClientRects()].map(r=>[r.left,r.top,r.width,r.height]));
   function active() {
     if (!state || !state.ready || !state.host.isConnected || !state.style.isConnected) { if(reason==='NONE') reason='MASK_NOT_ACTIVE'; return false; }
     if (state.viewport.width !== innerWidth || state.viewport.height !== innerHeight || state.host.getBoundingClientRect().width < innerWidth || state.host.getBoundingClientRect().height < innerHeight) { invalidate('VIEWPORT_CHANGED'); return false; }
-    if (fontSetChanged()) { invalidate('FONT_CHANGED'); return false; }
     if (state.observer.takeRecords().some(relevant)) { invalidate('DOCUMENT_MUTATION'); return false; }
+    if (fontSetChanged()) { invalidate('FONT_CHANGED'); return false; }
     if (state.checks.some(check=>geometry(check.object)!==check.geometry)) { invalidate('DOCUMENT_MUTATION'); return false; }
     return true;
   }

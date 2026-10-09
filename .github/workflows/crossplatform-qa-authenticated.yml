@@ -10,6 +10,7 @@ name: Cross-platform QA Authenticated All
 # Refuse preparation-shield PNGs; settle evidence requests before measuring.
 # Keep contract tests dependency-free; test shield PNGs in real DOM fixtures.
 # Preload declared faces; use XCTest as the sole native iOS launch owner.
+# Only unchanged geometry and unused-face cache reset after exact empty style are harmless.
 on:
   push:
     branches: [feature/workmode4-crossplatform-qa-infra-a1]
