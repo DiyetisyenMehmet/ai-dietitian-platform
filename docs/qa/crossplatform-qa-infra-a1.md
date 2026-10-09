@@ -148,6 +148,27 @@ Use the observed serial, not an assumed 5554. Timezone/root controls require a r
 
 ## CI and evidence safety
 
+### Verified evidence and remaining boundary — 2026-10-09
+
+Working branch: `feature/workmode4-crossplatform-qa-infra-a1`. Last runtime-tested harness HEAD: `2d6a129f03cf0bc1b3def81b5565d44d72dc61b5`, TREE: `7a76b4c4586bea6e53e90602d013e4a359e91f19`. Reverified staging branch HEAD: `872601622880accb59448cc9eb0e6a59bafa2c5f`, TREE: `3272db9c10acfb4db3aa25663c2bf14a16a88d90`. The Android product files are identical between those branches. These are repository source identifiers; the live website's immutable deployment SHA remains unverified.
+
+| Runtime | Accepted run / artifact | Outcome |
+| --- | --- | --- |
+| Web Chromium | `37840830014` / `11576734866` | Four authenticated screens + session reopen PASS; preserved |
+| Web WebKit | `37840830014` / `11577686788` | Four authenticated screens + session reopen PASS; preserved |
+| iOS Simulator | `37840830014` / `11578176667` | Four authenticated screens + session reopen PASS; preserved |
+| Android Emulator | [37927968661](https://github.com/DiyetisyenMehmet/ai-dietitian-platform/actions/runs/37927968661) / [11614858201](https://github.com/DiyetisyenMehmet/ai-dietitian-platform/actions/runs/37927968661/artifacts/11614858201) | Actual UI login and four authenticated screens PASS; session restoration BLOCKED, job failure retained |
+
+The older all-platform run's Android job was cancelled; its successful Web/iOS jobs above are accepted individually. No successful all-platform run is claimed. They were not rerun or changed for this Android-only investigation.
+
+The final Android command ran from 12:12:05 to 12:13:57 UTC and exited with failure after bounded cleanup. Emulator boot, ADB, install, native launch, current-PID WebView attachment, trusted staging load and actual authorized-account UI login passed. Dashboard, Coach list, Notification Preferences and Profile have genuine full-device PNGs. Force-stop/start and fresh WebView attachment also passed; before any test navigation to Coach, the native startup Dashboard redirected to LOGIN. `SESSION_RESTORE_DASHBOARD_READY` timed out after 45 seconds with the document complete and the guest online. The harness did not seed cookies or log in again.
+
+Artifact SHA-256: `1de50c6d6ad95207f9b73efbb1202488c8537066a63846e980c4159779e5b37d`. The downloaded archive matched GitHub's digest; all 13 exported files passed the scanner and all six PNGs were inspected, including `session-reopen-failure-android-emulator.png`. Its email/password inputs are empty; the dots are the existing password placeholder, not a populated field. Profile email is masked. The failure JSON is `runtime-start.json`, code `ANDROID_SESSION_RESTORE_DASHBOARD_READY_TIMEOUT`, with the failure PNG reference; there is no fabricated session-relaunch PASS. All records retain `productVerdict: NOT_ASSESSED`.
+
+Validation: 24 Node contract tests, 3 Python tests, shell syntax, native unit/build and export checks passed. The Android authenticated job remains failed solely at the observed session-restoration boundary. Native/staging session restoration must be resolved by the product/auth owner and independently assessed by Work Mode 3 before this task can report **READY FOR CROSS-PLATFORM QA**. No six-direction synchronization run or final all-platform rerun was performed after this failure. The existing synchronization harness remains available; its relaunch checkpoint must preserve this actual result.
+
+Android evidence expires on 2026-10-12; the preserved Web/iOS artifacts expire on 2026-10-11. Download through the approved GitHub access before expiry. Production/Main, staging allowlist, credentials and other workers' source changes were not modified.
+
 Workflow: `.github/workflows/crossplatform-qa-infra.yml`. The reusable entry point `.github/workflows/crossplatform-qa-authenticated.yml` explicitly passes `authenticated=true` and `platform=all`, still using the existing protected `staging` environment. Its branch/path-restricted push trigger starts the authorized run when dispatch is unavailable; there is no alternative credential transport. Push triggers are restricted to the A1 branch and relevant infra paths; expensive jobs are scoped to changed platform/shared files. Manual dispatch can select one platform or all. Authenticated runs require the existing staging environment and its configured secrets. There is no PR/fork secret flow, pull_request_target trigger, write permission or deploy action. Obsolete runs of this workflow on this branch may be canceled to avoid cost; other workers' workflows are unaffected.
 
 Artifacts expire after 3 days. Upload runs only when the export safety step succeeds. The safety step rejects symlinks, unknown file types, malformed PNGs, unexpected JSON fields, raw email, bearer/JWT strings and invalid runtime classifications. `.qa-artifacts` and `.qa-private` are ignored in Git. Only the approved test account is permitted; health fixtures must remain synthetic and minimal. Raw log files, APKs, xcresult, xctestrun, cookie/session storage and traces are not artifacts of this workflow.
