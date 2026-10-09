@@ -39,6 +39,13 @@
     removeEventListener('scroll', invalidate, true);
     document.fonts.removeEventListener('loading', fontsChanged);
     document.fonts.removeEventListener('loadingdone', fontsChanged);
+    for (const edit of state.edits) {
+      // Restore only our own temporary property; never overwrite a later app edit.
+      if (edit.element.style.getPropertyValue(edit.property)===edit.masked && edit.element.style.getPropertyPriority(edit.property)==='important') {
+        if(edit.value) edit.element.style.setProperty(edit.property,edit.value,edit.priority);
+        else edit.element.style.removeProperty(edit.property);
+      }
+    }
     state.host.remove(); state.style.remove(); state = null;
     return true;
   }
@@ -80,7 +87,12 @@
     const style = document.createElement('style');
     style.textContent = '*{animation:none!important;transition:none!important;caret-color:transparent!important}';
     document.head.appendChild(style); document.documentElement.appendChild(host); shadow.appendChild(shield);
-    state = {host,shield,style,ready:false,frame:0,observer:null,checks:[]};
+    state = {host,shield,style,ready:false,frame:0,observer:null,checks:[],edits:[]};
+    function maskStyle(element,property,masked) {
+      state.edits.push({element,property,masked,value:element.style.getPropertyValue(property),priority:element.style.getPropertyPriority(property)});
+      element.style.setProperty(property,masked,'important');
+      if (getComputedStyle(element).getPropertyValue(property)!==masked) throw new Error('STYLE_MASK_FAILED');
+    }
     function cover(rect) {
       if (!rect || rect.width <= 0 || rect.height <= 0 || rect.bottom < 0 || rect.top > innerHeight || rect.right < 0 || rect.left > innerWidth) return;
       const block = document.createElement('div');
@@ -116,7 +128,11 @@
         const visual = element.matches('img,canvas,video,iframe,object,embed,[role=progressbar],svg:not(.lucide)') || element.shadowRoot || element.tagName.includes('-');
         const field = element.matches('textarea,select,input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]):not([type=hidden])');
         const generated = ['::before','::after'].some(pseudo => { const content=getComputedStyle(element,pseudo).content; return content && !['none','normal','""',"''"].includes(content); });
-        if (visual || field || generated || css.backgroundImage.includes('url(')) { cover(element.getBoundingClientRect()); state.checks.push({object:element,geometry:geometry(element)}); }
+        // Hide only the visual layer, so overlaid card labels stay readable.
+        if (visual) maskStyle(element,'opacity','0');
+        if (css.backgroundImage.includes('url(')) maskStyle(element,'background-image','none');
+        if (field || generated || element.shadowRoot || element.tagName.includes('-')) cover(element.getBoundingClientRect());
+        if (visual || field || generated || css.backgroundImage.includes('url(')) state.checks.push({object:element,geometry:geometry(element)});
       }
       state.observer = new MutationObserver(records => { if (records.some(relevant)) invalidate('DOCUMENT_MUTATION'); });
       state.observer.observe(document.documentElement,{subtree:true,childList:true,characterData:true,attributes:true});

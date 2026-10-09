@@ -61,6 +61,17 @@ test('empty WebKit screenshot stylesheet is harmless; actual styling/value chang
     return page.screenshot({caret:'initial'});
   });
 }));
+test('private visual layer is hidden while its card label remains visible; styles restore exactly',async()=>fixture(async(page,dir)=>{
+  await page.setContent('<div id="card" style="background-image:url(data:image/svg+xml,test)"><h2>Kan Tahlili Analizi</h2><svg id="chart" width="100" height="80"><text y="20">79.0</text></svg></div>');
+  const original=await page.locator('body').innerHTML();
+  await guardedCapture(page,path.join(dir,'card.png'),async()=>{
+    assert.equal(await page.locator('#chart').evaluate(n=>getComputedStyle(n).opacity),'0');
+    assert.equal(await page.locator('#card').evaluate(n=>getComputedStyle(n).backgroundImage),'none');
+    assert.equal(await page.getByText('Kan Tahlili Analizi',{exact:true}).isVisible(),true);
+    return page.screenshot({caret:'initial'});
+  });
+  assert.equal(await page.locator('body').innerHTML(),original);
+}));
 test('mask bootstrap failure and populated credential fields never invoke device screenshot',async()=>fixture(async(page,dir)=>{
   await page.setContent('<input type="email" value="synthetic@example.invalid"><input type="password" value="synthetic-only">');
   let screenshots=0;

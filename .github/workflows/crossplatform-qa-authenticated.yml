@@ -2,6 +2,7 @@ name: Cross-platform QA Authenticated All
 # Protected staging run: credentials are inherited only by the reusable QA workflow.
 # Settle hydration before measuring private-value masks; never ignore capture-time changes.
 # Accept only WebKit's declaration-free screenshot plumbing; audit private-value geometry.
+# Hide private visual layers without covering the card labels above them.
 
 on:
   push:
