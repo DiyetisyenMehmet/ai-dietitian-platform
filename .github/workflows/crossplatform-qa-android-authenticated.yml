@@ -1,4 +1,5 @@
 name: Cross-platform QA Authenticated Android
+# Diagnose native startup origin using fixed, credential-free state categories.
 
 on:
   push:

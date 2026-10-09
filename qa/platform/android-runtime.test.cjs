@@ -3,10 +3,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const c = require('./contract.cjs');
 const { stage } = require('./android-stage.cjs');
-const { openAndroidRuntime } = require('./android-runtime.cjs');
+const { openAndroidRuntime, originClass } = require('./android-runtime.cjs');
 function fixture(failAttach = false) {
   let closed = 0, staleAttachments = 0, freshAttachments = 0, pid = 222;
-  const page = { setDefaultTimeout() {}, setDefaultNavigationTimeout() {}, async waitForURL() {}, async waitForLoadState() {}, async goto() {} };
+  const page = { setDefaultTimeout() {}, setDefaultNavigationTimeout() {}, on() {}, url:()=>c.ORIGIN+'/login', async evaluate() { return {origin:'STAGING',ready:'complete',online:true}; }, async waitForURL() {}, async waitForLoadState() {}, async goto() {} };
   const device = { serial: () => 'emulator-5554', setDefaultTimeout() {}, async close() { closed++; },
     async shell(command) { if (command.startsWith('pidof')) return Buffer.from(String(pid)); if (command.startsWith('am force-stop')) pid++; return Buffer.from(''); },
     webViews: () => [
@@ -37,4 +37,11 @@ test('bounded stages report timeout and propagate failure without private error 
     assert.ok(!lines.some(line=>line.includes('PRIVATE_FAILURE')));
     assert.ok(!lines.some(line=>line.includes(' PASS ')));
   } finally { mock.mock.restore(); }
+});
+test('origin diagnostics classify without returning URLs or private components', () => {
+  assert.equal(originClass(c.ORIGIN + '/login?private=value'), 'STAGING');
+  assert.equal(originClass('chrome-error://chromewebdata/'), 'NETWORK_ERROR');
+  assert.equal(originClass('about:blank'), 'BLANK');
+  assert.equal(originClass('https://private:credential@example.invalid/token'), 'OTHER');
+  assert.equal(originClass('private-content'), 'UNKNOWN');
 });

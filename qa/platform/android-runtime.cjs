@@ -4,6 +4,25 @@ const { stage } = require('./android-stage.cjs');
 async function closeDevices(devices) {
   await stage('DEVICE_CLOSE', 5000, () => Promise.all(devices.map(device => device.close())));
 }
+function originClass(value) {
+  try {
+    const url = new URL(value);
+    if (url.origin === c.ORIGIN) return 'STAGING';
+    if (url.protocol === 'about:') return 'BLANK';
+    if (url.protocol === 'chrome-error:') return 'NETWORK_ERROR';
+    return 'OTHER';
+  } catch { return 'UNKNOWN'; }
+}
+async function pageState(page, label) {
+  console.log('ANDROID_STATE', label, 'FRAME', originClass(page.url()));
+  const state = await stage('PAGE_STATE', 5000, () => page.evaluate(origin => ({
+    origin: location.origin === origin ? 'STAGING' : location.protocol === 'about:' ? 'BLANK' : location.protocol === 'chrome-error:' ? 'NETWORK_ERROR' : 'OTHER',
+    ready: document.readyState,
+    online: navigator.onLine,
+  }), c.ORIGIN));
+  console.log('ANDROID_STATE', label, 'DOCUMENT', ['STAGING','BLANK','NETWORK_ERROR','OTHER'].includes(state.origin) ? state.origin : 'UNKNOWN',
+    'READY', ['loading','interactive','complete'].includes(state.ready) ? state.ready.toUpperCase() : 'UNKNOWN', 'ONLINE', state.online === true ? 'YES' : 'NO');
+}
 async function openAndroidRuntime(pw) {
   const devices = await stage('DEVICE_DISCOVERY', 15000, () => pw._android.devices());
   const serial = process.env.QA_ANDROID_SERIAL;
@@ -39,7 +58,19 @@ async function openAndroidRuntime(pw) {
     const page = await stage('WEBVIEW_ATTACH', 45000, () => view.page());
     page.setDefaultTimeout(30000);
     page.setDefaultNavigationTimeout(30000);
-    await stage('STAGING_ORIGIN', 45000, () => page.waitForURL(url => url.origin === c.ORIGIN, { waitUntil: 'commit', timeout: 40000 }));
+    page.on('requestfailed', request => {
+      if (!request.isNavigationRequest()) return;
+      const code = request.failure()?.errorText;
+      const allowed = ['net::ERR_NAME_NOT_RESOLVED','net::ERR_INTERNET_DISCONNECTED','net::ERR_CONNECTION_TIMED_OUT','net::ERR_CONNECTION_REFUSED','net::ERR_CONNECTION_RESET','net::ERR_CERT_AUTHORITY_INVALID','net::ERR_CERT_DATE_INVALID','net::ERR_CERT_COMMON_NAME_INVALID','net::ERR_NETWORK_CHANGED','net::ERR_ABORTED'];
+      console.log('ANDROID_NETWORK', 'NAVIGATION_FAILED', allowed.includes(code) ? code.replace('net::','') : 'OTHER');
+    });
+    await pageState(page, 'ATTACHED');
+    try {
+      await stage('STAGING_ORIGIN', 45000, () => page.waitForURL(url => url.origin === c.ORIGIN, { waitUntil: 'commit', timeout: 40000 }));
+    } catch (error) {
+      await pageState(page, 'ORIGIN_TIMEOUT').catch(() => {});
+      throw error;
+    }
     await stage('PAGE_DOM_READY', 35000, () => page.waitForLoadState('domcontentloaded', { timeout: 30000 }));
     return page;
   };
@@ -67,4 +98,4 @@ async function openAndroidRuntime(pw) {
     throw error;
   }
 }
-module.exports = { openAndroidRuntime, closeDevices };
+module.exports = { openAndroidRuntime, closeDevices, originClass };
