@@ -10,7 +10,7 @@
     'Su', 'Beslenme', 'Hareket', 'Kilo', 'Güncel kg', 'Hedef kg', 'İlerleme', 'Su Ekle',
     'Öğün Ekle', 'Hareket Ekle', 'Kilo Ekle', 'Kilo & ilerleme', 'Kan Tahlili', 'Kan Tahlilleri',
     'Kan tahlilleri', 'Besin ve Barkod Tarayıcı', 'Kan Tahlili Analizi', 'İlerlememi Gör',
-    'Koç', 'Öğün Planım', 'Beslenme Planım', 'Nutrition Plan', 'Hedefler', 'Sağlık Profilim',
+    'Koç', 'Diewish Her Zaman Yanında', 'Öğün Planım', 'Beslenme Planım', 'Nutrition Plan', 'Hedefler', 'Sağlık Profilim',
     'Sağlık Verilerim', 'Sağlık Durumu', 'Beslenme Tercihi', 'Alerjiler', 'Başarılar',
     'Hesap', 'Oturum', 'Profili düzenle', 'Abonelik', 'Bildirim tercihleri', 'Bildirim Tercihleri',
     'Gizlilik ve izinler', 'Şifre değiştir', 'Çıkış yap', 'Çıkış', 'Çıkış Yap',
@@ -50,10 +50,20 @@
     try { window.webkit?.messageHandlers?.diewishIOS?.postMessage({version:1,operation:'qa-mask-invalid'}); } catch (_) {}
   }
   function fontsChanged(){invalidate('FONT_CHANGED');}
+  function relevant(record) {
+    if (state?.host.contains(record.target)) return false;
+    // WebKit screenshot plumbing adds/removes precisely this empty rule.
+    // It changes no declaration, text, value or geometry. No other application
+    // mutation is exempt, and geometry is checked independently below.
+    const nodes=[...record.addedNodes,...record.removedNodes];
+    return !(record.type==='childList' && record.target===document.head && nodes.length && nodes.every(n=>n.nodeType===1 && n.tagName==='STYLE' && n.attributes.length===0 && n.textContent==='body {}'));
+  }
+  const geometry = object => JSON.stringify([...object.getClientRects()].map(r=>[r.left,r.top,r.width,r.height]));
   function active() {
     if (!state || !state.ready || !state.host.isConnected || !state.style.isConnected) { if(reason==='NONE') reason='MASK_NOT_ACTIVE'; return false; }
     if (state.host.getBoundingClientRect().width !== innerWidth || state.host.getBoundingClientRect().height !== innerHeight) { invalidate('VIEWPORT_CHANGED'); return false; }
-    if (state.observer.takeRecords().some(record => !state.host.contains(record.target))) { invalidate('DOCUMENT_MUTATION'); return false; }
+    if (state.observer.takeRecords().some(relevant)) { invalidate('DOCUMENT_MUTATION'); return false; }
+    if (state.checks.some(check=>geometry(check.object)!==check.geometry)) { invalidate('DOCUMENT_MUTATION'); return false; }
     return true;
   }
   async function begin() {
@@ -70,7 +80,7 @@
     const style = document.createElement('style');
     style.textContent = '*{animation:none!important;transition:none!important;caret-color:transparent!important}';
     document.head.appendChild(style); document.documentElement.appendChild(host); shadow.appendChild(shield);
-    state = {host,shield,style,ready:false,frame:0,observer:null};
+    state = {host,shield,style,ready:false,frame:0,observer:null,checks:[]};
     function cover(rect) {
       if (!rect || rect.width <= 0 || rect.height <= 0 || rect.bottom < 0 || rect.top > innerHeight || rect.right < 0 || rect.left > innerWidth) return;
       const block = document.createElement('div');
@@ -97,6 +107,7 @@
         if (publicText(node.textContent) && !node.parentElement?.closest('[data-health-value],[data-personal-value]')) continue;
         const range = document.createRange(); range.selectNodeContents(node);
         [...range.getClientRects()].forEach(cover);
+        state.checks.push({object:range,geometry:geometry(range)});
       }
       for (const element of document.body.querySelectorAll('*')) {
         const css = getComputedStyle(element);
@@ -105,9 +116,9 @@
         const visual = element.matches('img,canvas,video,iframe,object,embed,[role=progressbar],svg:not(.lucide)') || element.shadowRoot || element.tagName.includes('-');
         const field = element.matches('textarea,select,input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]):not([type=hidden])');
         const generated = ['::before','::after'].some(pseudo => { const content=getComputedStyle(element,pseudo).content; return content && !['none','normal','""',"''"].includes(content); });
-        if (visual || field || generated || css.backgroundImage.includes('url(')) cover(element.getBoundingClientRect());
+        if (visual || field || generated || css.backgroundImage.includes('url(')) { cover(element.getBoundingClientRect()); state.checks.push({object:element,geometry:geometry(element)}); }
       }
-      state.observer = new MutationObserver(records => { if (records.some(record => !host.contains(record.target))) invalidate('DOCUMENT_MUTATION'); });
+      state.observer = new MutationObserver(records => { if (records.some(relevant)) invalidate('DOCUMENT_MUTATION'); });
       state.observer.observe(document.documentElement,{subtree:true,childList:true,characterData:true,attributes:true});
       addEventListener('resize',invalidate); addEventListener('scroll',invalidate,true);
       document.fonts.addEventListener('loading',fontsChanged); document.fonts.addEventListener('loadingdone',fontsChanged);

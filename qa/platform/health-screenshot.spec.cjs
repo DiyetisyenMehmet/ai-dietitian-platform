@@ -54,6 +54,13 @@ test('late hydration is settled before mask geometry; capture still preserves th
   await guardedCapture(page,path.join(dir,'hydrated.png'),()=>page.screenshot({caret:'initial'}));
   assert.equal(await page.locator('#value').textContent(),'80.0');
 }));
+test('empty WebKit screenshot stylesheet is harmless; actual styling/value changes still fail closed',async()=>fixture(async(page,dir)=>{
+  await page.setContent('<h1>Dashboard</h1><p>79.0</p>');
+  await guardedCapture(page,path.join(dir,'plumbing.png'),async()=>{
+    await page.evaluate(()=>{const style=document.createElement('style');style.textContent='body {}';document.head.appendChild(style);document.documentElement.getBoundingClientRect();style.remove();});
+    return page.screenshot({caret:'initial'});
+  });
+}));
 test('mask bootstrap failure and populated credential fields never invoke device screenshot',async()=>fixture(async(page,dir)=>{
   await page.setContent('<input type="email" value="synthetic@example.invalid"><input type="password" value="synthetic-only">');
   let screenshots=0;

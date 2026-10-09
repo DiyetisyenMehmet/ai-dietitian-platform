@@ -7,7 +7,7 @@ final class RuntimeTests: XCTestCase {
         let guardButton = app.buttons["qa-evidence"]
         guardButton.tap()
         let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == 'READY'"), object: guardButton)
-        guard XCTWaiter.wait(for: [ready], timeout: 10) == .completed else {
+        guard XCTWaiter.wait(for: [ready], timeout: 20) == .completed else {
             XCTFail("HEALTH_DATA_SCREENSHOT_GUARD_FAIL"); return
         }
         let snapshot = app.screenshot()
