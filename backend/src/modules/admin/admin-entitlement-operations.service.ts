@@ -7,10 +7,7 @@ import {
 } from "@prisma/client";
 
 import { ApiError } from "../../utils/api-error";
-import {
-  buildAuditSnapshot,
-  runAuditedAdminMutation,
-} from "./admin-audit.service";
+import { buildAuditSnapshot, runAuditedAdminMutation } from "./admin-audit.service";
 import { resolveRuntimeEnvironment } from "./admin.environment";
 import { supportEntitlementStatus } from "../payments/support-entitlements.repository";
 
@@ -21,7 +18,7 @@ interface OperationContext {
 
 interface SupportMutationInput {
   tier: Exclude<SubscriptionTier, "FREE">;
-  expiresAt: Date | null;
+  expiresAt: Date;
   expectedUpdatedAt: string | null;
   reason: string;
 }
@@ -31,12 +28,7 @@ const conflict = () =>
     code: "ADMIN_ENTITLEMENT_STATE_CHANGED",
   });
 
-function audit(
-  context: OperationContext,
-  userId: string,
-  action: string,
-  reason: string,
-) {
+function audit(context: OperationContext, userId: string, action: string, reason: string) {
   if (reason.trim().length < 3 || reason.trim().length > 500) {
     throw ApiError.badRequest("A reason is required.");
   }
@@ -64,8 +56,12 @@ async function requireConsumerUser(tx: Prisma.TransactionClient, userId: string)
   return user;
 }
 
-function assertExpiry(expiresAt: Date | null) {
-  if (expiresAt && expiresAt <= new Date()) {
+function assertExpiry(expiresAt: Date) {
+  if (
+    !(expiresAt instanceof Date) ||
+    !Number.isFinite(expiresAt.getTime()) ||
+    expiresAt <= new Date()
+  ) {
     throw ApiError.badRequest("Support entitlement expiry must be in the future.");
   }
 }
@@ -76,10 +72,10 @@ function iso(value: Date | null) {
 
 function snapshot(row: AdminSupportEntitlement | null, now = new Date()) {
   if (!row) {
-    return buildAuditSnapshot(
-      { source: "ADMIN_SUPPORT", supportStatus: "NONE" },
-      ["source", "supportStatus"],
-    );
+    return buildAuditSnapshot({ source: "ADMIN_SUPPORT", supportStatus: "NONE" }, [
+      "source",
+      "supportStatus",
+    ]);
   }
   return buildAuditSnapshot(
     {
@@ -89,13 +85,7 @@ function snapshot(row: AdminSupportEntitlement | null, now = new Date()) {
       supportExpiry: iso(row.expiresAt),
       supportUpdatedAt: row.updatedAt.toISOString(),
     },
-    [
-      "source",
-      "supportTier",
-      "supportStatus",
-      "supportExpiry",
-      "supportUpdatedAt",
-    ],
+    ["source", "supportTier", "supportStatus", "supportExpiry", "supportUpdatedAt"],
   );
 }
 
@@ -124,17 +114,14 @@ function assertExpectedState(
 }
 
 export const adminEntitlementOperationsService = {
-  async upsert(
-    context: OperationContext,
-    userId: string,
-    input: SupportMutationInput,
-  ) {
+  async upsert(context: OperationContext, userId: string, input: SupportMutationInput) {
     assertExpiry(input.expiresAt);
 
     return runAuditedAdminMutation(
       audit(context, userId, "admin.entitlements.support_upsert", input.reason),
       async (tx) => {
         await requireConsumerUser(tx, userId);
+        assertExpiry(input.expiresAt);
         const now = new Date();
         const current = await tx.adminSupportEntitlement.findUnique({
           where: { userId },
@@ -182,10 +169,7 @@ export const adminEntitlementOperationsService = {
               },
             });
           } catch (error) {
-            if (
-              error instanceof Prisma.PrismaClientKnownRequestError &&
-              error.code === "P2002"
-            ) {
+            if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
               throw conflict();
             }
             throw error;

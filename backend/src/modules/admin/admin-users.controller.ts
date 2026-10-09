@@ -17,7 +17,7 @@ export const adminUsersController = {
         req.params.id!,
         {
           tier: req.body.tier,
-          expiresAt: req.body.expiresAt ? new Date(req.body.expiresAt) : null,
+          expiresAt: new Date(req.body.expiresAt),
           expectedUpdatedAt: req.body.expectedUpdatedAt,
           reason: req.body.reason,
         },

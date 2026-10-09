@@ -1,6 +1,7 @@
 const { test, expect } = require("@playwright/test");
 
 const WEB = process.env.E2E_WEB_BASE_URL || "http://127.0.0.1:3000";
+test.use({ timezoneId: "UTC" });
 const user = {
   id: "00000000-0000-4000-8000-000000009902",
   email: "b2-user@example.com",
@@ -68,15 +69,17 @@ async function setup(page, options = {}) {
     }
 
     if (path.endsWith("/admin/session")) {
-      const permissions = options.readOnly
-        ? ["admin.access", "users.read", "entitlements.read"]
-        : [
-            "admin.access",
-            "users.read",
-            "entitlements.read",
-            "entitlements.grant",
-            "entitlements.revoke",
-          ];
+      const permissions =
+        options.permissions ||
+        (options.readOnly
+          ? ["admin.access", "users.read", "entitlements.read"]
+          : [
+              "admin.access",
+              "users.read",
+              "entitlements.read",
+              "entitlements.grant",
+              "entitlements.revoke",
+            ]);
       return ok({
         admin: { id: "admin", email: "admin@example.com", fullName: "Yönetici" },
         roles: options.readOnly ? ["B2_READ_ONLY"] : ["FINANCE"],
@@ -105,10 +108,14 @@ async function setup(page, options = {}) {
       }
 
       if (method === "PUT") {
-        const support = activeSupport("2026-09-30T13:00:00.000Z");
-        subscription = baseSubscription({
-          currentPlan: "PREMIUM_PLUS",
-          providerPlan: "FREE",
+        const support = {
+          ...activeSupport("2026-09-30T13:00:00.000Z"),
+          tier: lastBody.tier,
+          expiresAt: lastBody.expiresAt,
+        };
+        subscription = {
+          ...subscription,
+          currentPlan: lastBody.tier,
           currentPlanSource: "ADMIN_SUPPORT",
           entitlementStatus: "ACTIVE",
           entitlements: [
@@ -118,7 +125,7 @@ async function setup(page, options = {}) {
             "PRIORITY_SUPPORT",
           ],
           supportEntitlement: support,
-        });
+        };
         return ok({ supportEntitlement: support });
       }
 
@@ -176,15 +183,28 @@ for (const [width, height] of [
 
     const operations = page.getByTestId("admin-support-entitlement-operations");
     await expect(operations).toBeVisible();
-    await operations.getByLabel("Support plan").selectOption("PREMIUM_PLUS");
-    await operations.getByRole("button", { name: "Support erişimi ver" }).click();
+    await operations.getByLabel("Destek planı").selectOption("PREMIUM_PLUS");
+    await operations.getByLabel("Destek hakkı bitiş tarihi").fill("2030-01-01T12:00");
+    await operations.getByRole("button", { name: "Destek hakkı ver" }).click();
 
     const modal = page.getByRole("dialog");
+    await expect
+      .poll(async () => {
+        const bounds = await modal.boundingBox();
+        return Boolean(
+          bounds &&
+            bounds.x >= 0 &&
+            bounds.y >= 0 &&
+            bounds.x + bounds.width <= width + 1 &&
+            bounds.y + bounds.height <= height + 1,
+        );
+      })
+      .toBe(true);
     await expect(modal).toContainText(user.email);
-    await expect(modal).toContainText("Mevcut effective plan: Free");
-    await expect(modal).toContainText("Yeni support plan: Premium Plus");
+    await expect(modal).toContainText("Mevcut etkin plan: Free");
+    await expect(modal).toContainText("Yeni destek planı: Premium Plus");
     await expect(modal).toContainText(
-      "Google Play/IYZICO provider aboneliği ve ödeme kayıtları değiştirilmeyecek.",
+      "Google Play/IYZICO aboneliği ve ödeme kayıtları değiştirilmeyecek.",
     );
 
     const confirm = modal.getByRole("button", { name: "Onayla ve uygula" });
@@ -193,10 +213,11 @@ for (const [width, height] of [
     await expect(confirm).toBeEnabled();
     await confirm.click();
 
-    await expect(operations.getByRole("status")).toContainText("audit kaydı");
+    await expect(operations.getByRole("status")).toContainText("işlem kaydı");
     expect(fixture.mutationCalls()).toBe(1);
     expect(fixture.lastBody()).toMatchObject({
       tier: "PREMIUM_PLUS",
+      expiresAt: "2030-01-01T12:00:00.000Z",
       expectedUpdatedAt: null,
       reason: "Approved support entitlement",
       confirmed: true,
@@ -236,11 +257,11 @@ test("B2 stale state is sanitized and requires reload", async ({ page }) => {
   });
   await page.goto(`${WEB}/admin/users/${user.id}`);
   const operations = page.getByTestId("admin-support-entitlement-operations");
-  await operations.getByRole("button", { name: "Support erişimini güncelle" }).click();
+  await operations.getByRole("button", { name: "Destek hakkını güncelle" }).click();
   const modal = page.getByRole("dialog");
   await modal.getByLabel("İşlem gerekçesi").fill("Update approved support access");
   await modal.getByRole("button", { name: "Onayla ve uygula" }).click();
-  await expect(modal.getByRole("alert")).toContainText("Entitlement durumu değişti");
+  await expect(modal.getByRole("alert")).toContainText("Destek hakkı durumu değişti");
   await expect(page.getByText("private stale detail")).toHaveCount(0);
   fixture.setStale(false);
 });
@@ -268,12 +289,12 @@ test("B2 revoke confirmation preserves provider and sends stale-state token", as
   });
   await page.goto(`${WEB}/admin/users/${user.id}`);
   const operations = page.getByTestId("admin-support-entitlement-operations");
-  await operations.getByRole("button", { name: "Support erişimini kaldır" }).click();
+  await operations.getByRole("button", { name: "Destek hakkını sonlandır" }).click();
   const modal = page.getByRole("dialog");
-  await expect(modal).toContainText("Google Play/IYZICO provider aboneliği");
+  await expect(modal).toContainText("Google Play/IYZICO aboneliği");
   await modal.getByLabel("İşlem gerekçesi").fill("Support issue resolved");
   await modal.getByRole("button", { name: "Onayla ve uygula" }).click();
-  await expect(operations.getByRole("status")).toContainText("kaldırıldı");
+  await expect(operations.getByRole("status")).toContainText("sonlandırıldı");
   expect(fixture.lastBody()).toMatchObject({
     expectedUpdatedAt: support.updatedAt,
     reason: "Support issue resolved",
@@ -286,7 +307,8 @@ test("B2 duplicate submit is blocked while mutation is in flight", async ({ page
   const fixture = await setup(page, { holdMutation: true });
   await page.goto(`${WEB}/admin/users/${user.id}`);
   const operations = page.getByTestId("admin-support-entitlement-operations");
-  await operations.getByRole("button", { name: "Support erişimi ver" }).click();
+  await operations.getByLabel("Destek hakkı bitiş tarihi").fill("2030-01-01T12:00");
+  await operations.getByRole("button", { name: "Destek hakkı ver" }).click();
   const modal = page.getByRole("dialog");
   await modal.getByLabel("İşlem gerekçesi").fill("Approved controlled access");
   const confirm = modal.locator('button[type="submit"]');
@@ -298,3 +320,70 @@ test("B2 duplicate submit is blocked while mutation is in flight", async ({ page
   await expect(operations.getByRole("status")).toContainText("güncellendi");
   expect(fixture.mutationCalls()).toBe(1);
 });
+
+for (const tier of ["PREMIUM", "PREMIUM_PLUS"]) {
+  test(`B2 finite ${tier} grant refreshes B1 and revoke returns to Free`, async ({ page }) => {
+    const fixture = await setup(page);
+    await page.goto(`${WEB}/admin/users/${user.id}`);
+    const operations = page.getByTestId("admin-support-entitlement-operations");
+    await operations.getByLabel("Destek planı").selectOption(tier);
+    await operations.getByLabel("Destek hakkı bitiş tarihi").fill("2030-01-01T12:00");
+    await operations.getByRole("button", { name: "Destek hakkı ver", exact: true }).click();
+    const modal = page.getByRole("dialog");
+    await modal.getByLabel("İşlem gerekçesi").fill("Geçici destek erişimi testi");
+    await modal.getByRole("button", { name: "Onayla ve uygula" }).click();
+    await expect(operations.getByRole("status")).toContainText("güncellendi");
+    const label = tier === "PREMIUM" ? "Premium" : "Premium Plus";
+    await expect(page.getByTestId("admin-user-subscription")).toContainText(label);
+    expect(fixture.lastBody().expiresAt).toBe("2030-01-01T12:00:00.000Z");
+    await operations.getByRole("button", { name: "Destek hakkını sonlandır" }).click();
+    await modal.getByLabel("İşlem gerekçesi").fill("Geçici destek testi tamamlandı");
+    await modal.getByRole("button", { name: "Onayla ve uygula" }).click();
+    await expect(operations.getByRole("status")).toContainText("sonlandırıldı");
+    await expect(page.getByTestId("admin-user-subscription")).toContainText("Ücretsiz erişim");
+    expect(fixture.mutationCalls()).toBe(2);
+  });
+}
+
+test("B2 missing or past expiry and blank reason never send a mutation", async ({ page }) => {
+  const fixture = await setup(page);
+  await page.goto(`${WEB}/admin/users/${user.id}`);
+  const operations = page.getByTestId("admin-support-entitlement-operations");
+  for (const expiry of ["", "2000-01-01T12:00"]) {
+    await operations.getByLabel("Destek hakkı bitiş tarihi").fill(expiry);
+    await operations.getByRole("button", { name: "Destek hakkı ver", exact: true }).click();
+    await expect(operations.getByRole("alert")).toContainText("Gelecekteki bir bitiş tarihi");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    expect(fixture.mutationCalls()).toBe(0);
+  }
+  await operations.getByLabel("Destek hakkı bitiş tarihi").fill("2030-01-01T12:00");
+  await operations.getByRole("button", { name: "Destek hakkı ver", exact: true }).click();
+  const modal = page.getByRole("dialog");
+  await modal.getByLabel("İşlem gerekçesi").fill("   ");
+  await expect(modal.getByRole("button", { name: "Onayla ve uygula" })).toBeDisabled();
+  await modal.getByRole("button", { name: "Vazgeç" }).click();
+  expect(fixture.mutationCalls()).toBe(0);
+});
+
+for (const permission of ["entitlements.grant", "entitlements.revoke"]) {
+  test(`B2 action visibility respects ${permission} independently`, async ({ page }) => {
+    const fixture = await setup(page, {
+      permissions: ["admin.access", "users.read", "entitlements.read", permission],
+      subscription: baseSubscription({
+        currentPlan: "PREMIUM_PLUS",
+        currentPlanSource: "ADMIN_SUPPORT",
+        entitlementStatus: "ACTIVE",
+        supportEntitlement: activeSupport(),
+      }),
+    });
+    await page.goto(`${WEB}/admin/users/${user.id}`);
+    const operations = page.getByTestId("admin-support-entitlement-operations");
+    await expect(operations.getByRole("button", { name: "Destek hakkını güncelle" })).toHaveCount(
+      permission === "entitlements.grant" ? 1 : 0,
+    );
+    await expect(operations.getByRole("button", { name: "Destek hakkını sonlandır" })).toHaveCount(
+      permission === "entitlements.revoke" ? 1 : 0,
+    );
+    expect(fixture.mutationCalls()).toBe(0);
+  });
+}

@@ -203,7 +203,7 @@ export const adminClient = {
     id: string,
     input: {
       tier: "PREMIUM" | "PREMIUM_PLUS";
-      expiresAt: string | null;
+      expiresAt: string;
       expectedUpdatedAt: string | null;
       reason: string;
     },

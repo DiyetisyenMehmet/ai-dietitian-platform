@@ -63,11 +63,11 @@ export const paymentsService = {
       const play = await googlePlayEntitlementsService.findActiveForUser(userId);
       if (play) {
         return {
-          tier: play.tier,
+          tier,
           status: "ACTIVE",
           currentPeriodEnd: play.expiresAt,
           cancelAtPeriodEnd: false,
-          entitlements: entitlementsForTier(play.tier),
+          entitlements: entitlementsForTier(tier),
           provider: "GOOGLE_PLAY",
         };
       }

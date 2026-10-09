@@ -30,7 +30,7 @@ const adminEntitlementTimestampSchema = z.string().datetime({ offset: true });
 export const adminSupportEntitlementUpsertSchema = z
   .object({
     tier: z.enum(["PREMIUM", "PREMIUM_PLUS"]),
-    expiresAt: adminEntitlementTimestampSchema.nullable(),
+    expiresAt: adminEntitlementTimestampSchema,
     expectedUpdatedAt: adminEntitlementTimestampSchema.nullable(),
     reason: adminEntitlementReasonSchema,
     confirmed: z.literal(true),

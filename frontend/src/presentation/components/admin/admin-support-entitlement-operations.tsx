@@ -39,8 +39,14 @@ function toIso(value: string) {
 }
 
 function formatDate(value: string | null | undefined) {
-  return value ? new Date(value).toLocaleString("tr-TR") : "Süresiz";
+  return value ? new Date(value).toLocaleString("tr-TR") : "Bitiş tarihi yok";
 }
+
+const STATUS_LABEL = {
+  ACTIVE: "Aktif",
+  EXPIRED: "Süresi doldu",
+  REVOKED: "Sonlandırıldı",
+} as const;
 
 export function AdminSupportEntitlementOperations({
   userId,
@@ -78,6 +84,13 @@ export function AdminSupportEntitlementOperations({
   if (!canGrant && !canRevoke) return null;
 
   const open = (next: Exclude<Action, null>) => {
+    if (next === "upsert") {
+      const expiresAt = toIso(expiry);
+      if (!expiresAt || new Date(expiresAt) <= new Date()) {
+        setError("Gelecekteki bir bitiş tarihi seçin. Destek hakkı süresiz verilemez.");
+        return;
+      }
+    }
     setAction(next);
     setReason("");
     setError("");
@@ -89,7 +102,7 @@ export function AdminSupportEntitlementOperations({
     if (!action || inFlight.current || reason.trim().length < 3) return;
 
     const expiresAt = toIso(expiry);
-    if (action === "upsert" && expiry && !expiresAt) {
+    if (action === "upsert" && !expiresAt) {
       setError("Geçerli bir bitiş tarihi seçin.");
       return;
     }
@@ -98,7 +111,7 @@ export function AdminSupportEntitlementOperations({
       return;
     }
     if (action === "revoke" && !current?.updatedAt) {
-      setError("Support entitlement durumu değişti. Sayfayı yenileyin.");
+      setError("Destek hakkı durumu değişti. Sayfayı yenileyin.");
       return;
     }
 
@@ -109,18 +122,14 @@ export function AdminSupportEntitlementOperations({
       if (action === "upsert") {
         await adminClient.setUserSupportEntitlement(userId, {
           tier,
-          expiresAt,
+          expiresAt: expiresAt!,
           expectedUpdatedAt: current?.updatedAt ?? null,
           reason: reason.trim(),
         });
-        setSuccess("Support entitlement güncellendi ve audit kaydı oluşturuldu.");
+        setSuccess("Destek hakkı güncellendi ve işlem kaydı oluşturuldu.");
       } else {
-        await adminClient.revokeUserSupportEntitlement(
-          userId,
-          current!.updatedAt,
-          reason.trim(),
-        );
-        setSuccess("Support entitlement kaldırıldı ve audit kaydı oluşturuldu.");
+        await adminClient.revokeUserSupportEntitlement(userId, current!.updatedAt, reason.trim());
+        setSuccess("Destek hakkı sonlandırıldı ve işlem kaydı oluşturuldu.");
       }
       setAction(null);
       onChanged();
@@ -129,9 +138,9 @@ export function AdminSupportEntitlementOperations({
         typeof cause === "object" && cause && "status" in cause ? Number(cause.status) : 0;
       setError(
         status === 403
-          ? "Bu entitlement işlemi için yetkiniz yok."
+          ? "Bu destek hakkı işlemi için yetkiniz yok."
           : status === 409
-            ? "Entitlement durumu değişti veya aynı işlem zaten uygulandı. Sayfayı yenileyin."
+            ? "Destek hakkı durumu değişti veya aynı işlem zaten uygulandı. Sayfayı yenileyin."
             : status === 422 || status === 400
               ? "İşlem bilgileri geçersiz. Gerekçe ve bitiş tarihini kontrol edin."
               : "İşlem doğrulanamadı. Yeniden denemeden önce güncel durumu kontrol edin.",
@@ -143,12 +152,12 @@ export function AdminSupportEntitlementOperations({
   };
 
   return (
-    <div data-testid="admin-support-entitlement-operations" className="space-y-4 border-t pt-4">
+    <div data-testid="admin-support-entitlement-operations" className="min-w-0 space-y-4">
       <div>
-        <h3 className="font-medium">Kontrollü support entitlement</h3>
+        <h3 className="font-medium">Destek hakkı yönetimi</h3>
         <p className="mt-1 text-xs text-muted-foreground">
-          Bu işlem Google Play veya IYZICO aboneliğini değiştirmez. Yalnız ayrı Admin/Support
-          erişim katmanını yönetir.
+          Geçici Premium veya Premium Plus erişimi sağlayın. Google Play ve IYZICO abonelikleri ile
+          ödeme kayıtları değişmez.
         </p>
       </div>
 
@@ -161,13 +170,13 @@ export function AdminSupportEntitlementOperations({
       {canGrant && (
         <div className="grid min-w-0 gap-3 sm:grid-cols-2">
           <label className="min-w-0 text-sm">
-            <span className="mb-1 block font-medium">Support plan</span>
+            <span className="mb-1 block font-medium">Destek planı</span>
             <select
-              aria-label="Support plan"
+              aria-label="Destek planı"
               value={tier}
               disabled={busy}
               onChange={(event) => setTier(event.target.value as SupportTier)}
-              className="h-11 w-full rounded-xl border bg-background px-3"
+              className="h-11 w-full min-w-0 rounded-xl border bg-background px-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <option value="PREMIUM">Premium</option>
               <option value="PREMIUM_PLUS">Premium Plus</option>
@@ -176,29 +185,40 @@ export function AdminSupportEntitlementOperations({
           <label className="min-w-0 text-sm">
             <span className="mb-1 block font-medium">Bitiş tarihi</span>
             <input
-              aria-label="Support entitlement bitiş tarihi"
+              aria-label="Destek hakkı bitiş tarihi"
+              aria-describedby="admin-support-expiry-help"
               type="datetime-local"
+              required
               value={expiry}
               disabled={busy}
               onChange={(event) => setExpiry(event.target.value)}
-              className="h-11 w-full rounded-xl border bg-background px-3"
+              className="h-11 w-full min-w-0 max-w-full rounded-xl border bg-background px-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
-            <span className="mt-1 block text-xs text-muted-foreground">
-              Boş bırakılırsa support erişimi süresizdir.
+            <span
+              id="admin-support-expiry-help"
+              className="mt-1 block text-xs text-muted-foreground"
+            >
+              Gelecekteki bir bitiş tarihi zorunludur. Süresiz destek hakkı verilemez.
             </span>
           </label>
         </div>
       )}
 
+      {error && !action && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
+
       <div className="flex flex-wrap gap-2">
         {canGrant && (
           <Button variant="outline" disabled={busy} onClick={() => open("upsert")}>
-            {current?.status === "ACTIVE" ? "Support erişimini güncelle" : "Support erişimi ver"}
+            {current?.status === "ACTIVE" ? "Destek hakkını güncelle" : "Destek hakkı ver"}
           </Button>
         )}
         {canRevokeCurrent && (
           <Button variant="outline" disabled={busy} onClick={() => open("revoke")}>
-            Support erişimini kaldır
+            Destek hakkını sonlandır
           </Button>
         )}
       </div>
@@ -211,7 +231,7 @@ export function AdminSupportEntitlementOperations({
       >
         <ModalContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto">
           <ModalTitle>
-            {action === "revoke" ? "Support erişimini kaldır" : "Support entitlement değişikliğini onayla"}
+            {action === "revoke" ? "Destek hakkını sonlandır" : "Destek hakkı değişikliğini onayla"}
           </ModalTitle>
           <ModalDescription className="break-all">
             {userEmail} · {userId}
@@ -219,20 +239,20 @@ export function AdminSupportEntitlementOperations({
 
           <div className="space-y-2 rounded-xl border bg-background/60 p-3 text-sm">
             <p>
-              Mevcut effective plan: <strong>{PLAN_LABEL[subscription.currentPlan]}</strong>
+              Mevcut etkin plan: <strong>{PLAN_LABEL[subscription.currentPlan]}</strong>
             </p>
             <p>
-              Mevcut support:{" "}
+              Mevcut destek hakkı:{" "}
               <strong>
                 {current
-                  ? `${PLAN_LABEL[current.tier]} · ${current.status} · ${formatDate(current.expiresAt)}`
+                  ? `${PLAN_LABEL[current.tier]} · ${STATUS_LABEL[current.status]} · ${formatDate(current.expiresAt)}`
                   : "Yok"}
               </strong>
             </p>
             {action === "upsert" && (
               <>
                 <p>
-                  Yeni support plan: <strong>{PLAN_LABEL[tier]}</strong>
+                  Yeni destek planı: <strong>{PLAN_LABEL[tier]}</strong>
                 </p>
                 <p>
                   Yeni bitiş: <strong>{formatDate(toIso(expiry))}</strong>
@@ -240,7 +260,7 @@ export function AdminSupportEntitlementOperations({
               </>
             )}
             <p className="font-medium">
-              Google Play/IYZICO provider aboneliği ve ödeme kayıtları değiştirilmeyecek.
+              Google Play/IYZICO aboneliği ve ödeme kayıtları değiştirilmeyecek.
             </p>
           </div>
 
@@ -274,7 +294,12 @@ export function AdminSupportEntitlementOperations({
             )}
 
             <ModalFooter>
-              <Button type="button" variant="outline" disabled={busy} onClick={() => setAction(null)}>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={busy}
+                onClick={() => setAction(null)}
+              >
                 Vazgeç
               </Button>
               <Button type="submit" disabled={busy || reason.trim().length < 3}>
