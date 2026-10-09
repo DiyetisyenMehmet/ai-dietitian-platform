@@ -201,7 +201,7 @@ for (const [width, height] of [
       reason: "Approved support entitlement",
       confirmed: true,
     });
-    await expect(page.getByText("Admin/Support entitlement", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("Yönetici / destek hakkı", { exact: true }).first()).toBeVisible();
     await noOverflow(page);
   });
 }
@@ -218,7 +218,7 @@ test("B2 read-only admin sees state but no mutation controls", async ({ page }) 
     }),
   });
   await page.goto(`${WEB}/admin/users/${user.id}`);
-  await expect(page.getByText("Admin/Support entitlement", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Yönetici / destek hakkı", { exact: true }).first()).toBeVisible();
   await expect(page.getByTestId("admin-support-entitlement-operations")).toHaveCount(0);
   expect(fixture.mutationCalls()).toBe(0);
 });
@@ -279,7 +279,7 @@ test("B2 revoke confirmation preserves provider and sends stale-state token", as
     reason: "Support issue resolved",
     confirmed: true,
   });
-  await expect(page.getByText("IYZICO subscription", { exact: true })).toBeVisible();
+  await expect(page.getByText("IYZICO aboneliği", { exact: true })).toBeVisible();
 });
 
 test("B2 duplicate submit is blocked while mutation is in flight", async ({ page }) => {

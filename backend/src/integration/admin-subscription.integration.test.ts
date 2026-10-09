@@ -208,6 +208,54 @@ test("B1 read-only subscription management: canonical source, RBAC and data mini
       "record",
       "supportEntitlement",
     ].sort());
+    assert.deepEqual(Object.keys(body.data.subscription.record!).sort(), [
+      "status", "provider", "source", "startDate", "expiryOrRenewalDate",
+      "cancelAtPeriodEnd", "canceledAt", "trial",
+    ].sort());
+  });
+
+  await t.test("canceled, past-due, expired and period-end cancellation remain read-only", async () => {
+    for (const status of ["CANCELED", "PAST_DUE", "EXPIRED", "ACTIVE"] as const) {
+      const fixture = await create(`status-${status}`, UserRole.USER);
+      await prisma.user.update({ where: { id: fixture.user.id }, data: { subscriptionTier: "PREMIUM" } });
+      const row = await prisma.subscription.create({ data: {
+        userId: fixture.user.id, tier: "PREMIUM", status,
+        currentPeriodStart: new Date(now - 86400000), currentPeriodEnd: new Date(now + 86400000),
+        cancelAtPeriodEnd: status === "ACTIVE",
+        canceledAt: status === "CANCELED" ? new Date(now - 3600000) : null,
+      } });
+      const before = await prisma.user.findUniqueOrThrow({ where: { id: fixture.user.id }, select: { subscriptionTier: true, updatedAt: true } });
+      const view = (await read(await get(fixture.user.id, finance.token))).data.subscription;
+      assert.equal(view.currentPlan, status === "ACTIVE" ? "PREMIUM" : "FREE");
+      assert.equal(view.record?.status, status);
+      assert.equal(view.record?.cancelAtPeriodEnd, status === "ACTIVE");
+      assert.equal(view.record?.canceledAt, row.canceledAt?.toISOString() ?? null);
+      assert.deepEqual(await prisma.subscription.findUniqueOrThrow({ where: { id: row.id } }), row);
+      assert.deepEqual(await prisma.user.findUniqueOrThrow({ where: { id: fixture.user.id }, select: { subscriptionTier: true, updatedAt: true } }), before);
+    }
+  });
+
+  await t.test("active, expired and revoked support rights use the shared resolver without writes", async () => {
+    const auditBefore = await prisma.adminAuditEvent.count({ where: { actorAdminId: finance.user.id } });
+    for (const status of ["ACTIVE", "EXPIRED", "REVOKED"] as const) {
+      const fixture = await create(`support-${status}`, UserRole.USER);
+      const row = await prisma.adminSupportEntitlement.create({ data: {
+        userId: fixture.user.id, tier: "PREMIUM_PLUS",
+        grantedAt: new Date(now - 86400000),
+        expiresAt: status === "EXPIRED" ? new Date(now - 3600000) : new Date(now + 86400000),
+        revokedAt: status === "REVOKED" ? new Date(now - 3600000) : null,
+      } });
+      const before = await prisma.user.findUniqueOrThrow({ where: { id: fixture.user.id }, select: { subscriptionTier: true, updatedAt: true } });
+      const view = (await read(await get(fixture.user.id, finance.token))).data.subscription;
+      assert.equal(view.currentPlan, status === "ACTIVE" ? "PREMIUM_PLUS" : "FREE");
+      assert.equal(view.providerPlan, "FREE");
+      assert.equal(view.currentPlanSource, status === "ACTIVE" ? "ADMIN_SUPPORT" : "ACCOUNT_DEFAULT");
+      assert.equal(view.supportEntitlement?.status, status);
+      assert.deepEqual(Object.keys(view.supportEntitlement!).sort(), ["id", "tier", "status", "grantedAt", "expiresAt", "updatedAt"].sort());
+      assert.deepEqual(await prisma.adminSupportEntitlement.findUniqueOrThrow({ where: { userId: fixture.user.id } }), row);
+      assert.deepEqual(await prisma.user.findUniqueOrThrow({ where: { id: fixture.user.id }, select: { subscriptionTier: true, updatedAt: true } }), before);
+    }
+    assert.equal(await prisma.adminAuditEvent.count({ where: { actorAdminId: finance.user.id } }), auditBefore);
   });
 
   await t.test("missing user and production environment fail closed", async () => {
