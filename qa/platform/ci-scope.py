@@ -17,7 +17,7 @@ android = common or any(p.startswith("android/") or p in {"qa/platform/runtime.c
 ios = common or any(p.startswith("ios/") or p.startswith("frontend/") or p.startswith("qa/platform/ios-") or p == "qa/platform/ios-private.py" for p in files)
 # The explicit authenticated-all entry point already exercises every runtime.
 # Avoid duplicate public builds for the same commit; contracts still run.
-if ".github/workflows/crossplatform-qa-authenticated.yml" in files:
+if any(p in files for p in (".github/workflows/crossplatform-qa-authenticated.yml", ".github/workflows/crossplatform-qa-android-authenticated.yml")):
     web = android = ios = False
 with open(os.environ["GITHUB_OUTPUT"], "a") as output:
     for key, value in {"web": web, "android": android, "ios": ios}.items():

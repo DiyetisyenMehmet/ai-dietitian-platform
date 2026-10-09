@@ -1,0 +1,19 @@
+name: Cross-platform QA Authenticated Android
+
+on:
+  push:
+    branches: [feature/workmode4-crossplatform-qa-infra-a1]
+    paths: [".github/workflows/crossplatform-qa-android-authenticated.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  authenticated-android:
+    if: github.ref == 'refs/heads/feature/workmode4-crossplatform-qa-infra-a1'
+    uses: ./.github/workflows/crossplatform-qa-infra.yml
+    with:
+      authenticated: true
+      platform: android
+    secrets: inherit

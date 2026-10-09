@@ -141,6 +141,7 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - name: Real Android Emulator evidence
+        timeout-minutes: 12
         uses: reactivecircus/android-emulator-runner@v2
         env:
           QA_EMAIL: ${{ inputs.authenticated && secrets.QA_EMAIL || '' }}
@@ -154,10 +155,9 @@ jobs:
           target: google_apis
           arch: x86_64
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back emulated
-          script: |
-            adb install -r android/app/build/outputs/apk/debug/app-debug.apk
-            node qa/platform/authenticated-run.cjs android
+          emulator-boot-timeout: 180
+          emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back emulated
+          script: bash qa/platform/android-ci-run.sh
       - name: Validate export safety
         id: export-safety
         if: always()
