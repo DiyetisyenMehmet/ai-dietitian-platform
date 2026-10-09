@@ -4,6 +4,7 @@ name: Cross-platform QA Authenticated Android
 # Verify the native startup Dashboard before navigating away from auth recovery.
 # Export guarded empty-login failure evidence if the real session cannot restore.
 # Android WebView does not support the browser cookie-enumeration protocol.
+# Retest APP5 native session persistence with the unchanged QA harness.
 
 on:
   push:
@@ -21,4 +22,5 @@ jobs:
     with:
       authenticated: true
       platform: android
+      android_source_ref: 32157a41d8f301ca3a362dbe0867519f5826a2f0
     secrets: inherit
