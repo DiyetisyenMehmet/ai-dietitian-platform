@@ -4,11 +4,11 @@ const assert = require('node:assert/strict');
 const c = require('./contract.cjs');
 const { stage } = require('./android-stage.cjs');
 const { openAndroidRuntime, originClass } = require('./android-runtime.cjs');
-function fixture(failAttach = false) {
-  let closed = 0, staleAttachments = 0, freshAttachments = 0, pid = 222;
+function fixture(failAttach = false, delayedReopen = false) {
+  let closed = 0, staleAttachments = 0, freshAttachments = 0, pid = 222, pendingPid = 0;
   const page = { setDefaultTimeout() {}, setDefaultNavigationTimeout() {}, on() {}, url:()=>c.ORIGIN+'/login', async evaluate() { return {origin:'STAGING',ready:'complete',online:true}; }, async waitForURL() {}, async waitForLoadState() {}, async goto() {} };
   const device = { serial: () => 'emulator-5554', setDefaultTimeout() {}, async close() { closed++; },
-    async shell(command) { if (command.startsWith('pidof')) return Buffer.from(String(pid)); if (command.startsWith('am force-stop')) pid++; return Buffer.from(''); },
+    async shell(command) { if (command.startsWith('pidof')) return Buffer.from(pendingPid-- > 0 ? '' : String(pid)); if (command.startsWith('am force-stop')) { pid++; if (delayedReopen) pendingPid = 2; } return Buffer.from(''); },
     webViews: () => [
       { pkg: () => 'com.diewish.app', pid: () => 111, async page() { staleAttachments++; throw new Error('STALE_VIEW_USED'); } },
       { pkg: () => 'com.diewish.app', pid: () => pid, async page() { freshAttachments++; if (failAttach) throw Object.assign(new Error('private-content'), {name:'TimeoutError'}); return page; } },
@@ -24,6 +24,11 @@ test('attachment failure closes resources owned before the runtime is returned',
 test('initial launch and session reopen attach only the current native app process', async () => {
   const f = fixture(); const runtime = await openAndroidRuntime(f.pw);
   assert.equal(runtime.runtime, 'android-emulator');
+  await runtime.relaunch(); await runtime.close();
+  assert.deepEqual(f.counts(), {closed:1,staleAttachments:0,freshAttachments:2});
+});
+test('session reopen waits for native process creation before selecting its WebView', async () => {
+  const f = fixture(false, true); const runtime = await openAndroidRuntime(f.pw);
   await runtime.relaunch(); await runtime.close();
   assert.deepEqual(f.counts(), {closed:1,staleAttachments:0,freshAttachments:2});
 });

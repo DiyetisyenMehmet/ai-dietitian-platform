@@ -39,11 +39,17 @@ async function openAndroidRuntime(pw) {
   }
   device.setDefaultTimeout(30000);
   const start = async () => {
-    await stage('APP_LAUNCH', 20000, () => device.shell('am start -n com.diewish.app/.MainActivity'));
+    await stage('APP_LAUNCH', 20000, () => device.shell('am start -W -n com.diewish.app/.MainActivity'));
     const pid = await stage('APP_PROCESS_READY', 15000, async () => {
-      const value = (await device.shell('pidof com.diewish.app')).toString().trim();
-      if (!/^\d+$/.test(value)) throw new c.Blocked('ANDROID_APP_PROCESS_MISSING');
-      return Number(value);
+      // ActivityManager start and process creation are asynchronous after a
+      // force-stop. An empty immediate pidof is not a completed launch failure.
+      const deadline = Date.now() + 10000;
+      while (Date.now() < deadline) {
+        const value = (await device.shell('pidof com.diewish.app')).toString().trim();
+        if (/^\d+$/.test(value)) return Number(value);
+        await new Promise(resolve => setTimeout(resolve, 250));
+      }
+      throw new c.Blocked('ANDROID_APP_PROCESS_READY_TIMEOUT');
     });
     // A killed app's old WebView may remain in the Playwright discovery cache.
     // Only bind the socket owned by the currently running app process.
