@@ -72,7 +72,15 @@
     if(document.fonts.status!=='loaded') {fontDetail='FONT_LOADING';return true;}
     if(faces.length!==state.fonts.length) {fontDetail='FONT_COUNT';return true;}
     if(faces.some((face,i)=>face!==state.fonts[i].face)) {fontDetail='FONT_REFERENCE';return true;}
-    if(faces.some((face,i)=>fontProperties(face)!==state.fonts[i].properties)) {fontDetail='FONT_PROPERTIES';return true;}
+    for(let i=0;i<faces.length;i++) {
+      const before=state.fonts[i].properties.split('|'),after=fontProperties(faces[i]).split('|');
+      const index=before.findIndex((value,k)=>value!==after[k]);
+      if(index>=0) {
+        fontDetail='FONT_'+['FAMILY','STYLE','WEIGHT','STRETCH','UNICODE_RANGE','VARIANT','FEATURES','STATUS'][index];
+        if(index===7 && ['unloaded','loading','loaded','error'].includes(before[index]) && ['unloaded','loading','loaded','error'].includes(after[index])) fontDetail+='_'+before[index].toUpperCase()+'_'+after[index].toUpperCase();
+        return true;
+      }
+    }
     return false;
   }
   function fontsChanged(){
@@ -130,7 +138,10 @@
     }
     try {
       // Wait for hydration before measuring; changes DURING capture still fail.
-      await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('FONT_TIMEOUT')),5000);document.fonts.ready.then(()=>{clearTimeout(timer);resolve();});});
+      // ready covers fonts already used by layout, not every declared face.
+      // Settle unused declared faces as well; screenshot reflow must not start
+      // a late face load under an already-armed private-value mask.
+      await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('FONT_TIMEOUT')),5000);Promise.all([...document.fonts].map(face=>face.load().catch(()=>{}))).then(()=>document.fonts.ready).then(()=>{clearTimeout(timer);resolve();});});
       await new Promise((resolve,reject) => {
         let quiet;
         const observer=new MutationObserver(()=>{clearTimeout(quiet);quiet=setTimeout(done,1000);});

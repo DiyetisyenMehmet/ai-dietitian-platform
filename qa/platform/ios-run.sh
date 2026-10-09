@@ -41,23 +41,11 @@ echo SIMULATOR_BUILD_OK
 # Local ad-hoc signing supports ARM64 Simulator execution without an Apple account.
 xcrun simctl install "$simulator" "$private/build/Build/Products/Debug-iphonesimulator/DiewishQA.app" >"$private/install.log" 2>&1 || { python3 qa/platform/ios-result-summary.py --log "$private/install.log"; exit 1; }
 echo SIMULATOR_INSTALL_OK
-# A freshly booted Simulator may still be registering launch services. Retry
-# the same actual native launch at most three times; XCTest still must prove UI.
-launched=NO
-for attempt in 1 2 3; do
-  echo "IOS_STAGE NATIVE_LAUNCH RUNNING $attempt"
-  if xcrun simctl launch "$simulator" com.diewish.qa >"$private/launch.log" 2>&1; then launched=YES; break; fi
-  python3 qa/platform/ios-result-summary.py --log "$private/launch.log"
-  [[ "$attempt" == 3 ]] || sleep 2
-done
-[[ "$launched" == YES ]] || { echo 'IOS_STAGE NATIVE_LAUNCH FAIL'; exit 1; }
-echo 'IOS_STAGE NATIVE_LAUNCH PASS'
-echo SIMULATOR_LAUNCH_OK
+# XCTest is the sole launch owner. Its configuredApp.launch() and real UI
+# assertions prove native launch; no unconfigured extra app process is started.
+echo 'IOS_STAGE XCODE_LAUNCH_OWNER READY'
 # Keep only sanitized compile diagnostics; UI actions and credentials never leave the temp directory.
 python3 qa/platform/ios-private.py inject "$private/build"
-# Hand launch ownership to XCTest; avoid an already-running unconfigured host.
-xcrun simctl terminate "$simulator" com.diewish.qa >"$private/terminate.log" 2>&1 || { python3 qa/platform/ios-result-summary.py --log "$private/terminate.log"; exit 1; }
-echo 'IOS_STAGE XCODE_LAUNCH_HANDOFF PASS'
 echo RUNNING_UI_TESTS
 set +e
 xcodebuild test-without-building -xctestrun "$private/qa.xctestrun" -destination "id=$simulator" \

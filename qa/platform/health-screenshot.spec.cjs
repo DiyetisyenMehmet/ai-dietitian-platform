@@ -117,3 +117,9 @@ test('preparation-shield image bytes are refused before filesystem export',async
     assert.equal(fs.existsSync(file),false);
   } finally {fs.rmSync(path.join(c.ROOT,'.qa-artifacts','.health-guard-failed'),{force:true});}
 }));
+
+test('declared unused font faces settle before a screenshot can trigger reflow',async()=>fixture(async(page,dir)=>{
+  await page.setContent('<style>@font-face{font-family:GuardUnused;src:local("Fixture Missing Font"),local("Arial");unicode-range:U+0600-06FF}body{font-family:sans-serif}</style><h1>Dashboard</h1><p>79.0</p>');
+  await guardedCapture(page,path.join(dir,'unused-face.png'),()=>page.screenshot({caret:'initial'}));
+  assert.equal(await page.evaluate(()=>[...document.fonts].some(face=>face.status==='unloaded'||face.status==='loading')),false);
+}));

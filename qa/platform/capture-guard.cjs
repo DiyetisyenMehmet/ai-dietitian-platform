@@ -41,7 +41,7 @@ async function guardedCapture(page,file,screenshot) {
   } catch (error) {
     const reason=await page.evaluate(()=>window.__diewishEvidenceMask?.reason?.() || 'NONE').catch(()=>'NONE');
     const fontDetail=await page.evaluate(()=>window.__diewishEvidenceMask?.fontDetail?.() || 'NONE').catch(()=>'NONE');
-    if(['FONT_LOADING','FONT_COUNT','FONT_REFERENCE','FONT_PROPERTIES','FONT_GEOMETRY'].includes(fontDetail)) console.error('HEALTH_GUARD_FONT_DETAIL',fontDetail);
+    if(/^(?:FONT_(?:LOADING|COUNT|REFERENCE|PROPERTIES|GEOMETRY|FAMILY|STYLE|WEIGHT|STRETCH|UNICODE_RANGE|VARIANT|FEATURES|STATUS)|FONT_STATUS_(?:UNLOADED|LOADING|LOADED|ERROR)_(?:UNLOADED|LOADING|LOADED|ERROR))$/.test(fontDetail)) console.error('HEALTH_GUARD_FONT_DETAIL',fontDetail);
     console.error('HEALTH_DATA_SCREENSHOT_GUARD_PHASE',phase,['NONE','VIEWPORT_CHANGED','DOCUMENT_MUTATION','FONT_CHANGED','MASK_NOT_ACTIVE','PREPARE_FAILED'].includes(reason)?reason:'OTHER');
     fs.rmSync(file,{force:true});
     throw error instanceof c.Blocked && error.code==='CREDENTIAL_SCREENSHOT_REFUSED' ? error : failClosed();
