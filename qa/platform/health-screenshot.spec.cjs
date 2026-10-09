@@ -118,10 +118,18 @@ test('preparation-shield image bytes are refused before filesystem export',async
   } finally {fs.rmSync(path.join(c.ROOT,'.qa-artifacts','.health-guard-failed'),{force:true});}
 }));
 
-test('declared unused font faces settle before a screenshot can trigger reflow',async()=>fixture(async(page,dir)=>{
-  await page.setContent('<style>@font-face{font-family:GuardUnused;src:local("Fixture Missing Font"),local("Arial");unicode-range:U+0600-06FF}body{font-family:sans-serif}</style><h1>Dashboard</h1><p>79.0</p>');
-  await guardedCapture(page,path.join(dir,'unused-face.png'),()=>page.screenshot({caret:'initial'}));
-  assert.equal(await page.evaluate(()=>[...document.fonts].some(face=>face.status==='unloaded'||face.status==='loading')),false);
+test('unused font cache reflow preserves masked health pixels and restores UI',async()=>fixture(async(page,dir)=>{
+  await page.setContent('<style>@font-face{font-family:GuardUnused;src:local("Fixture Missing Font"),local("Arial");unicode-range:U+0600-06FF}body{font-family:sans-serif}</style><h1>Dashboard</h1><p id="weight">79.0</p>');
+  const original=await page.locator('body').innerHTML();
+  const file=path.join(dir,'unused-face.png');
+  await guardedCapture(page,file,()=>page.screenshot({caret:'initial'}));
+  assert.equal(proven(file),true);
+  assert.equal(await page.evaluate(()=>document.fonts.status),'loaded');
+  assert.equal(await page.locator('body').innerHTML(),original);
+  const rect=await page.locator('#weight').evaluate(n=>{const r=document.createRange();r.selectNodeContents(n);const b=r.getBoundingClientRect();return {x:b.x,y:b.y};});
+  const sharp=require('../../frontend/node_modules/sharp');
+  const pixel=await sharp(file).extract({left:Math.floor(rect.x+1),top:Math.floor(rect.y+1),width:1,height:1}).removeAlpha().raw().toBuffer();
+  assert.deepEqual([...pixel],[53,75,67]);
 }));
 
 test('real font property changes still refuse export after harmless WebKit reflow',async()=>fixture(async(page,dir)=>{
