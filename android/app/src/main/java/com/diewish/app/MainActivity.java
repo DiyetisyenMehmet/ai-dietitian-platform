@@ -28,6 +28,8 @@ import androidx.activity.OnBackPressedCallback;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
+import androidx.webkit.WebViewCompat;
+import androidx.webkit.WebViewFeature;
 
 import com.android.billingclient.api.BillingClient;
 import com.android.billingclient.api.BillingClientStateListener;
@@ -69,6 +71,7 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
     private static final String SCANNER_BRIDGE = "DiewishScanner";
     private static final String FOOD_SCAN_PATH = "/meals/scan";
     private static final String UI_BRIDGE = "DiewishSystemUi";
+    private static final String SESSION_COOKIE_BRIDGE = "DiewishSessionCookies";
 
     private WebView webView;
     private FrameLayout rootView;
@@ -206,6 +209,19 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
         );
         webView.addJavascriptInterface(new ScannerBridge(), SCANNER_BRIDGE);
         webView.addJavascriptInterface(new SystemUiBridge(), UI_BRIDGE);
+        webView.addJavascriptInterface(
+            new DiewishSessionCookieBridge(this::isTrustedPage),
+            SESSION_COOKIE_BRIDGE
+        );
+        // onPageFinished alone is too late for an in-flight startup refresh.
+        // Limit document-start injection to this app's exact HTTPS origin.
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+            WebViewCompat.addDocumentStartJavaScript(
+                webView,
+                DiewishSessionCookieBridge.bootstrapScript(),
+                Collections.singleton(BuildConfig.WEB_BASE_URL)
+            );
+        }
         webView.setWebViewClient(new TrustedWebViewClient());
         webView.setWebChromeClient(new DiewishChromeClient());
     }
@@ -759,10 +775,10 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
         public void onPageFinished(WebView view, String url) {
             super.onPageFinished(view, url);
             updateTrustedPageState(url);
-            persistSessionCookies();
             if (isTrustedPage()) {
                 view.evaluateJavascript(
-                    "window.__DIEWISH_ANDROID_APP__ = true;"
+                    DiewishSessionCookieBridge.bootstrapScript()
+                        + "window.__DIEWISH_ANDROID_APP__ = true;"
                         + "window.__DIEWISH_ANDROID_BUILD_REVISION__ = "
                         + JSONObject.quote(BuildConfig.BUILD_REVISION)
                         + ";document.documentElement.classList.add('diewish-android');"
@@ -1050,6 +1066,7 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
             webView.removeJavascriptInterface(SHARE_BRIDGE);
             webView.removeJavascriptInterface(SCANNER_BRIDGE);
             webView.removeJavascriptInterface(UI_BRIDGE);
+            webView.removeJavascriptInterface(SESSION_COOKIE_BRIDGE);
             webView.destroy();
         }
         super.onDestroy();
