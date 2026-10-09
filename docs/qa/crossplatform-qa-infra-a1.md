@@ -101,7 +101,11 @@ The script selects a real installed iPhone/device/runtime compatible with the **
 
 For live multi-runtime manual sessions, open the project in Xcode, choose an installed iPhone simulator and run the same scheme. Keep it open together with Web/Android, log in through the standard existing staging login, and obtain its UDID from `xcrun simctl list devices booted`. Use the QA toolbar for Dashboard/Coach/preferences/profile/back/refresh. The toolbar is QA host UI and must not be mistaken for production iOS UX.
 
-With the approved account contract injected into the local protected environment, set the observed `QA_IOS_UDID` and run `bash qa/platform/ios-live.sh` **before** opening the sync target list. This launches the already installed shell with in-memory expected identity/HMAC settings; no password enters the native shell. On each iOS target checkpoint press the native `QA` button before answeri…212 tokens truncated…onization
+With the approved account contract injected into the local protected environment, set the observed `QA_IOS_UDID` and run `bash qa/platform/ios-live.sh` **before** opening the sync target list. This launches the already installed shell with in-memory expected identity/HMAC settings; no password enters the native shell. On each iOS target checkpoint press the native `QA` button before answering the harness: populated login fields are refused, displayed emails are masked, and a recent alias-only readiness proof is written in the Simulator app's private temporary directory. The manual harness checks that proof before simctl capture. Web targets open a visible browser (a local display is required); `QA_HEADLESS=NO` also enables visible standalone browser operation.
+
+XCTest secrets are injected into a mode-0600 **temporary xctestrun**; XCTest results and action logs can contain typed text and are never uploaded. Only specifically named screenshots are exported; automatic failure screenshots are excluded. Dedicated synthetic profile data can appear in authenticated iOS screenshots; never use a real user. Simulator app build and public login smoke are separate from authenticated account acceptance.
+
+## Six-direction synchronization
 
 | Direction     | Automation                                     |
 | ------------- | ---------------------------------------------- |
