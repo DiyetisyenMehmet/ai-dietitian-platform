@@ -50,6 +50,6 @@ async function main() {
     if (!/^\d+$/.test(await adb(serial, ['shell', 'pidof', 'com.diewish.app']))) throw new c.Blocked('ANDROID_APP_PROCESS_MISSING');
   });
   process.env.QA_ANDROID_SERIAL = serial;
-  await require('./authenticated-run.cjs').main(['android']);
+  await require('./authenticated-run.cjs').main(process.argv.length > 2 ? process.argv.slice(2) : ['android']);
 }
 main().then(() => process.exit(process.exitCode || 0)).catch(error => { console.error(c.errorCode(error)); process.exit(2); });

@@ -81,15 +81,8 @@ async function capture(runtime, evidence, name) {
       if (!settled) throw new c.Blocked('ANDROID_FRAME_STABLE_TIMEOUT');
     });
   } else await waitForStableFrame(page);
-  // Identity masking affects only the evidence capture, never persisted app data.
-  const mask = page.getByText(process.env.QA_EMAIL || '__no_identity__', { exact: true });
   const file = name + '-' + runtime.runtime + '.png';
-  if (runtime.platform === 'web') await page.screenshot({ path: path.join(evidence.dir, file), mask: [mask] });
-  else {
-    await step('SCREENSHOT_IDENTITY_MASK', 10000, () => page.evaluate(email => { document.querySelectorAll('p,span,div').forEach(n => { if (n.children.length === 0 && n.textContent === email) { n.dataset.qaMasked = n.textContent; n.textContent = '[QA identity]'; } }); }, process.env.QA_EMAIL || '__no_identity__'));
-    try { await runtime.screenshot(path.join(evidence.dir, file)); }
-    finally { await step('SCREENSHOT_MASK_RESTORE', 10000, () => page.evaluate(() => document.querySelectorAll('[data-qa-masked]').forEach(n => { n.textContent = n.dataset.qaMasked; delete n.dataset.qaMasked; }))); }
-  }
+  await step('HEALTH_DATA_SCREENSHOT_GUARD', 20000, () => require('./capture-guard.cjs').guardedCapture(page,path.join(evidence.dir,file), () => runtime.platform==='web' ? page.screenshot({caret:'initial'}) : runtime.screenshot()));
   return file;
 }
 async function main() {

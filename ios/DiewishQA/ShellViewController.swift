@@ -15,6 +15,8 @@ final class ShellViewController: UIViewController, WKNavigationDelegate, WKUIDel
     private let routes = ["login": "/login", "dashboard": "/dashboard", "coach-list": "/ai", "notification-preferences": "/profile/notifications", "profile": "/profile"]
     private var contentController: WKUserContentController!
     private var evidenceButton: UIButton!
+    private var checkEvidenceButton: UIButton!
+    private var restoreEvidenceButton: UIButton!
     private var verifiedAlias: String?
     private var identityFile: URL { FileManager.default.temporaryDirectory.appendingPathComponent("qa-runtime-identity.json") }
 
@@ -54,6 +56,10 @@ final class ShellViewController: UIViewController, WKNavigationDelegate, WKUIDel
         })();
         """, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         config.applicationNameForUserAgent = "DiewishIOSQA/0.1.0"
+        if let file = Bundle.main.url(forResource: "evidence-mask", withExtension: "js"),
+           let script = try? String(contentsOf: file, encoding: .utf8) {
+            contentController.addUserScript(WKUserScript(source: script, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        }
         webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = self
         webView.uiDelegate = self
@@ -67,12 +73,14 @@ final class ShellViewController: UIViewController, WKNavigationDelegate, WKUIDel
         toolbar.distribution = .fillEqually
         toolbar.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(toolbar)
-        let controls = [("Giriş", "qa-login"), ("←", "qa-back"), ("↻", "qa-refresh"), ("Ana", "qa-dashboard"), ("Koç", "qa-coach-list"), ("Bildirim", "qa-notification-preferences"), ("Profil", "qa-profile"), ("QA", "qa-evidence")]
+        let controls = [("Giriş", "qa-login"), ("←", "qa-back"), ("↻", "qa-refresh"), ("Ana", "qa-dashboard"), ("Koç", "qa-coach-list"), ("Bildirim", "qa-notification-preferences"), ("Profil", "qa-profile"), ("QA", "qa-evidence"), ("✓", "qa-check-evidence"), ("×", "qa-restore-evidence")]
         for (title, identifier) in controls {
             let button = UIButton(type: .system)
             button.setTitle(title, for: .normal)
             button.accessibilityIdentifier = identifier
             if identifier == "qa-evidence" { evidenceButton = button }
+            if identifier == "qa-check-evidence" { checkEvidenceButton = button }
+            if identifier == "qa-restore-evidence" { restoreEvidenceButton = button }
             button.addAction(UIAction { [weak self] _ in self?.navigate(identifier) }, for: .touchUpInside)
             toolbar.addArrangedSubview(button)
         }
@@ -94,6 +102,8 @@ final class ShellViewController: UIViewController, WKNavigationDelegate, WKUIDel
 
     private func navigate(_ identifier: String) {
         if identifier == "qa-evidence" { prepareEvidence(); return }
+        if identifier == "qa-check-evidence" { checkEvidence(); return }
+        if identifier == "qa-restore-evidence" { restoreEvidence(); return }
         if identifier == "qa-back" { if webView.canGoBack { webView.goBack() }; return }
         if identifier == "qa-refresh" { webView.reload(); return }
         let key = String(identifier.dropFirst(3))
@@ -107,23 +117,39 @@ final class ShellViewController: UIViewController, WKNavigationDelegate, WKUIDel
         guard trusted(webView.url), !authenticated || verifiedAlias != nil else {
             evidenceButton.accessibilityValue = "ACCOUNT_UNVERIFIED"; return
         }
-        webView.evaluateJavaScript("""
-        (() => {
-          if ([...document.querySelectorAll('input[type=email],input[type=password]')].some(n => n.value)) return false;
-          document.querySelectorAll('p,span,div,a').forEach(n => {
-            if (!n.children.length && /[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}/i.test(n.textContent)) n.textContent = '[QA identity]';
-          });
-          return true;
-        })()
-        """) { [weak self] value, error in
+        webView.callAsyncJavaScript("return window.__diewishEvidenceMask ? await window.__diewishEvidenceMask.begin() : false;", arguments: [:], in: nil, in: .page) { [weak self] result in
             guard let self else { return }
-            let ready = error == nil && (value as? Bool) == true
-            self.evidenceButton.accessibilityValue = ready ? "READY" : "CAPTURE_REFUSED"
+            let ready: Bool
+            if case .success(let value) = result { ready = (value as? Bool) == true } else { ready = false }
+            self.evidenceButton.accessibilityValue = ready ? "READY" : "HEALTH_DATA_SCREENSHOT_GUARD_FAIL"
             if ready, let alias = self.verifiedAlias,
-               let data = try? JSONSerialization.data(withJSONObject: ["accountAlias": alias, "captureReadyAt": Date().timeIntervalSince1970]) {
+               let data = try? JSONSerialization.data(withJSONObject: ["accountAlias": alias, "captureReadyAt": Date().timeIntervalSince1970, "screenshotGuard": "HEALTH_MASK_V1"]) {
                 try? data.write(to: self.identityFile, options: .atomic)
             }
         }
+    }
+
+    private func checkEvidence() {
+        checkEvidenceButton.accessibilityValue = "WAITING"
+        webView.evaluateJavaScript("window.__diewishEvidenceMask?.active() === true") { [weak self] value, error in
+            self?.checkEvidenceButton.accessibilityValue = error == nil && (value as? Bool) == true ? "READY" : "HEALTH_DATA_SCREENSHOT_GUARD_FAIL"
+        }
+    }
+
+    private func restoreEvidence() {
+        restoreEvidenceButton.accessibilityValue = "WAITING"
+        webView.evaluateJavaScript("window.__diewishEvidenceMask?.restore() === true") { [weak self] value, error in
+            self?.restoreEvidenceButton.accessibilityValue = error == nil && (value as? Bool) == true ? "RESTORED" : "HEALTH_DATA_SCREENSHOT_GUARD_FAIL"
+            self?.invalidateCaptureProof()
+        }
+    }
+
+    private func invalidateCaptureProof() {
+        guard let alias = verifiedAlias,
+              let data = try? JSONSerialization.data(withJSONObject: ["accountAlias": alias]) else {
+            try? FileManager.default.removeItem(at: identityFile); return
+        }
+        try? data.write(to: identityFile, options: .atomic)
     }
 
     private func recordIdentity(_ id: String) {
@@ -173,6 +199,10 @@ final class ShellViewController: UIViewController, WKNavigationDelegate, WKUIDel
               let operation = body["operation"] as? String else { return }
         if operation == "qa-account", let id = body["id"] as? String { recordIdentity(id); return }
         if operation == "qa-logout" { verifiedAlias = nil; try? FileManager.default.removeItem(at: identityFile); return }
+        if operation == "qa-mask-invalid" {
+            evidenceButton.accessibilityValue = "HEALTH_DATA_SCREENSHOT_GUARD_FAIL"
+            invalidateCaptureProof(); return
+        }
         guard operation == "capabilities" else { return }
         // A capability contract, not Android bridge impersonation. Unsupported
         // operations stay unavailable; no auth tokens or arbitrary JS are accepted.

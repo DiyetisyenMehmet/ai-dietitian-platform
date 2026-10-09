@@ -39,8 +39,12 @@ for (const test of manifest) {
     )
       continue;
     if (scenario !== "login" && scenario !== "login-runtime-diagnostic" && !alias) continue;
+    if (!human.includes('-ios-simulator-guarded-health-v1')) {
+      throw require('./capture-guard.cjs').failClosed();
+    }
     const name = scenario + "-ios-simulator.png";
     fs.copyFileSync(source, path.join(e.dir, name));
+    require('./capture-guard.cjs').prove(path.join(e.dir,name));
     e.record(scenario === "login" ? "login-surface" : scenario, scenario === "login-runtime-diagnostic" ? "FAIL" : "PASS", {
       code: scenario === "login-runtime-diagnostic" ? "IOS_LOGIN_SURFACE_UNAVAILABLE" : "NONE",
       appVersion: "0.1.0",

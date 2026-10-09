@@ -17,4 +17,19 @@ jobs:
     with:
       authenticated: true
       platform: all
+      android_source_ref: d9bc07debcbaef54d10953bc9948c548865aab7d
+    secrets: inherit
+
+  authenticated-sync:
+    needs: authenticated-all
+    strategy:
+      fail-fast: false
+      matrix:
+        direction: [sync-android-to-web, sync-web-to-android]
+    uses: ./.github/workflows/crossplatform-qa-infra.yml
+    with:
+      authenticated: true
+      platform: android
+      android_source_ref: d9bc07debcbaef54d10953bc9948c548865aab7d
+      android_operation: ${{ matrix.direction }}
     secrets: inherit

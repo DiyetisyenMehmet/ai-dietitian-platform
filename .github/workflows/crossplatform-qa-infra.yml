@@ -19,6 +19,11 @@ on:
         description: "Optional immutable Android product commit; QA harness remains on the QA branch"
         type: string
         default: ""
+      android_operation:
+        description: "Existing Android runtime operation"
+        type: choice
+        options: [smoke, sync-android-to-web, sync-web-to-android]
+        default: smoke
   workflow_call:
     inputs:
       authenticated:
@@ -31,12 +36,16 @@ on:
         type: string
         required: false
         default: ""
+      android_operation:
+        type: string
+        required: false
+        default: smoke
 
 permissions:
   contents: read
 
 concurrency:
-  group: qa-infra-${{ inputs.authenticated && 'authenticated' || 'public' }}-${{ github.ref }}
+  group: qa-infra-${{ inputs.authenticated && 'authenticated' || 'public' }}-${{ github.ref }}-${{ inputs.android_operation || 'smoke' }}
   cancel-in-progress: true
 
 env:
@@ -67,6 +76,12 @@ jobs:
       - run: node --test qa/platform/*.test.cjs
       - run: python3 -m unittest discover -s qa/platform -p '*_test.py'
       - run: bash -n qa/platform/ios-run.sh
+      - name: Validate health masking in a real DOM before any authenticated runtime
+        if: inputs.android_operation == 'smoke' || !inputs.android_operation
+        run: |
+          npm ci --prefix frontend
+          npx --prefix frontend playwright install --with-deps chromium
+          node --test qa/platform/health-screenshot.spec.cjs
 
   web:
     needs: contracts
@@ -92,7 +107,7 @@ jobs:
       - name: Credential screenshot guard in a real DOM fixture
         env:
           QA_BROWSER_ENGINE: ${{ matrix.engine }}
-        run: node --test qa/platform/credential-screenshot.spec.cjs
+        run: node --test qa/platform/credential-screenshot.spec.cjs qa/platform/health-screenshot.spec.cjs
       - name: Real browser evidence (no traces, HAR, cookies or storage export)
         env:
           QA_EMAIL: ${{ inputs.authenticated && secrets.QA_EMAIL || '' }}
@@ -180,6 +195,9 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+      - name: Install actual browser for simultaneous native/browser synchronization
+        if: inputs.android_operation != 'smoke' && inputs.android_operation != ''
+        run: npx --prefix frontend playwright install --with-deps chromium
       - name: Real Android Emulator evidence
         timeout-minutes: 12
         uses: reactivecircus/android-emulator-runner@v2
@@ -190,6 +208,8 @@ jobs:
           QA_ACCOUNT_HMAC_KEY: ${{ inputs.authenticated && secrets.QA_ACCOUNT_HMAC_KEY || '' }}
           QA_SYNTHETIC_ACCOUNT: ${{ inputs.authenticated && 'YES' || '' }}
           QA_AUTHENTICATED_REQUIRED: ${{ inputs.authenticated && 'YES' || 'NO' }}
+          QA_ANDROID_OPERATION: ${{ inputs.android_operation || 'smoke' }}
+          QA_RUN_ID: ci-${{ github.run_id }}-${{ github.run_attempt }}-${{ inputs.android_operation || 'smoke' }}
         with:
           api-level: 35
           target: google_apis
@@ -205,7 +225,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always() && steps.export-safety.outcome == 'success'
         with:
-          name: qa-android-emulator-${{ github.run_id }}
+          name: qa-android-emulator-${{ inputs.android_operation || 'smoke' }}-${{ github.run_id }}
           path: .qa-artifacts/**
           include-hidden-files: true
           if-no-files-found: error

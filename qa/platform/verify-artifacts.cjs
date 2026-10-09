@@ -3,16 +3,18 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const c = require('./contract.cjs');
-const keys = new Set(['schemaVersion', 'platform', 'runtime', 'scenario', 'status', 'code', 'accountAlias', 'observed', 'productVerdict', 'timestamp', 'harnessGitSha', 'deployedGitSha', 'appVersion', 'device', 'viewport', 'screenshot', 'log', 'stagingOrigin', 'conversationId', 'direction']);
+const keys = new Set(['schemaVersion', 'platform', 'runtime', 'scenario', 'status', 'code', 'accountAlias', 'observed', 'productVerdict', 'timestamp', 'harnessGitSha', 'deployedGitSha', 'appVersion', 'device', 'viewport', 'screenshot', 'screenshotGuard', 'log', 'stagingOrigin', 'conversationId', 'direction']);
 const textSecrets = ['QA_EMAIL', 'QA_PASSWORD', 'QA_ACCOUNT_ID', 'QA_ACCOUNT_HMAC_KEY'].map(k => process.env[k]).filter(Boolean);
 function verify(dir) {
   if (!fs.existsSync(dir)) throw new Error('EVIDENCE_DIRECTORY_MISSING');
   let count = 0;
+  const images = new Set(), guarded = new Set();
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const file = path.join(dir, entry.name);
     if (entry.isSymbolicLink()) throw new Error('ARTIFACT_SYMLINK_REFUSED');
     if (entry.isDirectory()) { count += verify(file); continue; }
     if (entry.name.endsWith('.png')) {
+      images.add(entry.name);
       const bytes = fs.readFileSync(file);
       if (!bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) throw new Error('INVALID_PNG');
     } else if (entry.name.endsWith('.json')) {
@@ -24,10 +26,15 @@ function verify(dir) {
       for (const row of records) {
         if (Object.keys(row).some(key => !keys.has(key))) throw new Error('UNSAFE_EVIDENCE_FIELD');
         if (!c.PLATFORMS[row.platform]?.includes(row.runtime) || row.stagingOrigin !== c.ORIGIN || row.productVerdict !== 'NOT_ASSESSED') throw new Error('INVALID_EVIDENCE_CLASSIFICATION');
+        if (row.screenshot) {
+          if (row.screenshotGuard !== 'HEALTH_MASK_V1' || !/^[a-z0-9_-]+\.png$/.test(row.screenshot) || !fs.existsSync(path.join(dir,row.screenshot))) throw new Error('HEALTH_DATA_SCREENSHOT_GUARD_FAIL');
+          guarded.add(row.screenshot);
+        }
       }
     } else throw new Error('UNSAFE_ARTIFACT_TYPE');
     count++;
   }
+  if ([...images].some(name => !guarded.has(name))) throw new Error('UNGUARDED_SCREENSHOT_EXPORT_REFUSED');
   if (!count) throw new Error('EMPTY_ARTIFACT_DIRECTORY');
   return count;
 }

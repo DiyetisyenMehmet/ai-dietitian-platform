@@ -43,6 +43,9 @@ async function main() {
         if (!/^[A-Fa-f0-9-]{36}$/.test(udid || '') || process.platform !== 'darwin') throw new c.Blocked('BOOTED_IOS_SIMULATOR_REQUIRED');
         screenshot = 'sync-' + checkpoint + '-ios-simulator.png';
         execFileSync('xcrun', ['simctl', 'io', udid, 'screenshot', path.join(e.dir, screenshot)], { stdio: 'ignore' });
+        try { verifyIOSIdentity(plan.alias,true); require('./capture-guard.cjs').prove(path.join(e.dir,screenshot)); }
+        catch (_) { fs.rmSync(path.join(e.dir,screenshot),{force:true}); throw require('./capture-guard.cjs').failClosed(); }
+        console.log('Press the native restore (×) button after this guarded capture.');
       } else screenshot = await capture(runtime, e, 'sync-' + checkpoint);
       e.record('sync-' + checkpoint, 'PASS', { alias: plan.alias, observed: answer === 'yes', conversationId: id, direction: source + '-to-' + target, screenshot });
     }

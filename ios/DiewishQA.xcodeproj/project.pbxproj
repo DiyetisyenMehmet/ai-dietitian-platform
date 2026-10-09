@@ -5,7 +5,7 @@
 	objectVersion = 56;
 	objects = {
 		000000000000000000000001 = { isa = PBXProject; attributes = { LastUpgradeCheck = 1640; TargetAttributes = { 00000000000000000000000A = { CreatedOnToolsVersion = 16.4; }; 00000000000000000000000B = { CreatedOnToolsVersion = 16.4; TestTargetID = 00000000000000000000000A; }; }; }; buildConfigurationList = 00000000000000000000001E; compatibilityVersion = "Xcode 14.0"; developmentRegion = en; knownRegions = (en, Base); mainGroup = 000000000000000000000002; productRefGroup = 000000000000000000000005; projectDirPath = ""; projectRoot = ""; targets = (00000000000000000000000A, 00000000000000000000000B); };
-		000000000000000000000002 = { isa = PBXGroup; children = (000000000000000000000003, 000000000000000000000004, 000000000000000000000005); sourceTree = "<group>"; };
+		000000000000000000000002 = { isa = PBXGroup; children = (000000000000000000000003, 000000000000000000000004, 000000000000000000000005, 000000000000000000000050); sourceTree = "<group>"; };
 		000000000000000000000003 = { isa = PBXGroup; children = (000000000000000000000028, 000000000000000000000029, 00000000000000000000002A); path = DiewishQA; sourceTree = "<group>"; };
 		000000000000000000000004 = { isa = PBXGroup; children = (00000000000000000000002B); path = DiewishQAUITests; sourceTree = "<group>"; };
 		000000000000000000000005 = { isa = PBXGroup; children = (00000000000000000000002C, 00000000000000000000002D); name = Products; sourceTree = "<group>"; };
@@ -18,11 +18,13 @@
 		000000000000000000000032 = { isa = PBXBuildFile; fileRef = 000000000000000000000028; };
 		000000000000000000000033 = { isa = PBXBuildFile; fileRef = 000000000000000000000029; };
 		000000000000000000000034 = { isa = PBXBuildFile; fileRef = 00000000000000000000002B; };
+		000000000000000000000050 = { isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = "../qa/platform/evidence-mask.js"; sourceTree = SOURCE_ROOT; };
+		000000000000000000000051 = { isa = PBXBuildFile; fileRef = 000000000000000000000050; };
 		000000000000000000000014 = { isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (000000000000000000000032, 000000000000000000000033); runOnlyForDeploymentPostprocessing = 0; };
 		000000000000000000000017 = { isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (000000000000000000000034); runOnlyForDeploymentPostprocessing = 0; };
 		000000000000000000000015 = { isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 		000000000000000000000018 = { isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
-		000000000000000000000016 = { isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		000000000000000000000016 = { isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (000000000000000000000051); runOnlyForDeploymentPostprocessing = 0; };
 		000000000000000000000019 = { isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 		00000000000000000000000A = { isa = PBXNativeTarget; buildConfigurationList = 00000000000000000000001F; buildPhases = (000000000000000000000014, 000000000000000000000015, 000000000000000000000016); buildRules = (); dependencies = (); name = DiewishQA; productName = DiewishQA; productReference = 00000000000000000000002C; productType = "com.apple.product-type.application"; };
 		00000000000000000000000B = { isa = PBXNativeTarget; buildConfigurationList = 000000000000000000000020; buildPhases = (000000000000000000000017, 000000000000000000000018, 000000000000000000000019); buildRules = (); dependencies = (00000000000000000000003D); name = DiewishQAUITests; productName = DiewishQAUITests; productReference = 00000000000000000000002D; productType = "com.apple.product-type.bundle.ui-testing"; };

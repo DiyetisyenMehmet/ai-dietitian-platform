@@ -8,6 +8,7 @@ function validateIdentity(record, alias, capture = false, now = Date.now() / 100
   if (capture && (!Number.isFinite(record.captureReadyAt) || now - record.captureReadyAt > 120 || record.captureReadyAt > now)) {
     throw new c.Blocked('IOS_CAPTURE_GUARD_REQUIRED');
   }
+  if (capture && record.screenshotGuard !== 'HEALTH_MASK_V1') throw new c.Blocked('HEALTH_DATA_SCREENSHOT_GUARD_FAIL');
 }
 function verifyIOSIdentity(alias, capture = false) {
   const udid = process.env.QA_IOS_UDID;

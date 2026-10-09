@@ -47,6 +47,7 @@ function createEvidence(platform, runtime, device) {
       if (!/^[A-Z][A-Z0-9_]*$/.test(code)) throw new Error('UNSAFE_ERROR_CODE');
       if (alias !== null && !/^qa-[a-f0-9]{24}$/.test(alias)) throw new Error('UNSAFE_ACCOUNT_ALIAS');
       if (screenshot !== null && (!/^[a-z0-9_-]+\.png$/.test(screenshot) || !fs.existsSync(path.join(dir, screenshot)))) throw new Error('SCREENSHOT_MISSING_OR_UNSAFE');
+      if (screenshot !== null && !require('./capture-guard.cjs').proven(path.join(dir,screenshot))) throw new Blocked('HEALTH_DATA_SCREENSHOT_GUARD_FAIL');
       if (deployedGitSha !== null && !/^[a-f0-9]{40}$/.test(deployedGitSha)) throw new Error('INVALID_DEPLOYED_SHA');
       if (typeof appVersion !== 'string' || !/^[a-zA-Z0-9._-]{1,80}$/.test(appVersion)) throw new Error('UNSAFE_APP_VERSION');
       if (observed !== null && typeof observed !== 'boolean') throw new Error('INVALID_OBSERVATION');
@@ -55,7 +56,7 @@ function createEvidence(platform, runtime, device) {
       if (direction !== null && !/^(web|android|ios)-to-(web|android|ios)$/.test(direction)) throw new Error('INVALID_SYNC_DIRECTION');
       const row = { schemaVersion: 1, platform, runtime, scenario, status, code, accountAlias: alias, observed,
         productVerdict: 'NOT_ASSESSED', conversationId, direction, timestamp: new Date().toISOString(), harnessGitSha: gitSha(), deployedGitSha,
-        appVersion, device, viewport, screenshot, log: scenario + '.json', stagingOrigin: ORIGIN };
+        appVersion, device, viewport, screenshot, screenshotGuard: screenshot === null ? null : 'HEALTH_MASK_V1', log: scenario + '.json', stagingOrigin: ORIGIN };
       fs.writeFileSync(path.join(dir, scenario + '.json'), JSON.stringify(row, null, 2));
       records.push(row);
       fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify({ schemaVersion: 1, run, records }, null, 2));

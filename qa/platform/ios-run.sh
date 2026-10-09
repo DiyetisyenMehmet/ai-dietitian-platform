@@ -55,6 +55,10 @@ set -e
 python3 qa/platform/ios-result-summary.py "$private/result.xcresult"
 if [[ "$result" != 0 ]]; then python3 qa/platform/ios-result-summary.py --log "$private/test.log"; fi
 echo EXTRACTING_APPROVED_SCREENSHOTS
+if rg -q 'HEALTH_DATA_SCREENSHOT_GUARD_FAIL' "$private/test.log"; then
+  node -e "require('./qa/platform/capture-guard.cjs').failClosed()"
+  exit 1
+fi
 xcrun xcresulttool export attachments --path "$private/result.xcresult" --output-path "$private/attachments" >/dev/null
 node qa/platform/ios-evidence.cjs "$private/attachments" "$result"
 # xcresult, xctestrun, automatic failure screenshots and raw logs are intentionally deleted.

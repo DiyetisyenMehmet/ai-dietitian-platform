@@ -7,9 +7,24 @@ final class RuntimeTests: XCTestCase {
         let guardButton = app.buttons["qa-evidence"]
         guardButton.tap()
         let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == 'READY'"), object: guardButton)
-        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 10), .completed, "ACCOUNT_OR_SCREENSHOT_PRIVACY_UNVERIFIED")
-        let attachment = XCTAttachment(screenshot: app.screenshot())
-        attachment.name = name + "-ios-simulator"
+        guard XCTWaiter.wait(for: [ready], timeout: 10) == .completed else {
+            XCTFail("HEALTH_DATA_SCREENSHOT_GUARD_FAIL"); return
+        }
+        let snapshot = app.screenshot()
+        let check = app.buttons["qa-check-evidence"]
+        check.tap()
+        let checked = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == 'READY'"), object: check)
+        guard XCTWaiter.wait(for: [checked], timeout: 10) == .completed else {
+            XCTFail("HEALTH_DATA_SCREENSHOT_GUARD_FAIL"); return
+        }
+        let restore = app.buttons["qa-restore-evidence"]
+        restore.tap()
+        let restored = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == 'RESTORED'"), object: restore)
+        guard XCTWaiter.wait(for: [restored], timeout: 10) == .completed else {
+            XCTFail("HEALTH_DATA_SCREENSHOT_GUARD_FAIL"); return
+        }
+        let attachment = XCTAttachment(screenshot: snapshot)
+        attachment.name = name + "-ios-simulator-guarded-health-v1"
         attachment.lifetime = .keepAlways
         add(attachment)
     }
