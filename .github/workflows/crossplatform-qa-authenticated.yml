@@ -26,7 +26,7 @@ jobs:
     with:
       authenticated: true
       platform: all
-      android_source_ref: d9bc07debcbaef54d10953bc9948c548865aab7d
+      android_source_ref: d69502cd9c238c7e4958c6a21386de877b4c37d8
     secrets: inherit
 
   authenticated-sync:
@@ -39,6 +39,6 @@ jobs:
     with:
       authenticated: true
       platform: android
-      android_source_ref: d9bc07debcbaef54d10953bc9948c548865aab7d
+      android_source_ref: d69502cd9c238c7e4958c6a21386de877b4c37d8
       android_operation: ${{ matrix.direction }}
     secrets: inherit
