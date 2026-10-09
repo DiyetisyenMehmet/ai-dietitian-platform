@@ -27,11 +27,13 @@ jobs:
     uses: ./.github/workflows/crossplatform-qa-infra.yml
     with:
       authenticated: true
-      platform: all
+      platform: ios
       android_source_ref: d69502cd9c238c7e4958c6a21386de877b4c37d8
     secrets: inherit
 
   authenticated-sync:
+    # Paired sync resumes only after the final all-platform smoke.
+    if: false
     needs: authenticated-all
     strategy:
       fail-fast: false

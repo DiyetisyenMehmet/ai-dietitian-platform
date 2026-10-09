@@ -63,7 +63,7 @@ PYLOG
 python3 qa/platform/ios-result-summary.py "$private/result.xcresult"
 if [[ "$result" != 0 ]]; then python3 qa/platform/ios-result-summary.py --log "$private/test.log"; fi
 echo EXTRACTING_APPROVED_SCREENSHOTS
-if rg -q 'HEALTH_DATA_SCREENSHOT_GUARD_FAIL' "$private/test.log"; then
+if ! python3 qa/platform/ios-result-summary.py --guard-log "$private/test.log"; then
   node -e "require('./qa/platform/capture-guard.cjs').failClosed()"
   exit 1
 fi
