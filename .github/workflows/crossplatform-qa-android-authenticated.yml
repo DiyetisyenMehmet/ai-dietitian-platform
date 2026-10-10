@@ -22,5 +22,6 @@ jobs:
     with:
       authenticated: true
       platform: android
-      android_source_ref: 32157a41d8f301ca3a362dbe0867519f5826a2f0
+      android_source_ref: d69502cd9c238c7e4958c6a21386de877b4c37d8
+      android_operation: sync-android-to-web
     secrets: inherit
