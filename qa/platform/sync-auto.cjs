@@ -3,6 +3,7 @@ const c = require('./contract.cjs');
 const { openRuntime, login, logout, openList, capture } = require('./runtime.cjs');
 const { syncPlan, CHECKPOINTS } = require('./sync-plan.cjs');
 const { randomBytes } = require('node:crypto');
+const { stage } = require('./sync-stage.cjs');
 async function newCoachConversation(runtime, marker) {
   const page = runtime.page;
   await page.goto(c.ORIGIN + '/ai');
@@ -38,24 +39,24 @@ async function main() {
   process.env.QA_RUN_ID ||= 'sync-' + randomBytes(8).toString('hex');
   let source, target;
   try {
-    source = await openRuntime(sourceName);
-    target = await openRuntime(targetName);
-    const sourceAlias = await login(source.page);
-    const targetAlias = await login(target.page);
+    source = await stage('SOURCE_OPEN', () => openRuntime(sourceName));
+    target = await stage('TARGET_OPEN', () => openRuntime(targetName));
+    const sourceAlias = await login(source.page, (name, _ms, operation) => stage('SOURCE_' + name, operation));
+    const targetAlias = await login(target.page, (name, _ms, operation) => stage('TARGET_' + name, operation));
     if (sourceAlias !== targetAlias) throw new c.Blocked('CROSS_PLATFORM_ACCOUNT_MISMATCH');
     const plan = syncPlan(sourceName, targetName, sourceAlias);
     const e = c.createEvidence(target.platform, target.runtime, target.device);
-    await target.page.goto(c.ORIGIN + '/ai');
-    await openList(target.page);
+    await stage('TARGET_LIST_OPEN', async () => { await target.page.goto(c.ORIGIN + '/ai'); await openList(target.page); });
     // Target is open before the source mutation. Do not refresh it first.
-    const id = await newCoachConversation(source, plan.marker);
+    const id = await stage('SOURCE_CREATE', () => newCoachConversation(source, plan.marker));
     const sourceEvidence = c.createEvidence(source.platform, source.runtime, source.device);
-    sourceEvidence.record('sync-source-created', 'PASS', { alias: sourceAlias, conversationId: id, direction: sourceName + '-to-' + targetName, screenshot: await capture(source, sourceEvidence, 'sync-source-created') });
+    sourceEvidence.record('sync-source-created', 'PASS', { alias: sourceAlias, conversationId: id, direction: sourceName + '-to-' + targetName, screenshot: await stage('SOURCE_CAPTURE', () => capture(source, sourceEvidence, 'sync-source-created')) });
     for (const checkpoint of CHECKPOINTS) {
-      await performCheckpoint(target, checkpoint, sourceAlias);
+      const phase = 'TARGET_' + checkpoint.replace(/-/g, '_').toUpperCase();
+      await stage(phase + '_ACTION', () => performCheckpoint(target, checkpoint, sourceAlias));
       // An absence is an observation, not a product verdict by this worker.
-      const observed = await target.page.locator('nav[aria-label="Sohbetler"]:visible').getByText(plan.marker, { exact: false }).first().isVisible();
-      e.record('sync-' + checkpoint, 'PASS', { alias: targetAlias, observed, conversationId: id, direction: sourceName + '-to-' + targetName, screenshot: await capture(target, e, 'sync-' + checkpoint) });
+      const observed = await stage(phase + '_OBSERVE', () => target.page.locator('nav[aria-label="Sohbetler"]:visible').getByText(plan.marker, { exact: false }).first().isVisible());
+      e.record('sync-' + checkpoint, 'PASS', { alias: targetAlias, observed, conversationId: id, direction: sourceName + '-to-' + targetName, screenshot: await stage(phase + '_CAPTURE', () => capture(target, e, 'sync-' + checkpoint)) });
     }
   } finally { if (source) await source.close(); if (target) await target.close(); }
 }
