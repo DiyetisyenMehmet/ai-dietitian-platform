@@ -1,7 +1,7 @@
 'use strict';
 const { CHECKPOINTS } = require('./sync-plan.cjs');
 const STAGES = new Set([
-  'SOURCE_OPEN', 'TARGET_OPEN', 'TARGET_LIST_OPEN', 'SOURCE_CREATE', 'SOURCE_CAPTURE',
+  'SOURCE_OPEN', 'TARGET_OPEN', 'TARGET_LIST_NAVIGATION', 'TARGET_LIST_OPEN', 'SOURCE_CREATE', 'SOURCE_CAPTURE',
   ...['SOURCE', 'TARGET'].flatMap(side => ['AUTH_LOGIN_NAVIGATION', 'AUTH_FORM_FILL', 'AUTH_FORM_SUBMIT', 'AUTH_RESPONSE', 'AUTH_DASHBOARD_REDIRECT'].map(name => side + '_' + name)),
   ...CHECKPOINTS.flatMap(name => ['ACTION', 'OBSERVE', 'CAPTURE'].map(operation => 'TARGET_' + name.replace(/-/g, '_').toUpperCase() + '_' + operation)),
 ]);

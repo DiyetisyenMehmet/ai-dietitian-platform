@@ -27,3 +27,5 @@ jobs:
     secrets: inherit
 
 # Expose only fixed sync phases to locate the first runtime timeout; behavior and capture rules stay unchanged.
+
+# Separate target navigation from list opening; emit only fixed UI-control visibility flags.

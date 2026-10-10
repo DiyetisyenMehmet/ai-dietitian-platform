@@ -46,7 +46,13 @@ async function main() {
     if (sourceAlias !== targetAlias) throw new c.Blocked('CROSS_PLATFORM_ACCOUNT_MISMATCH');
     const plan = syncPlan(sourceName, targetName, sourceAlias);
     const e = c.createEvidence(target.platform, target.runtime, target.device);
-    await stage('TARGET_LIST_OPEN', async () => { await target.page.goto(c.ORIGIN + '/ai'); await openList(target.page); });
+    await stage('TARGET_LIST_NAVIGATION', () => target.page.goto(c.ORIGIN + '/ai'));
+    // Only visibility of fixed UI controls, never text, form values or URLs.
+    console.log('SYNC_LIST_STATE',
+      await target.page.getByLabel('Mesaj', { exact: true }).isVisible() ? 'INPUT_VISIBLE' : 'INPUT_PENDING',
+      await target.page.getByRole('button', { name: 'Sohbet geçmişi', exact: true }).isVisible() ? 'HISTORY_VISIBLE' : 'HISTORY_PENDING',
+      await target.page.locator('nav[aria-label="Sohbetler"]:visible').first().isVisible() ? 'LIST_VISIBLE' : 'LIST_PENDING');
+    await stage('TARGET_LIST_OPEN', () => openList(target.page));
     // Target is open before the source mutation. Do not refresh it first.
     const id = await stage('SOURCE_CREATE', () => newCoachConversation(source, plan.marker));
     const sourceEvidence = c.createEvidence(source.platform, source.runtime, source.device);
