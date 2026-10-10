@@ -26,7 +26,7 @@ jobs:
 
       - name: Refresh backend lockfile
         working-directory: backend
-        run: npm install --package-lock-only --ignore-scripts --install-links
+        run: npm install --package-lock-only --ignore-scripts
 
       - name: Refresh frontend lockfile
         working-directory: frontend
@@ -34,7 +34,7 @@ jobs:
 
       - name: Install backend dependency tree
         working-directory: backend
-        run: npm ci --ignore-scripts --install-links
+        run: npm ci --ignore-scripts
 
       - name: Install frontend dependency tree
         working-directory: frontend
