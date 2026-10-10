@@ -27,7 +27,7 @@ jobs:
     uses: ./.github/workflows/crossplatform-qa-infra.yml
     with:
       authenticated: true
-      platform: ios
+      platform: all
       android_source_ref: d69502cd9c238c7e4958c6a21386de877b4c37d8
     secrets: inherit
 
@@ -62,3 +62,5 @@ jobs:
 # Restore literal guard enum boundaries after passing Node/Python/shell contracts; run iOS only.
 
 # Diagnose fixed guard-owned reasons when an already-armed native mask is invalidated.
+
+# iOS authenticated evidence passed in run 38044114683; verify the current staging on all runtimes.
