@@ -19,8 +19,13 @@ async function authenticate(
 }
 async function openList(page: Page) {
   const nav = page.getByRole("navigation", { name: "Sohbetler" });
-  if (!(await nav.isVisible()))
-    await page.getByRole("button", { name: "Sohbet geçmişi", exact: true }).click();
+  // Desktop history is always open; its mobile trigger is hidden. Wait for
+  // account hydration before deciding whether the mobile drawer needs opening.
+  if ((page.viewportSize()?.width ?? 0) < 1024 && !(await nav.isVisible())) {
+    const trigger = page.getByRole("button", { name: "Sohbet geçmişi", exact: true });
+    await expect(trigger).toBeVisible();
+    await trigger.click();
+  }
   await expect(nav).toBeVisible();
   return nav;
 }
@@ -113,8 +118,9 @@ for (const direction of ["mobile-to-web", "web-to-mobile"]) {
         target.getByRole("navigation", { name: "Sohbetler" }).getByText(text, { exact: true }),
       ).toBeVisible();
     } finally {
-      await mobile.close();
-      await web.close();
+      // Preserve the actual assertion/action failure if Playwright already
+      // closed a context after a timeout; cleanup must not replace its cause.
+      await Promise.allSettled([mobile.close(), web.close()]);
     }
   });
 }
