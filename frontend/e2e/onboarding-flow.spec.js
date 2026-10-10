@@ -318,7 +318,14 @@ test("register -> consent -> onboarding -> scanner -> same-day weigh-in preserve
       body: JSON.stringify(success({ log: { id: "scanner-meal-e2e" } })),
     });
   });
-  await page.getByRole("button", { name: /50 gram tüketimi .* ekle/i }).click();
+  const [mealResponse] = await Promise.all([
+    page.waitForResponse((response) =>
+      response.request().method() === "POST" &&
+      new URL(response.url()).pathname === "/api/tracking/meals"
+    ),
+    page.getByRole("button", { name: /50 gram tüketimi .* ekle/i }).click(),
+  ]);
+  expect(mealResponse.status()).toBe(201);
   expect(mealPayload).toMatchObject({
     calories: 260,
     proteinG: 10,
