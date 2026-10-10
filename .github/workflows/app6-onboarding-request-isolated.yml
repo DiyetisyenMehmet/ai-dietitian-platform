@@ -50,6 +50,12 @@ jobs:
       E2E_API_BASE_URL: http://127.0.0.1:4000/api
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: 1558d93f37b37a6de9874ec23e7be4c9dfb90f42
+      - name: Verify exact tested commit
+        run: |
+          test "$(git rev-parse HEAD)" = "1558d93f37b37a6de9874ec23e7be4c9dfb90f42"
+          echo "APP6_TESTED_COMMIT: $(git rev-parse HEAD)"
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -125,9 +131,9 @@ jobs:
           });
           require("./onboarding-flow.spec.js");
           APP6_OBSERVER
-      - name: Run only the original failing scenario
+      - name: Run only the fixed scenario three times without retries
         working-directory: frontend
-        run: npx playwright test e2e/app6-onboarding-request-observer.spec.js --workers=1 --retries=0 --reporter=line
+        run: npx playwright test e2e/app6-onboarding-request-observer.spec.js --workers=1 --repeat-each=3 --retries=0 --reporter=line
       - name: Stop isolated local services
         if: always()
         run: |
