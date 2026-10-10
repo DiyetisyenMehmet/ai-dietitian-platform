@@ -78,9 +78,9 @@ def run_command(stage, timeout, log, command):
                                 for phase, status in re.findall(
                                     rb"IOS_STAGE (TEST_SETUP|APP_CONFIGURATION|APP_LAUNCH|AUTH_LOGIN|HEALTH_GUARD_PREPARE|HEALTH_GUARD_CAPTURE|HEALTH_GUARD) (RUNNING|PASS|FAIL)", line):
                                     print("IOS_STAGE", phase.decode("ascii"), status.decode("ascii"), flush=True)
-                                for reason in re.findall(rb"IOS_GUARD_REASON (READY|WAITING|ACCOUNT_UNVERIFIED|HEALTH_DATA_SCREENSHOT_GUARD_FAIL|NONE|MASK_SCRIPT_MISSING|PREPARE_FAILED|MASK_NOT_ACTIVE|VIEWPORT_CHANGED|FONT_CHANGED|DOCUMENT_MUTATION|JS_EVALUATION_FAILED|UNAVAILABLE)\\b", line):
+                                for reason in re.findall(rb"IOS_GUARD_REASON (READY|WAITING|ACCOUNT_UNVERIFIED|HEALTH_DATA_SCREENSHOT_GUARD_FAIL|NONE|MASK_SCRIPT_MISSING|PREPARE_FAILED|MASK_NOT_ACTIVE|VIEWPORT_CHANGED|FONT_CHANGED|DOCUMENT_MUTATION|JS_EVALUATION_FAILED|UNAVAILABLE)\b", line):
                                     print("IOS_GUARD_REASON", reason.decode("ascii"), flush=True)
-                                for detail in re.findall(rb"IOS_GUARD_FONT_DETAIL (NONE|FONT_LOADING|FONT_COUNT|FONT_REFERENCE|FONT_FAMILY|FONT_STYLE|FONT_WEIGHT|FONT_STRETCH|FONT_UNICODE_RANGE|FONT_VARIANT|FONT_FEATURES|FONT_GEOMETRY|FONT_STATUS(?:_LOADED_UNLOADED|_LOADED_LOADING|_UNLOADED_LOADED|_UNLOADED_LOADING|_LOADING_LOADED|_LOADING_ERROR)?)\\b", line):
+                                for detail in re.findall(rb"IOS_GUARD_FONT_DETAIL (NONE|FONT_LOADING|FONT_COUNT|FONT_REFERENCE|FONT_FAMILY|FONT_STYLE|FONT_WEIGHT|FONT_STRETCH|FONT_UNICODE_RANGE|FONT_VARIANT|FONT_FEATURES|FONT_GEOMETRY|FONT_STATUS(?:_LOADED_UNLOADED|_LOADED_LOADING|_UNLOADED_LOADED|_UNLOADED_LOADING|_LOADING_LOADED|_LOADING_ERROR)?)\b", line):
                                     print("IOS_GUARD_FONT_DETAIL", detail.decode("ascii"), flush=True)
                         elif stopped.is_set():
                             break

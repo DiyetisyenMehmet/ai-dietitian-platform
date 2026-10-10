@@ -58,3 +58,5 @@ jobs:
 # Keep missing-library classification separate from the referencing QA binary.
 
 # Diagnose only guard-owned enums; allow bounded native preparation/snapshot overhead.
+
+# Restore literal guard enum boundaries after passing Node/Python/shell contracts; run iOS only.

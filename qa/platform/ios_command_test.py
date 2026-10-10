@@ -45,3 +45,17 @@ class NativeCommandBounds(unittest.TestCase):
         self.assertEqual(result, 0)
         self.assertIn("IOS_GUARD_REASON ACCOUNT_UNVERIFIED", output)
         self.assertNotIn("private-fixture", output)
+
+    def test_mask_failure_reason_and_font_detail_are_mirrored(self):
+        result, output, _ = self.invoke("print('IOS_GUARD_REASON FONT_CHANGED'); print('IOS_GUARD_FONT_DETAIL FONT_STATUS_LOADED_LOADING')")
+        self.assertEqual(result, 0)
+        self.assertIn("IOS_GUARD_REASON FONT_CHANGED\n", output)
+        self.assertIn("IOS_GUARD_FONT_DETAIL FONT_STATUS_LOADED_LOADING\n", output)
+
+    def test_guard_diagnostics_reject_allowlisted_prefixes_with_unknown_suffixes(self):
+        result, output, private = self.invoke("print('IOS_GUARD_REASON ACCOUNT_UNVERIFIED_PRIVATE'); print('IOS_GUARD_REASON FONT_CHANGED_PRIVATE'); print('IOS_GUARD_FONT_DETAIL FONT_STATUS_PRIVATE'); print('IOS_GUARD_FONT_DETAIL FONT_STATUS_LOADED_LOADING_PRIVATE'); print('IOS_GUARD_FONT_DETAIL private-fixture')")
+        self.assertEqual(result, 0)
+        self.assertNotIn("IOS_GUARD_REASON", output)
+        self.assertNotIn("IOS_GUARD_FONT_DETAIL", output)
+        self.assertNotIn("private-fixture", output)
+        self.assertIn("ACCOUNT_UNVERIFIED_PRIVATE", private)
