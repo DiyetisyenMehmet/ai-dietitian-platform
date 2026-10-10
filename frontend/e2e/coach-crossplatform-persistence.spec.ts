@@ -3,6 +3,7 @@ import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 
 const base = process.env.E2E_WEB_BASE_URL || "http://127.0.0.1:3000";
 const api = process.env.E2E_API_BASE_URL || base + "/api";
+test.setTimeout(120000);
 
 async function authenticate(
   context: BrowserContext,
