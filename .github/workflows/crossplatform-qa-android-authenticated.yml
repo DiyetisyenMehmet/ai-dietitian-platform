@@ -23,7 +23,7 @@ jobs:
       authenticated: true
       platform: android
       android_source_ref: d69502cd9c238c7e4958c6a21386de877b4c37d8
-      android_operation: sync-android-to-web
+      android_operation: sync-web-to-android
     secrets: inherit
 
 # Expose only fixed sync phases to locate the first runtime timeout; behavior and capture rules stay unchanged.
