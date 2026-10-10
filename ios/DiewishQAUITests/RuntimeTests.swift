@@ -15,10 +15,20 @@ final class RuntimeTests: XCTestCase {
     private func screenshot(_ app: XCUIApplication, _ name: String) {
         let guardButton = app.buttons["qa-evidence"]
         stage("HEALTH_GUARD_PREPARE", "RUNNING")
-        guardButton.tap()
-        let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == 'READY'"), object: guardButton)
-        guard XCTWaiter.wait(for: [ready], timeout: 30) == .completed else {
+        var prepared = false
+        // A late page update can invalidate preparation before any capture.
+        // Rebuild the entire mask from current geometry, with a strict bound.
+        // Identity/font failures and all post-capture failures remain terminal.
+        for attempt in 0..<3 {
+            guardButton.tap()
+            let settled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == 'READY' OR value == 'ACCOUNT_UNVERIFIED' OR value CONTAINS '|'"), object: guardButton)
+            let completed = XCTWaiter.wait(for: [settled], timeout: 30) == .completed
+            let reason = (guardButton.value as? String ?? "UNAVAILABLE").split(separator: "|", maxSplits: 1).first.map(String.init)
+            if completed && reason == "READY" { prepared = true; break }
             describeGuardFailure(guardButton)
+            guard completed && reason == "DOCUMENT_MUTATION" && attempt < 2 else { break }
+        }
+        guard prepared else {
             stage("HEALTH_GUARD", "FAIL")
             XCTFail("HEALTH_DATA_SCREENSHOT_GUARD_FAIL"); return
         }
