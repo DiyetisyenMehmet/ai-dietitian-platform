@@ -48,33 +48,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for dir in backend frontend; do
-            (
-              cd "$dir"
-              node <<'NODE'
-          const braces = require("braces");
-          const pkg = require("braces/package.json");
-          if (pkg.version !== "3.0.4-diewish.1") {
-            throw new Error("unexpected braces version: " + pkg.version);
-          }
-          const ordinary = braces.expand("{a,b}");
-          if (JSON.stringify(ordinary) !== JSON.stringify(["a","b"])) {
-            throw new Error("ordinary expansion compatibility check failed");
-          }
-          const hostile = "{".repeat(101) + "a,b" + "}".repeat(101);
-          let rejected = false;
-          try {
-            braces(hostile);
-          } catch (error) {
-            rejected = /exceeds max depth/i.test(String(error && error.message));
-          }
-          if (!rejected) {
-            throw new Error("GHSA-vfj7-8cjw-p6xm hostile nesting was not safely rejected");
-          }
-          console.log("BRACES_DEPTH_GUARD=PASS");
-          NODE
-            )
-          done
+          node scripts/security-braces-depth-guard.cjs backend frontend
 
       - name: Fail closed on OSV findings
         shell: bash
