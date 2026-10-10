@@ -68,6 +68,7 @@ for stage,status in re.findall(r'IOS_STAGE (APP_LAUNCH|AUTH_LOGIN|HEALTH_GUARD_P
     print('IOS_STAGE',stage,status)
 PYLOG
 python3 qa/platform/ios-result-summary.py "$private/result.xcresult"
+if [[ "$result" != 0 ]]; then python3 qa/platform/ios-crash-diagnostics.py; fi
 if [[ "$result" != 0 ]]; then python3 qa/platform/ios-result-summary.py --log "$private/test.log"; fi
 echo EXTRACTING_APPROVED_SCREENSHOTS
 if ! python3 qa/platform/ios-result-summary.py --guard-log "$private/test.log"; then
