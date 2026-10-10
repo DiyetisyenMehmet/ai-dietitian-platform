@@ -52,3 +52,5 @@ jobs:
 # Bound every native execution stage; expose literal XCTest progress codes live.
 
 # Only fixed native QA crash classes leave the ephemeral runner.
+
+# Build only the Simulator QA host for 18.4+ to correct WebKit Swift overlay loading.

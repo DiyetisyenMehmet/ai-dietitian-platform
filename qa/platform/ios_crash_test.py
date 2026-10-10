@@ -23,3 +23,12 @@ class NativeCrashPrivacy(unittest.TestCase):
     def test_two_json_ips_records_are_supported(self):
         document = {"procName": "DiewishQA", "termination": {"namespace": "TCC"}}
         self.assertEqual(module.parse(json.dumps({"app_name": "DiewishQA"}) + "\n" + json.dumps(document)), document)
+
+    def test_referenced_binary_is_not_misclassified_as_missing_library(self):
+        document = {"procName": "DiewishQA",
+                    "termination": {"namespace": "DYLD", "reasons": [
+                        "Library not loaded: /usr/lib/swift/libswiftWebKit.dylib",
+                        "Referenced from: /private/DiewishQA.debug.dylib"]}}
+        codes = module.classify(document)
+        self.assertIn("IOS_SWIFT_WEBKIT_MISSING", codes)
+        self.assertNotIn("IOS_QA_DEBUG_DYLIB_MISSING", codes)

@@ -25,7 +25,7 @@ read -r runtime device_type < <(xcrun simctl list -j | python3 -c '
 import json,sys,os
 s=json.load(sys.stdin)
 sdk=tuple(map(int,os.environ["QA_IOS_SDK_VERSION"].split(".")))
-versions={r["identifier"]: tuple(map(int,r["version"].split("."))) for r in s["runtimes"] if r["isAvailable"] and "iOS" in r["name"] and tuple(map(int,r["version"].split("."))) <= sdk}
+versions={r["identifier"]: tuple(map(int,r["version"].split("."))) for r in s["runtimes"] if r["isAvailable"] and "iOS" in r["name"] and (18,4) <= tuple(map(int,r["version"].split("."))) <= sdk}
 pairs=[(versions[r],r,d["deviceTypeIdentifier"]) for r,ds in s["devices"].items() if r in versions for d in ds if d["isAvailable"] and d["name"].startswith("iPhone")]
 if not pairs: raise SystemExit("INSTALLED_IOS_DEVICE_REQUIRED")
 _,runtime,device=sorted(pairs)[-1]
@@ -40,8 +40,13 @@ python3 qa/platform/ios-private.py run SIMULATOR_BOOT 240 "$private/boot.log" xc
 echo SIMULATOR_BOOTED
 xcrun simctl status_bar "$simulator" override --time 9:41 --batteryState charged --batteryLevel 100
 echo BUILDING_SIMULATOR_APP
+# QA Simulator only: WebKit bug 293831 affects callAsyncJavaScript when
+# Xcode 16.4/iOS 18.5 binds the older Swift overlay. Build the SAME host/code
+# for 18.4+, as documented by WebKit; all auth/masking/UI assertions remain.
+# https://bugs.webkit.org/show_bug.cgi?id=293831
+echo 'IOS_QA_BUILD_TARGET 18.4'
 python3 qa/platform/ios-private.py run BUILD 360 "$private/build.log" xcodebuild -project ios/DiewishQA.xcodeproj -scheme DiewishQA -configuration Debug -sdk iphonesimulator \
-  -destination "id=$simulator" -derivedDataPath "$private/build" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- \
+  -destination "id=$simulator" -derivedDataPath "$private/build" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- IPHONEOS_DEPLOYMENT_TARGET=18.4 \
   build-for-testing || { python3 qa/platform/ios-build-diagnostics.py "$private/build.log"; node qa/platform/ios-evidence.cjs build-failed; exit 1; }
 echo SIMULATOR_BUILD_OK
 # Local ad-hoc signing supports ARM64 Simulator execution without an Apple account.
@@ -57,7 +62,7 @@ set +e
 python3 qa/platform/ios-private.py run XCODE_TESTS 600 "$private/test.log" xcodebuild test-without-building -xctestrun "$private/qa.xctestrun" -destination "id=$simulator" \
   -resultBundlePath "$private/result.xcresult" -parallel-testing-enabled NO \
   -test-timeouts-enabled YES -default-test-execution-time-allowance 480 -maximum-test-execution-time-allowance 480 \
-  -maximum-concurrent-test-simulator-destinations 1 CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=-
+  -maximum-concurrent-test-simulator-destinations 1 CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- IPHONEOS_DEPLOYMENT_TARGET=18.4
 result=$?
 set -e
 # Emit only allowlisted stage words, never XCTest actions or argument values.
