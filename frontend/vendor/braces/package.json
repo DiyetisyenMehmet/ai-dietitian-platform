@@ -1,6 +1,6 @@
 {
   "name": "braces",
-  "version": "3.0.4-diewish.1",
+  "version": "3.0.3-diewish.1",
   "description": "Diewish security backport of braces 3.0.3 for GHSA-vfj7-8cjw-p6xm",
   "main": "index.js",
   "private": true,
