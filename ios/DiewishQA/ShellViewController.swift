@@ -217,7 +217,10 @@ final class ShellViewController: UIViewController, WKNavigationDelegate, WKUIDel
         if operation == "qa-logout" { verifiedAlias = nil; try? FileManager.default.removeItem(at: identityFile); return }
         if operation == "qa-mask-invalid" {
             evidenceButton.accessibilityValue = "HEALTH_DATA_SCREENSHOT_GUARD_FAIL"
-            invalidateCaptureProof(); return
+            invalidateCaptureProof()
+            // Post-arming invalidation has the same fixed diagnostic contract
+            // as preparation failure; readiness and export remain blocked.
+            describeMaskFailure(); return
         }
         guard operation == "capabilities" else { return }
         // A capability contract, not Android bridge impersonation. Unsupported
