@@ -99,6 +99,10 @@ export function ChatSidebar({ open, onClose, triggerRef }: ChatSidebarProps) {
   const actionButtonRef = React.useRef<HTMLButtonElement | null>(null);
 
   React.useEffect(() => {
+    if (open || desktop) void chatStore.refresh();
+  }, [open, desktop]);
+
+  React.useEffect(() => {
     const query = window.matchMedia("(min-width: 1024px)");
     const sync = () => {
       setDesktop(query.matches);

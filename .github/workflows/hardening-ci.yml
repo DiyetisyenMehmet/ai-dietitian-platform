@@ -6,6 +6,8 @@ on:
       - fix/production-hardening
       - feature/android-native-scanner
       - feature/staging-preview
+      - feature/app6-coach-crossplatform-sync-p1-a1
+      - security/braces-ghsa-2026-a1
       - feature/workmode2-dashboard-journey-compact-text-a1
       - feature/workmode2-dashboard-and-coach-modal-polish-a1
   workflow_dispatch:
@@ -69,6 +71,8 @@ jobs:
           cache: npm
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
+      - name: Verify braces GHSA depth guard
+        run: node ../scripts/security-braces-depth-guard.cjs backend
       - name: Test reference micronutrient normalization
         run: python3 ../scripts/nutrition-reference-sync.test.py
       - name: Validate Prisma schema
@@ -95,6 +99,8 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
+      - name: Verify braces GHSA depth guard
+        run: node ../scripts/security-braces-depth-guard.cjs frontend
       - name: Check History browser harness formatting
         run: npx prettier --check e2e/history-ui.spec.js
       - name: Check History browser harness whitespace

@@ -1,0 +1,57 @@
+name: Security Braces Remediation
+
+on:
+  push:
+    branches:
+      - security/braces-ghsa-2026-a1
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Verify expired risk acceptances are gone
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -e backend/osv-scanner.toml
+          test ! -e frontend/osv-scanner.toml
+
+      - name: Install backend with standard npm ci
+        working-directory: backend
+        run: npm ci --ignore-scripts
+
+      - name: Install frontend with standard npm ci
+        working-directory: frontend
+        run: npm ci --ignore-scripts
+
+      - name: Verify patched braces dependency paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd backend && npm ls braces --all)
+          (cd frontend && npm ls braces --all)
+
+      - name: Verify GHSA depth guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/security-braces-depth-guard.cjs backend frontend
+
+      - name: Fail closed on OSV findings
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm             -v "$PWD:/github/workspace"             -w /github/workspace             ghcr.io/google/osv-scanner-action:v2.6.0             --lockfile=backend/package-lock.json             --lockfile=frontend/package-lock.json

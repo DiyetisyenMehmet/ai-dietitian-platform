@@ -160,6 +160,7 @@ const loadedConversationIds = new Set<string>();
 let initialized = false;
 let initializePromise: Promise<void> | null = null;
 let sessionGeneration = 0;
+let mutationGeneration = 0;
 
 function setState(next: Partial<ChatState>) {
   state = { ...state, ...next };
@@ -176,6 +177,7 @@ function getSnapshot() {
 }
 
 function updateConversation(id: string, mutator: (conv: Conversation) => Conversation) {
+  mutationGeneration += 1;
   setState({
     conversations: state.conversations.map((conversation) =>
       conversation.id === id ? mutator(conversation) : conversation,
@@ -184,6 +186,7 @@ function updateConversation(id: string, mutator: (conv: Conversation) => Convers
 }
 
 function removeConversationLocally(id: string) {
+  mutationGeneration += 1;
   loadedConversationIds.delete(id);
   const remaining = state.conversations.filter((conversation) => conversation.id !== id);
 
@@ -195,7 +198,8 @@ function removeConversationLocally(id: string) {
 
   if (state.activeId === id) {
     const existingDraft = remaining.find(
-      (conversation) => isDraftConversationId(conversation.id) && conversation.messages.length === 0,
+      (conversation) =>
+        isDraftConversationId(conversation.id) && conversation.messages.length === 0,
     );
     const draft = existingDraft ?? createEmptyConversation();
     setState({
@@ -214,33 +218,76 @@ async function fetchConversation(id: string): Promise<Conversation> {
     path: `/ai-chat/conversations/${encodeURIComponent(id)}`,
     method: "GET",
     auth: true,
+    cache: "no-store",
   });
   return mapDetail(result.conversation);
 }
 
-async function initializeFromBackend(): Promise<void> {
-  if (initialized) return;
+async function initializeFromBackend(refresh = false): Promise<void> {
+  if (initialized && !refresh) return;
   if (initializePromise) return initializePromise;
+  if (state.isResponding) return;
 
   const generation = sessionGeneration;
+  const mutation = mutationGeneration;
+  const initialLoad = !initialized;
   initializePromise = (async () => {
     if (generation !== sessionGeneration) return;
-    setState({ isLoading: true, error: null });
+    if (initialLoad) setState({ isLoading: true, error: null });
     try {
       const result = await apiRequest<ListConversationsResponse>({
         path: "/ai-chat/conversations",
         method: "GET",
         auth: true,
+        cache: "no-store",
       });
-      if (generation !== sessionGeneration) return;
+      if (generation !== sessionGeneration || mutation !== mutationGeneration) return;
 
-      if (result.conversations.length === 0) {
+      const summaries = [
+        ...new Map(result.conversations.map((item) => [item.id, mapSummary(item)])).values(),
+      ];
+      if (!initialLoad) {
+        const previous = new Map(state.conversations.map((item) => [item.id, item]));
+        const invalidated = summaries.filter(
+          (item) => previous.get(item.id)?.updatedAt !== item.updatedAt,
+        );
+        let conversations = summaries.map((item) => ({
+          ...item,
+          messages: previous.get(item.id)?.messages ?? [],
+        }));
+        const active = conversations.find((item) => item.id === state.activeId);
+        if (
+          active &&
+          (!loadedConversationIds.has(active.id) ||
+            invalidated.some((item) => item.id === active.id))
+        ) {
+          const detail = await fetchConversation(active.id);
+          if (generation !== sessionGeneration || mutation !== mutationGeneration) return;
+          conversations = conversations.map((item) => (item.id === detail.id ? detail : item));
+        }
+        for (const item of invalidated) loadedConversationIds.delete(item.id);
+        for (const id of loadedConversationIds) {
+          if (!summaries.some((item) => item.id === id)) loadedConversationIds.delete(id);
+        }
+        if (active) loadedConversationIds.add(active.id);
+        const drafts = state.conversations.filter((item) => isDraftConversationId(item.id));
+        conversations = [...drafts, ...conversations];
+        let activeId = state.activeId;
+        if (!conversations.some((item) => item.id === activeId)) {
+          const draft = drafts[0] ?? createEmptyConversation();
+          if (!drafts.length) conversations.unshift(draft);
+          activeId = draft.id;
+        }
+        setState({ conversations, activeId, error: null });
+        return;
+      }
+
+      if (summaries.length === 0) {
         const draft = createEmptyConversation();
         setState({ conversations: [draft], activeId: draft.id });
       } else {
-        const summaries = result.conversations.map(mapSummary);
         const first = await fetchConversation(summaries[0].id);
-        if (generation !== sessionGeneration) return;
+        if (generation !== sessionGeneration || mutation !== mutationGeneration) return;
         loadedConversationIds.add(first.id);
         setState({
           conversations: summaries.map((conversation) =>
@@ -249,7 +296,9 @@ async function initializeFromBackend(): Promise<void> {
           activeId: first.id,
         });
 
-        if (first.messages.some((message) => message.role === "user" && isToday(message.createdAt))) {
+        if (
+          first.messages.some((message) => message.role === "user" && isToday(message.createdAt))
+        ) {
           dailyTrackingStore.markChatted();
         }
       }
@@ -259,7 +308,7 @@ async function initializeFromBackend(): Promise<void> {
     } finally {
       if (generation === sessionGeneration) {
         initializePromise = null;
-        setState({ isLoading: false });
+        if (initialLoad) setState({ isLoading: false });
       }
     }
   })();
@@ -272,6 +321,10 @@ export const chatStore = {
     return initializeFromBackend();
   },
 
+  refresh(): Promise<void> {
+    return initializeFromBackend(true);
+  },
+
   sendMessage(text: string) {
     const trimmed = text.trim();
     if (!trimmed || state.isResponding) return;
@@ -280,6 +333,7 @@ export const chatStore = {
     const targetId = state.activeId;
     const active = state.conversations.find((conversation) => conversation.id === targetId);
     if (!active) return;
+    mutationGeneration += 1;
 
     const isDraft = isDraftConversationId(targetId);
     const userMessage: ChatMessage = {
@@ -322,6 +376,7 @@ export const chatStore = {
         const serverId = result.conversationId;
 
         if (isDraft) {
+          mutationGeneration += 1;
           loadedConversationIds.add(serverId);
           const nextConversations = state.conversations.map((conversation) => {
             if (conversation.id !== targetId) return conversation;
@@ -357,9 +412,7 @@ export const chatStore = {
         updateConversation(targetId, (conversation) => ({
           ...conversation,
           messages: conversation.messages.map((item) =>
-            item.id === pendingAssistantId
-              ? { ...item, content: message, streaming: false }
-              : item,
+            item.id === pendingAssistantId ? { ...item, content: message, streaming: false } : item,
           ),
         }));
         setState({ error: null });
@@ -387,6 +440,7 @@ export const chatStore = {
     }
     if (!state.conversations.some((conversation) => conversation.id === id)) return false;
 
+    mutationGeneration += 1;
     const generation = sessionGeneration;
     try {
       const result = await apiRequest<UpdateConversationResponse>({
@@ -421,6 +475,7 @@ export const chatStore = {
     if (state.isResponding || isDraftConversationId(id)) return false;
     if (!state.conversations.some((conversation) => conversation.id === id)) return false;
 
+    mutationGeneration += 1;
     const generation = sessionGeneration;
     try {
       const result = await apiRequest<UpdateConversationResponse>({
@@ -454,6 +509,7 @@ export const chatStore = {
     if (state.isResponding || isDraftConversationId(id)) return false;
     if (!state.conversations.some((conversation) => conversation.id === id)) return false;
 
+    mutationGeneration += 1;
     const generation = sessionGeneration;
     try {
       await apiRequest<void>({
@@ -487,6 +543,7 @@ export const chatStore = {
     const active = state.conversations.find((conversation) => conversation.id === state.activeId);
     if (active && isDraftConversationId(active.id) && active.messages.length === 0) return;
 
+    mutationGeneration += 1;
     const draft = createEmptyConversation();
     setState({
       conversations: [draft, ...state.conversations],
@@ -500,6 +557,7 @@ export const chatStore = {
     const conversation = state.conversations.find((item) => item.id === id);
     if (!conversation) return;
 
+    mutationGeneration += 1;
     setState({ activeId: id, error: null });
     if (isDraftConversationId(id) || loadedConversationIds.has(id)) return;
 
@@ -531,10 +589,11 @@ export const chatStore = {
 
 export function useChatState(): ChatState {
   const snapshot = React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  const generation = sessionGeneration;
 
   React.useEffect(() => {
     void chatStore.initialize();
-  }, []);
+  }, [generation]);
 
   return snapshot;
 }

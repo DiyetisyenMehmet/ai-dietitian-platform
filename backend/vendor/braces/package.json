@@ -1,0 +1,24 @@
+{
+  "name": "braces",
+  "version": "3.0.4-diewish.backport.1",
+  "description": "Diewish local security backport of braces 3.0.3 for GHSA-vfj7-8cjw-p6xm; not an upstream 3.0.4 release",
+  "main": "index.js",
+  "private": true,
+  "license": "MIT",
+  "engines": {
+    "node": ">=8"
+  },
+  "dependencies": {
+    "fill-range": "^7.1.1"
+  },
+  "diewishSecurityBackport": {
+    "advisory": "GHSA-vfj7-8cjw-p6xm",
+    "cve": "CVE-2026-93687",
+    "upstreamVersion": "3.0.3",
+    "sourceRepository": "FSDevelop/braces",
+    "sourceCommit": "28d440b5dd449dbf1fe6f3506cf94ecca4d02660",
+    "upstreamPullRequest": "micromatch/braces#72",
+    "syntheticLocalVersion": true,
+    "upstreamPatchedReleaseAvailable": false
+  }
+}
