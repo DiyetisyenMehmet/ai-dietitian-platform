@@ -29,7 +29,7 @@ def classify(document):
     reason = json.dumps(termination)
     if namespace == "DYLD" and "Library not loaded" in reason:
         codes.append("IOS_DYLD_LIBRARY_MISSING")
-        missing = re.findall(r"Library not loaded:\s*([^\s\\"\\\\]+)", reason)
+        missing = re.findall(r'Library not loaded:\s*([^\s"\\]+)', reason)
         libraries = {Path(path).name for path in missing}
         if "DiewishQA.debug.dylib" in libraries:
             codes.append("IOS_QA_DEBUG_DYLIB_MISSING")

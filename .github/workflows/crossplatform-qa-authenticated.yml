@@ -54,3 +54,5 @@ jobs:
 # Only fixed native QA crash classes leave the ephemeral runner.
 
 # Build only the Simulator QA host for 18.4+ to correct WebKit Swift overlay loading.
+
+# Keep missing-library classification separate from the referencing QA binary.
