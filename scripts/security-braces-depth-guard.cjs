@@ -4,7 +4,7 @@ const assert = require("node:assert/strict");
 const path = require("node:path");
 const { createRequire } = require("node:module");
 
-const EXPECTED_VERSION = "3.0.3-diewish.1";
+const EXPECTED_VERSION = "3.0.4-diewish.backport.1";
 const EXPECTED_SOURCE_COMMIT = "28d440b5dd449dbf1fe6f3506cf94ecca4d02660";
 
 const requested = process.argv.slice(2);
@@ -23,6 +23,8 @@ for (const project of projects) {
   assert.equal(pkg.version, EXPECTED_VERSION);
   assert.equal(pkg.diewishSecurityBackport?.advisory, "GHSA-vfj7-8cjw-p6xm");
   assert.equal(pkg.diewishSecurityBackport?.sourceCommit, EXPECTED_SOURCE_COMMIT);
+  assert.equal(pkg.diewishSecurityBackport?.syntheticLocalVersion, true);
+  assert.equal(pkg.diewishSecurityBackport?.upstreamPatchedReleaseAvailable, false);
   assert.deepEqual(braces.expand("{a,b}"), ["a", "b"]);
 
   const hostile = "{".repeat(101) + "a,b" + "}".repeat(101);
