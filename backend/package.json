@@ -26,7 +26,8 @@
     "start:migrate": "prisma migrate deploy && node dist/index.js",
     "admin:bootstrap": "tsx src/modules/admin/admin.bootstrap.ts",
     "admin:seed-foundation": "tsx src/modules/admin/admin.seed.ts",
-    "admin:bootstrap-first-super-admin": "tsx src/modules/admin/admin.bootstrap-first-super-admin.ts"
+    "admin:bootstrap-first-super-admin": "tsx src/modules/admin/admin.bootstrap-first-super-admin.ts",
+    "test:coach-sync": "node --import tsx --test --test-concurrency=1 src/integration/ai-chat.integration.test.ts src/integration/coach-crossplatform-sync.integration.test.ts"
   },
   "prisma": {
     "schema": "prisma/schema.prisma"

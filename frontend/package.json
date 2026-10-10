@@ -9,7 +9,9 @@
     "lint": "next lint",
     "type-check": "tsc --noEmit",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "test:coach-sync": "node --test tests/coach-crossplatform-sync.test.cjs",
+    "test:coach-sync:e2e": "playwright test e2e/coach-crossplatform-sync.spec.ts e2e/coach-crossplatform-persistence.spec.ts --workers=1 --reporter=line"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

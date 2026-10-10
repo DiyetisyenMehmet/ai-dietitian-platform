@@ -31,6 +31,20 @@ export function ChatView({ initialPrompt }: { initialPrompt?: string | null }) {
   const messages = conversation.messages;
   const lastMessage = messages[messages.length - 1];
 
+  React.useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === "visible") void chatStore.refresh();
+    };
+    const timer = window.setInterval(refresh, 5000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, []);
+
   const scrollToBottom = React.useCallback((behavior: ScrollBehavior = "smooth") => {
     const el = scrollRef.current;
     if (el) el.scrollTo({ top: el.scrollHeight, behavior });
