@@ -48,3 +48,5 @@ jobs:
     secrets: inherit
 
 # Inspect private XCTest test details using fixed diagnostic codes only.
+
+# Bound every native execution stage; expose literal XCTest progress codes live.

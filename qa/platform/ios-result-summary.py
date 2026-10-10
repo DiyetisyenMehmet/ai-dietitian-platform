@@ -104,6 +104,15 @@ def emit_legacy(document):
         print("IOS_FAILURE_SOURCE_LINE:", int(line))
 
 
+def private_result(arguments):
+    try:
+        result = subprocess.run(["xcrun", "xcresulttool", *arguments],
+                                capture_output=True, text=True, timeout=30)
+        return json.loads(result.stdout) if result.returncode == 0 else None
+    except (subprocess.TimeoutExpired, OSError, ValueError):
+        return None
+
+
 def main():
     if sys.argv[1] == "--guard-log":
         blocked = read_guard_log(sys.argv[2])
@@ -113,13 +122,10 @@ def main():
         found = codes(Path(sys.argv[2]).read_text(errors="replace"))
         print("IOS_DIAGNOSTIC_CODES:", ",".join(found) or "IOS_EXECUTION_FAILED")
         return
-    result = subprocess.run(
-        ["xcrun", "xcresulttool", "get", "test-results", "summary", "--path", sys.argv[1]],
-        capture_output=True, text=True)
-    if result.returncode:
+    document = private_result(["get", "test-results", "summary", "--path", sys.argv[1]])
+    if document is None:
         print("IOS_RESULT_SUMMARY_UNAVAILABLE")
         return
-    document = json.loads(result.stdout)
     for key in ("passedTests", "failedTests", "skippedTests", "totalTestCount"):
         value = document.get(key)
         if isinstance(value, int):
@@ -128,27 +134,16 @@ def main():
     if found:
         print("IOS_DIAGNOSTIC_CODES:", ",".join(found))
     emit_legacy(document)
-    legacy = subprocess.run(
-        ["xcrun", "xcresulttool", "get", "object", "--legacy", "--format", "json", "--path", sys.argv[1]],
-        capture_output=True, text=True, timeout=30)
-    if legacy.returncode:
-        print("IOS_PRIVATE_ISSUE_SUMMARY_UNAVAILABLE")
-    else:
-        try:
-            emit_legacy(json.loads(legacy.stdout))
-        except (ValueError, TypeError):
-            print("IOS_PRIVATE_ISSUE_SUMMARY_UNAVAILABLE")
-    details = subprocess.run(
-        ["xcrun", "xcresulttool", "get", "test-results", "test-details",
-         "--path", sys.argv[1], "--test-id", "RuntimeTests/testAuthenticatedScreensAndRelaunch()"],
-        capture_output=True, text=True, timeout=30)
-    if details.returncode:
-        print("IOS_PRIVATE_TEST_DETAILS_UNAVAILABLE")
-    else:
-        try:
-            emit_legacy(json.loads(details.stdout))
-        except (ValueError, TypeError):
-            print("IOS_PRIVATE_TEST_DETAILS_UNAVAILABLE")
+    for arguments, unavailable in (
+        (["get", "object", "--legacy", "--format", "json", "--path", sys.argv[1]], "IOS_PRIVATE_ISSUE_SUMMARY_UNAVAILABLE"),
+        (["get", "test-results", "test-details", "--path", sys.argv[1],
+          "--test-id", "RuntimeTests/testAuthenticatedScreensAndRelaunch()"], "IOS_PRIVATE_TEST_DETAILS_UNAVAILABLE"),
+    ):
+        detail = private_result(arguments)
+        if detail is None:
+            print(unavailable)
+        else:
+            emit_legacy(detail)
 
 
 if __name__ == "__main__":

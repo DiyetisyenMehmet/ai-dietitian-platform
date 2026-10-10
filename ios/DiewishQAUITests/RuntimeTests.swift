@@ -1,46 +1,57 @@
 import XCTest
+import Darwin
 
 final class RuntimeTests: XCTestCase {
-    override func setUpWithError() throws { continueAfterFailure = false }
+    private func stage(_ phase: String, _ status: String) {
+        print("IOS_STAGE " + phase + " " + status)
+        fflush(stdout)
+    }
+
+    override func setUpWithError() throws {
+        continueAfterFailure = false
+        stage("TEST_SETUP", "PASS")
+    }
 
     private func screenshot(_ app: XCUIApplication, _ name: String) {
         let guardButton = app.buttons["qa-evidence"]
-        print("IOS_STAGE HEALTH_GUARD_PREPARE RUNNING")
+        stage("HEALTH_GUARD_PREPARE", "RUNNING")
         guardButton.tap()
         let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == 'READY'"), object: guardButton)
         guard XCTWaiter.wait(for: [ready], timeout: 20) == .completed else {
-            print("IOS_STAGE HEALTH_GUARD FAIL")
+            stage("HEALTH_GUARD", "FAIL")
             XCTFail("HEALTH_DATA_SCREENSHOT_GUARD_FAIL"); return
         }
-        print("IOS_STAGE HEALTH_GUARD_PREPARE PASS")
+        stage("HEALTH_GUARD_PREPARE", "PASS")
         let snapshot = app.screenshot()
         let check = app.buttons["qa-check-evidence"]
         check.tap()
         let checked = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == 'READY'"), object: check)
         guard XCTWaiter.wait(for: [checked], timeout: 10) == .completed else {
-            print("IOS_STAGE HEALTH_GUARD FAIL")
+            stage("HEALTH_GUARD", "FAIL")
             XCTFail("HEALTH_DATA_SCREENSHOT_GUARD_FAIL"); return
         }
         let restore = app.buttons["qa-restore-evidence"]
         restore.tap()
         let restored = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == 'RESTORED'"), object: restore)
         guard XCTWaiter.wait(for: [restored], timeout: 10) == .completed else {
-            print("IOS_STAGE HEALTH_GUARD FAIL")
+            stage("HEALTH_GUARD", "FAIL")
             XCTFail("HEALTH_DATA_SCREENSHOT_GUARD_FAIL"); return
         }
         let attachment = XCTAttachment(screenshot: snapshot)
         attachment.name = name + "-ios-simulator-guarded-health-v1"
         attachment.lifetime = .keepAlways
         add(attachment)
-        print("IOS_STAGE HEALTH_GUARD_CAPTURE PASS")
+        stage("HEALTH_GUARD_CAPTURE", "PASS")
     }
 
     private func configuredApp() -> XCUIApplication {
+        stage("APP_CONFIGURATION", "RUNNING")
         let app = XCUIApplication()
         let env = ProcessInfo.processInfo.environment
         for key in ["QA_SYNTHETIC_ACCOUNT", "QA_ACCOUNT_ID", "QA_ACCOUNT_HMAC_KEY"] {
             if let value = env[key] { app.launchEnvironment[key] = value }
         }
+        stage("APP_CONFIGURATION", "PASS")
         return app
     }
 
@@ -72,9 +83,9 @@ final class RuntimeTests: XCTestCase {
             throw XCTSkip("PUBLIC_LOGIN_SURFACE_RECORDED_IN_PUBLIC_MODE")
         }
         let app = configuredApp()
-        print("IOS_STAGE APP_LAUNCH RUNNING")
+        stage("APP_LAUNCH", "RUNNING")
         app.launch()
-        print("IOS_STAGE APP_LAUNCH PASS")
+        stage("APP_LAUNCH", "PASS")
         app.buttons["qa-login"].tap()
         let ready = app.webViews.buttons["Giriş Yap"].waitForExistence(timeout: 60)
         if !ready { screenshot(app, "login-runtime-diagnostic") }
@@ -84,12 +95,12 @@ final class RuntimeTests: XCTestCase {
 
     func testAuthenticatedScreensAndRelaunch() throws {
         let app = configuredApp()
-        print("IOS_STAGE APP_LAUNCH RUNNING")
+        stage("APP_LAUNCH", "RUNNING")
         app.launch()
-        print("IOS_STAGE APP_LAUNCH PASS")
-        print("IOS_STAGE AUTH_LOGIN RUNNING")
+        stage("APP_LAUNCH", "PASS")
+        stage("AUTH_LOGIN", "RUNNING")
         try login(app)
-        print("IOS_STAGE AUTH_LOGIN PASS")
+        stage("AUTH_LOGIN", "PASS")
         screenshot(app, "dashboard")
         app.buttons["qa-coach-list"].tap()
         XCTAssertTrue(app.webViews.textViews["Mesaj"].waitForExistence(timeout: 45), "COACH_UNAVAILABLE")
@@ -104,9 +115,9 @@ final class RuntimeTests: XCTestCase {
         XCTAssertTrue(app.webViews.staticTexts["Sağlık Profilim"].waitForExistence(timeout: 45), "PROFILE_UNAVAILABLE")
         screenshot(app, "profile")
         app.terminate()
-        print("IOS_STAGE APP_LAUNCH RUNNING")
+        stage("APP_LAUNCH", "RUNNING")
         app.launch()
-        print("IOS_STAGE APP_LAUNCH PASS")
+        stage("APP_LAUNCH", "PASS")
         XCTAssertTrue(app.webViews.staticTexts["Bugünkü Yolculuğum"].waitForExistence(timeout: 60), "SESSION_RELAUNCH_UNAVAILABLE")
         screenshot(app, "session-relaunch")
     }

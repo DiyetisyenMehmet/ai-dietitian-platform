@@ -44,7 +44,75 @@ def inject(directory):
         plistlib.dump(document, stream)
     out.chmod(0o600)
 
+
+STAGES = {"SIMULATOR_BOOT", "BUILD", "INSTALL", "XCODE_TESTS",
+          "ATTACHMENT_EXPORT", "CLEANUP_SHUTDOWN", "CLEANUP_DELETE"}
+
+def run_command(stage, timeout, log, command):
+    """Bound the existing command; stdout and command arguments stay private."""
+    import signal
+    import subprocess
+    import threading
+    import re
+    if stage not in STAGES or not 0 < timeout <= 600 or not command:
+        raise SystemExit("IOS_COMMAND_CONFIGURATION_INVALID")
+    print("IOS_STAGE", stage, "RUNNING", flush=True)
+    with os.fdopen(os.open(log, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "wb") as stream:
+        os.fchmod(stream.fileno(), 0o600)
+        process = subprocess.Popen(command, stdout=stream, stderr=subprocess.STDOUT,
+                                   start_new_session=True)
+        stopped = threading.Event()
+        def progress():
+            # The existing private log remains private. Only literal stage enums
+            # are mirrored; no XCTest actions, messages, arguments or values.
+            try:
+                with Path(log).open("rb") as reader:
+                    pending = b""
+                    while True:
+                        chunk = reader.read(8192)
+                        if chunk:
+                            pending += chunk
+                            lines = pending.split(b"\n")
+                            pending = lines.pop()[-512:]
+                            for line in lines:
+                                for phase, status in re.findall(
+                                    rb"IOS_STAGE (TEST_SETUP|APP_CONFIGURATION|APP_LAUNCH|AUTH_LOGIN|HEALTH_GUARD_PREPARE|HEALTH_GUARD_CAPTURE|HEALTH_GUARD) (RUNNING|PASS|FAIL)", line):
+                                    print("IOS_STAGE", phase.decode("ascii"), status.decode("ascii"), flush=True)
+                        elif stopped.is_set():
+                            break
+                        else:
+                            stopped.wait(0.2)
+            except OSError:
+                print("IOS_PROGRESS_LOG_UNAVAILABLE", flush=True)
+        thread = threading.Thread(target=progress, daemon=True) if stage == "XCODE_TESTS" else None
+        if thread:
+            thread.start()
+        try:
+            code = process.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            for sig in (signal.SIGTERM, signal.SIGKILL):
+                try:
+                    os.killpg(process.pid, sig)
+                except ProcessLookupError:
+                    pass
+                try:
+                    process.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    pass
+            stopped.set()
+            if thread:
+                thread.join(timeout=2)
+            print("IOS_STAGE", stage, "TIMEOUT", flush=True)
+            return 124
+        stopped.set()
+        if thread:
+            thread.join(timeout=2)
+    print("IOS_STAGE", stage, "PASS" if code == 0 else "FAIL", flush=True)
+    return code if code >= 0 else 1
+
 if __name__ == "__main__":
+    if sys.argv[1] == "run":
+        raise SystemExit(run_command(sys.argv[2], float(sys.argv[3]), sys.argv[4], sys.argv[5:]))
     if sys.argv[1] != "inject":
         raise SystemExit("UNSUPPORTED_OPERATION")
     inject(sys.argv[2])
