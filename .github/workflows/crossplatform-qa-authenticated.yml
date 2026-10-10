@@ -56,3 +56,5 @@ jobs:
 # Build only the Simulator QA host for 18.4+ to correct WebKit Swift overlay loading.
 
 # Keep missing-library classification separate from the referencing QA binary.
+
+# Diagnose only guard-owned enums; allow bounded native preparation/snapshot overhead.

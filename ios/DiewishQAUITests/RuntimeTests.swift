@@ -17,7 +17,8 @@ final class RuntimeTests: XCTestCase {
         stage("HEALTH_GUARD_PREPARE", "RUNNING")
         guardButton.tap()
         let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == 'READY'"), object: guardButton)
-        guard XCTWaiter.wait(for: [ready], timeout: 20) == .completed else {
+        guard XCTWaiter.wait(for: [ready], timeout: 30) == .completed else {
+            describeGuardFailure(guardButton)
             stage("HEALTH_GUARD", "FAIL")
             XCTFail("HEALTH_DATA_SCREENSHOT_GUARD_FAIL"); return
         }
@@ -42,6 +43,16 @@ final class RuntimeTests: XCTestCase {
         attachment.lifetime = .keepAlways
         add(attachment)
         stage("HEALTH_GUARD_CAPTURE", "PASS")
+    }
+
+    private func describeGuardFailure(_ button: XCUIElement) {
+        let fields = (button.value as? String ?? "UNAVAILABLE").split(separator: "|", maxSplits: 1).map(String.init)
+        let reasons: Set<String> = ["READY", "WAITING", "ACCOUNT_UNVERIFIED", "HEALTH_DATA_SCREENSHOT_GUARD_FAIL", "NONE", "MASK_SCRIPT_MISSING", "PREPARE_FAILED", "MASK_NOT_ACTIVE", "VIEWPORT_CHANGED", "FONT_CHANGED", "DOCUMENT_MUTATION", "JS_EVALUATION_FAILED", "UNAVAILABLE"]
+        let details: Set<String> = ["NONE", "FONT_LOADING", "FONT_COUNT", "FONT_REFERENCE", "FONT_FAMILY", "FONT_STYLE", "FONT_WEIGHT", "FONT_STRETCH", "FONT_UNICODE_RANGE", "FONT_VARIANT", "FONT_FEATURES", "FONT_GEOMETRY", "FONT_STATUS", "FONT_STATUS_LOADED_UNLOADED", "FONT_STATUS_LOADED_LOADING", "FONT_STATUS_UNLOADED_LOADED", "FONT_STATUS_UNLOADED_LOADING", "FONT_STATUS_LOADING_LOADED", "FONT_STATUS_LOADING_ERROR"]
+        let reason = fields.first ?? "UNAVAILABLE"
+        print("IOS_GUARD_REASON", reasons.contains(reason) ? reason : "UNAVAILABLE")
+        if fields.count == 2 && details.contains(fields[1]) { print("IOS_GUARD_FONT_DETAIL", fields[1]) }
+        fflush(stdout)
     }
 
     private func configuredApp() -> XCUIApplication {

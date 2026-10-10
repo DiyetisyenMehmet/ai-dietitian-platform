@@ -39,3 +39,9 @@ class NativeCommandBounds(unittest.TestCase):
         self.assertEqual(result, 0)
         self.assertIn("IOS_STAGE APP_LAUNCH RUNNING", output)
         self.assertNotIn("private-fixture", output)
+
+    def test_guard_progress_rejects_unknown_values(self):
+        result, output, _ = self.invoke("print('IOS_GUARD_REASON ACCOUNT_UNVERIFIED'); print('IOS_GUARD_REASON private-fixture')")
+        self.assertEqual(result, 0)
+        self.assertIn("IOS_GUARD_REASON ACCOUNT_UNVERIFIED", output)
+        self.assertNotIn("private-fixture", output)

@@ -122,10 +122,26 @@ final class ShellViewController: UIViewController, WKNavigationDelegate, WKUIDel
             let ready: Bool
             if case .success(let value) = result { ready = (value as? Bool) == true } else { ready = false }
             self.evidenceButton.accessibilityValue = ready ? "READY" : "HEALTH_DATA_SCREENSHOT_GUARD_FAIL"
+            if !ready { self.describeMaskFailure() }
             if ready, let alias = self.verifiedAlias,
                let data = try? JSONSerialization.data(withJSONObject: ["accountAlias": alias, "captureReadyAt": Date().timeIntervalSince1970, "screenshotGuard": "HEALTH_MASK_V1"]) {
                 try? data.write(to: self.identityFile, options: .atomic)
             }
+        }
+    }
+
+    private func describeMaskFailure() {
+        // Read only guard-owned metadata, never page text or account fields.
+        webView.evaluateJavaScript("window.__diewishEvidenceMask ? ({reason:window.__diewishEvidenceMask.reason(),detail:window.__diewishEvidenceMask.fontDetail()}) : ({reason:'MASK_SCRIPT_MISSING',detail:'NONE'})") { [weak self] value, error in
+            guard let self else { return }
+            let reasons: Set<String> = ["NONE", "MASK_SCRIPT_MISSING", "PREPARE_FAILED", "MASK_NOT_ACTIVE", "VIEWPORT_CHANGED", "FONT_CHANGED", "DOCUMENT_MUTATION"]
+            let details: Set<String> = ["NONE", "FONT_LOADING", "FONT_COUNT", "FONT_REFERENCE", "FONT_FAMILY", "FONT_STYLE", "FONT_WEIGHT", "FONT_STRETCH", "FONT_UNICODE_RANGE", "FONT_VARIANT", "FONT_FEATURES", "FONT_GEOMETRY", "FONT_STATUS", "FONT_STATUS_LOADED_UNLOADED", "FONT_STATUS_LOADED_LOADING", "FONT_STATUS_UNLOADED_LOADED", "FONT_STATUS_UNLOADED_LOADING", "FONT_STATUS_LOADING_LOADED", "FONT_STATUS_LOADING_ERROR"]
+            let payload = value as? [String: Any]
+            let reason = payload?["reason"] as? String ?? "JS_EVALUATION_FAILED"
+            let detail = payload?["detail"] as? String ?? "NONE"
+            let safeReason = error == nil && reasons.contains(reason) ? reason : "JS_EVALUATION_FAILED"
+            let safeDetail = details.contains(detail) ? detail : "NONE"
+            self.evidenceButton.accessibilityValue = safeReason + "|" + safeDetail
         }
     }
 
