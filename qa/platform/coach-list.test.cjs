@@ -1,7 +1,7 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { openList } = require('./coach-list.cjs');
+const { openList, reopenList } = require('./coach-list.cjs');
 function fixture(initiallyOpen = false) {
   let reveal, unavailable;
   const readiness = new Promise((resolve, reject) => { reveal = resolve; unavailable = reject; });
@@ -39,4 +39,23 @@ test('unavailable history controls propagate failure without claiming the list l
   await assert.rejects(opening, value => value === error);
   assert.equal(f.state.clicks, 0);
   assert.equal(f.state.loaded, false);
+});
+test('reopening waits for the closing animation before opening a fresh list', async () => {
+  let finishClosing;
+  const closing = new Promise(resolve => { finishClosing = resolve; });
+  const state = { visible: true, closed: false, opens: 0 };
+  const list = { first() { return this; }, isVisible: async () => state.visible, waitFor: async ({ state: desired }) => {
+    if (desired === 'hidden') { await closing; state.visible = false; state.closed = true; }
+    else assert.equal(state.visible, true);
+  } };
+  const close = { first() { return this; }, isVisible: async () => true, click: async () => {} };
+  const button = { waitFor: async () => {}, click: async () => { assert.equal(state.closed, true); state.opens++; state.visible = true; } };
+  const page = { locator: () => list, getByRole: (_role, { name }) => name instanceof RegExp ? close : button, getByText: () => ({ first() { return this; }, waitFor: async () => {} }) };
+  const reopening = reopenList(page);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(state.opens, 0);
+  finishClosing();
+  await reopening;
+  assert.equal(state.opens, 1);
+  assert.equal(state.visible, true);
 });

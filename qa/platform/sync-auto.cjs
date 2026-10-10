@@ -4,6 +4,7 @@ const { openRuntime, login, logout, openList, capture } = require('./runtime.cjs
 const { syncPlan, CHECKPOINTS } = require('./sync-plan.cjs');
 const { randomBytes } = require('node:crypto');
 const { stage } = require('./sync-stage.cjs');
+const { reopenList } = require('./coach-list.cjs');
 async function newCoachConversation(runtime, marker) {
   const page = runtime.page;
   await page.goto(c.ORIGIN + '/ai');
@@ -22,10 +23,7 @@ async function newCoachConversation(runtime, marker) {
 async function performCheckpoint(runtime, checkpoint, sourceAlias) {
       if (checkpoint === 'already-open') await runtime.page.waitForTimeout(10000);
       if (checkpoint === 'list-reopen') {
-        const close = runtime.page.getByRole('button', { name: /Kapat/i }).first();
-        if (await close.isVisible()) await close.click();
-        else await runtime.page.keyboard.press('Escape');
-        await openList(runtime.page);
+        await reopenList(runtime.page);
       }
       if (checkpoint === 'refresh') { await runtime.refresh(runtime.page); await openList(runtime.page); }
       if (checkpoint === 'relaunch') { runtime.page = await runtime.relaunch(); await openList(runtime.page); }

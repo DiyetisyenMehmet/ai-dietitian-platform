@@ -11,4 +11,14 @@ async function openList(page) {
   await list.waitFor({ state: 'visible' });
   await page.getByText('Sohbetler yükleniyor...', { exact: true }).first().waitFor({ state: 'hidden' });
 }
-module.exports = { openList };
+async function reopenList(page) {
+  const list = page.locator('nav[aria-label="Sohbetler"]:visible').first();
+  const close = page.getByRole('button', { name: /Kapat/i }).first();
+  if (await close.isVisible()) await close.click();
+  else await page.keyboard.press('Escape');
+  // An exiting drawer remains visible during its animation. Do not mistake
+  // that closing list for the freshly reopened checkpoint.
+  await list.waitFor({ state: 'hidden' });
+  await openList(page);
+}
+module.exports = { openList, reopenList };
