@@ -73,6 +73,7 @@
     "typescript-eslint": "8.21.0"
   },
   "overrides": {
-    "qs": "6.16.0"
+    "qs": "6.16.0",
+    "braces": "https://github.com/FSDevelop/braces/archive/28d440b5dd449dbf1fe6f3506cf94ecca4d02660.tar.gz"
   }
 }
