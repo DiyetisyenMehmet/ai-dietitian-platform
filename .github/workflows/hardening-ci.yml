@@ -7,6 +7,7 @@ on:
       - feature/android-native-scanner
       - feature/staging-preview
       - feature/app6-coach-crossplatform-sync-p1-a1
+      - security/braces-ghsa-2026-a1
       - feature/workmode2-dashboard-journey-compact-text-a1
       - feature/workmode2-dashboard-and-coach-modal-polish-a1
   workflow_dispatch:
