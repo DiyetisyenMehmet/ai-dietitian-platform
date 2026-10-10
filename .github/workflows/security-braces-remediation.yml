@@ -6,16 +6,14 @@ on:
       - security/braces-ghsa-2026-a1
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  verify-and-lock:
+  verify:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -24,32 +22,29 @@ jobs:
             backend/package-lock.json
             frontend/package-lock.json
 
-      - name: Refresh backend lockfile
-        working-directory: backend
-        run: npm install --package-lock-only --ignore-scripts
-
-      - name: Refresh frontend lockfile
-        working-directory: frontend
-        run: npm install --package-lock-only --ignore-scripts
-
-      - name: Install backend dependency tree
-        working-directory: backend
-        run: npm ci --ignore-scripts
-
-      - name: Install frontend dependency tree
-        working-directory: frontend
-        run: npm ci --ignore-scripts
-
-      - name: Show braces dependency paths
+      - name: Verify expired risk acceptances are gone
         shell: bash
         run: |
           set -euo pipefail
-          echo "=== BACKEND ==="
+          test ! -e backend/osv-scanner.toml
+          test ! -e frontend/osv-scanner.toml
+
+      - name: Install backend with standard npm ci
+        working-directory: backend
+        run: npm ci --ignore-scripts
+
+      - name: Install frontend with standard npm ci
+        working-directory: frontend
+        run: npm ci --ignore-scripts
+
+      - name: Verify patched braces dependency paths
+        shell: bash
+        run: |
+          set -euo pipefail
           (cd backend && npm ls braces --all)
-          echo "=== FRONTEND ==="
           (cd frontend && npm ls braces --all)
 
-      - name: Verify upstream security patch behavior
+      - name: Verify GHSA depth guard
         shell: bash
         run: |
           set -euo pipefail
@@ -58,9 +53,13 @@ jobs:
               cd "$dir"
               node <<'NODE'
           const braces = require("braces");
-          const shallow = braces("{a,b}");
-          if (!Array.isArray(shallow) || shallow.length === 0) {
-            throw new Error("ordinary brace expansion compatibility check failed");
+          const pkg = require("braces/package.json");
+          if (pkg.version !== "3.0.4-diewish.1") {
+            throw new Error("unexpected braces version: " + pkg.version);
+          }
+          const ordinary = braces.expand("{a,b}");
+          if (JSON.stringify(ordinary) !== JSON.stringify(["a","b"])) {
+            throw new Error("ordinary expansion compatibility check failed");
           }
           const hostile = "{".repeat(101) + "a,b" + "}".repeat(101);
           let rejected = false;
@@ -77,25 +76,8 @@ jobs:
             )
           done
 
-      - name: Run OSV scanner diagnostic
-        shell: bash
-        run: |
-          set +e
-          docker run --rm             -v "$PWD:/github/workspace"             -w /github/workspace             ghcr.io/google/osv-scanner-action:v2.6.0             --lockfile=backend/package-lock.json             --lockfile=frontend/package-lock.json
-          status=$?
-          echo "OSV_DIAGNOSTIC_EXIT=$status"
-          exit 0
-
-      - name: Commit deterministic lockfile refresh
+      - name: Fail closed on OSV findings
         shell: bash
         run: |
           set -euo pipefail
-          if git diff --quiet -- backend/package-lock.json frontend/package-lock.json; then
-            echo "Lockfiles already current."
-            exit 0
-          fi
-          git config user.name "diewish-security-bot"
-          git config user.email "security-bot@users.noreply.github.com"
-          git add backend/package-lock.json frontend/package-lock.json
-          git commit -m "security(braces): lock reviewed depth-guard patch"
-          git push origin HEAD:security/braces-ghsa-2026-a1
+          docker run --rm             -v "$PWD:/github/workspace"             -w /github/workspace             ghcr.io/google/osv-scanner-action:v2.6.0             --lockfile=backend/package-lock.json             --lockfile=frontend/package-lock.json
