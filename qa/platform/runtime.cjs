@@ -7,6 +7,7 @@ const c = require('./contract.cjs');
 const pw = createRequire(path.join(c.ROOT, 'frontend/package.json'))('playwright');
 const scenarios = require('./scenarios.json');
 const { navigate } = require('./navigation.cjs');
+const { openList } = require('./coach-list.cjs');
 const { openAndroidRuntime } = require('./android-runtime.cjs');
 const { stage: androidStage } = require('./android-stage.cjs');
 async function openRuntime(platform, engine = 'chromium') {
@@ -45,12 +46,6 @@ async function logout(page) {
   await page.goto(c.ORIGIN + '/profile');
   await page.getByRole('button', { name: /Çıkış/i }).click();
   await page.waitForURL(c.ORIGIN + '/login');
-}
-async function openList(page) {
-  const b = page.getByRole('button', { name: 'Sohbet geçmişi', exact: true });
-  if (await b.isVisible()) await b.click();
-  await page.locator('nav[aria-label="Sohbetler"]:visible').first().waitFor({ state: 'visible' });
-  await page.getByText('Sohbetler yükleniyor...', { exact: true }).first().waitFor({ state: 'hidden' });
 }
 async function assertCredentialScreenshotSafe(page) {
   const values = await page.locator('input[type="email"],input[type="password"],input[name="email"],input[name="password"]').evaluateAll(nodes => nodes.some(n => n.value));

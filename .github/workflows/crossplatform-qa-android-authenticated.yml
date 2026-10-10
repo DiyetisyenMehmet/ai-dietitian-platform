@@ -29,3 +29,5 @@ jobs:
 # Expose only fixed sync phases to locate the first runtime timeout; behavior and capture rules stay unchanged.
 
 # Separate target navigation from list opening; emit only fixed UI-control visibility flags.
+
+# Wait for the mounted coach history control before opening the target list.
