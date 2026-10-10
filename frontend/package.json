@@ -54,6 +54,6 @@
   "overrides": {
     "postcss": "8.5.23",
     "postcss-selector-parser": "7.1.6",
-    "braces": "https://github.com/FSDevelop/braces/archive/28d440b5dd449dbf1fe6f3506cf94ecca4d02660.tar.gz"
+    "braces": "file:vendor/braces"
   }
 }
