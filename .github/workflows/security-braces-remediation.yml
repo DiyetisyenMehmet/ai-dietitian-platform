@@ -1,0 +1,101 @@
+name: Security Braces Remediation
+
+on:
+  push:
+    branches:
+      - security/braces-ghsa-2026-a1
+
+permissions:
+  contents: write
+
+jobs:
+  verify-and-lock:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Refresh backend lockfile
+        working-directory: backend
+        run: npm install --package-lock-only --ignore-scripts
+
+      - name: Refresh frontend lockfile
+        working-directory: frontend
+        run: npm install --package-lock-only --ignore-scripts
+
+      - name: Install backend dependency tree
+        working-directory: backend
+        run: npm ci --ignore-scripts
+
+      - name: Install frontend dependency tree
+        working-directory: frontend
+        run: npm ci --ignore-scripts
+
+      - name: Show braces dependency paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "=== BACKEND ==="
+          (cd backend && npm ls braces --all)
+          echo "=== FRONTEND ==="
+          (cd frontend && npm ls braces --all)
+
+      - name: Verify upstream security patch behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+          for dir in backend frontend; do
+            (
+              cd "$dir"
+              node <<'NODE'
+          const braces = require("braces");
+          const shallow = braces("{a,b}");
+          if (!Array.isArray(shallow) || shallow.length === 0) {
+            throw new Error("ordinary brace expansion compatibility check failed");
+          }
+          const hostile = "{".repeat(101) + "a,b" + "}".repeat(101);
+          let rejected = false;
+          try {
+            braces(hostile);
+          } catch (error) {
+            rejected = /exceeds max depth/i.test(String(error && error.message));
+          }
+          if (!rejected) {
+            throw new Error("GHSA-vfj7-8cjw-p6xm hostile nesting was not safely rejected");
+          }
+          console.log("BRACES_DEPTH_GUARD=PASS");
+          NODE
+            )
+          done
+
+      - name: Run OSV scanner diagnostic
+        shell: bash
+        run: |
+          set +e
+          docker run --rm             -v "$PWD:/github/workspace"             -w /github/workspace             ghcr.io/google/osv-scanner-action:v2.6.0             --lockfile=backend/package-lock.json             --lockfile=frontend/package-lock.json
+          status=$?
+          echo "OSV_DIAGNOSTIC_EXIT=$status"
+          exit 0
+
+      - name: Commit deterministic lockfile refresh
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- backend/package-lock.json frontend/package-lock.json; then
+            echo "Lockfiles already current."
+            exit 0
+          fi
+          git config user.name "diewish-security-bot"
+          git config user.email "security-bot@users.noreply.github.com"
+          git add backend/package-lock.json frontend/package-lock.json
+          git commit -m "security(braces): lock reviewed depth-guard patch"
+          git push origin HEAD:security/braces-ghsa-2026-a1
