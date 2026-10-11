@@ -75,7 +75,7 @@ function fetchAuthHarness(rawFetch, disk, enabled = true) {
     react: {}, '@/infrastructure/api/http-client': http,
     '@/infrastructure/auth/auth-client': { authClient },
   }, { window: native.window });
-  return { store: authStore, client: authClient, ...native };
+  return { store: authStore, client: authClient, http, ...native };
 }
 
 test('baseline page-finished checkpoint misses later fetch; native completion checkpoint restores after kill', async () => {
@@ -215,4 +215,30 @@ test('document-start observer retains an in-flight startup refresh through the p
   await refresh;
   disk.kill();
   assert.equal(disk.ram, 'synthetic-current');
+});
+
+test('concurrent live streams refresh the existing HttpOnly session once and send only Bearer headers', async () => {
+  const disk = diskModel(), refresh = deferred();
+  let refreshCalls = 0;
+  const streamCalls = [];
+  const h = fetchAuthHarness(async (url, options) => {
+    if (url.endsWith('/auth/refresh-token')) {
+      refreshCalls++;
+      await refresh.promise;
+      return response(session('new'));
+    }
+    assert.equal(url, '/api/ai-chat/events');
+    assert.equal(options.credentials, 'include');
+    streamCalls.push(options.headers.get('authorization'));
+    return new Response(null, { status: options.headers.get('authorization') === 'Bearer memory-new' ? 200 : 401,
+      headers: { 'content-type': 'text/event-stream' } });
+  }, disk);
+  h.store.setSession(session('old'));
+  const streams = [h.http.apiStream({ path: '/ai-chat/events' }), h.http.apiStream({ path: '/ai-chat/events' })];
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(refreshCalls, 1);
+  refresh.resolve();
+  assert.deepEqual((await Promise.all(streams)).map(r => r.status), [200, 200]);
+  assert.deepEqual(streamCalls, ['Bearer memory-old', 'Bearer memory-old', 'Bearer memory-new', 'Bearer memory-new']);
+  assert.equal(h.store.getSnapshot().status, 'authenticated');
 });

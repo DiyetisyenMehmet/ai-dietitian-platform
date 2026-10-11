@@ -77,6 +77,82 @@ function harness(api) {
 }
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 
+test("live turn replaces active canonical history once and never reloads the full list", async () => {
+  const row = summary("a");
+  let history = detail(row);
+  const h = harness(async (o) =>
+    o.path.endsWith("/summary")
+      ? { conversation: row }
+      : o.path.endsWith("/conversations")
+        ? { conversations: [row] }
+        : history,
+  );
+  await h.store.initialize();
+  history = {
+    conversation: {
+      ...row,
+      messages: [
+        ...history.conversation.messages,
+        {
+          id: "remote-answer",
+          role: "ASSISTANT",
+          content: "Remote answer",
+          createdAt: row.updatedAt,
+        },
+      ],
+    },
+  };
+  const before = h.calls.length;
+  for (let i = 0; i < 2; i++)
+    assert.equal(await h.store.syncConversation({ type: "turn", conversationId: "a" }), true);
+  assert.equal(h.state().activeId, "a");
+  assert.equal(h.state().conversations[0].messages.length, 2);
+  assert.equal(h.calls.slice(before).filter((o) => o.path.endsWith("/conversations")).length, 0);
+});
+
+test("live summaries preserve the selected draft, use no inactive details, and deletion removes a thread", async () => {
+  let row = summary("a");
+  const h = harness(async (o) =>
+    o.path.endsWith("/summary")
+      ? { conversation: row }
+      : o.path.endsWith("/conversations")
+        ? { conversations: [row] }
+        : detail(row),
+  );
+  await h.store.initialize();
+  h.store.newChat();
+  const draft = h.state().activeId;
+  const before = h.calls.length;
+  row = { ...summary("a", "Remote title", 2), pinnedAt: "2026-10-10T13:00:00Z" };
+  for (const type of ["renamed", "pinned", "turn"])
+    assert.equal(await h.store.syncConversation({ type, conversationId: "a" }), true);
+  assert.equal(h.state().activeId, draft);
+  assert.equal(h.state().conversations.find((c) => c.id === "a").title, "Remote title");
+  assert.ok(h.state().conversations.find((c) => c.id === "a").pinnedAt);
+  assert.ok(h.calls.slice(before).every((o) => o.path.endsWith("/summary")));
+  await h.store.syncConversation({ type: "deleted", conversationId: "a" });
+  assert.ok(!h.state().conversations.some((c) => c.id === "a"));
+  assert.equal(h.state().activeId, draft);
+});
+
+test("late live summary from the previous account cannot populate a reset store", async () => {
+  const old = summary("old"),
+    pending = deferred();
+  const h = harness(async (o) =>
+    o.path.endsWith("/summary")
+      ? pending.promise
+      : o.path.endsWith("/conversations")
+        ? { conversations: [old] }
+        : detail(old),
+  );
+  await h.store.initialize();
+  const update = h.store.syncConversation({ type: "renamed", conversationId: "old" });
+  h.store.resetSession();
+  pending.resolve({ conversation: old });
+  assert.equal(await update, false);
+  assert.ok(!h.state().conversations.some((c) => c.id === "old"));
+});
+
 test("mounted coach reloads when parent account hydration resets it; baseline [] effect loses history", async () => {
   const row = summary("persisted");
   const h = harness(async (o) =>
