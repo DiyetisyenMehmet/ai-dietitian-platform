@@ -230,7 +230,8 @@ test("dashboard home compact refinement keeps the approved scope and geometry", 
   assert.match(header, /normalizedName \? normalizedName\.split\(\/\\s\+\/\)\[0\] : "Diewish"/);
   assert.match(header, /whitespace-nowrap py-0\.5.*text-\[16px\].*min-\[360px\]:text-\[19px\].*min-\[400px\]:text-\[20px\].*min-\[430px\]:text-\[21px\].*sm:text-\[28px\]/);
   assert.match(header, /data-dashboard-greeting-emoji/);
-  assert.doesNotMatch(header, /overflow-hidden|text-ellipsis/);
+  // Only the greeting is bounded; an unbroken first name must not enlarge the mobile viewport.
+  assert.match(header, /<h1 className="min-w-0 flex-1 overflow-hidden text-ellipsis/);
   assert.match(header, /data-dashboard-header-actions/);
   assert.match(header, /flex size-9.*sm:size-10/);
   assert.match(header, /Bell className="size-4"/);
