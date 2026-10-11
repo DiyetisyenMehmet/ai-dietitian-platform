@@ -127,6 +127,10 @@ jobs:
         run: |
           sudo find /etc/apt/sources.list.d -maxdepth 1 -type f -iname '*google*chrome*' -delete
           npx playwright install --with-deps chromium
+      - name: Build frontend for real browser regression contracts
+        env:
+          NEXT_PUBLIC_API_BASE_URL: /api
+        run: npm run build
       - name: Run frontend regression contracts
         run: node --test tests/*.test.cjs
       - name: Lint notification and account lifecycle changes
@@ -138,7 +142,6 @@ jobs:
           src/presentation/components/meals/nutrition-plan-reminders.tsx
           src/presentation/providers/push-device-sync.tsx
           src/application/auth/auth-store.ts
-      - run: npm run build
       - name: Run notification and Dashboard browser regressions
         env:
           E2E_WEB_BASE_URL: http://127.0.0.1:3000

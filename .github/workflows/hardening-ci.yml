@@ -260,7 +260,8 @@ jobs:
       RATE_LIMIT_MAX: 1000
       AUTH_RATE_LIMIT_MAX: 1000
       NEXT_TELEMETRY_DISABLED: 1
-      NEXT_PUBLIC_API_BASE_URL: http://127.0.0.1:4000/api
+      NEXT_PUBLIC_API_BASE_URL: /api
+      DIEWISH_API_PROXY_TARGET: http://127.0.0.1:4000
       NEXT_PUBLIC_SITE_URL: http://127.0.0.1:3000
       E2E_WEB_BASE_URL: http://127.0.0.1:3000
       E2E_API_BASE_URL: http://127.0.0.1:4000/api
@@ -307,6 +308,9 @@ jobs:
           sudo find /etc/apt/sources.list.d -maxdepth 1 -type f -iname '*google*chrome*' -delete
           npx playwright install --with-deps chromium
           npm run build
+      - name: Test Dashboard viewport overflow and fixed navigation (51 scenarios)
+        working-directory: frontend
+        run: node --test tests/dashboard-viewport-layout.test.cjs
       - name: Test compact Journey responsive layout
         working-directory: frontend
         env:
