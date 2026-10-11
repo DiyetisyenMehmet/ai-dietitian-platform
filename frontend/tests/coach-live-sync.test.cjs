@@ -256,6 +256,30 @@ test("pending remote events wait for local reply/composer operation without poll
   assert.equal(h.changes.length, 1);
   h.stop();
 });
+test("coalesced title/pin changes retain earlier message invalidation; deletion wins", async () => {
+  for (const firstType of ["created", "turn"]) {
+    const h = harness();
+    await h.ready();
+    await h.busy(true);
+    await h.send("1", firstType);
+    await h.send("2", "renamed");
+    await h.send("3", "pinned");
+    await h.busy(false);
+    assert.equal(h.changes.length, 1);
+    assert.equal(h.changes[0].type, "turn");
+    assert.equal(h.changes[0].version, "3");
+    h.stop();
+  }
+  const h = harness();
+  await h.ready();
+  await h.busy(true);
+  await h.send("1", "turn");
+  await h.send("2", "deleted");
+  await h.busy(false);
+  assert.equal(h.changes.length, 1);
+  assert.equal(h.changes[0].type, "deleted");
+  h.stop();
+});
 test("server stream rotation with unchanged watermark never reloads a full list", async () => {
   const h = harness();
   await h.ready("5");

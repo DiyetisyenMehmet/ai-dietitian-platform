@@ -142,7 +142,15 @@ export function mountCoachSync(): () => void {
     if (lastVersion !== null && version <= lastVersion) return;
     if (lastVersion === null || version !== lastVersion + BigInt(1)) fullSnapshot = true;
     lastVersion = version;
-    pending.set(event.conversationId, event as Change);
+    const previous = pending.get(event.conversationId);
+    const contentChanged = previous?.type === "turn" || previous?.type === "created";
+    // Coalescing a later title/pin change must not discard an earlier message
+    // invalidation while a local reply or snapshot is still in progress.
+    pending.set(event.conversationId, {
+      conversationId: event.conversationId,
+      version: event.version,
+      type: contentChanged && event.type !== "deleted" ? "turn" : event.type!,
+    });
     if (pending.size > 100) {
       pending.clear();
       fullSnapshot = true;
