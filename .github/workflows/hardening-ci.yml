@@ -377,7 +377,7 @@ jobs:
           # Keep the existing browser suite's loopback rate bucket independent
           # from the new three-client suite. Restart only this hermetic test
           # process; leave database history, limits and all assertions intact.
-          curl --silent --show-error --dump-header - --output /dev/null http://127.0.0.1:4000/api/health | rg -i '^HTTP/|^RateLimit-'
+          curl --silent --show-error --dump-header - --output /dev/null http://127.0.0.1:4000/api/health | grep -Ei '^HTTP/|^RateLimit-'
           coach_a=$(cat /tmp/diewish-backend.pid)
           kill "$coach_a"
           for attempt in {1..15}; do
@@ -391,7 +391,7 @@ jobs:
             if curl --fail --silent http://127.0.0.1:4000/api/health > /dev/null; then break; fi
             sleep 1
           done
-          curl --fail --silent --show-error --dump-header - --output /dev/null http://127.0.0.1:4000/api/health | rg -i '^HTTP/|^RateLimit-'
+          curl --fail --silent --show-error --dump-header - --output /dev/null http://127.0.0.1:4000/api/health | grep -Ei '^HTTP/|^RateLimit-'
           PORT=4001 node ../backend/dist/integration/helpers/coach-server.js > /tmp/coach-server-b.log 2>&1 &
           coach_b=$!
           PORT=4002 node ../backend/dist/integration/helpers/coach-server.js > /tmp/coach-server-c.log 2>&1 &
