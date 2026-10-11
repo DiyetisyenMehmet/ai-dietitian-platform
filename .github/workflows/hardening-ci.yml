@@ -290,7 +290,7 @@ jobs:
       - name: Start backend
         working-directory: backend
         run: |
-          npm start > /tmp/diewish-backend.log 2>&1 &
+          node dist/index.js > /tmp/diewish-backend.log 2>&1 &
           echo $! > /tmp/diewish-backend.pid
       - name: Wait for backend
         run: |
@@ -337,23 +337,6 @@ jobs:
           done
           cat /tmp/diewish-frontend.log
           exit 1
-      - name: Run Coach event synchronization in Chromium and WebKit across three servers
-        working-directory: frontend
-        run: |
-          PORT=4001 node ../backend/dist/integration/helpers/coach-server.js > /tmp/coach-server-b.log 2>&1 &
-          coach_b=$!
-          PORT=4002 node ../backend/dist/integration/helpers/coach-server.js > /tmp/coach-server-c.log 2>&1 &
-          coach_c=$!
-          trap 'kill "$coach_b" "$coach_c" 2>/dev/null || true' EXIT
-          for port in 4001 4002; do
-            ready=false
-            for attempt in {1..30}; do
-              if curl --fail --silent "http://127.0.0.1:${port}/api/health" > /dev/null; then ready=true; break; fi
-              sleep 1
-            done
-            test "$ready" = true
-          done
-          npx playwright test e2e/coach-event-driven.spec.ts --workers=1 --reporter=line
       - name: Run targeted Dashboard card personalization E2E
         working-directory: frontend
         run: >-
@@ -388,6 +371,41 @@ jobs:
           e2e/admin-subscription.spec.js
           e2e/admin-entitlement-operations.spec.js
           --workers=1 --reporter=line
+      - name: Run Coach event synchronization in Chromium and WebKit across three servers
+        working-directory: frontend
+        run: |
+          # Keep the existing browser suite's loopback rate bucket independent
+          # from the new three-client suite. Restart only this hermetic test
+          # process; leave database history, limits and all assertions intact.
+          curl --silent --show-error --dump-header - --output /dev/null http://127.0.0.1:4000/api/health | rg -i '^HTTP/|^RateLimit-'
+          coach_a=$(cat /tmp/diewish-backend.pid)
+          kill "$coach_a"
+          for attempt in {1..15}; do
+            if ! kill -0 "$coach_a" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          ! kill -0 "$coach_a" 2>/dev/null
+          node ../backend/dist/index.js > /tmp/diewish-backend.log 2>&1 &
+          echo $! > /tmp/diewish-backend.pid
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:4000/api/health > /dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail --silent --show-error --dump-header - --output /dev/null http://127.0.0.1:4000/api/health | rg -i '^HTTP/|^RateLimit-'
+          PORT=4001 node ../backend/dist/integration/helpers/coach-server.js > /tmp/coach-server-b.log 2>&1 &
+          coach_b=$!
+          PORT=4002 node ../backend/dist/integration/helpers/coach-server.js > /tmp/coach-server-c.log 2>&1 &
+          coach_c=$!
+          trap 'kill "$coach_b" "$coach_c" 2>/dev/null || true' EXIT
+          for port in 4001 4002; do
+            ready=false
+            for attempt in {1..30}; do
+              if curl --fail --silent "http://127.0.0.1:${port}/api/health" > /dev/null; then ready=true; break; fi
+              sleep 1
+            done
+            test "$ready" = true
+          done
+          npx playwright test e2e/coach-event-driven.spec.ts --workers=1 --reporter=line
       - name: Upload Blood Test card browser screenshots
         if: always()
         uses: actions/upload-artifact@v4
