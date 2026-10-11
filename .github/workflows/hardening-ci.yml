@@ -7,6 +7,7 @@ on:
       - feature/android-native-scanner
       - feature/staging-preview
       - feature/app5-bottom-nav-scroll-containment-a2
+      - feature/app6-coach-event-driven-sync-p2-a1
       - feature/app6-coach-crossplatform-sync-p1-a1
       - security/braces-ghsa-2026-a1
       - feature/workmode2-dashboard-journey-compact-text-a1
@@ -138,6 +139,8 @@ jobs:
           tests/journey-compact-ui.test.cjs
       - name: Validate staging History runtime spec syntax
         run: node --check e2e/staging-history-runtime.spec.js
+      - name: Test Coach event lifecycle and account isolation
+        run: npm run test:coach-sync
       - name: Lint frontend
         run: npm run lint
       - name: Test History share formatter contracts
@@ -251,6 +254,8 @@ jobs:
       NODE_ENV: test
       DIEWISH_ENVIRONMENT: test
       PORT: 4000
+      COACH_SYNC_ENABLED: "true"
+      COACH_SYNC_DATABASE_URL: postgresql://diewish:diewish@127.0.0.1:5432/diewish_e2e?schema=public
       DATABASE_URL: postgresql://diewish:diewish@127.0.0.1:5432/diewish_e2e?schema=public
       JWT_ACCESS_SECRET: browser-e2e-access-secret-012345678901234567890123456789
       JWT_REFRESH_SECRET: browser-e2e-refresh-secret-01234567890123456789012345678
@@ -307,7 +312,7 @@ jobs:
           # index must not make our application E2E gate flaky, so remove only that
           # unrelated runner repository before asking Playwright for OS libraries.
           sudo find /etc/apt/sources.list.d -maxdepth 1 -type f -iname '*google*chrome*' -delete
-          npx playwright install --with-deps chromium
+          npx playwright install --with-deps chromium webkit
           npm run build
       - name: Test Dashboard viewport overflow and scroll containment (63 scenarios)
         working-directory: frontend
@@ -332,6 +337,23 @@ jobs:
           done
           cat /tmp/diewish-frontend.log
           exit 1
+      - name: Run Coach event synchronization in Chromium and WebKit across three servers
+        working-directory: frontend
+        run: |
+          PORT=4001 node ../backend/dist/integration/helpers/coach-server.js > /tmp/coach-server-b.log 2>&1 &
+          coach_b=$!
+          PORT=4002 node ../backend/dist/integration/helpers/coach-server.js > /tmp/coach-server-c.log 2>&1 &
+          coach_c=$!
+          trap 'kill "$coach_b" "$coach_c" 2>/dev/null || true' EXIT
+          for port in 4001 4002; do
+            ready=false
+            for attempt in {1..30}; do
+              if curl --fail --silent "http://127.0.0.1:${port}/api/health" > /dev/null; then ready=true; break; fi
+              sleep 1
+            done
+            test "$ready" = true
+          done
+          npx playwright test e2e/coach-event-driven.spec.ts --workers=1 --reporter=line
       - name: Run targeted Dashboard card personalization E2E
         working-directory: frontend
         run: >-

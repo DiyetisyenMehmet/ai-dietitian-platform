@@ -1,6 +1,7 @@
 import type { ChatConversation, ChatMessage } from "@prisma/client";
 
 import { prisma } from "../../lib/prisma";
+import { publishCoachChange, recordCoachChange } from "./coach-events";
 
 /** A conversation together with its ordered messages. */
 export type ConversationWithMessages = ChatConversation & { messages: ChatMessage[] };
@@ -24,8 +25,14 @@ export interface CreatedConversationTurn {
  */
 export const aiChatRepository = {
   /** Creates a new (empty) conversation for a user. */
-  createConversation(userId: string, title: string | null): Promise<ChatConversation> {
-    return prisma.chatConversation.create({ data: { userId, title } });
+  async createConversation(userId: string, title: string | null): Promise<ChatConversation> {
+    const result = await prisma.$transaction(async (tx) => {
+      const conversation = await tx.chatConversation.create({ data: { userId, title } });
+      const change = await recordCoachChange(tx, userId, conversation.id, "created");
+      return { conversation, change };
+    });
+    publishCoachChange(result.change);
+    return result.conversation;
   },
 
   /**
@@ -39,7 +46,7 @@ export const aiChatRepository = {
     userContent: string,
     assistant: AssistantTurnData,
   ): Promise<CreatedConversationTurn> {
-    return prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       const conversation = await tx.chatConversation.create({ data: { userId, title } });
       await tx.chatMessage.create({
         data: { conversationId: conversation.id, role: "USER", content: userContent },
@@ -53,8 +60,11 @@ export const aiChatRepository = {
           model: assistant.model,
         },
       });
-      return { conversation, assistantMessage };
+      const change = await recordCoachChange(tx, userId, conversation.id, "created");
+      return { conversation, assistantMessage, change };
     });
+    publishCoachChange(result.change);
+    return { conversation: result.conversation, assistantMessage: result.assistantMessage };
   },
 
   /** Fetches a conversation (no messages), scoped to the user. */
@@ -87,13 +97,19 @@ export const aiChatRepository = {
     userId: string,
     title: string,
   ): Promise<ChatConversation | null> {
-    const existing = await prisma.chatConversation.findFirst({ where: { id, userId } });
-    if (!existing) return null;
-
-    return prisma.chatConversation.update({
-      where: { id },
-      data: { title },
+    const result = await prisma.$transaction(async (tx) => {
+      const updated = await tx.chatConversation.updateMany({
+        where: { id, userId },
+        data: { title },
+      });
+      if (!updated.count) return null;
+      const conversation = await tx.chatConversation.findFirstOrThrow({ where: { id, userId } });
+      const change = await recordCoachChange(tx, userId, id, "renamed");
+      return { conversation, change };
     });
+    if (!result) return null;
+    publishCoachChange(result.change);
+    return result.conversation;
   },
 
   /** Sets or clears a persistent pin, owner-scoped at mutation time. */
@@ -102,13 +118,19 @@ export const aiChatRepository = {
     userId: string,
     pinned: boolean,
   ): Promise<ChatConversation | null> {
-    const result = await prisma.chatConversation.updateMany({
-      where: { id, userId },
-      data: { pinnedAt: pinned ? new Date() : null },
+    const result = await prisma.$transaction(async (tx) => {
+      const updated = await tx.chatConversation.updateMany({
+        where: { id, userId },
+        data: { pinnedAt: pinned ? new Date() : null },
+      });
+      if (!updated.count) return null;
+      const conversation = await tx.chatConversation.findFirstOrThrow({ where: { id, userId } });
+      const change = await recordCoachChange(tx, userId, id, "pinned");
+      return { conversation, change };
     });
-    if (result.count === 0) return null;
-
-    return prisma.chatConversation.findFirst({ where: { id, userId } });
+    if (!result) return null;
+    publishCoachChange(result.change);
+    return result.conversation;
   },
 
   /**
@@ -135,7 +157,7 @@ export const aiChatRepository = {
     assistant: AssistantTurnData,
     title?: string,
   ): Promise<ChatMessage> {
-    return prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       await tx.chatMessage.create({
         data: { conversationId, role: "USER", content: userContent },
       });
@@ -148,17 +170,24 @@ export const aiChatRepository = {
           model: assistant.model,
         },
       });
-      await tx.chatConversation.update({
+      const conversation = await tx.chatConversation.update({
         where: { id: conversationId },
         data: { updatedAt: new Date(), ...(title ? { title } : {}) },
       });
-      return assistantMessage;
+      const change = await recordCoachChange(tx, conversation.userId, conversationId, "turn");
+      return { assistantMessage, change };
     });
+    publishCoachChange(result.change);
+    return result.assistantMessage;
   },
 
   /** Deletes a conversation (and its messages via cascade), owner-scoped. */
   async deleteConversation(id: string, userId: string): Promise<boolean> {
-    const result = await prisma.chatConversation.deleteMany({ where: { id, userId } });
-    return result.count > 0;
+    const change = await prisma.$transaction(async (tx) => {
+      const result = await tx.chatConversation.deleteMany({ where: { id, userId } });
+      return result.count ? recordCoachChange(tx, userId, id, "deleted") : null;
+    });
+    if (change) publishCoachChange(change);
+    return !!change;
   },
 };

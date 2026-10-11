@@ -38,7 +38,12 @@ export function createApp(): Application {
   );
 
   // Response compression.
-  app.use(compression());
+  app.use(
+    compression({
+      filter: (req, res) =>
+        req.path === `${env.API_PREFIX}/ai-chat/events` ? false : compression.filter(req, res),
+    }),
+  );
 
   // Body parsing with sane size limits. The JSON parser also stashes the raw
   // request bytes on `req.rawBody` so the payment-webhook route can verify the

@@ -118,21 +118,7 @@ export async function apiRequest<TResponse>({
     throw new ApiError("Backend API yapılandırması bulunamadı.", 0);
   }
 
-  const url = `${env.apiBaseUrl.replace(/\/$/, "")}${path}`;
-  let response = await performFetch(url, init, headers, auth, accessTokenProvider?.() ?? null);
-
-  if (auth && retryOnUnauthorized && response.status === 401 && unauthorizedHandler) {
-    let refreshedToken: string | null = null;
-    try {
-      refreshedToken = await unauthorizedHandler();
-    } catch {
-      refreshedToken = null;
-    }
-
-    if (refreshedToken) {
-      response = await performFetch(url, init, headers, auth, refreshedToken);
-    }
-  }
+  const response = await apiStream({ path, headers, auth, retryOnUnauthorized, ...init });
 
   if (response.status === 204) {
     return undefined as TResponse;
@@ -166,4 +152,36 @@ export async function apiRequest<TResponse>({
     return (body as SuccessEnvelope<TResponse>).data;
   }
   return body as TResponse;
+}
+
+/** Fetch stream with the SAME in-memory Bearer and single-flight cookie refresh. */
+export async function apiStream({
+  path,
+  headers,
+  auth = true,
+  retryOnUnauthorized = true,
+  ...init
+}: RequestOptions): Promise<Response> {
+  if (!isApiConfigured()) throw new ApiError("Backend API yapılandırması bulunamadı.", 0);
+  const url = `${env.apiBaseUrl.replace(/\/$/, "")}${path}`;
+  let response = await performFetch(url, init, headers, auth, accessTokenProvider?.() ?? null);
+
+  if (auth && retryOnUnauthorized && response.status === 401 && unauthorizedHandler) {
+    let refreshedToken: string | null = null;
+    try {
+      refreshedToken = await unauthorizedHandler();
+    } catch {
+      refreshedToken = null;
+    }
+
+    if (refreshedToken) {
+      response = await performFetch(url, init, headers, auth, refreshedToken);
+    }
+  }
+
+  if (init.signal?.aborted) {
+    await response.body?.cancel();
+    throw new ApiError("Request cancelled", 0);
+  }
+  return response;
 }

@@ -7,6 +7,7 @@ import { AlertCircle, Menu } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { ThemeToggle } from "@/presentation/components/layout/theme-toggle";
 import { useActiveConversation, useChatState, chatStore } from "@/application/chat/chat-store";
+import { mountCoachSync } from "@/application/chat/coach-live-sync";
 import { useHealthProfile } from "@/application/health/health-profile-store";
 import { AiAvatar } from "./ai-avatar";
 import { ChatSidebar } from "./chat-sidebar";
@@ -31,19 +32,7 @@ export function ChatView({ initialPrompt }: { initialPrompt?: string | null }) {
   const messages = conversation.messages;
   const lastMessage = messages[messages.length - 1];
 
-  React.useEffect(() => {
-    const refresh = () => {
-      if (document.visibilityState === "visible") void chatStore.refresh();
-    };
-    const timer = window.setInterval(refresh, 5000);
-    window.addEventListener("focus", refresh);
-    document.addEventListener("visibilitychange", refresh);
-    return () => {
-      window.clearInterval(timer);
-      window.removeEventListener("focus", refresh);
-      document.removeEventListener("visibilitychange", refresh);
-    };
-  }, []);
+  React.useEffect(() => mountCoachSync(), []);
 
   const scrollToBottom = React.useCallback((behavior: ScrollBehavior = "smooth") => {
     const el = scrollRef.current;

@@ -46,6 +46,7 @@ model User {
   nutritionPlans    NutritionPlan[]
   nutritionPlanDeviations NutritionPlanDeviation[]
   chatConversations ChatConversation[]
+  coachSyncRevision CoachSyncRevision?
   aiUsageEvents     AiUsageEvent[]
   subscriptions     Subscription[]
   payments          Payment[]
@@ -441,6 +442,14 @@ model ChatConversation {
   @@index([userId])
   @@index([userId, pinnedAt])
   @@map("chat_conversations")
+}
+
+model CoachSyncRevision {
+  userId String @id @map("user_id")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  version BigInt @default(0)
+
+  @@map("coach_sync_revisions")
 }
 
 model ChatMessage {

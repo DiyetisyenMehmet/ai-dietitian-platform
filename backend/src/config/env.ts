@@ -30,6 +30,8 @@ const envSchema = z.object({
   ADMIN_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(60),
   AUTH_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(15 * 60 * 1000),
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
+  COACH_SYNC_ENABLED: booleanFromEnv.default(false),
+  COACH_SYNC_DATABASE_URL: z.string().url().optional(),
   DATABASE_URL: z.string().url({ message: "DATABASE_URL must be a valid connection string" }),
   JWT_ACCESS_SECRET: z.string().min(32, "JWT_ACCESS_SECRET must be at least 32 characters"),
   JWT_REFRESH_SECRET: z.string().min(32, "JWT_REFRESH_SECRET must be at least 32 characters"),

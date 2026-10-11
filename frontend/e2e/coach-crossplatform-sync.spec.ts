@@ -26,6 +26,14 @@ async function setup(page: Page, granted: boolean) {
         },
         tokens: { accessToken: "synthetic-token" },
       });
+    if (path.endsWith("/ai-chat/events"))
+      return route.fulfill({
+        status: 409,
+        json: {
+          success: false,
+          error: { code: "COACH_SYNC_DISABLED", message: "Explicit P1 rollback fixture" },
+        },
+      });
     if (path.endsWith("/legal/consents")) return ok({ allMandatoryGranted: granted, items: [] });
     if (path.endsWith("/onboarding")) return ok({ profile: null });
     if (path.endsWith("/ai-chat/conversations")) return ok({ conversations: rows });

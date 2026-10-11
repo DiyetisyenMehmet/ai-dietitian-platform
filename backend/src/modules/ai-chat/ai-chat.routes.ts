@@ -4,6 +4,11 @@ import { authenticate } from "../../middleware/authenticate";
 import { requireConsent } from "../../middleware/require-consent";
 import { validate } from "../../middleware/validate";
 import { aiChatController } from "./ai-chat.controller";
+import { coachStream } from "./coach-stream";
+import { aiChatRepository } from "./ai-chat.repository";
+import { asyncHandler } from "../../utils/async-handler";
+import { ApiError } from "../../utils/api-error";
+import { sendSuccess } from "../../utils/api-response";
 import {
   conversationIdParamSchema,
   pinConversationSchema,
@@ -19,6 +24,19 @@ import {
  * stays available after consent withdrawal.
  */
 export const aiChatRouter = Router();
+
+aiChatRouter.get("/events", authenticate, coachStream);
+aiChatRouter.get(
+  "/conversations/:id/summary",
+  authenticate,
+  validate({ params: conversationIdParamSchema }),
+  asyncHandler(async (req, res) => {
+    const conversation = await aiChatRepository.findConversation(req.params.id!, req.user!.id);
+    if (!conversation) throw ApiError.notFound("Conversation not found.");
+    const { id, title, pinnedAt, createdAt, updatedAt } = conversation;
+    sendSuccess(res, { conversation: { id, title, pinnedAt, createdAt, updatedAt } });
+  }),
+);
 
 /**
  * @openapi
