@@ -6,6 +6,7 @@ on:
       - fix/production-hardening
       - feature/android-native-scanner
       - feature/staging-preview
+      - feature/app5-bottom-nav-scroll-containment-a2
       - feature/app6-coach-crossplatform-sync-p1-a1
       - security/braces-ghsa-2026-a1
       - feature/workmode2-dashboard-journey-compact-text-a1
@@ -308,7 +309,7 @@ jobs:
           sudo find /etc/apt/sources.list.d -maxdepth 1 -type f -iname '*google*chrome*' -delete
           npx playwright install --with-deps chromium
           npm run build
-      - name: Test Dashboard viewport overflow and fixed navigation (51 scenarios)
+      - name: Test Dashboard viewport overflow and scroll containment (63 scenarios)
         working-directory: frontend
         run: node --test tests/dashboard-viewport-layout.test.cjs
       - name: Test compact Journey responsive layout

@@ -13,7 +13,7 @@ function isActiveRoute(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-/** Fixed bottom navigation bar for primary destinations (mobile-first). */
+/** Navigation stays outside the AppShell's scrolling content. */
 declare global {
   interface Window {
     __DIEWISH_NAVIGATE_HOME__?: () => void;
@@ -33,7 +33,10 @@ export function BottomNavigation() {
     // Labels can wrap with enlarged text. Reserve the real bar height (including
     // safe-area padding) in this shell without changing the navigation design.
     const updateHeight = () => {
-      shell.style.setProperty("--bottom-navigation-height", `${nav.getBoundingClientRect().height}px`);
+      shell.style.setProperty(
+        "--bottom-navigation-height",
+        `${nav.getBoundingClientRect().height}px`,
+      );
     };
     const observer = new ResizeObserver(updateHeight);
     observer.observe(nav, { box: "border-box" });
@@ -59,7 +62,7 @@ export function BottomNavigation() {
     <nav
       ref={navRef}
       aria-label="Ana gezinme"
-      className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/90 backdrop-blur-lg"
+      className="safe-bottom relative z-40 shrink-0 border-t border-border bg-background/90 backdrop-blur-lg"
     >
       <ul className="mx-auto flex w-full max-w-2xl items-stretch justify-between px-2">
         {PRIMARY_NAVIGATION.map((item) => {
@@ -84,9 +87,7 @@ export function BottomNavigation() {
                   )}
                 >
                   <Icon
-                    className={cn(
-                      item.id === "ai" ? "size-7 fill-current" : "size-5",
-                    )}
+                    className={cn(item.id === "ai" ? "size-7 fill-current" : "size-5")}
                     aria-hidden="true"
                   />
                 </span>

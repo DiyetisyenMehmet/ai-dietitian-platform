@@ -102,7 +102,7 @@ async function drag(page: Page, from: string, to: string, axis: "x" | "y", touch
   expect(await page.evaluate(({ x, y, from }) => !!document.elementFromPoint(x, y)?.closest(from), { x, y, from })).toBe(true);
   const tx = axis === "x" ? b.x + b.width * 0.2 : x;
   const ty = axis === "y" ? b.y + b.height * 0.2 : y;
-  let scrollBeforeDrag = await page.evaluate(() => scrollY);
+  let scrollBeforeDrag = await page.evaluate(() => document.querySelector<HTMLElement>("[data-app-scroll]")!.scrollTop);
   if (touch) {
     const cdp = await page.context().newCDPSession(page);
     await cdp.send("Input.dispatchTouchEvent", {
@@ -112,7 +112,7 @@ async function drag(page: Page, from: string, to: string, axis: "x" | "y", touch
     await page.waitForTimeout(190);
     // The hold stops inertia from the preceding native scroll. The intentional
     // drag must keep that settled viewport position throughout the move/drop.
-    scrollBeforeDrag = await page.evaluate(() => scrollY);
+    scrollBeforeDrag = await page.evaluate(() => document.querySelector<HTMLElement>("[data-app-scroll]")!.scrollTop);
     for (let i = 1; i <= 10; i++)
       await cdp.send("Input.dispatchTouchEvent", {
         type: "touchMove",
@@ -125,7 +125,7 @@ async function drag(page: Page, from: string, to: string, axis: "x" | "y", touch
     await page.mouse.move(tx, ty, { steps: 10 });
     await page.mouse.up();
   }
-  expect(await page.evaluate(() => scrollY)).toBeCloseTo(scrollBeforeDrag, 0);
+  expect(await page.evaluate(() => document.querySelector<HTMLElement>("[data-app-scroll]")!.scrollTop)).toBeCloseTo(scrollBeforeDrag, 0);
 }
 
 test("only Save persists; dirty exit, minimums, restore/reset drafts, failure and duplicate prevention", async ({
@@ -270,7 +270,7 @@ test("native touch: immediate swipe scrolls, stationary hold drags both full sur
     await food.evaluate((node) => node.scrollIntoView({ block: "center", behavior: "instant" }));
     const box = (await food.boundingBox())!;
     const cdp = await context.newCDPSession(page);
-    const before = await page.evaluate(() => scrollY);
+    const before = await page.evaluate(() => document.querySelector<HTMLElement>("[data-app-scroll]")!.scrollTop);
     const x = box.x + box.width / 2,
       y = box.y + box.height / 2;
     await cdp.send("Input.dispatchTouchEvent", {
@@ -283,7 +283,7 @@ test("native touch: immediate swipe scrolls, stationary hold drags both full sur
         touchPoints: [{ x, y: y + i * 15, id: 1 }],
       });
     await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
-    await expect.poll(() => page.evaluate(() => scrollY)).toBeLessThan(before - 20);
+    await expect.poll(() => page.evaluate(() => document.querySelector<HTMLElement>("[data-app-scroll]")!.scrollTop)).toBeLessThan(before - 20);
     expect(await ids(cards(page))).toEqual(defaults().order);
     await drag(
       page,

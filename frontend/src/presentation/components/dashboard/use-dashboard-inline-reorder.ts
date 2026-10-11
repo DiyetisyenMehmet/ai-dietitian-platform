@@ -31,6 +31,13 @@ const ACTIVATION_DISTANCE = 5;
 const TOUCH_SCROLL_TOLERANCE = 8;
 const SETTLE_MS = 220;
 
+function scrollOffset(element: HTMLElement) {
+  const region = element.closest<HTMLElement>("[data-app-scroll]");
+  if (!region) return { x: window.scrollX, y: window.scrollY };
+  const bounds = region.getBoundingClientRect();
+  return { x: region.scrollLeft - bounds.left, y: region.scrollTop - bounds.top };
+}
+
 export function useDashboardInlineReorder<T extends string>({
   group,
   axis,
@@ -90,10 +97,11 @@ export function useDashboardInlineReorder<T extends string>({
       const old = boxes.current.get(id);
       const running = animations.current.get(node);
       const visual = node.getBoundingClientRect();
+      const offset = scrollOffset(node);
       const matrix = new DOMMatrixReadOnly(getComputedStyle(node).transform);
       const next = new DOMRect(
-        visual.left - matrix.m41 + window.scrollX,
-        visual.top - matrix.m42 + window.scrollY,
+        visual.left - matrix.m41 + offset.x,
+        visual.top - matrix.m42 + offset.y,
         node.offsetWidth,
         node.offsetHeight,
       );
@@ -101,8 +109,8 @@ export function useDashboardInlineReorder<T extends string>({
         running.cancel();
         animations.current.delete(node);
       }
-      // Scroll and responsive layout changes are not reorders. Store document
-      // coordinates so a real reorder never includes the page's scroll offset.
+      // Scroll and responsive layout changes are not reorders. Store coordinates
+      // in the actual scroll region so scrolling cannot become a reorder offset.
       if (
         !disabled &&
         changedOrder &&
@@ -111,8 +119,8 @@ export function useDashboardInlineReorder<T extends string>({
       ) {
         animate(
           node,
-          (running ? visual.left + window.scrollX : old.left) - next.left,
-          (running ? visual.top + window.scrollY : old.top) - next.top,
+          (running ? visual.left + offset.x : old.left) - next.left,
+          (running ? visual.top + offset.y : old.top) - next.top,
         );
       }
       boxes.current.set(id, next);
@@ -240,15 +248,18 @@ export function useDashboardInlineReorder<T extends string>({
       const nodes = elements();
       const rects = nodes.map((node) => node.getBoundingClientRect());
       boxes.current = new Map(
-        nodes.map((node, index) => [
-          node.dataset.personalizeItem as T,
-          new DOMRect(
-            rects[index].left + window.scrollX,
-            rects[index].top + window.scrollY,
-            rects[index].width,
-            rects[index].height,
-          ),
-        ]),
+        nodes.map((node, index) => {
+          const offset = scrollOffset(node);
+          return [
+            node.dataset.personalizeItem as T,
+            new DOMRect(
+              rects[index].left + offset.x,
+              rects[index].top + offset.y,
+              rects[index].width,
+              rects[index].height,
+            ),
+          ];
+        }),
       );
       gesture.current = {
         id,
@@ -276,7 +287,8 @@ export function useDashboardInlineReorder<T extends string>({
           // A touch that interrupts a fling may already be uncancelable. Lock
           // native viewport panning only after the intentional stationary hold.
           // Immediate swipes cancel before this timer and keep native scrolling.
-          const viewport = document.documentElement;
+          const viewport =
+            current.element.closest<HTMLElement>("[data-app-scroll]") ?? document.documentElement;
           const overflow = viewport.style.getPropertyValue("overflow");
           const priority = viewport.style.getPropertyPriority("overflow");
           viewport.style.setProperty("overflow", "hidden");
