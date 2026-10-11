@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
@@ -23,6 +23,26 @@ declare global {
 export function BottomNavigation() {
   const pathname = usePathname();
   const router = useRouter();
+  const navRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const nav = navRef.current;
+    const shell = nav?.parentElement;
+    if (!nav || !shell) return;
+
+    // Labels can wrap with enlarged text. Reserve the real bar height (including
+    // safe-area padding) in this shell without changing the navigation design.
+    const updateHeight = () => {
+      shell.style.setProperty("--bottom-navigation-height", `${nav.getBoundingClientRect().height}px`);
+    };
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(nav, { box: "border-box" });
+    updateHeight();
+    return () => {
+      observer.disconnect();
+      shell.style.removeProperty("--bottom-navigation-height");
+    };
+  }, []);
 
   useEffect(() => {
     const navigateHome = () => router.replace("/dashboard");
@@ -37,6 +57,7 @@ export function BottomNavigation() {
 
   return (
     <nav
+      ref={navRef}
       aria-label="Ana gezinme"
       className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/90 backdrop-blur-lg"
     >

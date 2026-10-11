@@ -46,7 +46,7 @@ export function AppShell({
         <main
           className={cn(
             "relative flex min-h-0 flex-1 flex-col overflow-hidden",
-            !hideBottomNav && "mb-[calc(4.25rem+env(safe-area-inset-bottom))]",
+            !hideBottomNav && "mb-[var(--bottom-navigation-height,calc(4.25rem+env(safe-area-inset-bottom)))]",
             className,
           )}
         >
@@ -63,7 +63,7 @@ export function AppShell({
       <main
         className={cn(
           "mx-auto w-full max-w-2xl flex-1 px-4 py-5",
-          hideBottomNav ? "pb-8" : "pb-24",
+          hideBottomNav ? "pb-8" : "pb-[max(calc(6rem+env(safe-area-inset-bottom)),calc(var(--bottom-navigation-height,4.25rem)+1.25rem))]",
           className,
         )}
       >
