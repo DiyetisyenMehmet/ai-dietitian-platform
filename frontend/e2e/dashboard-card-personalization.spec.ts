@@ -432,7 +432,7 @@ test("touch drag is surface-wide and keyboard reorder stays accessible", async (
       cards: await cardIds(page),
       actions: await quickIds(page),
     };
-    await page.evaluate(() => window.scrollBy({ top: 240, behavior: "instant" }));
+    await page.evaluate(() => document.querySelector("[data-app-scroll]")!.scrollBy({ top: 240, behavior: "instant" }));
     expect(await cardIds(page)).toEqual(beforeScroll.cards);
     expect(await quickIds(page)).toEqual(beforeScroll.actions);
 
@@ -472,7 +472,7 @@ test("inline editor and hidden sheet stay responsive in light and dark modes", a
       { width: 1440, height: 900 },
     ]) {
       await page.setViewportSize(viewport);
-      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.evaluate(() => document.querySelector("[data-app-scroll]")!.scrollTo(0, 0));
 
       const rootGeometry = await page.evaluate(() => ({
         scrollWidth: document.documentElement.scrollWidth,

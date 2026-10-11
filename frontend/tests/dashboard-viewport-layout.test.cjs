@@ -245,6 +245,8 @@ async function measure(page) {
       };
     };
     const nav = document.querySelector(selector);
+    const main = document.querySelector("main");
+    const shell = document.querySelector("[data-app-shell]");
     const greeting = document.querySelector("[data-dashboard-greeting]");
     const actions = document.querySelector("[data-dashboard-header-actions]");
     const links = [...nav.querySelectorAll("a")].map((link) => {
@@ -263,7 +265,17 @@ async function measure(page) {
       htmlWidth: document.documentElement.scrollWidth,
       bodyWidth: document.body.scrollWidth,
       scrollX,
-      scrollY,
+      scrollY: main.scrollTop,
+      documentScrollY: scrollY,
+      documentHeight: document.scrollingElement.scrollHeight,
+      shell: box(shell),
+      shellPosition: getComputedStyle(shell).position,
+      main: box(main),
+      mainClientHeight: main.clientHeight,
+      mainScrollHeight: main.scrollHeight,
+      mainScrollWidth: main.scrollWidth,
+      mainOverflowY: getComputedStyle(main).overflowY,
+      mainScrollLeft: main.scrollLeft,
       visualWidth: visualViewport.width,
       visualHeight: visualViewport.height,
       nav: box(nav),
@@ -308,7 +320,15 @@ async function assertViewport(page, width, height) {
     result.rootOverflow.every((value) => value !== "hidden" && value !== "clip"),
     "document overflow must not be masked",
   );
-  assert.equal(result.navPosition, "fixed");
+  assert.equal(result.shellPosition, "fixed");
+  assert.equal(result.documentScrollY, 0, "the document must not own application scrolling");
+  assert.equal(result.documentHeight, height, "document scrollbar must not extend behind the bar");
+  assert.ok(
+    Math.abs(result.main.bottom - result.nav.top) < 0.5,
+    "content scrollport must end at navigation top",
+  );
+  assert.equal(result.mainScrollLeft, 0);
+  assert.ok(result.mainScrollWidth <= result.main.width + 0.5, "no inner horizontal overflow");
   assert.ok(Math.abs(result.nav.left) < 0.5 && Math.abs(result.nav.right - width) < 0.5);
   assert.ok(
     Math.abs(result.nav.bottom - height) < 0.5,
@@ -367,9 +387,9 @@ for (const [width, height] of [
             for (const direction of [1, -1, 1, -1, 1]) {
               await page.evaluate(
                 (d) =>
-                  scrollTo({
+                  document.querySelector("[data-app-scroll]").scrollTo({
                     left: 100,
-                    top: d > 0 ? document.documentElement.scrollHeight : 0,
+                    top: d > 0 ? document.querySelector("[data-app-scroll]").scrollHeight : 0,
                     behavior: "instant",
                   }),
                 direction,
@@ -404,7 +424,7 @@ for (const [width, height] of [
               await page
                 .getByRole("button", { name: "Detaylı günlük takibi gizle", exact: true })
                 .click();
-              await page.evaluate(() => scrollTo(0, 0));
+              await page.evaluate(() => document.querySelector("[data-app-scroll]").scrollTo(0, 0));
               await page.screenshot({
                 path: path.join(
                   artifacts,
@@ -430,16 +450,35 @@ for (const textScale of [1, 1.3]) {
       await page.getByRole("button", { name: "Detaylı günlük takibi göster", exact: true }).click();
       for (const height of [844, 700, 915, 844]) {
         await page.setViewportSize({ width: 390, height });
+        await page.waitForFunction((height) => {
+          const nav = document.querySelector('nav[aria-label="Ana gezinme"]');
+          const shell = nav.parentElement;
+          return (
+            Math.abs(shell.getBoundingClientRect().bottom - height) < 0.1 &&
+            Math.abs(
+              parseFloat(shell.style.getPropertyValue("--bottom-navigation-height")) -
+                nav.getBoundingClientRect().height,
+            ) < 0.1
+          );
+        }, height);
         await page.evaluate(() =>
-          scrollTo({ left: 100, top: document.documentElement.scrollHeight, behavior: "instant" }),
+          document.querySelector("[data-app-scroll]").scrollTo({
+            left: 100,
+            top: document.querySelector("[data-app-scroll]").scrollHeight,
+            behavior: "instant",
+          }),
         );
         await page.evaluate(() => new Promise(requestAnimationFrame));
         const result = await assertViewport(page, 390, height);
         assert.equal(result.navPaddingBottom, 34, "actual CSS env safe-area inset is exercised");
         if (textScale === 1)
-          assert.equal(result.mainPaddingBottom, 130, "existing 96px reserve plus safe area");
+          assert.equal(
+            result.mainPaddingBottom + result.nav.height,
+            130,
+            "existing 96px reserve plus safe area",
+          );
         assert.ok(
-          result.mainPaddingBottom >= result.nav.height + 19.9,
+          result.mainPaddingBottom >= 19.9,
           "reserve must follow wrapped labels and safe-area changes",
         );
         assert.ok(
@@ -508,6 +547,153 @@ test("fixed tabs navigate all destinations; Dashboard personalization persists w
           .map((node) => node.dataset.dashboardCardSlot)
           .join(",") === "food,coach,progress",
     );
+    await assertViewport(page, 390, 844);
+  } finally {
+    await context.close();
+  }
+});
+
+// A2: exercise actual input scrolling, not only programmatic geometry changes.
+for (const width of [320, 360, 390, 412, 430]) {
+  for (const theme of ["light", "dark"]) {
+    test(`${width}px ${theme}: wheel scrolling is contained above the always-hittable navigation`, async () => {
+      const { page, context } = await openDashboard({ width, theme });
+      try {
+        await page
+          .getByRole("button", { name: "Detaylı günlük takibi göster", exact: true })
+          .click();
+        await page.locator("[data-app-scroll]").evaluate((node) => node.scrollTo(0, 0));
+        const initial = await assertViewport(page, width, 844);
+        assert.equal(initial.mainOverflowY, "auto");
+        assert.ok(initial.mainScrollHeight > initial.mainClientHeight);
+        await page.mouse.move(width / 2, 400);
+        await page.mouse.wheel(0, 500);
+        await page.waitForFunction(
+          () => document.querySelector("[data-app-scroll]").scrollTop > 100,
+        );
+        const scrolled = await assertViewport(page, width, 844);
+        assert.equal(scrolled.nav.top, initial.nav.top);
+        assert.equal(
+          scrolled.main.bottom,
+          initial.nav.top,
+          "scroll indicator ends at the bar, not behind it",
+        );
+        await page
+          .locator("[data-app-scroll]")
+          .evaluate((node) => node.scrollTo(0, node.scrollHeight));
+        await page.mouse.wheel(0, 1000);
+        await page.evaluate(() => new Promise(requestAnimationFrame));
+        const bottom = await assertViewport(page, width, 844);
+        assert.ok(bottom.contentBottom <= bottom.nav.top);
+        await page.mouse.move(width / 2, bottom.nav.top + 20);
+        await page.mouse.wheel(0, 1000);
+        await page.evaluate(() => new Promise(requestAnimationFrame));
+        assert.equal(
+          (await measure(page)).scrollY,
+          bottom.scrollY,
+          "wheel over navigation cannot scroll content",
+        );
+        await page.setViewportSize({ width, height: 650 });
+        await page.waitForFunction(
+          () => document.querySelector("[data-app-shell]").getBoundingClientRect().bottom === 650,
+        );
+        await assertViewport(page, width, 650);
+        await page.setViewportSize({ width, height: 844 });
+        await page.waitForFunction(
+          () => document.querySelector("[data-app-shell]").getBoundingClientRect().bottom === 844,
+        );
+        await assertViewport(page, width, 844);
+        await page.locator(`${navSelector} a[href="/profile"]`).click();
+        await page.waitForURL(`${origin}/profile`);
+        await assertViewport(page, width, 844);
+      } finally {
+        await context.close();
+      }
+    });
+  }
+}
+
+test("visual-only viewport resize and pan keep Dashboard and Coach composer above the navigation", async () => {
+  const { page, context } = await openDashboard();
+  try {
+    // Controlled viewport events exercise the keyboard resize-visual contract;
+    // this is not a physical mobile keyboard or Android runtime assertion.
+    await page.evaluate(() => {
+      Object.defineProperty(visualViewport, "height", { configurable: true, get: () => 420 });
+      Object.defineProperty(visualViewport, "offsetTop", { configurable: true, get: () => 40 });
+      visualViewport.dispatchEvent(new Event("resize"));
+      visualViewport.dispatchEvent(new Event("scroll"));
+    });
+    await page.waitForFunction(
+      () => document.querySelector("[data-app-shell]").getBoundingClientRect().bottom === 460,
+    );
+    let result = await measure(page);
+    assert.equal(
+      result.innerHeight,
+      844,
+      "layout viewport remains tall while visual viewport shrinks",
+    );
+    assert.equal(result.shell.top, 40);
+    assert.equal(result.nav.bottom, 460);
+    assert.equal(result.main.bottom, result.nav.top);
+    assert.ok(result.links.every((link) => link.clickable));
+    await page.locator(`${navSelector} a[href="/ai"]`).click();
+    await page.waitForURL(`${origin}/ai`);
+    await page.locator("textarea").waitFor();
+    await page.locator("textarea").focus();
+    result = await measure(page);
+    assert.equal(result.shell.top, 40);
+    assert.equal(result.nav.bottom, 460);
+    assert.equal(result.main.bottom, result.nav.top);
+    assert.equal(
+      result.mainScrollHeight,
+      result.mainClientHeight,
+      "fill mode does not add a competing scroll owner",
+    );
+    const composer = await page.locator("textarea").boundingBox();
+    assert.ok(composer.y >= 40 && composer.y + composer.height <= result.nav.top);
+    assert.ok(result.links.every((link) => link.clickable));
+    await page.evaluate(() => {
+      delete visualViewport.height;
+      delete visualViewport.offsetTop;
+      visualViewport.dispatchEvent(new Event("resize"));
+    });
+    await page.waitForFunction(
+      () => document.querySelector("[data-app-shell]").getBoundingClientRect().bottom === 844,
+    );
+    await assertViewport(page, 390, 844);
+    await page.getByRole("button", { name: "Sohbet geçmişi", exact: true }).click();
+    await page.getByRole("dialog").waitFor();
+    await page.keyboard.press("Escape");
+    await page.getByRole("dialog").waitFor({ state: "hidden" });
+    await assertViewport(page, 390, 844);
+  } finally {
+    await context.close();
+  }
+});
+
+test("portalled edit dialog blocks the inner scroll region and restores navigation after closing", async () => {
+  const { page, context } = await openDashboard();
+  try {
+    await page.getByRole("button", { name: "Ana ekranı düzenle", exact: true }).click();
+    await page.locator('[data-dashboard-card-drag-handle="coach"]').focus();
+    await page.locator('[data-dashboard-card-drag-handle="coach"]').press("ArrowUp");
+    await page.getByRole("button", { name: "Ana ekran düzenlemeyi kapat", exact: true }).click();
+    await page.getByRole("dialog").waitFor();
+    const before = await page.locator("[data-app-scroll]").evaluate((node) => node.scrollTop);
+    await page.mouse.move(5, 5);
+    await page.mouse.wheel(0, 700);
+    await page.evaluate(() => new Promise(requestAnimationFrame));
+    assert.equal(
+      await page.locator("[data-app-scroll]").evaluate((node) => node.scrollTop),
+      before,
+    );
+    assert.equal(await page.evaluate(() => scrollY), 0);
+    await page.keyboard.press("Escape");
+    await page.getByRole("dialog").waitFor({ state: "hidden" });
+    await assertViewport(page, 390, 844);
+    await page.locator(`${navSelector} a[href="/meals"]`).click();
+    await page.waitForURL(`${origin}/meals`);
     await assertViewport(page, 390, 844);
   } finally {
     await context.close();
