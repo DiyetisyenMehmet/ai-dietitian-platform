@@ -394,6 +394,7 @@ test(
               data: {
                 email: `${crypto.randomUUID()}@example.invalid`,
                 passwordHash: "synthetic-unused",
+                onboardingCompleted: true,
               },
             });
             users.push(fixture.id);
