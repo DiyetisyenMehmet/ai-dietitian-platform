@@ -15,8 +15,12 @@ async function list(page: Page) {
   return nav;
 }
 async function closeList(page: Page) {
-  if ((page.viewportSize()?.width ?? 0) < 1024 && (await page.getByRole("dialog").isVisible()))
+  if ((page.viewportSize()?.width ?? 0) < 1024 && (await page.getByRole("dialog").isVisible())) {
     await page.keyboard.press("Escape");
+    // Wait for the real modal exit before asking list() to open it again.
+    // During the animation, isVisible() still returns true for the closing sheet.
+    await expect(page.getByRole("navigation", { name: "Sohbetler" })).toBeHidden();
+  }
 }
 
 test("three browser clients: six directions, zero idle list polling, lifecycle and history recovery", async () => {
@@ -85,6 +89,10 @@ test("three browser clients: six directions, zero idle list polling, lifecycle a
           await context.request.post(base + "/api/auth/login", { data: { email, password } })
         ).status(),
       ).toBe(200);
+    for (const context of contexts) {
+      context.setDefaultTimeout(10000);
+      context.setDefaultNavigationTimeout(20000);
+    }
     const pages = await Promise.all(contexts.map((context) => context.newPage()));
     const listCalls = [0, 0, 0],
       detailCalls = [0, 0, 0],
@@ -223,8 +231,10 @@ test("three browser clients: six directions, zero idle list polling, lifecycle a
         target = pages[targetIndex];
       await closeList(source);
       await closeList(target);
+      console.log(`COACH_DIRECTION_PANELS_CLOSED=${sourceIndex},${targetIndex}`);
       const text = `Senkron ${randomBytes(5).toString("hex")}`;
       await list(source);
+      console.log(`COACH_DIRECTION_SOURCE_LIST=${sourceIndex}`);
       await source.getByRole("button", { name: "Yeni Sohbet", exact: true }).click();
       await source.getByLabel("Mesaj", { exact: true }).fill(text);
       const responsePromise = source.waitForResponse(
