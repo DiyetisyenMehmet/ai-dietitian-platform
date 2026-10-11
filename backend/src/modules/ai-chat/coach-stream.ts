@@ -42,7 +42,6 @@ export const coachStream = asyncHandler(async (req: Request, res: Response) => {
   let ready = false;
   const buffered: unknown[] = [];
   let heartbeat: ReturnType<typeof setInterval> | undefined;
-  let expiry: ReturnType<typeof setTimeout> | undefined;
   const close = () => {
     if (ended) return;
     ended = true;
@@ -56,6 +55,8 @@ export const coachStream = asyncHandler(async (req: Request, res: Response) => {
     // No unbounded buffering for slow clients. Reconnect reads the watermark.
     if (!res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)) close();
   };
+  // Bound authentication/request lifetime even if LISTEN or the snapshot stalls.
+  const expiry = setTimeout(close, Math.max(0, lifetime));
   res.on("close", close);
   release = await broker.subscribe(userId, {
     changed: ({ type, conversationId, version }) => {
@@ -114,7 +115,6 @@ export const coachStream = asyncHandler(async (req: Request, res: Response) => {
         }
       })();
     }, 25000);
-    expiry = setTimeout(close, Math.max(0, Math.min(145000, claims.exp! * 1000 - Date.now())));
   } catch {
     close();
   }

@@ -319,8 +319,8 @@ async function initializeFromBackend(refresh = false): Promise<void> {
 }
 
 export const chatStore = {
-  initialize(): Promise<void> {
-    return initializeFromBackend();
+  initialize(refresh = false): Promise<void> {
+    return initializeFromBackend(refresh);
   },
 
   refresh(): Promise<void> {

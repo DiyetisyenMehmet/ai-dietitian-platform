@@ -211,7 +211,8 @@ export function mountCoachSync(): () => void {
         dataOwner = nextOwner;
         chatStore.resetSession();
       }
-      if (active()) void chatStore.initialize();
+      // Entry must load current history even when the live endpoint is unavailable.
+      if (active()) void chatStore.initialize(true);
     }
     if (active()) void connect();
     else stop();

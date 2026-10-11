@@ -29,6 +29,14 @@ const metrics = (child: ChildProcess) =>
       child.send({ command: "metrics" });
     }),
   );
+async function waitConnections(child: ChildProcess, expected: number): Promise<void> {
+  const deadline = Date.now() + 5000;
+  while (Date.now() < deadline) {
+    if ((await metrics(child)).connections === expected) return;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  assert.fail("Temporary Coach connection cleanup deadline exceeded");
+}
 const bounded = <T>(promise: Promise<T>, ms = 5000): Promise<T> =>
   new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error("Coach test deadline exceeded")), ms);
@@ -304,10 +312,12 @@ test(
       async () => {
         b.abort.abort();
         await b.done;
-        await bounded(new Promise<void>((resolve) => {
-          servers[1].child.once("exit", () => resolve());
-          servers[1].child.kill("SIGTERM");
-        }));
+        await bounded(
+          new Promise<void>((resolve) => {
+            servers[1].child.once("exit", () => resolve());
+            servers[1].child.kill("SIGTERM");
+          }),
+        );
         const sent = await request(2, "/ai-chat/messages", "POST", {
           conversationId: id,
           message: "Çevrimdışı sentetik mesaj.",
@@ -321,6 +331,107 @@ test(
           (await request(1, `/ai-chat/conversations/${id}`)).data!.conversation.messages.length,
           6,
         );
+      },
+    );
+    await t.test(
+      "simultaneous turns on separate servers keep both user/assistant pairs exactly once",
+      async () => {
+        const before = await prisma.chatMessage.count({ where: { conversationId: id } });
+        const revision = (
+          await prisma.coachSyncRevision.findUniqueOrThrow({ where: { userId: user.id } })
+        ).version;
+        const messages = ["Eşzamanlı sentetik A.", "Eşzamanlı sentetik B."];
+        const sent = await Promise.all(
+          messages.map((message, index) =>
+            request(index === 0 ? 0 : 2, "/ai-chat/messages", "POST", {
+              conversationId: id,
+              message,
+            }),
+          ),
+        );
+        assert.deepEqual(
+          sent.map((response) => response.status),
+          [201, 201],
+        );
+        assert.equal(await prisma.chatMessage.count({ where: { conversationId: id } }), before + 4);
+        for (const content of messages)
+          assert.equal(
+            await prisma.chatMessage.count({
+              where: { conversationId: id, role: "USER", content },
+            }),
+            1,
+          );
+        assert.equal(
+          (await prisma.coachSyncRevision.findUniqueOrThrow({ where: { userId: user.id } }))
+            .version,
+          revision + 2n,
+        );
+        await a.wait("changed", (frame) => BigInt(frame.data.version) >= revision + 2n);
+      },
+    );
+    await t.test(
+      "connection limits reserve API headroom and release all temporary listeners",
+      async () => {
+        const temporary: Awaited<ReturnType<typeof connect>>[] = [];
+        try {
+          for (let i = 0; i < 5; i++) temporary.push(await connect(servers[0].base, token));
+          assert.equal(
+            (
+              await fetch(servers[0].base + "/ai-chat/events", {
+                headers: { authorization: `Bearer ${token}` },
+              })
+            ).status,
+            429,
+          );
+          for (const stream of temporary) stream.abort.abort();
+          await Promise.all(temporary.map((stream) => stream.done));
+          temporary.length = 0;
+          await waitConnections(servers[0].child, 1);
+          const before = await metrics(servers[0].child),
+            start = performance.now();
+          for (let owner = 0; owner < 3; owner++) {
+            const fixture = await prisma.user.create({
+              data: {
+                email: `${crypto.randomUUID()}@example.invalid`,
+                passwordHash: "synthetic-unused",
+              },
+            });
+            users.push(fixture.id);
+            const bearer = signAccessToken({
+              userId: fixture.id,
+              email: fixture.email,
+              role: fixture.role,
+            });
+            for (let client = 0; client < 6; client++)
+              temporary.push(await connect(servers[0].base, bearer));
+          }
+          temporary.push(await connect(servers[0].base, token));
+          const after = await metrics(servers[0].child);
+          assert.equal(after.connections, 20);
+          assert.equal(
+            (
+              await fetch(servers[0].base + "/ai-chat/events", {
+                headers: { authorization: `Bearer ${token}` },
+              })
+            ).status,
+            429,
+          );
+          assert.equal((await request(0, `/ai-chat/conversations/${id}`)).status, 200);
+          console.log(
+            "COACH_CAPACITY_SAMPLE=" +
+              JSON.stringify({
+                connections: after.connections,
+                additionalConnections: 19,
+                openMs: Math.ceil(performance.now() - start),
+                heapDeltaBytes: after.heap - before.heap,
+                rssDeltaBytes: after.rss - before.rss,
+              }),
+          );
+        } finally {
+          for (const stream of temporary) stream.abort.abort();
+          await Promise.all(temporary.map((stream) => stream.done));
+        }
+        await waitConnections(servers[0].child, 1);
       },
     );
     await t.test(

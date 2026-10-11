@@ -213,10 +213,12 @@ test("three browser clients: six directions, zero idle list polling, lifecycle a
       [1, 2],
       [2, 1],
     ];
-    const latencies: number[] = [];
+    const latencies: number[] = [],
+      responseToUi: number[] = [];
     let sharedId = "",
       sharedTitle = "";
     for (const [sourceIndex, targetIndex] of directions) {
+      console.log(`COACH_DIRECTION_BEGIN=${sourceIndex},${targetIndex}`);
       const source = pages[sourceIndex],
         target = pages[targetIndex];
       await closeList(source);
@@ -229,17 +231,25 @@ test("three browser clients: six directions, zero idle list polling, lifecycle a
         (response) =>
           new URL(response.url()).pathname === "/api/ai-chat/messages" &&
           response.request().method() === "POST",
+        { timeout: 10000 },
       );
-      await source.getByRole("button", { name: "Gönder", exact: true }).click();
-      const response = await responsePromise;
+      console.log(`COACH_SEND_START=${sourceIndex}`);
+      const sentAt = performance.now();
+      const [response] = await Promise.all([
+        responsePromise,
+        source.getByRole("button", { name: "Gönder", exact: true }).click(),
+      ]);
       expect(response.status()).toBe(201);
+      console.log(`COACH_SEND_RESPONSE=${sourceIndex},${response.status()}`);
       const id = (await response.json()).data.conversationId;
       sharedId = id;
       sharedTitle = text;
-      const committedAt = performance.now();
+      const responseAt = performance.now();
       const nav = await list(target);
       await expect(nav.getByText(text, { exact: true })).toBeVisible({ timeout: 5000 });
-      latencies.push(performance.now() - committedAt);
+      latencies.push(performance.now() - sentAt);
+      responseToUi.push(performance.now() - responseAt);
+      console.log(`COACH_DIRECTION_DONE=${sourceIndex},${targetIndex}`);
       expect(await nav.getByText(text, { exact: true }).count()).toBe(1);
       expect(
         (
@@ -251,6 +261,7 @@ test("three browser clients: six directions, zero idle list polling, lifecycle a
     }
     expect(changed.every((value) => value >= 6)).toBe(true);
     console.log(`COACH_SIX_DIRECTION_UI_MS=${latencies.map(Math.ceil).join(",")}`);
+    console.log(`COACH_RESPONSE_TO_UI_MS=${responseToUi.map(Math.ceil).join(",")}`);
     // All three active views reconcile the same canonical history without
     // clearing unsent composer text or selecting a different conversation.
     for (const [index, page] of pages.entries()) {
@@ -400,10 +411,78 @@ test("three browser clients: six directions, zero idle list polling, lifecycle a
     const leftCount = eventCalls[1];
     await new Promise((resolve) => setTimeout(resolve, 5500));
     expect(eventCalls[1]).toBe(leftCount);
+    // Measure the explicit preserved 5-second rollback under the same real API.
+    // It is a control client only; healthy live clients above never select it.
+    const rollback = await chrome.newContext({ viewport: { width: 1440, height: 900 } });
+    contexts.push(rollback);
+    expect(
+      (
+        await rollback.request.post(base + "/api/auth/login", { data: { email, password } })
+      ).status(),
+    ).toBe(200);
+    const control = await rollback.newPage();
+    let controlLists = 0,
+      controlPending = 0,
+      controlActivity = performance.now();
+    control.on("request", (request) => {
+      if (
+        request.method() === "GET" &&
+        new URL(request.url()).pathname === "/api/ai-chat/conversations"
+      ) {
+        controlLists++;
+        controlPending++;
+        controlActivity = performance.now();
+      }
+    });
+    const controlFinished = (request: import("@playwright/test").Request) => {
+      if (
+        request.method() === "GET" &&
+        new URL(request.url()).pathname === "/api/ai-chat/conversations"
+      ) {
+        controlPending--;
+        controlActivity = performance.now();
+      }
+    };
+    control.on("requestfinished", controlFinished);
+    control.on("requestfailed", controlFinished);
+    await control.route("**/api/ai-chat/events", (route) =>
+      route.fulfill({
+        status: 409,
+        json: { success: false, error: { code: "COACH_SYNC_DISABLED" } },
+      }),
+    );
+    await control.goto(base + "/ai");
+    await expect(control.getByLabel("Mesaj", { exact: true })).toBeEnabled();
+    await expect
+      .poll(
+        () => controlLists > 0 && controlPending === 0 && performance.now() - controlActivity > 500,
+      )
+      .toBe(true);
+    const controlBefore = controlLists;
+    await new Promise((resolve) => setTimeout(resolve, 11500));
+    const controlDelta = controlLists - controlBefore;
+    expect(controlDelta).toBeGreaterThanOrEqual(2);
+    console.log(`COACH_ROLLBACK_IDLE_LIST_REQUESTS_11_5S=${controlDelta}`);
+    await rollback.close();
   } finally {
-    await Promise.allSettled(contexts.map((context) => context.close()));
-    await chrome.close();
-    await safari.close();
+    // A failed browser operation must retain its original diagnostic even if
+    // WebKit is disposing an interrupted streaming request.
+    const boundedClose = (operation: Promise<void>) =>
+      new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, 5000);
+        operation.then(
+          () => {
+            clearTimeout(timer);
+            resolve();
+          },
+          () => {
+            clearTimeout(timer);
+            resolve();
+          },
+        );
+      });
+    await Promise.all(contexts.map((context) => boundedClose(context.close())));
+    await Promise.all([boundedClose(chrome.close()), boundedClose(safari.close())]);
   }
 });
 function pageLastThread(page: Page) {

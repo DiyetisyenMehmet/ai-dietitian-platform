@@ -77,6 +77,18 @@ function harness(api) {
 }
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 
+test("Coach re-entry explicitly refreshes cached history even without a live transport", async () => {
+  let row = summary("a");
+  const h = harness(async (o) =>
+    o.path.endsWith("/conversations") ? { conversations: [row] } : detail(row),
+  );
+  await h.store.initialize();
+  row = summary("a", "Changed while Coach was closed", 2);
+  await h.store.initialize(true);
+  assert.equal(h.state().conversations[0].title, row.title);
+  assert.equal(h.calls.filter((o) => o.path.endsWith("/conversations")).length, 2);
+});
+
 test("live turn replaces active canonical history once and never reloads the full list", async () => {
   const row = summary("a");
   let history = detail(row);
