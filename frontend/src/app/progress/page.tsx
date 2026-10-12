@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 
 export default function ProgressPage() {
   return (
-    <AppShell title="İlerleme">
+    <AppShell title="İlerleme" hideHeader>
       <ProgressView />
     </AppShell>
   );

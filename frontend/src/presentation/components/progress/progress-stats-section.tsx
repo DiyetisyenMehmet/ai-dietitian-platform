@@ -46,6 +46,8 @@ export function ProgressStatsSection() {
   const entries = useWeightEntries();
   const profile = useHealthProfile();
   const stats = useProgressStats(entries, profile.targetWeightKg);
+  const hasComparableDays = entries.some((entry) => entry.date !== entries[0]?.date);
+  const hasConfiguredGoal = Number.isFinite(profile.targetWeightKg) && profile.targetWeightKg > 0;
 
   if (entries.length < 2) return null;
 
@@ -74,18 +76,22 @@ export function ProgressStatsSection() {
           <DeltaStat label="Hafta ort." value={stats.avgWeeklyChangeKg} />
         </div>
 
-        <div>
-          <div className="mb-1.5 flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">Hedef tamamlanma</span>
-            <span className="font-semibold">%{stats.completionPercent}</span>
+        {hasConfiguredGoal && hasComparableDays && (
+          <div>
+            <div className="mb-1.5 flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Hedef tamamlanma</span>
+              <span className="font-semibold">
+                %{stats.completionPercent}
+              </span>
+            </div>
+            <ProgressBar value={stats.completionPercent} />
+            <p className="mt-1.5 text-[11px] text-muted-foreground">
+              Hedefe mesafe: {stats.remainingKg.toLocaleString("tr-TR")} kg
+            </p>
           </div>
-          <ProgressBar value={stats.completionPercent} />
-          <p className="mt-1.5 text-[11px] text-muted-foreground">
-            Hedefe {stats.remainingKg.toLocaleString("tr-TR")} kg kaldı
-          </p>
-        </div>
+        )}
 
-        {stats.estimatedTargetLabel && (
+        {hasConfiguredGoal && hasComparableDays && stats.estimatedTargetLabel && (
           <div className="flex items-center gap-3 rounded-2xl border border-primary/20 bg-primary/5 p-3">
             <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
               <CalendarClock className="size-[18px]" aria-hidden="true" />
