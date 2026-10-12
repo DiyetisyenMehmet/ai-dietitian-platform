@@ -213,9 +213,10 @@ function removeConversationLocally(id: string) {
   setState({ conversations: remaining, error: null });
 }
 
-async function fetchConversation(id: string): Promise<Conversation> {
+async function fetchConversation(id: string, signal?: AbortSignal): Promise<Conversation> {
   const result = await apiRequest<GetConversationResponse>({
     path: `/ai-chat/conversations/${encodeURIComponent(id)}`,
+    signal,
     method: "GET",
     auth: true,
     cache: "no-store",
@@ -247,6 +248,7 @@ async function initializeFromBackend(refresh = false): Promise<void> {
         ...new Map(result.conversations.map((item) => [item.id, mapSummary(item)])).values(),
       ];
       if (!initialLoad) {
+        const summariesById = new Set(summaries.map((item) => item.id));
         const previous = new Map(state.conversations.map((item) => [item.id, item]));
         const invalidated = summaries.filter(
           (item) => previous.get(item.id)?.updatedAt !== item.updatedAt,
@@ -267,7 +269,7 @@ async function initializeFromBackend(refresh = false): Promise<void> {
         }
         for (const item of invalidated) loadedConversationIds.delete(item.id);
         for (const id of loadedConversationIds) {
-          if (!summaries.some((item) => item.id === id)) loadedConversationIds.delete(id);
+          if (!previous.has(id) || !summariesById.has(id)) loadedConversationIds.delete(id);
         }
         if (active) loadedConversationIds.add(active.id);
         const drafts = state.conversations.filter((item) => isDraftConversationId(item.id));
@@ -317,12 +319,76 @@ async function initializeFromBackend(refresh = false): Promise<void> {
 }
 
 export const chatStore = {
-  initialize(): Promise<void> {
-    return initializeFromBackend();
+  initialize(refresh = false): Promise<void> {
+    return initializeFromBackend(refresh);
   },
 
   refresh(): Promise<void> {
     return initializeFromBackend(true);
+  },
+
+  subscribe,
+  isBusy(): boolean {
+    return state.isResponding || state.isLoading || !!initializePromise;
+  },
+
+  async syncSnapshot(): Promise<boolean> {
+    const generation = sessionGeneration,
+      mutation = mutationGeneration;
+    await initializeFromBackend(true);
+    return (
+      generation === sessionGeneration &&
+      mutation === mutationGeneration &&
+      !state.error &&
+      initialized
+    );
+  },
+
+  async syncConversation(
+    change: { type: string; conversationId: string },
+    signal?: AbortSignal,
+  ): Promise<boolean> {
+    if (this.isBusy()) return false;
+    const generation = sessionGeneration,
+      mutation = mutationGeneration;
+    const id = change.conversationId;
+    if (change.type === "deleted") {
+      removeConversationLocally(id);
+      return true;
+    }
+    try {
+      const response = await apiRequest<UpdateConversationResponse>({
+        path: `/ai-chat/conversations/${encodeURIComponent(id)}/summary`,
+        auth: true,
+        cache: "no-store",
+        signal,
+      });
+      if (generation !== sessionGeneration || mutation !== mutationGeneration) return false;
+      const existing = state.conversations.find((item) => item.id === id);
+      let conversation = {
+        ...mapSummary(response.conversation),
+        messages: existing?.messages ?? [],
+      };
+      if (state.activeId === id && (change.type === "turn" || change.type === "created")) {
+        conversation = await fetchConversation(id, signal);
+        if (generation !== sessionGeneration || mutation !== mutationGeneration) return false;
+        loadedConversationIds.add(id);
+      } else if (change.type === "turn" || change.type === "created")
+        loadedConversationIds.delete(id);
+      const conversations = state.conversations.filter((item) => item.id !== id);
+      conversations.push(conversation);
+      // Sidebar applies its existing pin grouping. Do not select remote threads.
+      conversations.sort((a, b) => b.updatedAt - a.updatedAt);
+      setState({ conversations, error: null });
+      return true;
+    } catch (error) {
+      if (generation !== sessionGeneration) return false;
+      if (error instanceof ApiError && error.status === 404) {
+        removeConversationLocally(id);
+        return true;
+      }
+      return false;
+    }
   },
 
   sendMessage(text: string) {

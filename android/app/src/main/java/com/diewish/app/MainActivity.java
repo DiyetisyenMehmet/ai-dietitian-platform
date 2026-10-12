@@ -306,9 +306,16 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
     @Override
     protected void onResume() {
         super.onResume();
+        emitCoachVisibility(true);
         WellnessReminderScheduler.rescheduleStored(getApplicationContext());
         emitNotificationState();
         emitPendingNotificationOpen();
+    }
+
+    private void emitCoachVisibility(boolean active) {
+        JSONObject detail = new JSONObject();
+        try { detail.put("active", active); } catch (JSONException ignored) { return; }
+        emitEvent("diewish:app-visibility", detail);
     }
 
     private boolean isTrustedOrigin(Uri uri) {
@@ -1036,12 +1043,14 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
 
     @Override
     protected void onPause() {
+        emitCoachVisibility(false);
         persistSessionCookies();
         super.onPause();
     }
 
     @Override
     protected void onStop() {
+        emitCoachVisibility(false);
         persistSessionCookies();
         super.onStop();
     }
