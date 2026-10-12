@@ -50,6 +50,7 @@ export function MealCard({ meal, defaultOpen = false }: MealCardProps) {
   const totals = mealTotals(meal);
   const Icon = SLOT_ICON[meal.slot];
   const foodCount = meal.foods.length;
+  const missingCalories = meal.foods.some((food) => food.missingNutrition?.calories === true);
   const contentId = `meal-panel-${meal.slot}`;
   const checkboxId = `meal-eaten-${meal.slot}`;
 
@@ -129,7 +130,7 @@ export function MealCard({ meal, defaultOpen = false }: MealCardProps) {
               {meal.label}
             </span>
             <span className="mt-1 block text-sm font-semibold tabular-nums text-muted-foreground">
-              {foodCount > 0 ? formatNumber(totals.calories) + " kcal" : meal.isEaten ? "Öğün işaretlendi" : "Besin eklenmedi"}
+              {foodCount > 0 ? (missingCalories ? "Kalori bilgisi eksik" : formatNumber(totals.calories) + " kcal") : meal.isEaten ? "Öğün işaretlendi" : "Besin eklenmedi"}
             </span>
             <span className="mt-1 block max-w-full truncate text-xs text-muted-foreground">
               {foodCount > 0

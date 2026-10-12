@@ -6,7 +6,7 @@ import { CalendarDays, ChevronRight, Clock3, Plus, ScanLine } from "lucide-react
 
 import { nutritionPlanStore, useNutritionPlan } from "@/application/health/nutrition-plan-store";
 import { useHealthProfile } from "@/application/health/health-profile-store";
-import { useMeals, useMealsReadiness, computeTotals } from "@/application/meals/meals-store";
+import { useMeals, useMealsReadiness, computeTotals, findMissingNutrition } from "@/application/meals/meals-store";
 import { formatLongDate } from "@/shared/lib/format";
 import { MEAL_SLOTS, type MealSlot, type NutritionTotals } from "@/domain/meals/types";
 import type { NutritionPlanDuration } from "@/infrastructure/nutrition/nutrition-plan-client";
@@ -44,6 +44,7 @@ export default function MealsPage() {
   const readiness = useMealsReadiness();
   const profile = useHealthProfile();
   const totals = computeTotals(meals);
+  const missingNutrition = findMissingNutrition(meals);
   const totalFoods = meals.reduce((sum, meal) => sum + meal.foods.length, 0);
   const { activePlan, hydrated, loading } = useNutritionPlan();
 
@@ -121,7 +122,7 @@ export default function MealsPage() {
           </div>
         </section>
 
-        <NutritionSummary totals={totals} goals={goals} readiness={readiness} />
+        <NutritionSummary totals={totals} goals={goals} readiness={readiness} missingNutrition={missingNutrition} hasLoggedFoods={totalFoods > 0} />
 
         <section className="space-y-3" aria-labelledby="today-meals-heading" id="today-meals-list">
           <div className="flex items-center justify-between gap-2">

@@ -9,6 +9,8 @@ interface NutritionSummaryProps {
   totals: NutritionTotals;
   goals: Partial<NutritionTotals>;
   readiness: DailyDataReadiness;
+  missingNutrition: Partial<Record<keyof NutritionTotals, boolean>>;
+  hasLoggedFoods: boolean;
 }
 
 const MACROS = [
@@ -30,9 +32,11 @@ function percentOf(value: number, goal: number): number {
 }
 
 /** Real logged consumption and configured targets only; no fallback calorie goals. */
-export function NutritionSummary({ totals, goals, readiness }: NutritionSummaryProps) {
+export function NutritionSummary({
+  totals, goals, readiness, missingNutrition, hasLoggedFoods,
+}: NutritionSummaryProps) {
   const known = readiness !== "UNKNOWN";
-  const calories = known ? safeAmount(totals.calories) : null;
+  const calories = known && hasLoggedFoods && !missingNutrition.calories ? safeAmount(totals.calories) : null;
   const calorieGoal = validGoal(goals.calories);
   const hasProgress = calories !== null && calorieGoal !== null;
   const fraction = hasProgress ? percentOf(calories!, calorieGoal!) : 0;
@@ -40,8 +44,12 @@ export function NutritionSummary({ totals, goals, readiness }: NutritionSummaryP
 
   const headline = !known
     ? "Öğün kayıtların yükleniyor"
-    : !calorieGoal
-      ? "Günlük hedefin tanımlı değil"
+    : !hasLoggedFoods
+      ? "Henüz besin kaydı yok"
+      : missingNutrition.calories
+        ? "Kalori bilgisi eksik"
+        : !calorieGoal
+          ? "Günlük hedefin tanımlı değil"
       : calories === null
         ? "Kalori bilgisi gösterilemiyor"
         : calories > calorieGoal
@@ -91,9 +99,13 @@ export function NutritionSummary({ totals, goals, readiness }: NutritionSummaryP
             <p className="mt-2 text-xs leading-relaxed text-muted-foreground sm:text-sm">
               {!known
                 ? "Gerçek tüketim verilerin alındığında özet güncellenecek."
-                : calorieGoal === null
-                  ? "Hedefini profilinden belirlediğinde ilerlemen burada görünür."
-                  : "Özetin, kaydettiğin öğünlere ve tanımlı hedeflerine göre hesaplanır."}
+                : !hasLoggedFoods
+                  ? "Günlük beslenme özeti için önce gerçek besin kaydı ekle."
+                  : missingNutrition.calories
+                    ? "Bazı besinlerin kalori değeri bilinmiyor; yanlış toplam veya hedef yüzdesi gösterilmiyor."
+                    : calorieGoal === null
+                      ? "Hedefini profilinden belirlediğinde ilerlemen burada görünür."
+                      : "Özetin, kaydettiğin öğünlere ve tanımlı hedeflerine göre hesaplanır."}
             </p>
           </div>
         </div>
@@ -102,7 +114,7 @@ export function NutritionSummary({ totals, goals, readiness }: NutritionSummaryP
       <Card className="rounded-[1.5rem] border-border/60 shadow-soft">
         <div className="grid grid-cols-3 divide-x divide-border/60 px-1 py-4 sm:px-3">
           {MACROS.map(({ key, label, Icon, color, iconColor }) => {
-            const value = known ? safeAmount(totals[key]) : null;
+            const value = known && hasLoggedFoods && !missingNutrition[key] ? safeAmount(totals[key]) : null;
             const goal = validGoal(goals[key]);
             const hasMacroProgress = value !== null && goal !== null;
             const progress = hasMacroProgress ? percentOf(value!, goal!) : 0;
@@ -130,7 +142,7 @@ export function NutritionSummary({ totals, goals, readiness }: NutritionSummaryP
                   <div className={"h-full rounded-full " + color} style={{ width: progress + "%" }} />
                 </div>
                 <p className="break-words text-[10px] leading-tight text-muted-foreground sm:text-xs">
-                  {value === null ? "Veri bekleniyor" : formatNumber(value) + " g"}
+                  {value === null ? (missingNutrition[key] ? "Eksik veri" : hasLoggedFoods ? "Veri bekleniyor" : "Kayıt yok") : formatNumber(value) + " g"}
                   {goal !== null ? " / " + formatNumber(goal) + " g" : ""}
                 </p>
                 {goal === null && known && <p className="text-[10px] text-muted-foreground">Hedef tanımlı değil</p>}
