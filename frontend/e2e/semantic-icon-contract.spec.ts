@@ -51,7 +51,8 @@ test("semantic icon usage map keeps the approved Coach navigation vector in the 
 
   expect(evaluation).toContain("diewish-evaluation.png");
   expect(share).toContain("diewish-evaluation.png");
-  expect(progress).toContain("diewish-evaluation.png");
+  // Progress A1 composes the existing evaluation card through the stats component.
+  expect(progress).toContain("<ProgressStatsSection />");
   expect(stats).toContain("diewish-evaluation.png");
   expect(stats).toContain("diewish-weight-analysis.png");
 
