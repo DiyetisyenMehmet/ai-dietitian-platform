@@ -16,7 +16,9 @@ const prismaRoot = fileURLToPath(new URL("../prisma/", import.meta.url));
 const migrations = fs.readdirSync(path.join(prismaRoot, "migrations"))
   .filter(name => fs.existsSync(path.join(prismaRoot, "migrations", name, "migration.sql"))).sort();
 const additions = ["20261007124500_water_reminder_schedule", "20261007160000_notification_category_alerts"];
-assert.deepEqual(migrations.slice(-2), additions);
+const notificationStart = migrations.indexOf(additions[0]);
+assert.ok(notificationStart >= 0, "Required notification upgrade migration is missing");
+assert.deepEqual(migrations.slice(notificationStart, notificationStart + additions.length), additions);
 function run(command, args, env = process.env) {
   const result = spawnSync(command, args, { stdio: "inherit", env });
   if (result.status !== 0) throw new Error(`Isolated validation failed: ${command}`);
@@ -24,8 +26,8 @@ function run(command, args, env = process.env) {
 // The guard executes before either database is created or changed.
 run("psql", [url.href, "-v", "ON_ERROR_STOP=1", "-c", "CREATE DATABASE notification_phase6_clean_test"]);
 run("npx", ["prisma", "migrate", "deploy"], { ...process.env, DATABASE_URL: cleanUrl.href });
-// Reproduce staging's 40 actual migrations (including raw device/payment tables),
-// seed legacy preferences, then run the exact two additive migrations via Prisma.
+// Reproduce the actual migrations before notification upgrades, seed legacy
+// preferences, then apply notification upgrades and any newer migrations.
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "diewish-notification-ci-"));
 try {
   const schema = path.join(temporary, "schema.prisma");
@@ -34,7 +36,7 @@ try {
   const migrationRoot = path.join(temporary, "migrations");
   fs.mkdirSync(migrationRoot);
   fs.copyFileSync(path.join(prismaRoot, "migrations/migration_lock.toml"), path.join(migrationRoot, "migration_lock.toml"));
-  for (const name of migrations.filter(name => !additions.includes(name)))
+  for (const name of migrations.slice(0, notificationStart))
     fs.cpSync(path.join(prismaRoot, "migrations", name), path.join(migrationRoot, name), { recursive: true });
   run("npx", ["prisma", "migrate", "deploy", "--schema", schema]);
   run("psql", [url.href, "-v", "ON_ERROR_STOP=1", "-c", `
@@ -67,6 +69,6 @@ async function verifySchema(databaseUrl) {
     const old = await legacy.notificationPreference.findUniqueOrThrow({ where: { id: "legacy-pref" } });
     assert.equal(old.waterReminders, true); assert.equal(old.waterReminderTime, "13:55");
     assert.equal(old.waterReminderSchedule, null); assert.equal(old.categoryAlerts, null);
-    console.log(`Real PostgreSQL: ${migrations.length} clean migrations and ${migrations.length - 2} -> ${migrations.length} staging-history upgrade pass; legacy flags/times and NULL fields preserved.`);
+    console.log(`Real PostgreSQL: ${migrations.length} clean migrations and ${notificationStart} -> ${migrations.length} staging-history upgrade pass; legacy flags/times and NULL fields preserved.`);
   } finally { await clean.$disconnect(); await legacy.$disconnect(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });
