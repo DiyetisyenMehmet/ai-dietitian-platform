@@ -8,6 +8,7 @@ on:
       - feature/staging-preview
       - feature/app5-bottom-nav-scroll-containment-a2
       - feature/app6-coach-event-driven-sync-p2-a1
+      - feature/app6-coach-p2-listener-security-fix
       - feature/app6-coach-crossplatform-sync-p1-a1
       - security/braces-ghsa-2026-a1
       - feature/workmode2-dashboard-journey-compact-text-a1
@@ -257,7 +258,6 @@ jobs:
       DIEWISH_ENVIRONMENT: test
       PORT: 4000
       COACH_SYNC_ENABLED: "true"
-      COACH_SYNC_DATABASE_URL: postgresql://diewish:diewish@127.0.0.1:5432/diewish_e2e?schema=public
       DATABASE_URL: postgresql://diewish:diewish@127.0.0.1:5432/diewish_e2e?schema=public
       JWT_ACCESS_SECRET: browser-e2e-access-secret-012345678901234567890123456789
       JWT_REFRESH_SECRET: browser-e2e-refresh-secret-01234567890123456789012345678
@@ -289,6 +289,9 @@ jobs:
           npx prisma generate
           npx prisma migrate deploy
           npm run build
+      - name: Prepare notification-only account in the disposable CI database
+        working-directory: backend
+        run: node dist/integration/helpers/coach-listener-fixture.js
       - name: Start backend
         working-directory: backend
         run: |

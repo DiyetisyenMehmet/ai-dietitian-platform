@@ -23,11 +23,19 @@ Streams expire no later than their access token or 145 seconds, below the existi
 Default `COACH_SYNC_ENABLED=false` preserves the explicit P1 rollback. Enabling live mode needs all of the following on **staging**, after integration approval:
 
 1. Apply `20261011220000_coach_sync_revision` using the existing migration workflow. Verify the runtime role's ordinary table DML privileges for the new table.
-2. Configure `COACH_SYNC_DATABASE_URL` as a **direct connection to the same database, endpoint and runtime role** as DATABASE_URL. The transaction pooler cannot maintain LISTEN sessions. The application rejects a pooler listener, different host/database/role and production runtime. Do not mount or reuse the privileged migration credential.
+2. Configure `COACH_SYNC_DATABASE_URL` as a **direct connection to the same database and endpoint**, using only the fixed `diewish_staging_coach_listener` account. The ordinary `DATABASE_URL` and its application role remain unchanged. A pooler listener, other database/endpoint, other listener username, identity/routing query overrides or production runtime is rejected. Do not mount or reuse an application-owner or migration credential.
 3. Set `COACH_SYNC_ENABLED=true` and validate the actual frontend proxy, runtime role, Neon endpoint, Android and Safari/WebKit lifecycle on the approved staging deployment.
 4. Measure concurrency, real device latency and the billing effect before expanding capacity. No cloud resource or deployment configuration has been changed by this branch.
 
 Rollback: explicitly disable the flag; new streams receive the disabled response and use P1 polling only while Coach is active. Existing streams age out within 145 seconds. No message/history migration reversal is necessary.
+
+## Listener account guard — APP6 P2 SECURITY-FIX
+
+Before each dedicated database session starts LISTEN, a single catalog-only query verifies actual `session_user` and `current_user`, LOGIN/NOINHERIT, no superuser/createdb/createrole/replication/bypass-RLS flags, and no role memberships. It refuses database/schema CREATE, effective application table or column privileges (including PUBLIC grants), sequence access, and executable application SECURITY DEFINER functions. The guard reads permission metadata only; it grants nothing and never reads message, health or administrative rows. Failure closes the listener with a credential-free transport error; normal history/send APIs retain their existing application connection.
+
+LISTEN itself needs database CONNECT, not application table access. Default public schema USAGE and database TEMP do not confer application-table access and are not globally revoked by this change. PostgreSQL does not offer a per-channel LISTEN ACL: the broker fixes its channel and the existing authenticated owner routing and strict metadata-only envelope remain essential. Permission validation is per connection, not continuous monitoring of subsequent administrator privilege changes.
+
+This security-fix branch does **not** create a staging account, change grants/secrets, deploy, or enable the channel. Those remain separate manager decisions. The previous preparation proposal for a shared application role with broad table DML must not be used for this listener. Existing CI alone creates a temporary notification-only role in its disposable loopback PostgreSQL test/e2e database, with an ephemeral generated password; it never connects to Neon. Tests inject/revoke unsafe permissions only in that isolated service. Browser tests consume the same fixture through the existing Hardening CI rather than a second test pipeline.
 
 ## Resource model and limits
 
