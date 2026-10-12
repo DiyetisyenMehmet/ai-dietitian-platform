@@ -81,6 +81,9 @@ jobs:
           done
           log_file="$(mktemp)"
           trap 'rm -f "$log_file"' EXIT
+          gcloud builds describe "$build_id" --project "$PROJECT_ID" --region=global \
+            --format='yaml(status,failureInfo,steps.status,steps.exitCode,serviceAccount)'
+          echo "Safe permission result: exit 21 = migration secret access missing; 22 = runtime secret version-add missing; 23 = both missing."
           gcloud builds log "$build_id" --project "$PROJECT_ID" >"$log_file" 2>&1 || true
           grep 'COACH_PREFLIGHT_' "$log_file" || echo "Safe preflight details unavailable; inspect the Cloud Build log."
           if [[ "$status" != "SUCCESS" ]]; then

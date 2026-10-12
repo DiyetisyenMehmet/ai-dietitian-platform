@@ -11,7 +11,7 @@ steps:
         git fetch --depth=1 origin "${_GIT_SHA}"
         git checkout --detach FETCH_HEAD
         test "$(git rev-parse HEAD)" = "${_GIT_SHA}"
-  - name: gcr.io/google.com/cloudsdktool/google-cloud-cli:stable
+  - name: gcr.io/google.com/cloudsdktool/google-cloud-cli:slim
     entrypoint: python3
     args: [/workspace/repo/scripts/coach-sync-staging-preflight.py, --phase, build]
     env:

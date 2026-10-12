@@ -89,7 +89,10 @@ def main():
     writable = permissions(token, DATABASE_SECRET, ["secretmanager.versions.add"])
     if not readable or not writable:
         report("activation", state="BLOCKED", reason="missing-existing-secret-permission")
-        raise SystemExit(3)
+        # Cloud Build exposes the exit code as build metadata. This avoids
+        # broadening access to build-log buckets just to retrieve this result.
+        # 21: migration secret access; 22: runtime secret add; 23: both.
+        raise SystemExit(23 if not readable and not writable else 21 if not readable else 22)
     report("activation", state="PREFLIGHT_PASS", note="No credentials or runtime settings changed")
 
 
