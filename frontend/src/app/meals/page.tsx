@@ -70,6 +70,7 @@ export default function MealsPage() {
   const shownMeals = filter === "all" ? meals : meals.filter((meal) => meal.slot === filter);
   const hasAnyMealData = totalFoods > 0 || meals.some((meal) => meal.isEaten);
   const verified = readiness !== "UNKNOWN";
+  const selectedSlotIsEmpty = filter !== "all" && shownMeals.every((meal) => meal.foods.length === 0 && !meal.isEaten);
 
   return (
     <AppShell title="Beslenme" hideHeader>
@@ -153,7 +154,10 @@ export default function MealsPage() {
               Bugün için henüz besin kaydı bulunmuyor. Öğününü işaretleyebilir veya besin ekleyebilirsin.
             </p>
           )}
-          {shownMeals.length === 0 ? (
+          {verified && selectedSlotIsEmpty && (
+            <p className="text-sm text-muted-foreground">Bu öğün türünde henüz kayıt bulunmuyor. Aşağıdaki karttan besin ekleyebilirsin.</p>
+          )}
+          {!verified && !hasAnyMealData ? null : shownMeals.length === 0 ? (
             <p className="rounded-2xl border border-dashed p-4 text-sm text-muted-foreground">
               Bu filtrede öğün bulunmuyor.
             </p>
