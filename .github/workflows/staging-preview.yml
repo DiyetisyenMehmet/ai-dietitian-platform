@@ -37,7 +37,7 @@ env:
 
 jobs:
   coach-sync-final-preflight:
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feature/staging-preview' && contains(github.event.head_commit.message, '[coach-sync-final]') }}
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feature/staging-preview' && (contains(github.event.head_commit.message, '[coach-sync-final]') || contains(github.event.head_commit.message, '[coach-sync-diagnostics]')) }}
     name: Coach P2 staging activation preflight
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -55,8 +55,18 @@ jobs:
         run: python3 scripts/coach-sync-staging-preflight.py --phase deployer
       - name: Check existing migration execution identity without changing IAM
         shell: bash
+        env:
+          DIAGNOSTICS_ONLY: ${{ contains(github.event.head_commit.message, '[coach-sync-diagnostics]') }}
         run: |
           set -euo pipefail
+          if [[ "$DIAGNOSTICS_ONLY" == "true" ]]; then
+            build_id=53eac75b-eac9-4cbc-a8be-6e6038b682b2
+            gcloud builds describe "$build_id" --project "$PROJECT_ID" --region=global \
+              --format='yaml(status,statusDetail,failureInfo,steps.id,steps.status,serviceAccount)'
+            gcloud builds log "$build_id" --project "$PROJECT_ID" --region=global 2>&1 \
+              | grep -E 'COACH_PREFLIGHT_|ERROR:|PERMISSION_DENIED|does not have|not found|exited|denied' || true
+            exit 0
+          fi
           build_id="$(gcloud builds submit --no-source --project "$PROJECT_ID" \
             --config .github/cloudbuild/coach-sync-preflight-staging.yaml \
             --substitutions "_GIT_SHA=${GITHUB_SHA}" --async --format='value(id)' --quiet)"
