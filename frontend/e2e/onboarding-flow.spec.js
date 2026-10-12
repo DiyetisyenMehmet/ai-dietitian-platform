@@ -572,13 +572,13 @@ test("register -> consent -> onboarding -> scanner -> same-day weigh-in preserve
   await expect(page.locator("html")).not.toHaveClass(/dark/);
 
   await page.goto(`${WEB_BASE_URL}/progress`);
-  await expect(page.getByText("Kilo İlerlemen")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Kilo", exact: true })).toBeVisible();
   await page.getByLabel("Kilo (kg)").fill("68.5");
   await page.getByRole("button", { name: "Kaydet", exact: true }).click();
-  await expect(page.getByText("68,5", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("70,0", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("65,0", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("Hedefe 3,5 kg kaldı", { exact: true })).toBeVisible();
+  await expect(page.getByText("68,5 kg", { exact: true })).toBeVisible();
+  await expect(page.getByText("65,0 kg", { exact: true })).toBeVisible();
+  await expect(page.getByText("3,5 kg", { exact: true })).toBeVisible();
+  await expect(page.locator('svg[aria-label="Kilo değişim grafiği"] desc')).toContainText("İlk ölçüm 70,0 kg");
 
   const weightResponse = await request.get(`${API_BASE_URL}/tracking/weight`, { headers: authHeaders });
   const weightBody = await weightResponse.json();

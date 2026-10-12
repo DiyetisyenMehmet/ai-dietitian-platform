@@ -266,8 +266,9 @@ test("semantic Diewish icons keep coach, History and progress meanings distinct"
   await page.getByRole("button", { name: "Kaydet", exact: true }).click();
   await expect(weightInput).toHaveValue("", { timeout: 15_000 });
 
+  // The A1 layout keeps the approved evaluation icon inside the detailed analysis card.
   const progressEvaluation = page
-    .getByText("Hedef kiloya ilerleme", { exact: true })
+    .getByRole("heading", { name: "İlerleme Analizi", exact: true })
     .locator("xpath=ancestor::section[1]");
   await expect(progressEvaluation.locator('img[data-diewish-semantic-icon="evaluation"]')).toBeVisible();
 
