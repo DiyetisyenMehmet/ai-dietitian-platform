@@ -155,7 +155,6 @@ export function ProgressHomeOverview() {
           currentWeightKg: next.currentWeightKg,
           targetWeightKg: next.targetWeightKg,
           dailyWaterGoalMl: next.dailyWaterGoalMl,
-          dailyCalorieGoal: next.dailyCalorieGoal,
         });
       }),
       trackingClient.getWaterGoal().then(({ dailyWaterGoalMl }) => {
