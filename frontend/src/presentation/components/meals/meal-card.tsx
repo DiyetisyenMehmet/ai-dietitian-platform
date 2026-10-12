@@ -107,62 +107,62 @@ export function MealCard({ meal, defaultOpen = false }: MealCardProps) {
   }, [deleting, deletePending, meal.slot]);
 
   return (
-    <Card className="overflow-hidden">
+    <Card className="overflow-hidden rounded-[1.4rem] border-border/60 shadow-sm">
       <div className="flex items-stretch">
         <button
           type="button"
-          onClick={() => setExpanded((v) => !v)}
+          onClick={() => setExpanded((value) => !value)}
           aria-expanded={expanded}
           aria-controls={contentId}
-          className="flex min-w-0 flex-1 items-center gap-3.5 p-4 text-left transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+          className="flex min-w-0 flex-1 items-center gap-3 p-3 text-left transition-colors hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:p-4"
         >
           <span
             className={cn(
-              "flex size-11 shrink-0 items-center justify-center rounded-xl",
+              "flex size-16 shrink-0 items-center justify-center rounded-2xl sm:size-[4.5rem]",
               SLOT_ACCENT[meal.slot],
             )}
           >
-            <Icon className="size-5" aria-hidden="true" />
+            <Icon className="size-8" aria-hidden="true" />
           </span>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <p className="truncate font-semibold">{meal.label}</p>
-              <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                <Clock className="size-3" aria-hidden="true" />
-                {meal.time}
-              </span>
-            </div>
-            <div className="mt-0.5 flex flex-wrap gap-x-3 text-xs text-muted-foreground">
-              <span className="font-medium text-foreground">
-                {formatNumber(totals.calories)} kcal
-              </span>
-              <span>P {formatNumber(totals.protein)}g</span>
-              <span>K {formatNumber(totals.carbs)}g</span>
-              <span>Y {formatNumber(totals.fat)}g</span>
-              <span>· {foodCount} besin</span>
-            </div>
-          </div>
-          <ChevronDown
-            className={cn(
-              "size-5 shrink-0 text-muted-foreground transition-transform",
-              expanded && "rotate-180",
-            )}
-            aria-hidden="true"
-          />
+          <span className="min-w-0 flex-1">
+            <span className="block break-words text-sm font-bold leading-tight text-foreground sm:text-base">
+              {meal.label}
+            </span>
+            <span className="mt-1 block text-sm font-semibold tabular-nums text-muted-foreground">
+              {foodCount > 0 ? formatNumber(totals.calories) + " kcal" : meal.isEaten ? "Öğün işaretlendi" : "Besin eklenmedi"}
+            </span>
+            <span className="mt-1 block max-w-full truncate text-xs text-muted-foreground">
+              {foodCount > 0
+                ? meal.foods.slice(0, 2).map((food) => food.name || "İsimsiz besin").join(", ")
+                : "Öğün detayını açarak besin ekleyebilirsin"}
+              {foodCount > 2 ? "…" : ""}
+            </span>
+            <span className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground">
+              <Clock className="size-3" aria-hidden="true" />
+              {meal.time}
+              {foodCount > 0 ? " · " + foodCount + " besin" : ""}
+            </span>
+          </span>
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-teal-500/10 text-teal-700 dark:text-teal-300">
+            <ChevronDown
+              className={cn("size-5 transition-transform", expanded ? "rotate-180" : "-rotate-90")}
+              aria-hidden="true"
+            />
+          </span>
         </button>
 
-        <div className="flex shrink-0 flex-col items-center justify-center gap-1 border-l px-3 py-2">
+        <div className="flex shrink-0 flex-col items-center justify-center gap-1 border-l border-border/60 px-2 py-2 sm:px-3">
           <Checkbox
             id={checkboxId}
             checked={meal.isEaten}
             disabled={checkPending}
             onCheckedChange={(value) => void handleMealCheck(value === true)}
-            aria-label={`${meal.label} öğününü yedim`}
+            aria-label={meal.label + " öğününü yedim"}
           />
           <label
             htmlFor={checkboxId}
             className={cn(
-              "cursor-pointer select-none text-[11px] font-medium",
+              "cursor-pointer select-none text-[10px] font-medium",
               meal.isEaten ? "text-primary" : "text-muted-foreground",
               checkPending && "cursor-wait opacity-60",
             )}
