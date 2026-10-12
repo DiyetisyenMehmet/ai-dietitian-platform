@@ -22,6 +22,8 @@ export const adminForgotPasswordSchema = z.object({
   email: adminEmailSchema,
 });
 
+export const adminVerifyPasswordResetSchema = z.object({ token: z.string().min(1).max(512) });
+
 export const adminResetPasswordSchema = z.object({
   token: z.string().min(1).max(512),
   newPassword: newAdminPasswordSchema,

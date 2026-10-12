@@ -61,6 +61,7 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { status, user } = useAuth();
   const consentState = useConsentState();
+  const onIdentityAction = pathname === "/auth/action";
   const onAdmin = pathname === "/admin" || pathname.startsWith("/admin/");
 
   React.useEffect(() => {
@@ -71,14 +72,14 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
   const onboardingDone = authed && user.onboardingCompleted;
 
   React.useEffect(() => {
-    if (!onAdmin && status === "authenticated" && user?.id) {
+    if (!onAdmin && !onIdentityAction && status === "authenticated" && user?.id) {
       void consentStore.hydrate(user.id);
     }
-  }, [onAdmin, status, user?.id]);
+  }, [onAdmin, onIdentityAction, status, user?.id]);
 
   const consentOwnedByUser = authed && consentState.ownerId === user.id;
   const consentLoading =
-    !onAdmin &&
+    !onAdmin && !onIdentityAction &&
     authed &&
     (!consentOwnedByUser || consentState.status === "idle" || consentState.status === "loading");
   const consentGranted =
@@ -92,7 +93,7 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
   // not block navigation to account/privacy/data-management screens.
   React.useEffect(() => {
     if (
-      !onAdmin &&
+      !onAdmin && !onIdentityAction &&
       status === "authenticated" &&
       user?.onboardingCompleted &&
       user.id &&
@@ -101,7 +102,7 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
     ) {
       void hydrateProfileFromBackend(user.id, user.fullName);
     }
-  }, [onAdmin, status, user?.id, user?.onboardingCompleted, user?.fullName, consentGranted]);
+  }, [onAdmin, onIdentityAction, status, user?.id, user?.onboardingCompleted, user?.fullName, consentGranted]);
 
   React.useEffect(() => {
     if (status === "unauthenticated") {
@@ -116,7 +117,7 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
   const onOnboarding = pathname === ONBOARDING_ROUTE;
 
   let redirectTo: string | null = null;
-  if (!onMarketing && status !== "loading" && !consentLoading) {
+  if (!onIdentityAction && !onMarketing && status !== "loading" && !consentLoading) {
     if (!authed && !onAuthRoute) {
       redirectTo = onAdmin ? "/admin/login" : "/login";
     } else if (!onAdmin && authed && !onboardingDone) {
@@ -140,7 +141,7 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
   }, [redirectTo, pathname, router]);
 
   // Marketing pages remain public even when a signed-in user's consent is stale.
-  if (onMarketing) return <>{children}</>;
+  if (onIdentityAction || onMarketing) return <>{children}</>;
 
   if (status === "loading" || consentLoading || redirectTo) {
     return <Splash />;

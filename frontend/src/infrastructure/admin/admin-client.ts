@@ -304,8 +304,12 @@ export const adminClient = {
     });
   },
 
-  resetPassword(token: string, newPassword: string): Promise<{ message: string }> {
-    return apiRequest<{ message: string }>({
+  verifyPasswordReset(token: string): Promise<{ context: "invitation" | "reset" }> {
+    return apiRequest({ path: "/admin/auth/password/verify", method: "POST", body: JSON.stringify({ token }) });
+  },
+
+  resetPassword(token: string, newPassword: string): Promise<{ message: string; context: "invitation" | "reset" }> {
+    return apiRequest<{ message: string; context: "invitation" | "reset" }>({
       path: "/admin/auth/password/reset",
       method: "POST",
       body: JSON.stringify({ token, newPassword }),

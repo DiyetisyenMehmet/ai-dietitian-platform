@@ -24,6 +24,7 @@ import {
   adminForgotPasswordSchema,
   adminPasswordChangeSchema,
   adminResetPasswordSchema,
+  adminVerifyPasswordResetSchema,
 } from "./admin-auth.schemas";
 import { adminController } from "./admin.controller";
 import { requireAdminFoundationEnvironment } from "./admin.environment";
@@ -61,6 +62,11 @@ adminRouter.post(
   "/auth/password/forgot",
   validate({ body: adminForgotPasswordSchema }),
   adminAuthController.forgotPassword,
+);
+adminRouter.post(
+  "/auth/password/verify",
+  validate({ body: adminVerifyPasswordResetSchema }),
+  adminAuthController.verifyPasswordReset,
 );
 adminRouter.post(
   "/auth/password/reset",

@@ -39,6 +39,11 @@ function identityError(code: string, operation: "signin" | "mutation"): ApiError
       code: "ADMIN_AUTH_INVALID",
     });
   }
+  if (["INVALID_OOB_CODE", "EXPIRED_OOB_CODE"].includes(code)) {
+    return new ApiError(400, "Password action link is invalid or expired.", {
+      code: "ADMIN_RESET_LINK_INVALID",
+    });
+  }
   if (code === "EMAIL_EXISTS") {
     return new ApiError(409, "This email address is already in use.", {
       code: "ADMIN_EMAIL_IN_USE",
@@ -145,13 +150,19 @@ export const adminPasswordIdentityProvider = {
     );
   },
 
-  async sendPasswordReset(email: string): Promise<void> {
+  async sendPasswordReset(email: string, context: "invitation" | "reset" = "reset"): Promise<void> {
+    const continueUrl = new URL("/admin/reset-password", env.APP_WEB_URL);
+    continueUrl.searchParams.set("context", context);
     await request<{ email?: string }>(
       "sendOobCode",
-      { requestType: "PASSWORD_RESET", email },
+      { requestType: "PASSWORD_RESET", email, continueUrl: continueUrl.toString() },
       "mutation",
       true,
     );
+  },
+
+  async verifyPasswordReset(oobCode: string): Promise<ResetPasswordResponse> {
+    return request<ResetPasswordResponse>("resetPassword", { oobCode }, "mutation");
   },
 
   async confirmPasswordReset(

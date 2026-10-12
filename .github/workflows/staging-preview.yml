@@ -442,6 +442,10 @@ jobs:
         shell: bash
         run: bash scripts/configure-staging-auth.sh
 
+      - name: Configure protected Diewish Admin password action routing
+        if: ${{ contains(github.event.head_commit.message, '[admin2-password]') }}
+        run: python3 scripts/configure-admin-password-staging.py --apply
+
       - name: Bind backend to staging frontend and Firebase Auth
         shell: bash
         run: |

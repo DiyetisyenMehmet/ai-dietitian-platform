@@ -15,6 +15,8 @@ const options: LoggerOptions = {
       "req.headers.cookie",
       "res.headers['set-cookie']",
       "*.password",
+      "*.newPassword",
+      "*.oobCode",
       "*.token",
     ],
     censor: "[redacted]",

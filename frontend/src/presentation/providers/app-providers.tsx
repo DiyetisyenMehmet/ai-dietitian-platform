@@ -13,7 +13,7 @@ function RuntimeUserEffects() {
   const onAdmin = pathname === "/admin" || pathname.startsWith("/admin/");
 
   // Management Center must not trigger normal-app push/device synchronization.
-  return onAdmin ? null : <PushDeviceSync />;
+  return onAdmin || pathname === "/auth/action" ? null : <PushDeviceSync />;
 }
 
 /** Aggregates all client-side providers required by the application shell. */

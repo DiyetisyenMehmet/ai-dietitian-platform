@@ -199,7 +199,7 @@ export const adminGovernanceService = {
         input.email,
         providerOnlyPassword,
       );
-      await adminPasswordIdentityProvider.sendPasswordReset(input.email);
+      await adminPasswordIdentityProvider.sendPasswordReset(input.email, "invitation");
     } catch (error) {
       if (externalIdentity?.idToken) {
         await adminPasswordIdentityProvider
