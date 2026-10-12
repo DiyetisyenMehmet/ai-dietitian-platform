@@ -56,6 +56,16 @@ Actual role creation, password generation and secret writing have **not** been e
 
 ## The one requested administrator operation
 
+### Current decision: check the existing manager first
+
+Before adding any IAM binding, run `scripts/coach-sync-manager-check.py` in the existing manager's Google Cloud Shell with the isolated staging project selected. It tests only the ability to add a runtime-secret version and access the already existing migration secret. It does not read either payload, grant permissions, generate a password, change a role or enable Coach.
+
+The current workspace has no signed-in human Google Cloud manager credentials. The automated-account preflight does not establish the human manager's permissions. A positive manager check permits preparing the direct-write path, subject to actual API enforcement and a separate activation decision. A negative/unknown result is never treated as authorized.
+
+If the existing manager has both capabilities, they can perform one controlled credential preparation/version write in Cloud Shell under their current identity after the pinned-rollback and restricted-role checks. No Cloud Build writer binding is needed. Credentials must remain within that session and go directly to Secret Manager; they must never be copied into chat or a public artifact. The existing OIDC deploy identity can perform the previously authorized runtime configuration steps after the manager decision.
+
+The temporary binding below is an unexecuted fallback, not the current instruction. Its example deadline is still **12 October 2026, 18:00 Europe/Istanbul**; the time condition is valid only before that deadline and conveys no access until a binding is actually approved and applied.
+
 Approve and apply an **expiring binding on this secret only**:
 
 ```bash
