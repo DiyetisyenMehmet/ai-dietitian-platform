@@ -2,7 +2,7 @@
 
 Reporter: Uygulama Çalışan 6
 Task: APP6-COACH-EVENT-DRIVEN-SYNC-P2-FINAL-CLOSE
-State: BLOCKED pending one narrowly scoped administrator operation.
+State: PARTIAL; existing-manager path selected, review-only preparation completed.
 
 ## Verified evidence
 
@@ -49,8 +49,8 @@ Actual role creation, password generation and secret writing have **not** been e
 
 ## Alternatives and recommendation
 
-1. **Recommended for this automated closure:** temporary `roles/secretmanager.secretVersionAdder` on the one existing runtime secret for the already authorized Cloud Build execution identity. No new payload-read permission, IAM administration, secret deletion, project-wide grant or logging access is needed.
-2. **No added automation IAM grant:** an authorized administrator can perform the prepared credential/version write directly using their existing rights. This is safe but makes that write a manual administrator step. Thus a permission grant to Cloud Build is not intrinsically mandatory; an authorized version write is.
+1. **Selected by the manager:** the existing human manager performs the approved credential/version write using current rights. The user's two capability checks passed. No added automation IAM grant is required. See `coach-p2-manager-preparation-review.md` for the two current prerequisites that still require a decision.
+2. **Unselected fallback only:** temporary `roles/secretmanager.secretVersionAdder` on the one existing runtime secret for the already authorized Cloud Build identity. Do not apply this under the current decision.
 3. A custom IAM role containing only `secretmanager.versions.add` is technically narrower than the predefined role, which also includes rotation/metadata permissions. It adds custom-role creation and management and does not avoid the administrator decision. A secret-scoped, expiring predefined writer is the simpler bounded choice here.
 4. Reusing the owner credential is rejected. A distinct read-only listener role is incompatible with the current same-username guard and would require a new code/security design; it is outside this closure.
 
@@ -60,25 +60,13 @@ Actual role creation, password generation and secret writing have **not** been e
 
 Before adding any IAM binding, run `scripts/coach-sync-manager-check.py` in the existing manager's Google Cloud Shell with the isolated staging project selected. It tests only the ability to add a runtime-secret version and access the already existing migration secret. It does not read either payload, grant permissions, generate a password, change a role or enable Coach.
 
-The current workspace has no signed-in human Google Cloud manager credentials. The automated-account preflight does not establish the human manager's permissions. A positive manager check permits preparing the direct-write path, subject to actual API enforcement and a separate activation decision. A negative/unknown result is never treated as authorized.
+The current workspace has no signed-in human Google Cloud manager credentials. The user has now verified both capabilities in the existing manager session. This permits reviewing the direct-write path, subject to actual API enforcement and the separate database-role/version-pin decision. No secret payload was supplied to this workspace.
 
 If the existing manager has both capabilities, they can perform one controlled credential preparation/version write in Cloud Shell under their current identity after the pinned-rollback and restricted-role checks. No Cloud Build writer binding is needed. Credentials must remain within that session and go directly to Secret Manager; they must never be copied into chat or a public artifact. The existing OIDC deploy identity can perform the previously authorized runtime configuration steps after the manager decision.
 
-The temporary binding below is an unexecuted fallback, not the current instruction. Its example deadline is still **12 October 2026, 18:00 Europe/Istanbul**; the time condition is valid only before that deadline and conveys no access until a binding is actually approved and applied.
+The prior temporary binding is not selected and was not applied. Its old example deadline was **12 October 2026, 18:00 Europe/Istanbul**. The command is intentionally removed from this current preparation document to avoid an unintended grant. Permanent version-writing authority is unnecessary for normal LISTEN/NOTIFY or conversation queries. Never set an expiration on the secret itself.
 
-Approve and apply an **expiring binding on this secret only**:
-
-```bash
-gcloud secrets add-iam-policy-binding diewish-staging-database-url \
-  --project=project-a2e260c1-839d-4f1d-b90 \
-  --member='serviceAccount:730419163638-compute@developer.gserviceaccount.com' \
-  --role=roles/secretmanager.secretVersionAdder \
-  --condition="expression=request.time < timestamp('2026-10-12T15:00:00Z'),title=coach-p2-one-time-20261012,description=Temporary staging runtime credential preparation"
-```
-
-This example expires at **18:00 Europe/Istanbul on 12 October 2026**. If applied later, an administrator must deliberately choose a new short future deadline. Never set an expiration on the secret itself. The IAM access condition expires; the secret and all rollback versions remain intact.
-
-This command has **not** been run. Neither the deployer nor the build is allowed to grant itself the missing permission. Permanent version-writing authority is unnecessary for normal LISTEN/NOTIFY or conversation queries.
+No Cloud IAM change is requested now. Under the current instruction, the restricted database-role SQL and the old-version pin are also review-only: the former assigns DB privileges, and the latter creates a Cloud Run revision. See the new review document before attempting any secret write.
 
 ## Activation and rollback checkpoints after permission is supplied
 
