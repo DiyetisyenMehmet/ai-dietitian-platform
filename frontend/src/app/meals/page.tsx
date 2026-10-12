@@ -51,8 +51,9 @@ export default function MealsPage() {
   const [dateLabel, setDateLabel] = React.useState("Bugün");
 
   React.useEffect(() => {
+    // Shared meal cache emits a new snapshot when the local day rolls over.
     setDateLabel(formatLongDate());
-  }, []);
+  }, [meals]);
 
   React.useEffect(() => {
     if (!hydrated && !loading) void nutritionPlanStore.hydrateFromBackend();
