@@ -16,7 +16,7 @@ const to = overview.indexOf("\ntype TrendPoint =", from);
 assert.ok(from >= 0 && to > from, "Production period filter is available");
 const isolated = overview.slice(from, to);
 const transpiled = ts.transpileModule(
-  "const localDateKey = () => '2026-10-12';\nconst dateKeyToLocalNoon = (key) => new Date(key + 'T12:00:00');\n" +
+  "const localDateKey = (date = new Date('2026-10-12T12:00:00')) => date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');\nconst dateKeyToLocalNoon = (key) => new Date(key + 'T12:00:00');\n" +
     isolated + "\nmodule.exports = { weightEntriesForPeriod, PERIODS };",
   { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } },
 ).outputText;
