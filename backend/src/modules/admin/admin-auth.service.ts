@@ -363,6 +363,9 @@ export const adminAuthService = {
         // No role assignment here: the role chosen by the inviter is preserved.
         const confirmed = await adminPasswordIdentityProvider.confirmPasswordReset(token, newPassword);
         if (confirmed.email?.trim().toLowerCase() !== email || confirmed.requestType !== "PASSWORD_RESET") throw invalidResetLink();
+        // Provider confirmation can take seconds: never activate an invitation
+        // that expires while the external password operation is in flight.
+        if (invitation && invitation.expiresAt <= new Date()) throw invalidResetLink();
         const next = await tx.user.update({
           where: { id: user.id },
           data: { passwordHash, ...(invitation ? { isActive: true, emailVerifiedAt: new Date() } : {}) },

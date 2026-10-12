@@ -25,7 +25,8 @@ jobs:
           bash -n scripts/bootstrap-staging-sms-defense-gcp.sh
           bash -n scripts/configure-staging-sms-defense.sh
           bash -n scripts/configure-staging-auth.sh
-          python3 -m py_compile scripts/nutrition-reference-sync.py
+          python3 -m py_compile scripts/nutrition-reference-sync.py scripts/configure-admin-password-staging.py
+          python3 scripts/configure-admin-password-staging.test.py
 
       - name: Assert staging isolation contract
         shell: bash

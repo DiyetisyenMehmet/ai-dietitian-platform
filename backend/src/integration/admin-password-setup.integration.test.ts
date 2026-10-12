@@ -164,6 +164,47 @@ test("Firebase-backed Admin invitation/reset security contract", async (t) => {
     },
   );
 
+  await t.test(
+    "expiration during provider confirmation cannot activate an Admin",
+    async (subtest) => {
+      const invitation = await invite();
+      const now = Date.now();
+      await prisma.adminInvitation.update({
+        where: { id: invitation.id },
+        data: { expiresAt: new Date(now + 10_000) },
+      });
+      const before = await prisma.user.findUniqueOrThrow({ where: { id: invitation.userId } });
+      const confirm = provider.confirmPasswordReset;
+      subtest.mock.timers.enable({ apis: ["Date"], now });
+      provider.confirmPasswordReset = async (code, value) => {
+        const result = await confirm(code, value);
+        subtest.mock.timers.tick(10_001);
+        return result;
+      };
+      try {
+        await assert.rejects(adminAuthService.resetPassword(invitation.code, password, context));
+        const after = await prisma.user.findUniqueOrThrow({ where: { id: invitation.userId } });
+        assert.equal(after.isActive, false);
+        assert.equal(after.passwordHash, before.passwordHash);
+        assert.equal(
+          (await prisma.adminInvitation.findUniqueOrThrow({ where: { id: invitation.id } }))
+            .acceptedAt,
+          null,
+        );
+        assert.equal(
+          await prisma.adminAuditEvent.count({
+            where: { targetId: invitation.userId, action: "admin.staff.invite_accept" },
+          }),
+          0,
+        );
+        assert.equal(await resolveAdminAccess(invitation.userId), null);
+      } finally {
+        provider.confirmPasswordReset = confirm;
+        subtest.mock.timers.reset();
+      }
+    },
+  );
+
   for (const kind of [
     "expired",
     "revoked",
