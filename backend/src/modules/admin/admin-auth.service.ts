@@ -41,6 +41,10 @@ function invalidAdminLogin(): ApiError {
   });
 }
 
+function invalidResetLink(): ApiError {
+  return new ApiError(400, "Password action link is invalid or expired.", { code: "ADMIN_RESET_LINK_INVALID" });
+}
+
 function forbiddenAdminLogin(): ApiError {
   return new ApiError(403, "Management Center access is not authorized.", {
     code: "ADMIN_AUTH_FORBIDDEN",
@@ -279,6 +283,13 @@ export const adminAuthService = {
 
   async requestPasswordReset(email: string, _context: SessionContext): Promise<void> {
     const user = await authRepository.findUserByEmail(email);
+    if (user?.role === UserRole.ADMIN && !user.isActive) {
+      const invitation = await prisma.adminInvitation.findFirst({
+        where: { userId: user.id, email, acceptedAt: null, revokedAt: null, expiresAt: { gt: new Date() } },
+      });
+      if (invitation) await adminPasswordIdentityProvider.sendPasswordReset(email, "invitation");
+      return;
+    }
     if (!user || !(await hasAdminAccess(user))) {
       await adminAuthService.requestFirstSuperAdminBootstrap(email);
       return;
@@ -286,201 +297,87 @@ export const adminAuthService = {
     await adminPasswordIdentityProvider.sendPasswordReset(email);
   },
 
+  async verifyPasswordReset(token: string): Promise<{ context: "invitation" | "reset" }> {
+    const identity = await adminPasswordIdentityProvider.verifyPasswordReset(token);
+    const email = identity.email?.trim().toLowerCase();
+    if (!email || identity.requestType !== "PASSWORD_RESET") throw invalidResetLink();
+    const user = await authRepository.findUserByEmail(email);
+    if (!user || user.role !== UserRole.ADMIN || user.deletionRequestedAt) throw invalidResetLink();
+    if (user.isActive) {
+      if (!(await hasAdminAccess(user))) throw invalidResetLink();
+      return { context: "reset" };
+    }
+    const invitation = await prisma.adminInvitation.findFirst({
+      where: { userId: user.id, email, acceptedAt: null, revokedAt: null, expiresAt: { gt: new Date() } },
+    });
+    const membership = await prisma.adminUserRole.findFirst({
+      where: { userId: user.id, role: { permissions: { some: { permission: { key: ADMIN_PERMISSIONS.ACCESS } } } } },
+    });
+    if (!invitation || !membership) throw invalidResetLink();
+    return { context: "invitation" };
+  },
+
   async resetPassword(
     token: string,
     newPassword: string,
     _context: SessionContext,
-  ): Promise<void> {
-    const identity = await adminPasswordIdentityProvider.confirmPasswordReset(
-      token,
-      newPassword,
-    );
+  ): Promise<{ context: "invitation" | "reset" }> {
+    // Verify without consuming the Firebase code or changing the password.
+    const identity = await adminPasswordIdentityProvider.verifyPasswordReset(token);
     const email = identity.email?.trim().toLowerCase();
-    if (!email) throw invalidAdminLogin();
-
-    const passwordHash = await hashPassword(newPassword);
+    if (!email || identity.requestType !== "PASSWORD_RESET") throw invalidResetLink();
     const existingUser = await authRepository.findUserByEmail(email);
-
-    if (
-      existingUser &&
-      existingUser.role === UserRole.ADMIN &&
-      !existingUser.isActive
-    ) {
-      const invitation = await prisma.adminInvitation.findFirst({
-        where: {
-          userId: existingUser.id,
-          email,
-          acceptedAt: null,
-          revokedAt: null,
-          expiresAt: { gt: new Date() },
-        },
-        orderBy: { createdAt: "desc" },
-      });
-
-      if (invitation) {
-        await runAuditedAdminMutation(
-          {
-            actorAdminId: existingUser.id,
-            action: "admin.staff.invite_accept",
-            targetType: "user",
-            targetId: existingUser.id,
-            reason: "Invited administrator completed password setup",
-            environment: resolveRuntimeEnvironment(),
-            correlationId: `admin-invite:${invitation.id}`,
-            requestId: `admin-invite:${invitation.id}`,
-            riskLevel: AdminAuditRiskLevel.HIGH,
-          },
-          async (tx) => {
-            const pending = await tx.adminInvitation.findFirst({
-              where: {
-                id: invitation.id,
-                userId: existingUser.id,
-                acceptedAt: null,
-                revokedAt: null,
-                expiresAt: { gt: new Date() },
-              },
-            });
-            if (!pending) throw invalidAdminLogin();
-
-            const next = await tx.user.update({
-              where: { id: existingUser.id },
-              data: {
-                passwordHash,
-                isActive: true,
-                emailVerifiedAt: new Date(),
-                deletionRequestedAt: null,
-              },
-            });
-            await tx.adminInvitation.update({
-              where: { id: pending.id },
-              data: { acceptedAt: new Date() },
-            });
-
-            return {
-              result: next,
-              before: buildAuditSnapshot(
-                { email: existingUser.email, isActive: false },
-                ["email", "isActive"],
-              ),
-              after: buildAuditSnapshot(
-                { email: next.email, isActive: true },
-                ["email", "isActive"],
-              ),
-            };
-          },
-        );
-        await authRepository.revokeAllForUser(existingUser.id);
-        return;
-      }
-    }
-
-    if (existingUser && (await hasAdminAccess(existingUser))) {
-      await runAuditedAdminMutation(
-        {
-          actorAdminId: existingUser.id,
-          action: "admin.security.password_reset_completed",
-          targetType: "user",
-          targetId: existingUser.id,
-          reason: "Management Center password reset completed",
-          environment: resolveRuntimeEnvironment(),
-          correlationId: `password-reset:${existingUser.id}`,
-          requestId: `password-reset:${existingUser.id}`,
-          riskLevel: AdminAuditRiskLevel.HIGH,
-        },
-        async (tx) => {
-          const next = await tx.user.update({
-            where: { id: existingUser.id },
-            data: { passwordHash },
-          });
-          return { result: next };
-        },
-      );
-      await authRepository.revokeAllForUser(existingUser.id);
-      return;
-    }
-
-    const environment = resolveRuntimeEnvironment();
-    const canCompleteOwnerBootstrap =
-      (environment === "staging" || environment === "test") &&
-      sha256(email) === APPROVED_FIRST_SUPER_ADMIN_EMAIL_SHA256;
-    if (!canCompleteOwnerBootstrap) throw invalidAdminLogin();
-
-    const user = await prisma.$transaction(async (tx) => {
-      await ensureAdminFoundation(tx);
-
-      const consumed = await tx.adminAuditEvent.findFirst({
-        where: { action: "admin.bootstrap.super_admin", environment },
-        select: { id: true },
-      });
-      if (consumed) throw invalidAdminLogin();
-
-      const superRole = await tx.adminRole.findUniqueOrThrow({
-        where: { key: ADMIN_SYSTEM_ROLES.SUPER_ADMIN },
-        select: { id: true },
-      });
-      const existingSuperAdmin = await tx.adminUserRole.findFirst({
-        where: { roleId: superRole.id },
-        select: { userId: true },
-      });
-      if (existingSuperAdmin) throw invalidAdminLogin();
-
-      const current = await tx.user.findUnique({ where: { email } });
-      const next = current
-        ? await tx.user.update({
-            where: { id: current.id },
-            data: {
-              passwordHash,
-              role: UserRole.ADMIN,
-              isActive: true,
-              emailVerifiedAt: new Date(),
-              deletionRequestedAt: null,
-            },
-          })
-        : await tx.user.create({
-            data: {
-              email,
-              passwordHash,
-              role: UserRole.ADMIN,
-              isActive: true,
-              emailVerifiedAt: new Date(),
-            },
-          });
-
-      await tx.adminUserRole.upsert({
-        where: { userId_roleId: { userId: next.id, roleId: superRole.id } },
-        update: { assignedByAdminId: next.id },
-        create: {
-          userId: next.id,
-          roleId: superRole.id,
-          assignedByAdminId: next.id,
-        },
-      });
-
-      await tx.adminAuditEvent.create({
-        data: {
-          actorAdminId: next.id,
-          action: "admin.bootstrap.super_admin",
-          targetType: "user",
-          targetId: next.id,
-          beforeState: current
-            ? { role: current.role, isActive: current.isActive }
-            : undefined,
-          afterState: {
-            role: UserRole.ADMIN,
-            assignedRole: ADMIN_SYSTEM_ROLES.SUPER_ADMIN,
-          },
-          reason: "Verified owner email bootstrap completed through password setup link",
-          environment,
-          correlationId: "owner-email-bootstrap",
-          requestId: "owner-email-bootstrap",
-          riskLevel: AdminAuditRiskLevel.CRITICAL,
-        },
-      });
-
-      return next;
-    });
-
-    await authRepository.revokeAllForUser(user.id);
+    if (!existingUser || existingUser.role !== UserRole.ADMIN) throw invalidResetLink();
+    const passwordHash = await hashPassword(newPassword);
+    const result = await runAuditedAdminMutation(
+      {
+        actorAdminId: existingUser.id,
+        action: existingUser.isActive ? "admin.security.password_reset_completed" : "admin.staff.invite_accept",
+        targetType: "user",
+        targetId: existingUser.id,
+        reason: existingUser.isActive ? "Management Center password reset completed" : "Invited administrator completed password setup",
+        environment: resolveRuntimeEnvironment(),
+        correlationId: `admin-password:${existingUser.id}`,
+        requestId: `admin-password:${existingUser.id}`,
+        riskLevel: AdminAuditRiskLevel.HIGH,
+      },
+      async (tx) => {
+        // Serialize acceptance with staff deactivation / invitation revocation.
+        await tx.$queryRaw`SELECT id FROM users WHERE id = ${existingUser.id} FOR UPDATE`;
+        const user = await tx.user.findUnique({ where: { id: existingUser.id } });
+        if (!user || user.role !== UserRole.ADMIN || user.email !== email || user.deletionRequestedAt || user.isActive !== existingUser.isActive) throw invalidResetLink();
+        const membership = await tx.adminUserRole.findFirst({
+          where: { userId: user.id, role: { permissions: { some: { permission: { key: ADMIN_PERMISSIONS.ACCESS } } } } },
+        });
+        if (!membership) throw invalidResetLink();
+        const invitation = !user.isActive ? await tx.adminInvitation.findFirst({
+          where: { userId: user.id, email, acceptedAt: null, revokedAt: null, expiresAt: { gt: new Date() } },
+          orderBy: { createdAt: "desc" },
+        }) : null;
+        if (!user.isActive && !invitation) throw invalidResetLink();
+        if (invitation) {
+          await tx.$queryRaw`SELECT id FROM admin_invitations WHERE id = ${invitation.id} FOR UPDATE`;
+          const pending = await tx.adminInvitation.findUnique({ where: { id: invitation.id } });
+          if (!pending || pending.revokedAt || pending.acceptedAt || pending.expiresAt <= new Date()) throw invalidResetLink();
+        }
+        // No role assignment here: the role chosen by the inviter is preserved.
+        const confirmed = await adminPasswordIdentityProvider.confirmPasswordReset(token, newPassword);
+        if (confirmed.email?.trim().toLowerCase() !== email || confirmed.requestType !== "PASSWORD_RESET") throw invalidResetLink();
+        const next = await tx.user.update({
+          where: { id: user.id },
+          data: { passwordHash, ...(invitation ? { isActive: true, emailVerifiedAt: new Date() } : {}) },
+        });
+        if (invitation) await tx.adminInvitation.update({ where: { id: invitation.id }, data: { acceptedAt: new Date() } });
+        await tx.refreshToken.updateMany({ where: { userId: user.id, revokedAt: null }, data: { revokedAt: new Date() } });
+        return {
+          result: { context: invitation ? "invitation" as const : "reset" as const },
+          before: buildAuditSnapshot({ isActive: user.isActive, invitationAccepted: false }, ["isActive", "invitationAccepted"]),
+          after: buildAuditSnapshot({ isActive: next.isActive, invitationAccepted: Boolean(invitation) }, ["isActive", "invitationAccepted"]),
+        };
+      },
+      { timeout: 20_000 },
+    );
+    return result;
   },
 
   async changePrimaryEmail(

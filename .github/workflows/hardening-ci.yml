@@ -6,6 +6,7 @@ on:
       - fix/production-hardening
       - feature/android-native-scanner
       - feature/staging-preview
+      - feature/admin2-staff-password-b2-close-a1
       - feature/app5-bottom-nav-scroll-containment-a2
       - feature/app6-coach-event-driven-sync-p2-a1
       - feature/app6-coach-p2-listener-security-fix
@@ -165,6 +166,11 @@ jobs:
         env:
           NEXT_PUBLIC_API_BASE_URL: https://example.invalid/api
           NEXT_PUBLIC_SITE_URL: https://example.invalid
+
+      - name: Install browser for Admin password setup regression
+        run: npx playwright install --with-deps chromium
+      - name: Test branded Admin password setup and action isolation
+        run: npx playwright test --config playwright.admin-password.config.ts
 
   android-native:
     runs-on: ubuntu-latest

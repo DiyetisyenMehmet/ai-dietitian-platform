@@ -69,10 +69,16 @@ export const adminAuthController = {
     });
   }),
 
+  verifyPasswordReset: asyncHandler(async (req: Request, res: Response) => {
+    res.setHeader("Cache-Control", "no-store");
+    sendSuccess(res, await adminAuthService.verifyPasswordReset(req.body.token));
+  }),
+
   resetPassword: asyncHandler(async (req: Request, res: Response) => {
     const input = req.body as AdminResetPasswordInput;
-    await adminAuthService.resetPassword(input.token, input.newPassword, context(req));
-    sendSuccess(res, { message: "Şifreniz güncellendi." });
+    const result = await adminAuthService.resetPassword(input.token, input.newPassword, context(req));
+    res.setHeader("Cache-Control", "no-store");
+    sendSuccess(res, { ...result, message: result.context === "invitation" ? "Yönetim Merkezi hesabınız etkinleştirildi." : "Şifreniz başarıyla güncellendi." });
   }),
 
   changeEmail: asyncHandler(async (req: Request, res: Response) => {

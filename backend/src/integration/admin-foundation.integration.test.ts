@@ -487,6 +487,7 @@ test("Phase 1 admin authorization, RBAC and transactional audit", async (t) => {
     const originalDeleteUser = adminPasswordIdentityProvider.deleteUser;
     const originalSendReset = adminPasswordIdentityProvider.sendPasswordReset;
     const originalConfirmReset = adminPasswordIdentityProvider.confirmPasswordReset;
+    const originalVerifyReset = adminPasswordIdentityProvider.verifyPasswordReset;
 
     let invitedUserId = "";
     let customRoleId = "";
@@ -535,10 +536,12 @@ test("Phase 1 admin authorization, RBAC and transactional audit", async (t) => {
       adminPasswordIdentityProvider.sendPasswordReset = async (email) => {
         resetEmail = email;
       };
-      adminPasswordIdentityProvider.confirmPasswordReset = async (token) => ({
+      adminPasswordIdentityProvider.verifyPasswordReset = async (token) => ({
         email: token === "phase2-invite-reset" ? inviteEmail : undefined,
         requestType: "PASSWORD_RESET",
       });
+
+      adminPasswordIdentityProvider.confirmPasswordReset = adminPasswordIdentityProvider.verifyPasswordReset;
 
       const invite = await fetch(`${baseUrl}/api/admin/access/invitations`, {
         method: "POST",
@@ -760,6 +763,7 @@ test("Phase 1 admin authorization, RBAC and transactional audit", async (t) => {
       adminPasswordIdentityProvider.deleteUser = originalDeleteUser;
       adminPasswordIdentityProvider.sendPasswordReset = originalSendReset;
       adminPasswordIdentityProvider.confirmPasswordReset = originalConfirmReset;
+      adminPasswordIdentityProvider.verifyPasswordReset = originalVerifyReset;
 
       const cleanupUsers = [actor.id, ...(invitedUserId ? [invitedUserId] : [])];
       await prisma.adminInvitation.deleteMany({
@@ -807,6 +811,7 @@ test("Phase 1 admin authorization, RBAC and transactional audit", async (t) => {
     const originalDeleteUser = adminPasswordIdentityProvider.deleteUser;
     const originalSendReset = adminPasswordIdentityProvider.sendPasswordReset;
     const originalConfirmReset = adminPasswordIdentityProvider.confirmPasswordReset;
+    const originalVerifyReset = adminPasswordIdentityProvider.verifyPasswordReset;
     let createdId = "";
     let resetEmail = "";
     let resetSendCount = 0;
@@ -822,10 +827,12 @@ test("Phase 1 admin authorization, RBAC and transactional audit", async (t) => {
         resetEmail = email;
         resetSendCount += 1;
       };
-      adminPasswordIdentityProvider.confirmPasswordReset = async (token) => ({
+      adminPasswordIdentityProvider.verifyPasswordReset = async (token) => ({
         email: token === "approved-owner-reset" ? approvedEmail : undefined,
         requestType: "PASSWORD_RESET",
       });
+
+      adminPasswordIdentityProvider.confirmPasswordReset = adminPasswordIdentityProvider.verifyPasswordReset;
 
       const unknown = await fetch(`${baseUrl}/api/admin/auth/bootstrap`, {
         method: "POST",
@@ -900,6 +907,7 @@ test("Phase 1 admin authorization, RBAC and transactional audit", async (t) => {
       adminPasswordIdentityProvider.deleteUser = originalDeleteUser;
       adminPasswordIdentityProvider.sendPasswordReset = originalSendReset;
       adminPasswordIdentityProvider.confirmPasswordReset = originalConfirmReset;
+      adminPasswordIdentityProvider.verifyPasswordReset = originalVerifyReset;
       if (createdId) {
         await prisma.adminAuditEvent.deleteMany({ where: { actorAdminId: createdId } });
         await prisma.adminUserRole.deleteMany({ where: { userId: createdId } });

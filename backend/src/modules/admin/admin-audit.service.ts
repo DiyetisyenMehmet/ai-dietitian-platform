@@ -5,7 +5,7 @@ import { ApiError } from "../../utils/api-error";
 import type { DiewishRuntimeEnvironment } from "./admin.environment";
 
 const FORBIDDEN_AUDIT_KEY =
-  /(password|passwordhash|token|secret|credential|authorization|cookie|firebase|blood|health|meal|sleep|weight)/i;
+  /(password|passwordhash|oobcode|token|secret|credential|authorization|cookie|firebase|blood|health|meal|sleep|weight)/i;
 
 export type AdminAuditSnapshot = Record<string, Prisma.InputJsonValue | null>;
 
@@ -80,6 +80,7 @@ function assertSafeSnapshot(snapshot: AdminAuditSnapshot | undefined): void {
 export async function runAuditedAdminMutation<T>(
   context: AdminAuditContext,
   mutate: (tx: Prisma.TransactionClient) => Promise<AuditedMutationResult<T>>,
+  options?: { timeout: number },
 ): Promise<T> {
   return prisma.$transaction(async (tx) => {
     const mutation = await mutate(tx);
@@ -110,5 +111,5 @@ export async function runAuditedAdminMutation<T>(
     }
 
     return mutation.result;
-  });
+  }, options);
 }

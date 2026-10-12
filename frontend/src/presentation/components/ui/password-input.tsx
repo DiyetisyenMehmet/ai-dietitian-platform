@@ -24,7 +24,7 @@ const PasswordInput = React.forwardRef<HTMLInputElement, InputProps>(
           onClick={() => setVisible((v) => !v)}
           aria-label={visible ? "Şifreyi gizle" : "Şifreyi göster"}
           aria-pressed={visible}
-          tabIndex={-1}
+          disabled={props.disabled}
           className="absolute right-1 top-1/2 flex size-9 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {visible ? (
