@@ -42,10 +42,10 @@ export function EditFoodModal({ food, open, onOpenChange, onSave }: EditFoodModa
       reset({
         name: food.name,
         quantity: food.quantity,
-        calories: food.calories,
-        protein: food.protein,
-        carbs: food.carbs,
-        fat: food.fat,
+        calories: food.missingNutrition?.calories ? undefined : food.calories,
+        protein: food.missingNutrition?.protein ? undefined : food.protein,
+        carbs: food.missingNutrition?.carbs ? undefined : food.carbs,
+        fat: food.missingNutrition?.fat ? undefined : food.fat,
       });
     }
   }, [food, reset]);
@@ -71,6 +71,11 @@ export function EditFoodModal({ food, open, onOpenChange, onSave }: EditFoodModa
           <ModalDescription>Miktar ve besin değerlerini güncelleyin.</ModalDescription>
         </ModalHeader>
         <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
+          {food && Object.values(food.missingNutrition ?? {}).some(Boolean) && (
+            <p className="rounded-xl bg-amber-500/10 p-3 text-xs text-foreground">
+              Bu kayıtta bazı besin değerleri bilinmiyor. Kaydetmeden önce boş alanlara doğru değerleri girmen gerekir.
+            </p>
+          )}
           <FormField id="edit-name" label="Besin Adı" error={errors.name?.message}>
             <Input {...register("name")} />
           </FormField>

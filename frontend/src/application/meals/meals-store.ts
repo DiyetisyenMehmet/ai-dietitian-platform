@@ -64,15 +64,29 @@ function isMealCheckIn(log: MealLog): boolean {
   );
 }
 
+function isMissingAmount(value: number | null): boolean {
+  return typeof value !== "number" || !Number.isFinite(value) || value < 0;
+}
+
+function amountOrZero(value: number | null): number {
+  return isMissingAmount(value) ? 0 : value!;
+}
+
 function toFoodItem(log: MealLog, quantity = ""): FoodItem {
   return {
     id: log.id,
     name: log.name ?? "",
     quantity,
-    calories: log.calories ?? 0,
-    protein: log.proteinG ?? 0,
-    carbs: log.carbsG ?? 0,
-    fat: log.fatG ?? 0,
+    calories: amountOrZero(log.calories),
+    protein: amountOrZero(log.proteinG),
+    carbs: amountOrZero(log.carbsG),
+    fat: amountOrZero(log.fatG),
+    missingNutrition: {
+      calories: isMissingAmount(log.calories),
+      protein: isMissingAmount(log.proteinG),
+      carbs: isMissingAmount(log.carbsG),
+      fat: isMissingAmount(log.fatG),
+    },
   };
 }
 
@@ -316,6 +330,17 @@ export function useMeals(): Meal[] {
 
 export function useMealsReadiness(): DailyDataReadiness {
   return React.useSyncExternalStore(subscribe, getReadinessSnapshot, getReadinessSnapshot);
+}
+
+/** Presentation-only completeness flags; do not alter the persisted nutrition sums. */
+export function findMissingNutrition(source: Meal[]): Record<keyof NutritionTotals, boolean> {
+  const foods = source.flatMap((meal) => meal.foods);
+  return {
+    calories: foods.some((food) => food.missingNutrition?.calories === true),
+    protein: foods.some((food) => food.missingNutrition?.protein === true),
+    carbs: foods.some((food) => food.missingNutrition?.carbs === true),
+    fat: foods.some((food) => food.missingNutrition?.fat === true),
+  };
 }
 
 export function computeTotals(source: Meal[]): NutritionTotals {

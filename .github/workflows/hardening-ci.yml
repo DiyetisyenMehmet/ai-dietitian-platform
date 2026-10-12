@@ -116,6 +116,8 @@ jobs:
             exit 0
           fi
           exit "$status"
+      - name: Test Nutrition A1 data accuracy
+        run: node --test tests/nutrition-home-a1-data.test.cjs
       - name: Test identity runtime and error recovery
         run: node --test tests/identity.test.cjs
       - name: Test notification lifecycle and web push guards

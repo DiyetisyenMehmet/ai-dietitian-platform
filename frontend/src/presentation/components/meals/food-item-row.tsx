@@ -20,10 +20,10 @@ export function FoodItemRow({ food, onEdit, onDelete }: FoodItemRowProps) {
         <p className="truncate text-sm font-semibold">{food.name}</p>
         <p className="text-xs text-muted-foreground">{food.quantity}</p>
         <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
-          <span className="font-medium text-foreground">{formatNumber(food.calories)} kcal</span>
-          <span>P {formatNumber(food.protein)}g</span>
-          <span>K {formatNumber(food.carbs)}g</span>
-          <span>Y {formatNumber(food.fat)}g</span>
+          <span className="font-medium text-foreground">{food.missingNutrition?.calories ? "—" : formatNumber(food.calories)} kcal</span>
+          <span>P {food.missingNutrition?.protein ? "—" : formatNumber(food.protein)}g</span>
+          <span>K {food.missingNutrition?.carbs ? "—" : formatNumber(food.carbs)}g</span>
+          <span>Y {food.missingNutrition?.fat ? "—" : formatNumber(food.fat)}g</span>
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-1">

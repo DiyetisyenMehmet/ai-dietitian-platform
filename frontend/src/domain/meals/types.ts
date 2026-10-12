@@ -11,6 +11,8 @@ export interface FoodItem {
   protein: number;
   carbs: number;
   fat: number;
+  /** API fields absent from a food entry; a recorded zero remains a valid value. */
+  missingNutrition?: Partial<Record<keyof NutritionTotals, boolean>>;
 }
 
 /** A meal slot with its logged foods, scheduled time and explicit check-in. */
