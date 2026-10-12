@@ -1,67 +1,22 @@
 "use client";
 
 import * as React from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
 
-import { cn } from "@/shared/lib/utils";
 import { formatLongDate } from "@/shared/lib/format";
 import { Button } from "@/presentation/components/ui/button";
 import { Input } from "@/presentation/components/ui/input";
-import { ProgressBar } from "@/presentation/components/ui/progress-bar";
 import { EmptyState } from "@/presentation/components/feedback/empty-state";
 import { SectionCard } from "@/presentation/components/health/section-card";
 import { ProgressStatsSection } from "@/presentation/components/progress/progress-stats-section";
-import { WeightChart } from "@/presentation/components/health/weight-chart";
+import { ProgressHomeOverview } from "@/presentation/components/progress/progress-home-overview";
 import { healthIcon } from "@/presentation/components/health/health-icon";
-import { useHealthProfile } from "@/application/health/health-profile-store";
-import {
-  analyzeWeight,
-  useWeightCheckInStatus,
-  useWeightEntries,
-  weightStore,
-} from "@/application/health/weight-store";
-import {
-  formatWeightNumber,
-  localDateKey,
-  parseWeightInput,
-} from "@/application/health/weight-utils";
-import { useActivity } from "@/application/health/activity-store";
+import { useWeightCheckInStatus, weightStore } from "@/application/health/weight-store";
+import { formatWeightNumber, localDateKey, parseWeightInput } from "@/application/health/weight-utils";
 import { journeyStore, useJourneyEvents } from "@/application/health/journey-store";
 import type { JourneyEventType } from "@/domain/health/types";
-
-const STATUS_TONE: Record<
-  ReturnType<typeof analyzeWeight>["status"],
-  { wrap: string; badge: string; label: string }
-> = {
-  reached: {
-    wrap: "border-emerald-500/30 bg-emerald-500/5",
-    badge: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
-    label: "Hedefe ulaşıldı",
-  },
-  ahead: {
-    wrap: "border-emerald-500/30 bg-emerald-500/5",
-    badge: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
-    label: "Planın önünde",
-  },
-  "on-track": {
-    wrap: "border-primary/30 bg-primary/5",
-    badge: "bg-primary/15 text-primary",
-    label: "Yolunda",
-  },
-  behind: {
-    wrap: "border-amber-500/30 bg-amber-500/5",
-    badge: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
-    label: "Takip gerekiyor",
-  },
-  "no-data": {
-    wrap: "border-border bg-muted/40",
-    badge: "bg-muted text-muted-foreground",
-    label: "Veri bekleniyor",
-  },
-};
 
 const HISTORY_ICON: Record<JourneyEventType, Parameters<typeof healthIcon>[0]> = {
   "profile-created": "user",
@@ -165,98 +120,16 @@ function WeighInForm() {
 }
 
 export function ProgressView() {
-  const profile = useHealthProfile();
-  const entries = useWeightEntries();
   const checkIn = useWeightCheckInStatus();
-  const activity = useActivity();
   const history = useJourneyEvents();
 
   React.useEffect(() => {
     void weightStore.hydrateCheckInFromBackend();
   }, []);
 
-  const analysis = React.useMemo(
-    () => analyzeWeight(entries, profile.targetWeightKg),
-    [entries, profile.targetWeightKg],
-  );
-  const tone = STATUS_TONE[analysis.status];
-  const currentWeight = profile.currentWeightKg > 0 ? profile.currentWeightKg : analysis.latestKg;
-
   return (
     <div className="space-y-5">
-      <SectionCard icon="scale" title="Kilo İlerlemen">
-        {entries.length === 0 ? (
-          <EmptyState
-            icon={healthIcon("scale")}
-            title="Henüz kilo kaydın yok"
-            description="İlk kilonu kaydet; grafiğin ve profilindeki hedef kilo burada görünsün."
-          />
-        ) : (
-          <>
-            <div className="mb-4 grid grid-cols-3 gap-3 text-center">
-              <div>
-                <p className="text-lg font-bold">
-                  {analysis.startKg !== null ? formatWeightNumber(analysis.startKg) : "—"}
-                </p>
-                <p className="text-[11px] text-muted-foreground">Başlangıç</p>
-              </div>
-              <div>
-                <p className="text-lg font-bold text-primary">
-                  {currentWeight !== null ? formatWeightNumber(currentWeight) : "—"}
-                </p>
-                <p className="text-[11px] text-muted-foreground">Güncel</p>
-              </div>
-              <div>
-                <p className="text-lg font-bold">
-                  {analysis.targetKg > 0 ? formatWeightNumber(analysis.targetKg) : "—"}
-                </p>
-                <p className="text-[11px] text-muted-foreground">Hedef</p>
-              </div>
-            </div>
-            <WeightChart
-              entries={entries}
-              targetKg={profile.targetWeightKg}
-              className="h-44 w-full"
-            />
-          </>
-        )}
-      </SectionCard>
-
-      {analysis.status !== "no-data" && (
-        <section className={cn("rounded-2xl border p-5 shadow-card", tone.wrap)}>
-          <div className="mb-3 flex items-center gap-2.5">
-            <span className="flex size-9 items-center justify-center rounded-xl bg-background/70 text-primary">
-              <Image
-                src="/images/diewish/semantic/diewish-evaluation.png"
-                alt=""
-                width={32}
-                height={32}
-                unoptimized
-                draggable={false}
-                aria-hidden="true"
-                data-diewish-semantic-icon="evaluation"
-                className="size-8 rounded-full object-contain"
-              />
-            </span>
-            <div className="flex flex-col">
-              <h3 className="text-sm font-semibold">İlerleme Analizi</h3>
-              <span className={cn("mt-0.5 inline-flex w-fit rounded-full px-2 py-0.5 text-[11px] font-medium", tone.badge)}>
-                {tone.label}
-              </span>
-            </div>
-          </div>
-          <p className="text-sm leading-relaxed text-muted-foreground">{analysis.message}</p>
-          <div className="mt-4">
-            <div className="mb-1.5 flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Hedef kiloya ilerleme</span>
-              <span className="font-semibold">%{analysis.progressPercent}</span>
-            </div>
-            <ProgressBar value={analysis.progressPercent} />
-          </div>
-        </section>
-      )}
-
-      <ProgressStatsSection />
+      <ProgressHomeOverview />
 
       <SectionCard icon="scale" title="Kilonu Kaydet">
         {checkIn?.required && (
@@ -277,30 +150,7 @@ export function ProgressView() {
         <WeighInForm />
       </SectionCard>
 
-      <SectionCard icon="activity" title="Aktivite">
-        <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-2xl border border-border bg-card p-3">
-            <p className="text-[11px] text-muted-foreground">Adım</p>
-            <p className="mt-1 text-base font-bold tabular-nums">
-              {activity.stepGoal > 0 ? activity.steps.toLocaleString("tr-TR") : "—"}
-            </p>
-            <p className="mt-0.5 text-[11px] text-muted-foreground">
-              {activity.stepGoal > 0
-                ? `/ ${activity.stepGoal.toLocaleString("tr-TR")} hedef`
-                : "Adım kaynağı henüz bağlı değil"}
-            </p>
-          </div>
-          <div className="rounded-2xl border border-border bg-card p-3">
-            <p className="text-[11px] text-muted-foreground">Aktif süre</p>
-            <p className="mt-1 text-base font-bold tabular-nums">{activity.activeMinutes} dk</p>
-            <p className="mt-0.5 text-[11px] text-muted-foreground">
-              {activity.activeMinutesGoal > 0
-                ? `/ ${activity.activeMinutesGoal} dk hedef`
-                : "Bugün kaydedilen süre"}
-            </p>
-          </div>
-        </div>
-      </SectionCard>
+      <ProgressStatsSection />
 
       <SectionCard
         icon="calendar"
