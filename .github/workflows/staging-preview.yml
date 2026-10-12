@@ -36,6 +36,48 @@ env:
   NOTIFICATION_SCHEDULER_JOB: diewish-notification-dispatch-staging
 
 jobs:
+  coach-sync-final-preflight:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feature/staging-preview' && contains(github.event.head_commit.message, '[coach-sync-final]') }}
+    name: Coach P2 staging activation preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOY_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+      - name: Read serving runtime and exact staging identities
+        run: python3 scripts/coach-sync-staging-preflight.py --phase deployer
+      - name: Check existing migration execution identity without changing IAM
+        shell: bash
+        run: |
+          set -euo pipefail
+          build_id="$(gcloud builds submit --no-source --project "$PROJECT_ID" \
+            --config .github/cloudbuild/coach-sync-preflight-staging.yaml \
+            --substitutions "_GIT_SHA=${GITHUB_SHA}" --async --format='value(id)' --quiet)"
+          test -n "$build_id"
+          echo "Coach permission preflight Cloud Build: $build_id"
+          for attempt in {1..150}; do
+            status="$(gcloud builds describe "$build_id" --project "$PROJECT_ID" --region=global --format='value(status)')"
+            case "$status" in
+              SUCCESS|FAILURE|INTERNAL_ERROR|TIMEOUT|CANCELLED|EXPIRED) break ;;
+            esac
+            sleep 2
+          done
+          log_file="$(mktemp)"
+          trap 'rm -f "$log_file"' EXIT
+          gcloud builds log "$build_id" --project "$PROJECT_ID" >"$log_file" 2>&1 || true
+          grep 'COACH_PREFLIGHT_' "$log_file" || echo "Safe preflight details unavailable; inspect the Cloud Build log."
+          if [[ "$status" != "SUCCESS" ]]; then
+            echo "BLOCKED: existing-secret permission preflight status=$status; no role, secret or runtime configuration changed."
+            exit 1
+          fi
+
   deploy-staging:
     # [stage4-release] may start this workflow immediately, but no staging
     # resource is touched until the exact-SHA Hardening + Staging Config gates
