@@ -14,3 +14,8 @@ staging release recovery
 task=STAGING-RELEASE-RECOVERY-A1
 verified_source_sha=5b0e24e1a3ab35f21d6ec787edceac86c66c99ac
 purpose=trigger exact-SHA staging gates and deploy without application code changes
+
+staging release recovery
+task=STAGING-RELEASE-RECOVERY-A1
+verified_source_sha=2c26a745dd8692e92adfc509a7c5824f6662ce1d
+purpose=release current verified staging tree after exact-SHA gates passed
