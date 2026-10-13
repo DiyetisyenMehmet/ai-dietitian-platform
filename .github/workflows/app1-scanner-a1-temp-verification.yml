@@ -48,6 +48,11 @@ jobs:
       - name: Install backend
         run: npm ci
       - name: Verify OFF volume and mg/L normalization
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgresql://diewish_test:diewish_test@localhost:5432/diewish_test
+          JWT_ACCESS_SECRET: scanner-test-access-secret-is-not-production-value
+          JWT_REFRESH_SECRET: scanner-test-refresh-secret-is-not-production-value
         run: node --import tsx --test src/modules/nutrition-data/open-food-facts-normalization.test.ts src/modules/nutrition-data/micronutrients.test.ts
       - name: Backend TypeScript
         run: npm run type-check
