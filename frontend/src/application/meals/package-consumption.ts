@@ -17,7 +17,7 @@ function round(value: number) { return Math.round(value * 10000) / 10000; }
 export function parsePackageSize(quantity: string | null | undefined): PackageSize | null {
   if (!quantity) return null;
   const normalized = quantity.trim().toLocaleLowerCase("tr-TR").replace(/,/g, ".");
-  const match = /^(?:(\d+(?:\.\d+)?)\s*[x×]\s*)?(\d+(?:\.\d+)?)\s*(ml|cl|l|g|kg)$/.exec(normalized);
+  const match = /^(?:(\d+(?:\.\d+)?)\s*[x×*]\s*)?(\d+(?:\.\d+)?)\s*(ml|cl|l|g|kg)$/.exec(normalized);
   if (!match) return null;
   const packages = match[1] ? Number(match[1]) : 1;
   const size = Number(match[2]);

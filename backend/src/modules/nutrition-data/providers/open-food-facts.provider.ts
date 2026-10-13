@@ -97,7 +97,13 @@ function declaredVolumeMinerals(n: Record<string, unknown>, volumeMl: number) {
 }
 
 function nutrientValues(n: Record<string, unknown>, basis: "100g" | "serving"): NutrientValues {
-  const sodiumG = nutrient(n, "sodium", basis);
+  const sodiumValue = nutrient(n, "sodium", basis);
+  const sodiumUnit = text(n["sodium_unit"])?.trim().toLowerCase().replace(/\s/g, "") ?? "g";
+  // mg/L is a concentration, not grams per 100g or grams per serving.
+  const sodiumMg = sodiumValue === null ? null
+    : sodiumUnit === "mg" ? sodiumValue
+    : sodiumUnit === "g" ? Math.round(sodiumValue * 1000 * 100) / 100
+    : null;
   const values: NutrientValues = {
     energyKcal: nutrient(n, "energy-kcal", basis),
     proteinG: nutrient(n, "proteins", basis),
@@ -106,7 +112,7 @@ function nutrientValues(n: Record<string, unknown>, basis: "100g" | "serving"): 
     saturatedFatG: nutrient(n, "saturated-fat", basis),
     sugarsG: nutrient(n, "sugars", basis),
     fiberG: nutrient(n, "fiber", basis),
-    sodiumMg: sodiumG === null ? null : Math.round(sodiumG * 1000 * 100) / 100,
+    sodiumMg,
     saltG: nutrient(n, "salt", basis),
   };
   const micronutrients = offMicronutrients(n, basis);
@@ -170,6 +176,13 @@ export function normalizeOpenFoodFactsProduct(raw: unknown, barcodeHint?: string
   const requestedServingMl = unambiguousServingVolume(sourceServingText) ?? num(product.serving_quantity);
   if (requestedServingMl && servingUnitFromDescription(sourceServingText) === "ml") {
     const minerals = declaredVolumeMinerals(nutriments, requestedServingMl);
+    const sodiumUnit = text(nutriments["sodium_unit"])?.trim().toLowerCase().replace(/\s/g, "");
+    if (sodiumUnit === "mg/l" || sodiumUnit === "mg/litre" || sodiumUnit === "mg/liter") {
+      const sodiumPerLiter = num(nutriments["sodium_100g"]) ?? num(nutriments["sodium_serving"]);
+      if (sodiumPerLiter !== null && sodiumPerLiter >= 0) {
+        perServing.sodiumMg = Math.round(sodiumPerLiter * requestedServingMl / 1000 * 10000) / 10000;
+      }
+    }
     if (minerals) {
       const existing = perServing.micronutrients ?? emptyMicronutrients();
       perServing.micronutrients = Object.fromEntries(

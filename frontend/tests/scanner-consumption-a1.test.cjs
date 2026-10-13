@@ -90,7 +90,7 @@ test("inspection hides consumption selector until the add action", () => {
 test("meal API preserves ml and uses explicit-source nutrients", () => {
   assert.match(api, /consumedAmount: consumption\.amount/);
   assert.match(api, /consumedUnit: consumption\.unit/);
-  assert.match(scanUI, /personalizeNutrients\(nutrients\)/);
+  assert.match(scanUI, /personalizeNutrients\(nutrients, food\.barcode\)/);
   assert.match(scanUI, /nutritionClient\.logMeal\(mealType, food, personalization, selectedConsumption\)/);
 });
 
