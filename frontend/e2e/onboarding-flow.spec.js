@@ -251,42 +251,40 @@ test("register -> consent -> onboarding -> scanner -> same-day weigh-in preserve
   await page.getByRole("button", { name: /Sorgula/ }).click();
 
   await expect(page.getByText("Test Protein Bar", { exact: true })).toBeVisible();
-  await expect(page.getByLabel("Seçilen porsiyon gramı")).toHaveValue("");
-  await expect(page.getByText("Henüz seçilmedi", { exact: true })).toBeVisible();
-  await expect(
-    page.getByText("Kaynak porsiyon bilgisi: 1 bar / 25 g. Bu değer otomatik tüketim sayılmaz.", {
-      exact: true,
-    }),
-  ).toBeVisible();
+  // Barcode inspection is not consumption. A trusted 50g package total can
+  // appear without exposing or applying any consumed quantity.
+  await expect(page.getByLabel("Tüketim miktarı")).toHaveCount(0);
+  await expect(page.getByText("Paketin tamamı: 50 g")).toBeVisible();
   await expect(page.getByText("520 kcal", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("260 kcal", { exact: true }).first()).toBeVisible();
   expect(personalizationRequests).toHaveLength(0);
 
-  await page.getByLabel("Seçilen porsiyon gramı").fill("25");
-  await page
-    .getByRole("button", { name: "Tüketilen miktarı uygula ve besin değerlerini hesapla" })
-    .click();
-  await expect(page.getByLabel("Seçilen porsiyon gramı")).toHaveValue("25");
-  await expect(page.getByText("130 kcal", { exact: true }).first()).toBeVisible();
-  await page.getByText("Vitamin ve Mineraller", { exact: true }).click();
-  await expect(page.getByText("60 mg", { exact: true })).toBeVisible();
-  await expect(page.getByText("2,5 µg", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Öğüne eklemek için porsiyon seç" }).click();
+  const portion = page.locator("#barcode-consumption-selection");
+  await expect(page.getByLabel("Tüketim miktarı")).toHaveValue("1");
+  await expect(portion.getByText("260 kcal", { exact: true })).toBeVisible();
+  expect(personalizationRequests.at(-1)).toMatchObject({ barcode: "4006381333931", grams: 50 });
+
+  await page.getByRole("button", { name: "Yarım paket" }).click();
+  await expect(page.getByLabel("Tüketim miktarı")).toHaveValue("0,5");
+  await expect(page.getByRole("button", { name: /Kalori karşılaştır/ })).toBeDisabled();
+  await page.getByRole("button", { name: "Miktarı hesapla" }).click();
+  await expect(portion.getByText("130 kcal", { exact: true })).toBeVisible();
+  await portion.getByText("Vitamin ve Mineraller", { exact: true }).click();
+  await expect(portion.getByText("60 mg", { exact: true })).toBeVisible();
+  await expect(portion.getByText("2,5 µg", { exact: true })).toBeVisible();
   await expect(page.getByText("Veri yok", { exact: true })).toHaveCount(0);
   await expect(page.getByText("100 g için", { exact: true })).toBeVisible();
-  await expect(page.getByText(/Kaynak besin değeri 100 g referansına aittir/)).toBeVisible();
+  await expect(page.getByText(/Paket boyutu, 100 g/)).toBeVisible();
   await expect(page.getByText("100 g için şeker miktarı yüksek.")).toBeVisible();
   await expect(page.getByText("Open Food Facts", { exact: false }).first()).toBeVisible();
   expect(personalizationRequests.at(-1)).toMatchObject({ barcode: "4006381333931", grams: 25 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 
-  await page.getByLabel("Seçilen porsiyon gramı").fill("50");
+  await page.getByRole("button", { name: "1 paket" }).click();
   await expect(page.getByRole("button", { name: /Kalori karşılaştır/ })).toBeDisabled();
-  await page
-    .getByRole("button", { name: "Tüketilen miktarı uygula ve besin değerlerini hesapla" })
-    .click();
-  await expect(page.getByLabel("Seçilen porsiyon gramı")).toHaveValue("50");
-  await expect(page.getByText("260 kcal", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("120 mg", { exact: true })).toBeVisible();
-  await expect(page.getByText("5 µg", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Miktarı hesapla" }).click();
+  await expect(portion.getByText("260 kcal", { exact: true })).toBeVisible();
   expect(personalizationRequests.at(-1)).toMatchObject({ barcode: "4006381333931", grams: 50 });
 
   let comparisonPayload = null;
@@ -323,7 +321,7 @@ test("register -> consent -> onboarding -> scanner -> same-day weigh-in preserve
       response.request().method() === "POST" &&
       new URL(response.url()).pathname === "/api/tracking/meals"
     ),
-    page.getByRole("button", { name: /50 gram tüketimi .* ekle/i }).click(),
+    page.getByRole("button", { name: "Öğüne ekle", exact: true }).click(),
   ]);
   expect(mealResponse.status()).toBe(201);
   expect(mealPayload).toMatchObject({
@@ -331,6 +329,8 @@ test("register -> consent -> onboarding -> scanner -> same-day weigh-in preserve
     proteinG: 10,
     carbsG: 27.5,
     fatG: 12.5,
+    consumedAmount: 50,
+    consumedUnit: "g",
     micronutrients: {
       calcium: 120,
       iron: 3,
