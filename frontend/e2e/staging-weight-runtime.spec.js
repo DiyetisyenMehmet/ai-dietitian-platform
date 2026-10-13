@@ -212,7 +212,7 @@ test("staging Body & Weight acceptance: chronology, CRUD, isolation, graph and s
 
   // GRAPH + DATA CONSISTENCY — real staging browser uses the same authoritative value.
   await page.goto(`${WEB_BASE_URL}/progress`);
-  await expect(page.getByText("Kilo İlerlemen", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Kilo", exact: true })).toBeVisible();
   const graph = page.getByRole("img", { name: "Kilo değişim grafiği" });
   await expect(graph).toBeVisible();
   await expect(graph.locator("desc")).toContainText(/3 ölçüm/);

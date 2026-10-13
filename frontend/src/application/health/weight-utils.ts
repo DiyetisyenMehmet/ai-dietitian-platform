@@ -64,6 +64,40 @@ export function dateKeyToLocalNoon(dateKey: string): Date | null {
   return value;
 }
 
+/** Prevent impossible or future calendar dates before a weight record reaches the API. */
+export function isSelectableWeightDate(dateKey: string, today = localDateKey()): boolean {
+  return dateKeyToLocalNoon(dateKey) !== null && dateKey <= today;
+}
+
+/** Readable local-calendar label without interpreting a date-only value in UTC. */
+export function formatWeightDate(dateKey: string): string {
+  const date = dateKeyToLocalNoon(dateKey);
+  return date
+    ? new Intl.DateTimeFormat("tr-TR", { day: "numeric", month: "short", year: "numeric" }).format(date)
+    : dateKey;
+}
+
+export interface WeightHistoryRow {
+  entry: WeightEntry;
+  /** Only compare distinct calendar days; same-day repetitions never manufacture a trend. */
+  changeFromPreviousDayKg: number | null;
+}
+
+/** Reuses existing records and stable chronological order; it never creates sample entries. */
+export function recentWeightHistory(entries: WeightEntry[], limit = 4): WeightHistoryRow[] {
+  const sorted = sortWeightEntries(entries).filter((entry) => isValidWeightKg(entry.weightKg));
+  return sorted.slice(-Math.max(0, limit)).reverse().map((entry) => {
+    const position = sorted.findIndex((candidate) => candidate.id === entry.id);
+    const previous = sorted.slice(0, position).reverse().find((candidate) => candidate.date !== entry.date);
+    return {
+      entry,
+      changeFromPreviousDayKg: previous
+        ? Number((entry.weightKg - previous.weightKg).toFixed(1))
+        : null,
+    };
+  });
+}
+
 export function localDateKeyFromIso(iso: string): string {
   const value = new Date(iso);
   return Number.isFinite(value.getTime()) ? localDateKey(value) : iso.slice(0, 10);
