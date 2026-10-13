@@ -25,6 +25,6 @@ Unit tests cover owner routing, bounded queries, atomic capacity reservation, st
 
 ## Integration and later activation
 
-Merge code only after Hardening and Staging Config pass on the reviewed branch and the latest staging base is reconciled. Do not add deployment trigger markers. The existing unrelated staging runtime deployment hold remains in force.
+Merge code only after Hardening and Staging Config pass on the reviewed branch and the latest staging base is reconciled. Do not add deployment trigger markers. This task integrates code only and does not start a runtime release.
 
-No database account/password/connection-secret preparation remains. A later separately approved staging release must deploy both backend and frontend, resolve the existing deployment hold, verify the serving SHA and flag, then explicitly enable COACH_SYNC_ENABLED and validate actual Cloud Run streaming plus real devices. This code integration keeps the flag off. Rollback is the existing disabled flag/P1 path; no database ACL restoration is necessary.
+No database account/password/connection-secret preparation remains. A later separately approved staging release must deploy both backend and frontend, respect any current release restrictions, verify the serving SHA and flag, then explicitly enable COACH_SYNC_ENABLED and validate actual Cloud Run streaming plus real devices. This code integration keeps the flag off. Rollback is the existing disabled flag/P1 path; no database ACL restoration is necessary.
