@@ -8,6 +8,12 @@ import {
 
 test.use({ viewport: { width: 390, height: 844 } });
 
+// Synthetic runtime probes must never create accounts or write on production.
+for (const target of [base, process.env.E2E_API_BASE_URL || "http://127.0.0.1:4000/api"]) {
+  if (!["staging.diewish.com", "localhost", "127.0.0.1"].includes(new URL(target).hostname))
+    throw new Error("Mirmir pilot refuses non-staging/non-local hosts");
+}
+
 async function frameState(mascot: Locator, time: number) {
   return mascot.evaluate((node, currentTime) => {
     for (const animation of node.getAnimations({ subtree: true })) {
@@ -22,7 +28,7 @@ test("Mirmir pilot preserves layout, persists across two sessions, and stops all
   page,
   request,
   browser,
-}) => {
+}, testInfo) => {
   test.setTimeout(180_000);
   const account = await createDashboardSession(page, request);
   const banner = page.locator("[data-dashboard-coach-banner]");
@@ -47,6 +53,7 @@ test("Mirmir pilot preserves layout, persists across two sessions, and stops all
   const openBox = await mascot.boundingBox();
   expect(await frameState(mascot, 100)).toEqual(["visible", "hidden"]);
   expect(await frameState(mascot, 5500)).toEqual(["hidden", "visible"]);
+  await mascot.screenshot({ path: testInfo.outputPath("mirmir-eyes-closed.png") });
   expect(await mascot.boundingBox()).toEqual(openBox);
   expect(await frameState(mascot, 0)).toEqual(["visible", "hidden"]);
 
@@ -76,6 +83,7 @@ test("Mirmir pilot preserves layout, persists across two sessions, and stops all
   for (const theme of ["dark", "light"] as const) {
     await setDashboardTheme(page, theme);
     await banner.scrollIntoViewIfNeeded();
+    await banner.screenshot({ path: testInfo.outputPath(`mirmir-banner-${theme}.png`) });
     expect(
       await mascot
         .locator("img")
