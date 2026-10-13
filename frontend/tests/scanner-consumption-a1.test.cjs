@@ -93,3 +93,12 @@ test("meal API preserves ml and uses explicit-source nutrients", () => {
   assert.match(scanUI, /personalizeNutrients\(nutrients\)/);
   assert.match(scanUI, /nutritionClient\.logMeal\(mealType, food, personalization, selectedConsumption\)/);
 });
+
+test("photo food edits prefer estimated portion over mandatory gram entry", () => {
+  const photo = fs.readFileSync(path.join(root, "src/presentation/components/meals/food-scanner-view.tsx"), "utf8");
+  assert.match(photo, /Yarım tahmini porsiyon/);
+  assert.match(photo, /1 tahmini porsiyon/);
+  assert.match(photo, /2 tahmini porsiyon/);
+  assert.match(photo, /Gerekirse gram ile hassas düzelt/);
+  assert.match(photo, /analysis\.estimatedGrams \* multiplier/);
+});
