@@ -432,12 +432,12 @@ export const nutritionClient = {
     });
   },
 
-  personalizeNutrients(nutrients: NutrientValuesDto) {
+  personalizeNutrients(nutrients: NutrientValuesDto, barcode?: string) {
     return apiRequest<{ personalization: PersonalizationContextDto }>({
       path: "/nutrition/personalize-nutrients",
       method: "POST",
       auth: true,
-      body: JSON.stringify({ nutrients }),
+      body: JSON.stringify({ nutrients, ...(barcode ? { barcode } : {}) }),
     });
   },
 

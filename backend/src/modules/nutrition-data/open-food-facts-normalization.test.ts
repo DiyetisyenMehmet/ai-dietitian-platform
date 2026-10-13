@@ -203,3 +203,45 @@ test("mg/L without explicit volume serving is never converted to per-serving val
   assert.equal(drink.nutrientsPerServing, null);
   assert.equal(drink.nutrientsPer100g.micronutrients?.calcium ?? null, null);
 });
+
+
+test("volume mg/L sodium uses real volume and never incorrectly multiplies as g per 100g", () => {
+  const food = normalizeOpenFoodFactsProduct({
+    product: {
+      code: "8691381000486",
+      product_name: "Beypazarı Doğal Maden Suyu",
+      quantity: "200 ml",
+      serving_quantity: 200,
+      serving_size: "200 ml",
+      nutriments: {
+        "sodium_100g": 138.18,
+        "sodium_unit": "mg/L",
+        "calcium_100g": 205.86,
+        "calcium_unit": "mg/L",
+      },
+    },
+  });
+  assert.ok(food);
+  assert.equal(food.nutrientsPer100g.sodiumMg, null);
+  assert.equal(food.nutrientsPerServing?.sodiumMg, 27.636);
+  assert.equal(food.nutrientsPerServing?.micronutrients?.calcium, 41.172);
+  // These fixture concentrations are an example only, not values embedded in product code.
+});
+
+
+test("compact 200ml and 20cl source servings resolve to equal real volume", () => {
+  for (const servingSize of ["200ml", "20 cl", "0,2l"]) {
+    const drink = normalizeOpenFoodFactsProduct({
+      product: {
+        code: "8691381000486", product_name: "200 ml Doğal Maden Suyu",
+        quantity: "200 ml", serving_quantity: servingSize === "20 cl" ? 20 : 200,
+        serving_size: servingSize,
+        nutriments: { "calcium_100g": 100, "calcium_unit": "mg/L" },
+      },
+    });
+    assert.equal(drink?.serving?.unit, "ml");
+    assert.equal(drink?.serving?.amount, 200);
+    assert.equal(drink?.serving?.gramWeight, null);
+    assert.equal(drink?.nutrientsPerServing?.micronutrients?.calcium, 20);
+  }
+});

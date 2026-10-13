@@ -1,7 +1,7 @@
 import type { CanonicalFoodDto, CoreNutrientKeyDto, NutrientValuesDto } from "@/infrastructure/nutrition/nutrition-client";
 
 export type PackageUnit = "g" | "ml";
-export interface PackageSize { amount: number; unit: PackageUnit }
+export interface PackageSize { amount: number; unit: PackageUnit; units?: number; totalAmount?: number }
 export interface SelectedConsumption {
   amount: number;
   unit: PackageUnit;
@@ -23,9 +23,15 @@ export function parsePackageSize(quantity: string | null | undefined): PackageSi
   const size = Number(match[2]);
   const rawUnit = match[3];
   const factor = rawUnit === "l" || rawUnit === "kg" ? 1000 : rawUnit === "cl" ? 10 : 1;
-  const amount = packages * size * factor;
-  return Number.isFinite(amount) && amount > 0 && amount <= 5000
-    ? { amount, unit: rawUnit === "g" || rawUnit === "kg" ? "g" : "ml" } : null;
+  const amount = size * factor;
+  // A multipack (e.g. 20 x 200 ml) is 20 individual bottles,
+  // not a 4000 ml default consumption.
+  if (!Number.isSafeInteger(packages) || packages < 1 || packages > 1000 ||
+      !Number.isFinite(amount) || amount <= 0 || amount > 5000) return null;
+  const unit: PackageUnit = rawUnit === "g" || rawUnit === "kg" ? "g" : "ml";
+  return packages > 1
+    ? { amount, unit, units: packages, totalAmount: amount * packages }
+    : { amount, unit };
 }
 
 export function volumeReference(food: CanonicalFoodDto): { amount: number; nutrients: NutrientValuesDto } | null {
@@ -51,7 +57,10 @@ export function nutrientsForAmount(food: CanonicalFoodDto, amount: number, unit:
   if (!source || !basisAmount || !Number.isFinite(basisAmount) || basisAmount <= 0) return null;
   const factor = amount / basisAmount;
   const result = Object.fromEntries(
-    CORE_NUTRIENT_KEYS.map((key) => [key, source[key] === null ? null : round(source[key] * factor)]),
+    CORE_NUTRIENT_KEYS.map((key) => [
+      key, typeof source[key] === "number" && Number.isFinite(source[key])
+        ? round(source[key] * factor) : null,
+    ]),
   ) as unknown as NutrientValuesDto;
   if (source.micronutrients) {
     result.micronutrients = Object.fromEntries(
@@ -59,6 +68,11 @@ export function nutrientsForAmount(food: CanonicalFoodDto, amount: number, unit:
         key, typeof value === "number" && Number.isFinite(value) ? round(value * factor) : null,
       ]),
     ) as NutrientValuesDto["micronutrients"];
+  }
+  // An entirely missing nutrition reference does not support any package totals.
+  if (!CORE_NUTRIENT_KEYS.some((key) => result[key] !== null) &&
+      !Object.values(result.micronutrients ?? {}).some((value) => typeof value === "number")) {
+    return null;
   }
   return result;
 }

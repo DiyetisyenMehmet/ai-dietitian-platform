@@ -154,10 +154,14 @@ export const nutritionDataController = {
   }),
 
   personalizeNutrients: asyncHandler(async (req: Request, res: Response) => {
-    const body = req.body as { nutrients?: unknown } | undefined;
+    const body = req.body as { nutrients?: unknown; barcode?: unknown } | undefined;
+    if (body?.barcode !== undefined && (typeof body.barcode !== "string" || !body.barcode.trim())) {
+      throw ApiError.badRequest("barcode geçerli bir metin olmalıdır.");
+    }
     const personalization = await nutritionPersonalizationService.personalizeNutrients(
       requireUserId(req),
       parseNutrients(body?.nutrients),
+      body?.barcode as string | undefined,
     );
     sendSuccess(res, { personalization });
   }),

@@ -119,9 +119,21 @@ function hasNutrientValues(values: NutrientValues): boolean {
 function servingUnitFromDescription(description: string | null): "g" | "ml" | "serving" {
   if (!description) return "serving";
   const normalized = description.toLocaleLowerCase("tr-TR");
-  if (/\bml\b|mililitre|milliliter/.test(normalized)) return "ml";
-  if (/\bg\b|gram/.test(normalized)) return "g";
+  // Detect 200ml and 20cl, not just "200 ml". These are units, never gram weights.
+  if (/\d\s*(?:ml|cl|l)\b|mililitre|milliliter/.test(normalized)) return "ml";
+  if (/\d\s*(?:g|kg)\b|gram/.test(normalized)) return "g";
   return "serving";
+}
+
+/** The exact provider label "20 cl" is 200 ml even when its quantity field is 20. */
+function unambiguousServingVolume(description: string | null): number | null {
+  if (!description) return null;
+  const match = /^(\d+(?:[.,]\d+)?)\s*(ml|cl|l)$/i.exec(description.trim());
+  if (!match) return null;
+  const value = Number(match[1].replace(",", "."));
+  const factor = match[2].toLowerCase() === "l" ? 1000 : match[2].toLowerCase() === "cl" ? 10 : 1;
+  const amount = value * factor;
+  return Number.isFinite(amount) && amount > 0 ? amount : null;
 }
 
 function providerUpdatedAt(product: Record<string, unknown>): string | null {
@@ -154,8 +166,8 @@ export function normalizeOpenFoodFactsProduct(raw: unknown, barcodeHint?: string
   const nutriments = record(product.nutriments);
   const nutrientsPer100g = nutrientValues(nutriments, "100g");
   const perServing = nutrientValues(nutriments, "serving");
-  const requestedServingMl = num(product.serving_quantity);
   const sourceServingText = text(product.serving_size);
+  const requestedServingMl = unambiguousServingVolume(sourceServingText) ?? num(product.serving_quantity);
   if (requestedServingMl && servingUnitFromDescription(sourceServingText) === "ml") {
     const minerals = declaredVolumeMinerals(nutriments, requestedServingMl);
     if (minerals) {
@@ -183,9 +195,11 @@ export function normalizeOpenFoodFactsProduct(raw: unknown, barcodeHint?: string
     ...(traceText ? [traceText] : []),
     ...traceTags,
   ]);
-  const servingQuantity = num(product.serving_quantity);
   const servingSize = text(product.serving_size);
   const servingUnit = servingUnitFromDescription(servingSize);
+  const servingQuantity = servingUnit === "ml"
+    ? unambiguousServingVolume(servingSize) ?? num(product.serving_quantity)
+    : num(product.serving_quantity);
   const sourceReference = `${env.OPEN_FOOD_FACTS_BASE_URL.replace(/\/$/, "")}/product/${code}`;
   const lifecycleEvidence = explicitTrue(product.obsolete)
     ? {

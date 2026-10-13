@@ -391,7 +391,7 @@ export function BarcodeScannerPanel() {
 
   const packageSize = food ? parsePackageSize(food.quantity) : null;
   const displayedPackageNutrients = food && packageSize
-    ? nutrientsForAmount(food, packageSize.amount, packageSize.unit) : null;
+    ? nutrientsForAmount(food, packageSize.totalAmount ?? packageSize.amount, packageSize.unit) : null;
   const volumeSource = food ? volumeReference(food) : null;
   const parsedCount = parseGrams(portionInput);
   const calculatedAmount = parsedCount === null ? null
@@ -430,7 +430,7 @@ export function BarcodeScannerPanel() {
       // A declared volume serving is scaled as volume, not via the gram-based API.
       const result = unit === "g" && food.provenance.dataBasis === "PER_100_G"
         ? (await nutritionClient.personalize(food.barcode, actual)).personalization
-        : (await nutritionClient.personalizeNutrients(nutrients)).personalization;
+        : (await nutritionClient.personalizeNutrients(nutrients, food.barcode)).personalization;
       setPersonalization(result);
       setGrams(unit === "g" ? actual : null);
       const descriptor = consumptionUnit === "package"
@@ -487,7 +487,10 @@ export function BarcodeScannerPanel() {
   }, [barcode, food]);
 
   const portionNutrients = personalization?.nutrients ?? null;
-  const referenceNutrients = scan?.nutrients.reference ?? food?.nutrientsPer100g ?? null;
+  const referenceNutrients = scan?.nutrients.reference ?? (food
+    ? food.provenance.dataBasis === "PER_SERVING"
+      ? food.nutrientsPerServing ?? null : food.nutrientsPer100g
+    : null);
   const referenceLabel = scan?.nutritionReference.description ?? (food ? sourceBasis(food) : "Kaynak referansı");
 
   return (

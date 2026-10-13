@@ -27,7 +27,7 @@ const food = ({ quantity, basis = "PER_100_G", serving = null, per100 = nutrient
 test("200 ml beverage uses volume and not grams", () => {
   assert.deepEqual({ ...parsePackageSize("200 ml") }, { amount: 200, unit: "ml" });
   assert.deepEqual({ ...parsePackageSize("0,2 L") }, { amount: 200, unit: "ml" });
-  assert.deepEqual({ ...parsePackageSize("2 x 200 ml") }, { amount: 400, unit: "ml" });
+  assert.deepEqual({ ...parsePackageSize("2 x 200 ml") }, { amount: 200, unit: "ml", units: 2, totalAmount: 400 });
 });
 test("ambiguous package sizes are rejected", () => {
   for (const v of ["200", "200 ml + 50 ml", "yaklaşık 200 ml", "1 şişe", "200ml/100g", null]) {
@@ -101,4 +101,36 @@ test("photo food edits prefer estimated portion over mandatory gram entry", () =
   assert.match(photo, /2 tahmini porsiyon/);
   assert.match(photo, /Gerekirse gram ile hassas düzelt/);
   assert.match(photo, /analysis\.estimatedGrams \* multiplier/);
+});
+
+test("20 x 200 ml bulk pack defaults to one 200 ml bottle, not a 4000 ml drink", () => {
+  const bulk = parsePackageSize("20*200 ml");
+  assert.deepEqual({ ...bulk }, { amount: 200, unit: "ml", units: 20, totalAmount: 4000 });
+  const bottle = food({
+    quantity: "20*200 ml",
+    serving: { amount: 200, unit: "ml", gramWeight: null, description: "200 ml" },
+    perServing: nutrients({ sodiumMg: 27.636 }),
+  });
+  assert.equal(nutrientsForAmount(bottle, bulk.amount, "ml").sodiumMg, 27.636);
+  assert.equal(nutrientsForAmount(bottle, bulk.totalAmount, "ml").sodiumMg, 552.72);
+});
+test("unknown nutrient reference cannot produce a fictitious total", () => {
+  assert.equal(nutrientsForAmount(food({ quantity: "200 ml" }), 200, "g"), null);
+  assert.equal(nutrientsForAmount(food({
+    quantity: "200 ml",
+    serving: { amount: 200, unit: "ml", gramWeight: null },
+    perServing: nutrients(),
+  }), 200, "ml"), null);
+});
+test("source product identity travels with volume nutrition for allergen safety", () => {
+  const backend = fs.readFileSync(path.join(root, "../backend/src/modules/nutrition-data/nutrition-personalization.service.ts"), "utf8");
+  assert.match(scanUI, /personalizeNutrients\(nutrients, food\.barcode\)/);
+  assert.match(api, /personalizeNutrients\(nutrients: NutrientValuesDto, barcode\?: string\)/);
+  assert.match(backend, /nutritionDataService\.getByBarcode\(barcode, userId\)/);
+  assert.match(backend, /personalizeLocal\(userId, verified, food \?\? undefined\)/);
+});
+test("catalog reference uses declared serving basis rather than mislabeled 100g values", () => {
+  assert.match(scanUI, /food\.provenance\.dataBasis === "PER_SERVING"/);
+  assert.match(scanUI, /food\.nutrientsPerServing \?\? null : food\.nutrientsPer100g/);
+  assert.match(scanUI, /packageSize\.totalAmount \?\? packageSize\.amount/);
 });
