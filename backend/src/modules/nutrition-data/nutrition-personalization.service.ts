@@ -189,9 +189,12 @@ export const nutritionPersonalizationService = {
     };
   },
 
-  async personalizeNutrients(userId: string, nutrients: NutrientValues) {
+  async personalizeNutrients(userId: string, nutrients: NutrientValues, barcode?: string) {
     const verified = validateNutrients(nutrients);
-    return { nutrients: verified, ...(await personalizeLocal(userId, verified)) };
+    // Preserve product allergen, dietary and source warnings for volume servings.
+    const food = barcode ? await nutritionDataService.getByBarcode(barcode, userId) : undefined;
+    if (barcode && !food) throw ApiError.notFound("Ürün bulunamadı.");
+    return { nutrients: verified, ...(await personalizeLocal(userId, verified, food ?? undefined)) };
   },
 
   async compareBarcode(

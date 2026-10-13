@@ -306,7 +306,7 @@ export function FoodScannerView() {
   }, [analysis, ingredients, loadPersonalization, recalculating, syncEditable, targetGrams]);
 
   const onLogMeal = React.useCallback(async () => {
-    if (!analysis || loggingMeal) return;
+    if (!analysis || loggingMeal || editing || recalculating) return;
     setLoggingMeal(true);
     try {
       await foodScanClient.logMeal(mealType, analysis);
@@ -316,7 +316,7 @@ export function FoodScannerView() {
     } finally {
       setLoggingMeal(false);
     }
-  }, [analysis, loggingMeal, mealType]);
+  }, [analysis, editing, loggingMeal, mealType, recalculating]);
 
   const source = analysis ? sourceSummary(analysis) : null;
 
@@ -473,6 +473,7 @@ export function FoodScannerView() {
                   className="min-h-11 w-full"
                   onClick={() => void onLogMeal()}
                   isLoading={loggingMeal}
+                  disabled={editing || recalculating}
                   aria-label="Seçilen porsiyonu öğüne ekle"
                 >
                   <Utensils /> Öğüne ekle
@@ -491,9 +492,38 @@ export function FoodScannerView() {
             <section className="space-y-2">
               <p className="text-sm font-semibold">Muhtemel malzemeler</p>
               {editing && (
-                <div className="rounded-xl border bg-muted/20 p-3">
-                  <label className="text-xs font-semibold" htmlFor="photo-target-grams">Toplam porsiyon</label>
-                  <div className="mt-1 flex items-center gap-2">
+                <div className="space-y-2 rounded-xl border bg-muted/20 p-3">
+                  <p className="text-xs font-semibold">Tüketim porsiyonu</p>
+                  <p className="text-xs text-muted-foreground">
+                    {analysis.estimatedPortion || "Taranan porsiyon"}
+                    {analysis.estimatedGrams ? " · tahmini " + analysis.estimatedGrams + " g" : ""}
+                  </p>
+                  {analysis.estimatedGrams && analysis.estimatedGrams > 0 ? (
+                    <label className="block text-xs font-medium" htmlFor="photo-target-portion">
+                      Porsiyon tercihi
+                      <select
+                        id="photo-target-portion"
+                        defaultValue=""
+                        className="mt-1 block h-11 w-full rounded-xl border bg-background px-3 text-sm"
+                        onChange={(event) => {
+                          const multiplier = Number(event.target.value);
+                          if (multiplier > 0 && analysis.estimatedGrams) {
+                            setTargetGrams(Math.max(1, Math.min(5000, Math.round(analysis.estimatedGrams * multiplier))));
+                          }
+                        }}
+                      >
+                        <option value="">Porsiyon seç</option>
+                        <option value="0.5">Yarım tahmini porsiyon</option>
+                        <option value="1">1 tahmini porsiyon</option>
+                        <option value="2">2 tahmini porsiyon</option>
+                      </select>
+                    </label>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Tahmini porsiyon net değil; ayrıntılı miktar girebilirsin.</p>
+                  )}
+                  <details className="rounded-xl border bg-background px-3 py-2">
+                    <summary className="cursor-pointer text-xs font-medium">Gerekirse gram ile hassas düzelt</summary>
+                    <label className="mt-2 block text-xs" htmlFor="photo-target-grams">Tahmini miktar (g)</label>
                     <input
                       id="photo-target-grams"
                       type="number"
@@ -501,11 +531,10 @@ export function FoodScannerView() {
                       max={5000}
                       value={targetGrams}
                       onChange={(event) => setTargetGrams(Math.max(1, Math.min(5000, Number(event.target.value) || 1)))}
-                      className="w-28 rounded-lg border px-2 py-1.5 text-sm"
+                      className="mt-1 h-10 w-28 rounded-lg border bg-background px-2 text-sm"
                     />
-                    <span className="text-sm">g</span>
-                    <span className="text-xs text-muted-foreground">Malzeme miktarları toplam porsiyona göre birlikte güncellenir.</span>
-                  </div>
+                    <p className="mt-1 text-xs text-muted-foreground">Malzemeler bu tahmini miktara göre yeniden hesaplanır.</p>
+                  </details>
                 </div>
               )}
 

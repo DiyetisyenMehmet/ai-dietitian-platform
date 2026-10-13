@@ -70,8 +70,40 @@ function offMicronutrients(n: Record<string, unknown>, basis: "100g" | "serving"
   return hasAny ? values : null;
 }
 
+/**
+ * A source-declared mg/L value is a concentration, never an amount per 100g.
+ * Convert it only when the provider supplies an explicit volume serving.
+ * Keep missing minerals null. The frontend can scale this trusted serving to
+ * 200ml/100ml without inventing liquid density.
+ */
+function declaredVolumeMinerals(n: Record<string, unknown>, volumeMl: number) {
+  if (!Number.isFinite(volumeMl) || volumeMl <= 0) return null;
+  const values = emptyMicronutrients();
+  let found = false;
+  for (const [key, aliases] of OFF_MICRONUTRIENTS) {
+    for (const alias of aliases) {
+      const unit = text(n[alias + "_unit"])?.trim().toLowerCase().replace(/\s/g, "");
+      if (unit !== "mg/l" && unit !== "mg/litre" && unit !== "mg/liter") continue;
+      const perLiter = num(n[alias + "_100g"]) ?? num(n[alias + "_serving"]);
+      if (perLiter === null || perLiter < 0) continue;
+      const normalized = normalizeMicronutrientAmount(key, perLiter * volumeMl / 1000, "mg");
+      if (normalized === null) continue;
+      values[key] = normalized;
+      found = true;
+      break;
+    }
+  }
+  return found ? values : null;
+}
+
 function nutrientValues(n: Record<string, unknown>, basis: "100g" | "serving"): NutrientValues {
-  const sodiumG = nutrient(n, "sodium", basis);
+  const sodiumValue = nutrient(n, "sodium", basis);
+  const sodiumUnit = text(n["sodium_unit"])?.trim().toLowerCase().replace(/\s/g, "") ?? "g";
+  // mg/L is a concentration, not grams per 100g or grams per serving.
+  const sodiumMg = sodiumValue === null ? null
+    : sodiumUnit === "mg" ? sodiumValue
+    : sodiumUnit === "g" ? Math.round(sodiumValue * 1000 * 100) / 100
+    : null;
   const values: NutrientValues = {
     energyKcal: nutrient(n, "energy-kcal", basis),
     proteinG: nutrient(n, "proteins", basis),
@@ -80,7 +112,7 @@ function nutrientValues(n: Record<string, unknown>, basis: "100g" | "serving"): 
     saturatedFatG: nutrient(n, "saturated-fat", basis),
     sugarsG: nutrient(n, "sugars", basis),
     fiberG: nutrient(n, "fiber", basis),
-    sodiumMg: sodiumG === null ? null : Math.round(sodiumG * 1000 * 100) / 100,
+    sodiumMg,
     saltG: nutrient(n, "salt", basis),
   };
   const micronutrients = offMicronutrients(n, basis);
@@ -93,9 +125,21 @@ function hasNutrientValues(values: NutrientValues): boolean {
 function servingUnitFromDescription(description: string | null): "g" | "ml" | "serving" {
   if (!description) return "serving";
   const normalized = description.toLocaleLowerCase("tr-TR");
-  if (/\bml\b|mililitre|milliliter/.test(normalized)) return "ml";
-  if (/\bg\b|gram/.test(normalized)) return "g";
+  // Detect 200ml and 20cl, not just "200 ml". These are units, never gram weights.
+  if (/\d\s*(?:ml|cl|l)\b|mililitre|milliliter/.test(normalized)) return "ml";
+  if (/\d\s*(?:g|kg)\b|gram/.test(normalized)) return "g";
   return "serving";
+}
+
+/** The exact provider label "20 cl" is 200 ml even when its quantity field is 20. */
+function unambiguousServingVolume(description: string | null): number | null {
+  if (!description) return null;
+  const match = /^(\d+(?:[.,]\d+)?)\s*(ml|cl|l)$/i.exec(description.trim());
+  if (!match) return null;
+  const value = Number(match[1].replace(",", "."));
+  const factor = match[2].toLowerCase() === "l" ? 1000 : match[2].toLowerCase() === "cl" ? 10 : 1;
+  const amount = value * factor;
+  return Number.isFinite(amount) && amount > 0 ? amount : null;
 }
 
 function providerUpdatedAt(product: Record<string, unknown>): string | null {
@@ -128,6 +172,26 @@ export function normalizeOpenFoodFactsProduct(raw: unknown, barcodeHint?: string
   const nutriments = record(product.nutriments);
   const nutrientsPer100g = nutrientValues(nutriments, "100g");
   const perServing = nutrientValues(nutriments, "serving");
+  const sourceServingText = text(product.serving_size);
+  const requestedServingMl = unambiguousServingVolume(sourceServingText) ?? num(product.serving_quantity);
+  if (requestedServingMl && servingUnitFromDescription(sourceServingText) === "ml") {
+    const minerals = declaredVolumeMinerals(nutriments, requestedServingMl);
+    const sodiumUnit = text(nutriments["sodium_unit"])?.trim().toLowerCase().replace(/\s/g, "");
+    if (sodiumUnit === "mg/l" || sodiumUnit === "mg/litre" || sodiumUnit === "mg/liter") {
+      const sodiumPerLiter = num(nutriments["sodium_100g"]) ?? num(nutriments["sodium_serving"]);
+      if (sodiumPerLiter !== null && sodiumPerLiter >= 0) {
+        perServing.sodiumMg = Math.round(sodiumPerLiter * requestedServingMl / 1000 * 10000) / 10000;
+      }
+    }
+    if (minerals) {
+      const existing = perServing.micronutrients ?? emptyMicronutrients();
+      perServing.micronutrients = Object.fromEntries(
+        Object.keys(minerals).map((key) => [
+          key, existing[key as keyof typeof existing] ?? minerals[key as keyof typeof minerals],
+        ]),
+      ) as typeof minerals;
+    }
+  }
   const labelTags = tags(product.labels_tags);
   const sourceCategories = uniqueText([
     ...tags(product.categories_tags).map(stripTag),
@@ -144,9 +208,11 @@ export function normalizeOpenFoodFactsProduct(raw: unknown, barcodeHint?: string
     ...(traceText ? [traceText] : []),
     ...traceTags,
   ]);
-  const servingQuantity = num(product.serving_quantity);
   const servingSize = text(product.serving_size);
   const servingUnit = servingUnitFromDescription(servingSize);
+  const servingQuantity = servingUnit === "ml"
+    ? unambiguousServingVolume(servingSize) ?? num(product.serving_quantity)
+    : num(product.serving_quantity);
   const sourceReference = `${env.OPEN_FOOD_FACTS_BASE_URL.replace(/\/$/, "")}/product/${code}`;
   const lifecycleEvidence = explicitTrue(product.obsolete)
     ? {

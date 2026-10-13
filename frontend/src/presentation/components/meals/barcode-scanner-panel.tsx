@@ -19,6 +19,7 @@ import {
   Utensils,
 } from "lucide-react";
 import { toast } from "sonner";
+import { parsePackageSize, nutrientsForAmount, volumeReference, type PackageUnit, type SelectedConsumption } from "@/application/meals/package-consumption";
 
 import { ApiError } from "@/infrastructure/api/http-client";
 import {
@@ -28,7 +29,7 @@ import {
   type MealTypeDto,
   type NormalizedNutritionScanDto,
   type NutrientValuesDto,
-  type PersonalizationDto,
+  type PersonalizationContextDto,
 } from "@/infrastructure/nutrition/nutrition-client";
 import { Button } from "@/presentation/components/ui/button";
 import { Card, CardContent } from "@/presentation/components/ui/card";
@@ -176,7 +177,10 @@ export function BarcodeScannerPanel() {
   const [scan, setScan] = React.useState<NormalizedNutritionScanDto | null>(null);
   const [grams, setGrams] = React.useState<number | null>(null);
   const [portionInput, setPortionInput] = React.useState("");
-  const [personalization, setPersonalization] = React.useState<PersonalizationDto | null>(null);
+  const [personalization, setPersonalization] = React.useState<PersonalizationContextDto | null>(null);
+  const [consumptionOpen, setConsumptionOpen] = React.useState(false);
+  const [consumptionUnit, setConsumptionUnit] = React.useState<"package" | PackageUnit>("g");
+  const [selectedConsumption, setSelectedConsumption] = React.useState<SelectedConsumption | null>(null);
   const [comparison, setComparison] = React.useState<ComparisonDto | null>(null);
   const [notFound, setNotFound] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
@@ -204,22 +208,6 @@ export function BarcodeScannerPanel() {
   }, []);
   React.useEffect(() => stopCamera, [stopCamera]);
 
-  const loadPersonalization = React.useCallback(async (code: string, portionGrams: number, notify = false) => {
-    setPersonalizing(true);
-    try {
-      const result = await nutritionClient.personalize(code, portionGrams);
-      setPersonalization(result.personalization);
-      return result.personalization;
-    } catch (error) {
-      if (notify) {
-        toast.error(error instanceof ApiError ? error.message : "Porsiyon değerleri güncellenemedi.");
-      }
-      return null;
-    } finally {
-      setPersonalizing(false);
-    }
-  }, []);
-
   const applyFoundFood = React.useCallback(
     (
       _code: string,
@@ -234,7 +222,10 @@ export function BarcodeScannerPanel() {
       // Package quantity, nutrition reference and provider serving are source
       // metadata. None of them is evidence of what the user consumed.
       setGrams(null);
-      setPortionInput("");
+      setPortionInput(parsePackageSize(nextFood.quantity) ? "1" : "");
+      setConsumptionUnit(parsePackageSize(nextFood.quantity) ? "package" : volumeReference(nextFood) ? "ml" : "g");
+      setConsumptionOpen(false);
+      setSelectedConsumption(null);
     },
     [],
   );
@@ -265,6 +256,8 @@ export function BarcodeScannerPanel() {
       setComparison(null);
       setGrams(null);
       setPortionInput("");
+      setConsumptionOpen(false);
+      setSelectedConsumption(null);
       try {
         const result = await nutritionClient.barcode(normalized);
         if (result.food) {
@@ -396,28 +389,64 @@ export function BarcodeScannerPanel() {
     }
   }, [cameraActive, loading, lookup, nativeScanning, stopCamera]);
 
+  const packageSize = food ? parsePackageSize(food.quantity) : null;
+  const displayedPackageNutrients = food && packageSize
+    ? nutrientsForAmount(food, packageSize.totalAmount ?? packageSize.amount, packageSize.unit) : null;
+  const volumeSource = food ? volumeReference(food) : null;
+  const parsedCount = parseGrams(portionInput);
+  const calculatedAmount = parsedCount === null ? null
+    : consumptionUnit === "package" && packageSize
+      ? parsedCount * packageSize.amount
+      : parsedCount;
+  const chosenUnit: PackageUnit = consumptionUnit === "package" && packageSize
+    ? packageSize.unit : consumptionUnit === "ml" ? "ml" : "g";
+  const portionDirty = !selectedConsumption || calculatedAmount === null ||
+    Math.abs(calculatedAmount - selectedConsumption.amount) > 0.0001 ||
+    chosenUnit !== selectedConsumption.unit;
+  const selectedLabel = selectedConsumption?.description ?? "";
+
   const updatePortion = React.useCallback(async () => {
     if (!food?.barcode) return;
-    const nextGrams = parseGrams(portionInput);
-    if (nextGrams === null) {
-      toast.error("Porsiyon 1 g ile 5000 g arasında olmalıdır.");
+    const packageReference = parsePackageSize(food.quantity);
+    const number = parseGrams(portionInput);
+    const actual = number === null ? null
+      : consumptionUnit === "package" && packageReference
+        ? number * packageReference.amount : number;
+    const unit: PackageUnit = consumptionUnit === "package" && packageReference
+      ? packageReference.unit : consumptionUnit === "ml" ? "ml" : "g";
+    if (actual === null || actual <= 0 || actual > 5000) {
+      toast.error("Geçerli bir miktar seçmelisin (en fazla 5000 g/ml).");
       return;
     }
-    const next = await loadPersonalization(food.barcode, nextGrams, true);
-    if (!next) return;
-    setGrams(next.grams);
-    setPortionInput(roundedGrams(next.grams));
-    setComparison(null);
-  }, [food, loadPersonalization, portionInput]);
-
-  const portionInputValue = parseGrams(portionInput);
-  const portionDirty =
-    grams === null ||
-    portionInputValue === null ||
-    Math.abs(portionInputValue - grams) > 0.0001;
+    const nutrients = nutrientsForAmount(food, actual, unit);
+    if (!nutrients) {
+      toast.error(unit === "ml"
+        ? "Bu ürün için güvenilir ml besin referansı yok; ml, grama çevrilerek tahmin yapılamaz."
+        : "Bu miktar için güvenilir besin referansı bulunamadı.");
+      return;
+    }
+    setPersonalizing(true);
+    try {
+      // A declared volume serving is scaled as volume, not via the gram-based API.
+      const result = unit === "g" && food.provenance.dataBasis === "PER_100_G"
+        ? (await nutritionClient.personalize(food.barcode, actual)).personalization
+        : (await nutritionClient.personalizeNutrients(nutrients, food.barcode)).personalization;
+      setPersonalization(result);
+      setGrams(unit === "g" ? actual : null);
+      const descriptor = consumptionUnit === "package"
+        ? number + " " + (/maden suyu|şişe|doğal su/i.test(food.displayNameTr || food.name) && unit === "ml" ? "şişe" : "paket")
+        : number + " " + unit;
+      setSelectedConsumption({ amount: actual, unit, description: descriptor });
+      setComparison(null);
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.message : "Seçilen miktarın besin hesabı yapılamadı.");
+    } finally {
+      setPersonalizing(false);
+    }
+  }, [food, portionInput, consumptionUnit]);
 
   const compare = React.useCallback(async () => {
-    if (!food?.barcode || portionDirty || grams === null) return;
+    if (!food?.barcode || portionDirty || grams === null || selectedConsumption?.unit !== "g") return;
     setComparing(true);
     try {
       setComparison((await nutritionClient.compare(food.barcode, grams)).comparison);
@@ -426,20 +455,23 @@ export function BarcodeScannerPanel() {
     } finally {
       setComparing(false);
     }
-  }, [food, grams, portionDirty]);
+  }, [food, grams, portionDirty, selectedConsumption]);
 
   const logMeal = React.useCallback(async () => {
-    if (!food || !personalization || portionDirty || grams === null) return;
+    if (!food || !personalization || portionDirty || !selectedConsumption) {
+      setConsumptionOpen(true);
+      return;
+    }
     setLoggingMeal(true);
     try {
-      await nutritionClient.logMeal(mealType, food, personalization);
-      toast.success(`${roundedGrams(grams)} g porsiyon öğüne eklendi.`);
+      await nutritionClient.logMeal(mealType, food, personalization, selectedConsumption);
+      toast.success(selectedConsumption.description + " öğüne eklendi.");
     } catch {
       toast.error("Öğüne eklenemedi.");
     } finally {
       setLoggingMeal(false);
     }
-  }, [food, grams, mealType, personalization, portionDirty]);
+  }, [food, mealType, personalization, portionDirty, selectedConsumption]);
 
   const addFavorite = React.useCallback(async () => {
     if (!food) return;
@@ -455,7 +487,10 @@ export function BarcodeScannerPanel() {
   }, [barcode, food]);
 
   const portionNutrients = personalization?.nutrients ?? null;
-  const referenceNutrients = scan?.nutrients.reference ?? food?.nutrientsPer100g ?? null;
+  const referenceNutrients = scan?.nutrients.reference ?? (food
+    ? food.provenance.dataBasis === "PER_SERVING"
+      ? food.nutrientsPerServing ?? null : food.nutrientsPer100g
+    : null);
   const referenceLabel = scan?.nutritionReference.description ?? (food ? sourceBasis(food) : "Kaynak referansı");
 
   return (
@@ -573,7 +608,7 @@ export function BarcodeScannerPanel() {
                     {food.displayNameTr || food.name}
                   </h3>
                   {food.brand && <p className="mt-0.5 text-sm font-medium text-muted-foreground">{food.brand}</p>}
-                  <div className={`mt-3 grid gap-2 text-xs ${food.quantity ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
+                  <div className={`mt-3 grid gap-2 text-xs ${food.quantity ? "sm:grid-cols-2" : ""}`}>
                     {food.quantity && (
                       <div className="rounded-xl bg-primary/5 px-3 py-2">
                         <p className="text-muted-foreground">Paket</p>
@@ -584,12 +619,7 @@ export function BarcodeScannerPanel() {
                       <p className="text-muted-foreground">Besin referansı</p>
                       <p className="mt-0.5 font-bold text-foreground">{referenceLabel} için</p>
                     </div>
-                    <div className="rounded-xl bg-primary/5 px-3 py-2">
-                      <p className="text-muted-foreground">Tüketilen miktar</p>
-                      <p className="mt-0.5 font-bold text-foreground">
-                        {grams === null ? "Henüz seçilmedi" : `${roundedGrams(grams)} g`}
-                      </p>
-                    </div>
+
                   </div>
                   <div className="mt-3 space-y-0.5 text-xs text-muted-foreground">
                     <p className="break-all tabular-nums">Barkod: {food.barcode ?? barcode}</p>
@@ -624,86 +654,118 @@ export function BarcodeScannerPanel() {
 
           <Card>
             <CardContent className="space-y-4 p-4 sm:p-5">
-              <SectionTitle>2. Tüketilen miktar ve besin değerleri</SectionTitle>
-              <div>
-                <label htmlFor="portion-grams" className="mb-2 block text-sm font-medium text-muted-foreground">
-                  Tüketilen miktar
-                </label>
-                <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] gap-2.5">
-                  <div className="relative">
-                    <input
-                      id="portion-grams"
-                      type="text"
-                      inputMode="decimal"
-                      value={portionInput}
-                      placeholder="örn. 25"
-                      onChange={(event) => setPortionInput(event.target.value.replace(/[^0-9.,]/g, "").slice(0, 7))}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") void updatePortion();
-                      }}
-                      aria-label="Seçilen porsiyon gramı"
-                      className="h-12 w-full rounded-2xl border bg-background px-4 pr-10 text-lg font-bold tabular-nums outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                    />
-                    <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-sm font-semibold text-muted-foreground">g</span>
-                  </div>
-                  <Button
-                    className="h-12 rounded-2xl"
-                    variant="secondary"
-                    onClick={() => void updatePortion()}
-                    isLoading={personalizing}
-                    disabled={personalizing || !portionDirty}
-                    aria-label="Tüketilen miktarı uygula ve besin değerlerini hesapla"
-                  >
-                    <RefreshCcw aria-hidden="true" /> Miktarı Uygula
-                  </Button>
+              <SectionTitle>2. Ürünün besin değerleri</SectionTitle>
+              {packageSize && displayedPackageNutrients ? (
+                <div className="space-y-2">
+                  <p className="text-sm font-semibold">Paketin tamamı: {food.quantity}</p>
+                  <NutritionFactsGrid portion={displayedPackageNutrients} portionLabel={"Toplam " + food.quantity} hideMissing />
                 </div>
-                {grams === null && !personalizing ? (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Ürün taraması tüketim değildir. Yediğin veya içtiğin gerçek miktarı girip uygula.
-                  </p>
-                ) : portionDirty && !personalizing ? (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Değiştirdiğin miktarı uyguladığında besin değerleri yeniden hesaplanır.
-                  </p>
-                ) : null}
-              </div>
-
-              <div className="flex gap-2 text-xs text-muted-foreground">
-                <Info className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
-                <p>
-                  Kaynak besin değeri {referenceLabel} referansına aittir. Paket miktarı ve kaynak porsiyon bilgisi tüketim değildir.
-                </p>
-              </div>
-
-              {portionNutrients && grams !== null ? (
-                <NutritionFactsGrid portion={portionNutrients} portionLabel={consumedPortionLabel(grams)} hideMissing />
-              ) : referenceNutrients ? (
-                <NutritionFactsGrid portion={referenceNutrients} portionLabel={`${referenceLabel} referans`} hideMissing />
               ) : (
-                <p className="text-sm text-muted-foreground">Kaynak besin değerleri bulunamadı.</p>
+                <p className="rounded-xl border border-border bg-muted/30 px-3 py-3 text-sm text-muted-foreground">
+                  {packageSize
+                    ? "Paket miktarı biliniyor ancak uygun birimle eşleşen güvenilir besin referansı bulunmadığından toplam değer hesaplanmadı."
+                    : "Paketin net miktarı doğrulanamadı; toplam kalori ve besin değerleri hesaplanmadı."}
+                </p>
               )}
-
+              {volumeSource && (
+                <div className="space-y-2 border-t border-border/60 pt-3">
+                  <p className="text-sm font-semibold">Kaynakta bildirilen hacim porsiyonu</p>
+                  <NutritionFactsGrid
+                    portion={volumeSource.nutrients}
+                    portionLabel={volumeSource.amount + " ml (paket toplamı olmayabilir)"}
+                    hideMissing
+                  />
+                </div>
+              )}
+              {referenceNutrients && (
+                <div className="space-y-2 border-t border-border/60 pt-3">
+                  <p className="text-sm font-semibold">Kaynak besin referansı</p>
+                  <NutritionFactsGrid portion={referenceNutrients} portionLabel={referenceLabel + " (paket toplamı değil)"} hideMissing />
+                </div>
+              )}
               {scan?.additionalNutritionReferences.map((reference, index) => (
-                <div key={`${reference.description}-${index}`} className="space-y-2 rounded-2xl border border-primary/20 p-3">
-                  <p className="text-xs font-bold text-foreground">Hazırlanmış ürün için ayrı etiket referansı</p>
+                <div key={reference.description + index} className="space-y-2 rounded-xl border border-border p-3">
+                  <p className="text-xs font-bold">Ek etiket referansı</p>
                   <NutritionFactsGrid portion={reference.nutrients} portionLabel={reference.description} hideMissing />
-                  <p className="text-[11px] text-muted-foreground">Bu değer ayrı bir etiket referansıdır; tüketilen miktar değildir.</p>
                 </div>
               ))}
-
-              <Button
-                className="h-12 w-full rounded-2xl text-base font-bold"
-                onClick={() => void logMeal()}
-                isLoading={loggingMeal}
-                disabled={!personalization || portionDirty || personalizing || grams === null}
-                aria-label={
-                  grams === null
-                    ? "Öğüne eklemek için tüketilen miktarı seç"
-                    : `${roundedGrams(grams)} gram tüketimi ${MEALS.find((meal) => meal.value === mealType)?.label ?? "öğüne"} ekle`
-                }
-              >
-                <Plus aria-hidden="true" /> Öğüne Ekle
-              </Button>
+              <p className="text-xs text-muted-foreground">
+                Paket boyutu, 100 g / kaynak porsiyonu ve tükettiğin miktar ayrı bilgilerdir.
+                Sıvılarda 1 ml, 1 g kabul edilmez. Bilinmeyen besin değerleri sıfır olarak gösterilmez.
+              </p>
+              {!consumptionOpen && (
+                <Button
+                  className="h-12 w-full rounded-2xl font-bold"
+                  onClick={() => { setConsumptionOpen(true); if (packageSize) void updatePortion(); }}
+                >
+                  <Plus aria-hidden="true" /> Öğüne eklemek için porsiyon seç
+                </Button>
+              )}
+              {consumptionOpen && (
+                <div className="space-y-3 rounded-2xl border border-primary/20 bg-primary/5 p-3" id="barcode-consumption-selection">
+                  <h3 className="text-sm font-bold">Öğüne eklenecek tüketim miktarı</h3>
+                  <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                    <label className="text-xs font-medium" htmlFor="portion-unit">
+                      Ölçü birimi
+                      <select
+                        id="portion-unit"
+                        value={consumptionUnit}
+                        onChange={(event) => {
+                          const unit = event.target.value as "package" | PackageUnit;
+                          setConsumptionUnit(unit);
+                          setPortionInput(unit === "package" ? "1" : "");
+                          setSelectedConsumption(null);
+                          setPersonalization(null);
+                          setGrams(null);
+                        }}
+                        className="mt-1 block h-11 w-full rounded-xl border bg-background px-2 text-sm"
+                      >
+                        {packageSize && <option value="package">{packageSize.unit === "ml" ? "Şişe / paket" : "Paket"}</option>}
+                        {food.provenance.dataBasis === "PER_100_G" && <option value="g">Gram (g)</option>}
+                        {(volumeSource || packageSize?.unit === "ml") && <option value="ml">Mililitre (ml)</option>}
+                      </select>
+                    </label>
+                    <label className="text-xs font-medium" htmlFor="portion-grams">
+                      {consumptionUnit === "package" ? "Paket sayısı" : "Miktar (" + chosenUnit + ")"}
+                      <input
+                        id="portion-grams"
+                        type="text"
+                        inputMode="decimal"
+                        value={portionInput}
+                        placeholder={consumptionUnit === "package" ? "örn. 1 veya 0,5" : "örn. 200"}
+                        onChange={(event) => setPortionInput(event.target.value.replace(/[^0-9.,]/g, "").slice(0, 7))}
+                        aria-label="Tüketim miktarı"
+                        className="mt-1 h-11 w-full rounded-xl border bg-background px-3 text-base font-bold tabular-nums"
+                      />
+                    </label>
+                  </div>
+                  {packageSize && (
+                    <div className="flex flex-wrap gap-2">
+                      {[0.5, 1, 2].map((count) => (
+                        <Button key={count} variant="outline" size="sm" onClick={() => {
+                          setConsumptionUnit("package");
+                          setPortionInput(String(count).replace(".", ","));
+                        }}>
+                          {count === 0.5 ? "Yarım paket" : count === 1 ? "1 paket" : "2 paket"}
+                        </Button>
+                      ))}
+                    </div>
+                  )}
+                  <Button className="w-full" variant="secondary" onClick={() => void updatePortion()} isLoading={personalizing}>
+                    <RefreshCcw aria-hidden="true" /> Miktarı hesapla
+                  </Button>
+                  {selectedConsumption && !portionDirty && portionNutrients && (
+                    <NutritionFactsGrid
+                      portion={portionNutrients}
+                      portionLabel={selectedLabel + " tüketim"}
+                      hideMissing
+                    />
+                  )}
+                  {portionDirty && (
+                    <p className="text-xs text-muted-foreground">Öğüne eklemeden önce seçtiğin miktarı hesapla.</p>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -713,7 +775,7 @@ export function BarcodeScannerPanel() {
               {personalizing && (
                 <p className="text-sm text-muted-foreground">Aktif planın ve bugünkü kayıtlarınla karşılaştırılıyor…</p>
               )}
-              {grams !== null && !personalizing && personalization?.metrics && (
+              {selectedConsumption !== null && !portionDirty && !personalizing && personalization?.metrics && (
                 <div className="space-y-2">
                   {personalization.metrics.lines.slice(0, 4).map((line) => (
                     <div key={line} className="flex gap-3 rounded-2xl bg-primary/5 p-3 text-sm">
@@ -725,7 +787,7 @@ export function BarcodeScannerPanel() {
                   ))}
                 </div>
               )}
-              {!personalizing && grams === null && (
+              {!personalizing && selectedConsumption === null && (
                 <div className="flex gap-3 rounded-2xl bg-primary/5 p-3 text-sm">
                   <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
                     <Target className="size-4" aria-hidden="true" />
@@ -735,7 +797,7 @@ export function BarcodeScannerPanel() {
                   </p>
                 </div>
               )}
-              {!personalizing && grams !== null && !personalization?.metrics && (
+              {!personalizing && selectedConsumption !== null && !personalization?.metrics && (
                 <div className="flex gap-3 rounded-2xl bg-primary/5 p-3 text-sm">
                   <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
                     <Target className="size-4" aria-hidden="true" />
@@ -816,20 +878,23 @@ export function BarcodeScannerPanel() {
                 </div>
                 <Button
                   className="h-12 rounded-2xl font-bold"
-                  onClick={() => void logMeal()}
+                  onClick={() => {
+                    if (!consumptionOpen) { setConsumptionOpen(true); if (packageSize) void updatePortion(); }
+                    else void logMeal();
+                  }}
                   isLoading={loggingMeal}
-                  disabled={!personalization || portionDirty || personalizing || grams === null}
+                  disabled={loggingMeal || personalizing}
                 >
                   <Plus aria-hidden="true" /> Öğüne ekle
                 </Button>
               </div>
-              <Button className="h-11 w-full rounded-2xl" variant="outline" onClick={() => void compare()} isLoading={comparing} disabled={grams === null || portionDirty || personalizing}>
+              <Button className="h-11 w-full rounded-2xl" variant="outline" onClick={() => void compare()} isLoading={comparing} disabled={grams === null || portionDirty || personalizing || selectedConsumption?.unit !== "g"}>
                 <Scale aria-hidden="true" /> Kalori karşılaştır
               </Button>
               <Button className="h-11 w-full rounded-2xl" variant="outline" onClick={() => void addFavorite()} isLoading={favoriting}>
                 <Heart aria-hidden="true" /> Favorilere ekle
               </Button>
-              {grams !== null && portionNutrients ? (
+              {selectedConsumption?.unit === "g" && grams !== null && portionNutrients ? (
                 <Button className="h-11 w-full rounded-2xl" asChild variant="outline">
                   <Link href={coachHref(food, grams, portionNutrients)}>
                     <MessageCircle aria-hidden="true" /> Diewish Koç&apos;a sor
@@ -840,8 +905,8 @@ export function BarcodeScannerPanel() {
                   <MessageCircle aria-hidden="true" /> Diewish Koç&apos;a sor
                 </Button>
               )}
-              {portionDirty && (
-                <p className="text-center text-xs text-muted-foreground">Karşılaştırma ve öğüne ekleme için önce yeni porsiyonu uygula.</p>
+              {consumptionOpen && portionDirty && (
+                <p className="text-center text-xs text-muted-foreground">Öğüne eklemek için tüketim miktarını önce hesapla.</p>
               )}
             </CardContent>
           </Card>
