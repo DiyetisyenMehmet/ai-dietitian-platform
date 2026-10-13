@@ -70,6 +70,32 @@ function offMicronutrients(n: Record<string, unknown>, basis: "100g" | "serving"
   return hasAny ? values : null;
 }
 
+/**
+ * A source-declared mg/L value is a concentration, never an amount per 100g.
+ * Convert it only when the provider supplies an explicit volume serving.
+ * Keep missing minerals null. The frontend can scale this trusted serving to
+ * 200ml/100ml without inventing liquid density.
+ */
+function declaredVolumeMinerals(n: Record<string, unknown>, volumeMl: number) {
+  if (!Number.isFinite(volumeMl) || volumeMl <= 0) return null;
+  const values = emptyMicronutrients();
+  let found = false;
+  for (const [key, aliases] of OFF_MICRONUTRIENTS) {
+    for (const alias of aliases) {
+      const unit = text(n[alias + "_unit"])?.trim().toLowerCase().replace(/\s/g, "");
+      if (unit !== "mg/l" && unit !== "mg/litre" && unit !== "mg/liter") continue;
+      const perLiter = num(n[alias + "_100g"]) ?? num(n[alias + "_serving"]);
+      if (perLiter === null || perLiter < 0) continue;
+      const normalized = normalizeMicronutrientAmount(key, perLiter * volumeMl / 1000, "mg");
+      if (normalized === null) continue;
+      values[key] = normalized;
+      found = true;
+      break;
+    }
+  }
+  return found ? values : null;
+}
+
 function nutrientValues(n: Record<string, unknown>, basis: "100g" | "serving"): NutrientValues {
   const sodiumG = nutrient(n, "sodium", basis);
   const values: NutrientValues = {
@@ -128,6 +154,19 @@ export function normalizeOpenFoodFactsProduct(raw: unknown, barcodeHint?: string
   const nutriments = record(product.nutriments);
   const nutrientsPer100g = nutrientValues(nutriments, "100g");
   const perServing = nutrientValues(nutriments, "serving");
+  const requestedServingMl = num(product.serving_quantity);
+  const sourceServingText = text(product.serving_size);
+  if (requestedServingMl && servingUnitFromDescription(sourceServingText) === "ml") {
+    const minerals = declaredVolumeMinerals(nutriments, requestedServingMl);
+    if (minerals) {
+      const existing = perServing.micronutrients ?? emptyMicronutrients();
+      perServing.micronutrients = Object.fromEntries(
+        Object.keys(minerals).map((key) => [
+          key, existing[key as keyof typeof existing] ?? minerals[key as keyof typeof minerals],
+        ]),
+      ) as typeof minerals;
+    }
+  }
   const labelTags = tags(product.labels_tags);
   const sourceCategories = uniqueText([
     ...tags(product.categories_tags).map(stripTag),

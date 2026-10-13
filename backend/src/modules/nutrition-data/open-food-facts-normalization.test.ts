@@ -160,3 +160,46 @@ test("Open Food Facts explicit obsolete flag becomes lifecycle evidence without 
   });
   assert.equal(noEvidence?.provenance.lifecycleEvidence, null);
 });
+
+
+test("200 ml Beypazarı-style volume serving converts explicitly labeled mg/L mineral concentrations", () => {
+  const drink = normalizeOpenFoodFactsProduct({
+    product: {
+      code: "8690000000201",
+      product_name: "Doğal Maden Suyu",
+      quantity: "200 ml",
+      serving_quantity: 200,
+      serving_size: "200 ml",
+      nutriments: {
+        "calcium_100g": 400,
+        "calcium_unit": "mg/L",
+        "magnesium_100g": 100,
+        "magnesium_unit": "mg/L",
+        "iron_100g": 5,
+        "iron_unit": "mg/L",
+      },
+    },
+  });
+  assert.ok(drink);
+  assert.equal(drink.serving?.unit, "ml");
+  assert.equal(drink.serving?.gramWeight, null);
+  assert.equal(drink.nutrientsPer100g.micronutrients?.calcium ?? null, null);
+  assert.equal(drink.nutrientsPerServing?.micronutrients?.calcium, 80);
+  assert.equal(drink.nutrientsPerServing?.micronutrients?.magnesium, 20);
+  assert.equal(drink.nutrientsPerServing?.micronutrients?.iron, 1);
+  assert.equal(drink.nutrientsPerServing?.micronutrients?.potassium, null);
+});
+
+test("mg/L without explicit volume serving is never converted to per-serving values", () => {
+  const drink = normalizeOpenFoodFactsProduct({
+    product: {
+      code: "8690000000202",
+      product_name: "Doğal Maden Suyu",
+      quantity: "200 ml",
+      nutriments: { "calcium_100g": 400, "calcium_unit": "mg/L" },
+    },
+  });
+  assert.ok(drink);
+  assert.equal(drink.nutrientsPerServing, null);
+  assert.equal(drink.nutrientsPer100g.micronutrients?.calcium ?? null, null);
+});
