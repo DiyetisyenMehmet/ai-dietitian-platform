@@ -182,9 +182,9 @@ export function ProgressHomeOverview() {
   const distance = target !== null && current !== null ? Math.abs(current - target) : null;
   const calibrated = analysis.status !== "no-data" && target !== null && distance !== null;
   const motivationTitle = analysis.status === "reached" && calibrated
-    ? "Hedefine ulaştın!"
-    : calibrated && change !== null && (analysis.direction === "lose" ? change < 0 : analysis.direction === "gain" ? change > 0 : Math.abs(change) < 0.3)
-      ? "İlerlemeni sürdürüyorsun!"
+    ? "Hedef kilon ölçümlerine yansıdı"
+    : change !== null
+      ? "Kilo eğilimin güncellendi"
       : "Her kayıt ilerlemeni görünür kılar";
   const motivationCopy = calibrated && distance !== null
     ? "Hedefine " + formatWeightNumber(distance) + " kg mesafen var. Düzenli kayıtlarla ilerlemeni takip et."
@@ -244,7 +244,7 @@ export function ProgressHomeOverview() {
       </div>
 
       <section aria-labelledby="progress-weight-title" className="rounded-[1.35rem] border border-border/70 bg-card p-4 shadow-sm">
-        <div className="flex items-start gap-3">
+        <div className="flex flex-wrap items-start gap-3">
           <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-sky-500/10 text-sky-500">
             <Scale className="size-5" aria-hidden="true" />
           </span>
@@ -255,7 +255,7 @@ export function ProgressHomeOverview() {
               {change === null ? "Bu dönem için karşılaştırılabilir ölçüm yok" : (change > 0 ? "+" : "") + formatWeightNumber(change) + " kg · seçilen dönem"}
             </p>
           </div>
-          <div className="flex shrink-0 gap-3 text-right">
+          <div className="flex w-full flex-wrap justify-start gap-x-5 gap-y-2 pl-14 text-left sm:w-auto sm:shrink-0 sm:gap-3 sm:pl-0 sm:text-right">
             <div className="min-w-0">
               <p className="text-[10px] text-muted-foreground">Hedef</p>
               <p className="text-xs font-bold tabular-nums">{target === null ? "—" : formatWeightNumber(target) + " kg"}</p>
@@ -277,7 +277,7 @@ export function ProgressHomeOverview() {
             </div>
           </div>
         )}
-        <Link href="/history" className="mt-2 flex items-center justify-end gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-300">
+        <Link href="#weight-measurements" className="mt-2 flex min-h-9 items-center justify-end gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-300">
           Ölçüm geçmişi <ChevronRight className="size-4" aria-hidden="true" />
         </Link>
       </section>

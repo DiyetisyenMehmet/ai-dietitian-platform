@@ -13,8 +13,15 @@ import { SectionCard } from "@/presentation/components/health/section-card";
 import { ProgressStatsSection } from "@/presentation/components/progress/progress-stats-section";
 import { ProgressHomeOverview } from "@/presentation/components/progress/progress-home-overview";
 import { healthIcon } from "@/presentation/components/health/health-icon";
-import { useWeightCheckInStatus, weightStore } from "@/application/health/weight-store";
-import { formatWeightNumber, localDateKey, parseWeightInput } from "@/application/health/weight-utils";
+import { useWeightCheckInStatus, useWeightEntries, weightStore } from "@/application/health/weight-store";
+import {
+  formatWeightDate,
+  formatWeightNumber,
+  isSelectableWeightDate,
+  localDateKey,
+  parseWeightInput,
+  recentWeightHistory,
+} from "@/application/health/weight-utils";
 import { journeyStore, useJourneyEvents } from "@/application/health/journey-store";
 import type { JourneyEventType } from "@/domain/health/types";
 
@@ -46,7 +53,7 @@ function WeighInForm() {
       toast.error("Geçerli bir kilo gir", { description: "25-400 kg arasında, en fazla 1 ondalık kullan." });
       return;
     }
-    if (!date || date > localDateKey()) {
+    if (!isSelectableWeightDate(date)) {
       toast.error("Geçerli bir ölçüm tarihi seç");
       return;
     }
@@ -119,6 +126,55 @@ function WeighInForm() {
   );
 }
 
+/** A compact read-only view of already saved weight logs, not a second history store. */
+function RecentWeightMeasurements() {
+  const entries = useWeightEntries();
+  const recent = React.useMemo(() => recentWeightHistory(entries, 4), [entries]);
+
+  return (
+    <div id="weight-measurements" className="mt-5 border-t border-border/70 pt-4">
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <h4 className="text-sm font-bold">Son Kilo Ölçümleri</h4>
+        <span className="text-xs text-muted-foreground">
+          {entries.length > 0 ? entries.length + " kayıt" : "Kayıt bulunmuyor"}
+        </span>
+      </div>
+      {recent.length === 0 ? (
+        <p className="rounded-xl bg-muted/40 px-3 py-4 text-sm text-muted-foreground">
+          Görüntülenebilen kilo ölçümü yok. Kayıtların yükleniyorsa biraz bekle.
+        </p>
+      ) : (
+        <ol className="divide-y divide-border/60 rounded-xl border border-border/60">
+          {recent.map(({ entry, changeFromPreviousDayKg }) => (
+            <li key={entry.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-3 py-3 sm:px-4">
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-foreground">{formatWeightDate(entry.date)}</p>
+                {entry.note === "Başlangıç" && (
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">Başlangıç ölçümü</p>
+                )}
+                {changeFromPreviousDayKg !== null && (
+                  <p className="mt-1 break-words text-[11px] text-muted-foreground">
+                    Önceki farklı güne göre {changeFromPreviousDayKg > 0 ? "+" : ""}
+                    {formatWeightNumber(changeFromPreviousDayKg)} kg
+                  </p>
+                )}
+              </div>
+              <p className="whitespace-nowrap text-sm font-bold tabular-nums sm:text-base">
+                {formatWeightNumber(entry.weightKg)} kg
+              </p>
+            </li>
+          ))}
+        </ol>
+      )}
+      {entries.length > recent.length && (
+        <p className="mt-2 text-[11px] text-muted-foreground">
+          En son dört ölçüm gösteriliyor. Diğer kayıtlar kilo grafiğindeki Tümü döneminde görüntülenebilir.
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function ProgressView() {
   const checkIn = useWeightCheckInStatus();
   const history = useJourneyEvents();
@@ -148,6 +204,7 @@ export function ProgressView() {
           </p>
         )}
         <WeighInForm />
+        <RecentWeightMeasurements />
       </SectionCard>
 
       <ProgressStatsSection />
