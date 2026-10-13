@@ -357,6 +357,28 @@ jobs:
           e2e/dashboard-edit-sanity.spec.ts
           e2e/mascot-preferences.spec.ts
           --workers=1 --reporter=line
+      - name: Isolate broad browser suite request budget
+        working-directory: frontend
+        run: |
+          # UI preference probes share the runner's loopback address. Keep
+          # suites independent without raising or disabling application limits.
+          test "$NODE_ENV" = test
+          test "$DIEWISH_ENVIRONMENT" = test
+          curl --silent --show-error --dump-header - --output /dev/null http://127.0.0.1:4000/api/health | grep -Ei '^HTTP/|^RateLimit-'
+          browser_backend=$(cat /tmp/diewish-backend.pid)
+          kill "$browser_backend"
+          for attempt in {1..15}; do
+            if ! kill -0 "$browser_backend" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          ! kill -0 "$browser_backend" 2>/dev/null
+          node ../backend/dist/index.js > /tmp/diewish-backend.log 2>&1 &
+          echo $! > /tmp/diewish-backend.pid
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:4000/api/health > /dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail --silent --show-error --dump-header - --output /dev/null http://127.0.0.1:4000/api/health | grep -Ei '^HTTP/|^RateLimit-'
       - name: Run browser smoke
         working-directory: frontend
         run: >-
@@ -433,9 +455,21 @@ jobs:
           path: frontend/test-results/dashboard-live-feature-card/
           if-no-files-found: warn
           retention-days: 7
+      - name: Upload Mirmir pilot browser diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mirmir-pilot-browser-${{ github.run_number }}
+          path: |
+            frontend/test-results/e2e-mascot-preferences-*/
+            frontend/test-results/e2e-onboarding-flow-*/error-context.md
+            frontend/test-results/e2e-semantic-icon-browser-*/error-context.md
+          if-no-files-found: warn
+          retention-days: 7
       - name: Print service logs on failure
         if: failure()
         run: |
+          curl --silent --show-error --dump-header - --output /dev/null http://127.0.0.1:4000/api/health | grep -Ei '^HTTP/|^RateLimit-' || true
           echo "--- backend ---"
           cat /tmp/diewish-backend.log || true
           echo "--- frontend ---"
