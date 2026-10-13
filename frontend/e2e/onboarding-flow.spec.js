@@ -554,7 +554,8 @@ test("register -> consent -> onboarding -> scanner -> same-day weigh-in preserve
     expect(await nutrientLabel.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
   }
   await page.getByRole("button", { name: /Malzemeleri Düzenle/ }).click();
-  await page.getByLabel("Toplam porsiyon").fill("250");
+  await page.getByText("Gerekirse gram ile hassas düzelt", { exact: true }).click();
+  await page.getByLabel("Tahmini miktar (g)").fill("250");
   await page.getByRole("button", { name: /Yeniden hesapla/ }).click();
   await expect(page.getByText("Seçilen porsiyon: 250 g", { exact: true })).toBeVisible();
   await expect(page.getByText("Bu porsiyonda sodyum miktarı dikkat gerektirecek düzeyde.")).toBeVisible();
