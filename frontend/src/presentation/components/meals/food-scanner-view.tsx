@@ -306,7 +306,7 @@ export function FoodScannerView() {
   }, [analysis, ingredients, loadPersonalization, recalculating, syncEditable, targetGrams]);
 
   const onLogMeal = React.useCallback(async () => {
-    if (!analysis || loggingMeal) return;
+    if (!analysis || loggingMeal || editing || recalculating) return;
     setLoggingMeal(true);
     try {
       await foodScanClient.logMeal(mealType, analysis);
@@ -316,7 +316,7 @@ export function FoodScannerView() {
     } finally {
       setLoggingMeal(false);
     }
-  }, [analysis, loggingMeal, mealType]);
+  }, [analysis, editing, loggingMeal, mealType, recalculating]);
 
   const source = analysis ? sourceSummary(analysis) : null;
 
@@ -473,6 +473,7 @@ export function FoodScannerView() {
                   className="min-h-11 w-full"
                   onClick={() => void onLogMeal()}
                   isLoading={loggingMeal}
+                  disabled={editing || recalculating}
                   aria-label="Seçilen porsiyonu öğüne ekle"
                 >
                   <Utensils /> Öğüne ekle
