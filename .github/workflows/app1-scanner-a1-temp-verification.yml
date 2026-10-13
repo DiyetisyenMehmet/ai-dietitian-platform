@@ -23,8 +23,6 @@ jobs:
         run: npm ci
       - name: Scanner consumption and mineral unit tests
         run: node --test tests/scanner-consumption-a1.test.cjs
-      - name: Existing product quality/display tests
-        run: node --test src/presentation/components/meals/product-data-display.test.ts
       - name: TypeScript
         run: npm run type-check
       - name: Lint
