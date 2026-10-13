@@ -450,7 +450,12 @@ export const nutritionClient = {
     });
   },
 
-  logMeal(mealType: MealTypeDto, food: CanonicalFoodDto, personalization: PersonalizationDto) {
+  logMeal(
+    mealType: MealTypeDto,
+    food: CanonicalFoodDto,
+    personalization: PersonalizationContextDto,
+    consumption: { amount: number; unit: "g" | "ml" },
+  ) {
     const n = personalization.nutrients;
     return apiRequest<{ log: { id: string } }>({
       path: "/tracking/meals",
@@ -466,8 +471,8 @@ export const nutritionClient = {
         sodiumMg: n.sodiumMg ?? undefined,
         sugarG: n.sugarsG ?? undefined,
         micronutrients: n.micronutrients ?? undefined,
-        consumedAmount: personalization.grams,
-        consumedUnit: "g",
+        consumedAmount: consumption.amount,
+        consumedUnit: consumption.unit,
       }),
     });
   },
