@@ -1,12 +1,9 @@
 import type { Prisma } from "@prisma/client";
-import { Client } from "pg";
 import { z } from "zod";
 import { env } from "../../config/env";
 import { prisma } from "../../lib/prisma";
+import { ApiError } from "../../utils/api-error";
 
-export const COACH_CHANNEL = "diewish_coach_change_v1";
-// Deliberately fixed, not an environment-selectable application/migration account.
-export const COACH_LISTENER_ROLE = "diewish_staging_coach_listener";
 export const changeSchema = z
   .object({
     userId: z.string().uuid(),
@@ -19,88 +16,6 @@ export const changeSchema = z
   })
   .strict();
 export type CoachChange = z.infer<typeof changeSchema>;
-
-/** Same database/endpoint, but ONLY the predefined notification-only account. */
-export function sameCoachDatabase(queryUrl: string, listenerUrl: string): boolean {
-  try {
-    const query = new URL(queryUrl),
-      listener = new URL(listenerUrl);
-    // node-postgres accepts query-string host/user/port overrides and startup
-    // options. Reject these before comparing URL authority, including encoded keys.
-    const overrides = new Set([
-      "host",
-      "hostaddr",
-      "port",
-      "user",
-      "password",
-      "database",
-      "dbname",
-      "options",
-      "service",
-      "role",
-    ]);
-    return (
-      [query, listener].every(
-        (url) =>
-          ["postgres:", "postgresql:"].includes(url.protocol) &&
-          Boolean(url.hostname && url.username && url.pathname.length > 1) &&
-          !url.hash &&
-          ![...url.searchParams.keys()].some((key) => overrides.has(key.toLowerCase())),
-      ) &&
-      !listener.hostname.includes("-pooler") &&
-      query.hostname.replace(/-pooler(?=\.)/, "") === listener.hostname &&
-      query.port === listener.port &&
-      query.pathname === listener.pathname &&
-      listener.username === COACH_LISTENER_ROLE
-    );
-  } catch {
-    return false;
-  }
-}
-
-/** Catalog/ACL metadata only: no application rows and no grants or role changes.
- * Checked once per dedicated session, before LISTEN; never a periodic data query.
- */
-export async function verifyCoachListener(client: Client): Promise<void> {
-  const result = await client.query<{ allowed: boolean }>(
-    `
-    SELECT session_user = $1 AND current_user = $1
-      AND r.rolcanlogin AND NOT r.rolsuper AND NOT r.rolinherit
-      AND NOT r.rolcreatedb AND NOT r.rolcreaterole
-      AND NOT r.rolreplication AND NOT r.rolbypassrls
-      AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_auth_members m WHERE m.member = r.oid)
-      AND NOT pg_catalog.has_database_privilege(r.oid, pg_catalog.current_database(), 'CREATE')
-      AND NOT EXISTS (
-        SELECT 1 FROM pg_catalog.pg_namespace n
-        WHERE n.nspname !~ '^pg_' AND n.nspname <> 'information_schema'
-          AND pg_catalog.has_schema_privilege(r.oid, n.oid, 'CREATE')
-      )
-      AND NOT EXISTS (
-        SELECT 1 FROM pg_catalog.pg_class c
-        JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-        WHERE n.nspname !~ '^pg_' AND n.nspname <> 'information_schema'
-          AND CASE
-            WHEN c.relkind IN ('r', 'p', 'v', 'm', 'f') THEN (
-              pg_catalog.has_table_privilege(r.oid, c.oid, 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
-              OR pg_catalog.has_any_column_privilege(r.oid, c.oid, 'SELECT,INSERT,UPDATE,REFERENCES')
-            )
-            WHEN c.relkind = 'S' THEN pg_catalog.has_sequence_privilege(r.oid, c.oid, 'USAGE,SELECT,UPDATE')
-            ELSE false
-          END
-      )
-      AND NOT EXISTS (
-        SELECT 1 FROM pg_catalog.pg_proc p
-        JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
-        WHERE n.nspname !~ '^pg_' AND n.nspname <> 'information_schema'
-          AND p.prosecdef AND pg_catalog.has_function_privilege(r.oid, p.oid, 'EXECUTE')
-      ) AS allowed
-    FROM pg_catalog.pg_roles r WHERE r.rolname = $1
-  `,
-    [COACH_LISTENER_ROLE],
-  );
-  if (result.rows.length !== 1 || result.rows[0].allowed !== true)
-    throw new Error("Coach listener account is not restricted");
-}
 
 /** Durable watermark is in the SAME transaction as its conversation mutation. */
 export async function recordCoachChange(
@@ -117,105 +32,156 @@ export async function recordCoachChange(
   return { userId, conversationId, type, version: revision.version.toString() };
 }
 
-/** NOTIFY failure never rolls back a saved message or changes its HTTP reply. */
-export function publishCoachChange(change: CoachChange): void {
-  if (!env.COACH_SYNC_ENABLED) return;
-  void prisma.$executeRaw`SELECT pg_notify(${COACH_CHANNEL}, ${JSON.stringify(change)})`.catch(
-    () => {
-      /* The durable watermark repairs this on reconnect. No PHI/credentials in logs. */
-    },
-  );
-}
+type Subscriber = {
+  changed: (event: CoachChange) => void;
+  revised: (version: string) => void;
+  disconnected: () => void;
+};
+type Group = { subscribers: Set<Subscriber>; pending: Set<Subscriber>; version: bigint | null };
+type ReadVersions = (userIds: string[]) => Promise<{ userId: string; version: bigint }[]>;
 
-export async function coachVersion(userId: string): Promise<string> {
-  return (
-    (await prisma.coachSyncRevision.findUnique({ where: { userId } }))?.version.toString() ?? "0"
-  );
-}
+/** Existing application pool; only revision metadata for authenticated subscribers.
+ * No listener credential, LISTEN session, schema migration or new data permission.
+ */
+export const readCoachVersions: ReadVersions = (userIds) =>
+  prisma.coachSyncRevision.findMany({
+    where: { userId: { in: userIds } },
+    select: { userId: true, version: true },
+    take: 20,
+  });
 
-type Subscriber = { changed: (event: CoachChange) => void; disconnected: () => void };
-
-/** One dedicated LISTEN session per server PROCESS, not per browser/client. */
+/** One bounded, non-overlapping metadata check per active server process.
+ * Cross-process changes invalidate the existing authenticated snapshot; local
+ * post-commit changes retain the existing targeted event fast path.
+ */
 export class CoachEventBroker {
-  private client: Client | null = null;
-  private opening: Promise<void> | null = null;
-  private subscribers = new Map<string, Set<Subscriber>>();
-  constructor(private readonly connectionString: string) {}
+  private groups = new Map<string, Group>();
+  private timer: ReturnType<typeof setTimeout> | undefined;
+  private reading = false;
+  private unavailableUntil = 0;
+  private stalled = false;
+  constructor(
+    private readonly readVersions: ReadVersions = readCoachVersions,
+    private readonly intervalMs = 2000,
+    private readonly deadlineMs = 5000,
+  ) {}
 
-  connectionsFor(userId: string): number {
-    return this.subscribers.get(userId)?.size ?? 0;
+  get available(): boolean {
+    return !this.stalled && Date.now() >= this.unavailableUntil;
   }
-
+  connectionsFor(userId: string): number {
+    return this.groups.get(userId)?.subscribers.size ?? 0;
+  }
   get activeConnections(): number {
-    return [...this.subscribers.values()].reduce((sum, set) => sum + set.size, 0);
+    return [...this.groups.values()].reduce((sum, group) => sum + group.subscribers.size, 0);
   }
 
   async subscribe(userId: string, subscriber: Subscriber): Promise<() => void> {
-    const group = this.subscribers.get(userId) ?? new Set<Subscriber>();
-    group.add(subscriber);
-    this.subscribers.set(userId, group);
-    const release = () => {
-      group.delete(subscriber);
-      if (!group.size) this.subscribers.delete(userId);
+    if (!this.available)
+      throw new ApiError(503, "Coach sync temporarily unavailable.", {
+        code: "COACH_SYNC_UNAVAILABLE",
+      });
+    // Reserve synchronously, before any await, including concurrent openings.
+    if (this.activeConnections >= 20 || this.connectionsFor(userId) >= 6)
+      throw ApiError.tooManyRequests("Coach connection capacity reached.");
+    const group = this.groups.get(userId) ?? {
+      subscribers: new Set<Subscriber>(),
+      pending: new Set<Subscriber>(),
+      version: null,
+    };
+    group.subscribers.add(subscriber);
+    group.pending.add(subscriber);
+    this.groups.set(userId, group);
+    this.schedule();
+    return () => {
+      group.subscribers.delete(subscriber);
+      group.pending.delete(subscriber);
+      if (!group.subscribers.size && this.groups.get(userId) === group) this.groups.delete(userId);
       if (!this.activeConnections) this.close();
     };
+  }
+
+  publish(change: CoachChange): void {
+    const parsed = changeSchema.safeParse(change);
+    if (!parsed.success) return;
+    const group = this.groups.get(parsed.data.userId);
+    if (!group) return;
+    const version = BigInt(parsed.data.version);
+    if (group.version !== null && version <= group.version) return;
+    group.version = version;
+    for (const subscriber of group.subscribers) subscriber.changed(parsed.data);
+  }
+
+  private schedule(): void {
+    if (this.timer || this.reading || !this.activeConnections) return;
+    this.timer = setTimeout(() => {
+      this.timer = undefined;
+      void this.poll();
+    }, this.intervalMs);
+    this.timer.unref?.();
+  }
+
+  private fail(): void {
+    this.unavailableUntil = Date.now() + 10000;
+    const subscribers = [...this.groups.values()].flatMap((group) => [...group.subscribers]);
+    this.close();
+    for (const subscriber of subscribers) subscriber.disconnected();
+  }
+
+  private async poll(): Promise<void> {
+    if (this.reading || !this.activeConnections) return;
+    this.reading = true;
+    const groups = new Map(this.groups);
+    let expired = false;
+    const deadline = setTimeout(() => {
+      expired = true;
+      this.stalled = true;
+      this.fail();
+    }, this.deadlineMs);
     try {
-      await this.open(); // LISTEN commits before caller reads its watermark.
-      return release;
+      const rows = await this.readVersions([...groups.keys()]);
+      if (expired) return;
+      const revisions = new Map(rows.map((row) => [row.userId, row.version]));
+      for (const [userId, group] of groups) {
+        // Discard an old query after all subscribers left or changed account.
+        if (this.groups.get(userId) !== group) continue;
+        const readVersion = revisions.get(userId) ?? 0n;
+        const advanced = group.version === null || readVersion > group.version;
+        const version = advanced ? readVersion : group.version!;
+        group.version = version;
+        for (const subscriber of group.subscribers) {
+          if (advanced || group.pending.has(subscriber)) {
+            group.pending.delete(subscriber);
+            subscriber.revised(version.toString());
+          }
+        }
+      }
     } catch {
-      release();
-      throw new Error("Coach event transport unavailable");
+      if (!expired) this.fail();
+    } finally {
+      clearTimeout(deadline);
+      this.reading = false;
+      this.stalled = false;
+      // Even after a timeout do not start another query until the first settles.
+      this.schedule();
     }
   }
 
-  private open(): Promise<void> {
-    if (this.opening) return this.opening;
-    if (this.client) return Promise.resolve();
-    const client = new Client({
-      connectionString: this.connectionString,
-      connectionTimeoutMillis: 5000,
-    });
-    this.client = client;
-    client.on("notification", (notification) => {
-      if (notification.channel !== COACH_CHANNEL || !notification.payload) return;
-      try {
-        const parsed = changeSchema.safeParse(JSON.parse(notification.payload));
-        if (!parsed.success) return;
-        for (const subscriber of this.subscribers.get(parsed.data.userId) ?? []) {
-          subscriber.changed(parsed.data);
-        }
-      } catch {
-        /* Reject malformed/untrusted database payloads without logging them. */
-      }
-    });
-    const disconnected = () => {
-      if (this.client !== client) return;
-      const subscribers = [...this.subscribers.values()].flatMap((set) => [...set]);
-      this.close();
-      for (const subscriber of subscribers) subscriber.disconnected();
-    };
-    client.on("error", disconnected);
-    client.on("end", disconnected);
-    this.opening = (async () => {
-      try {
-        await client.connect();
-        await verifyCoachListener(client);
-        await client.query(`LISTEN ${COACH_CHANNEL}`);
-        if (this.client !== client) throw new Error("Listener disconnected");
-      } catch {
-        disconnected();
-        throw new Error("Coach event transport unavailable");
-      } finally {
-        this.opening = null;
-      }
-    })();
-    return this.opening;
-  }
-
   close(): void {
-    const client = this.client;
-    this.client = null;
-    this.subscribers.clear();
-    if (client) void client.end().catch(() => {});
+    clearTimeout(this.timer);
+    this.timer = undefined;
+    this.groups.clear();
+  }
+}
+
+export const coachBroker = new CoachEventBroker();
+
+/** Local delivery is only an optimization; the committed revision repairs misses. */
+export function publishCoachChange(change: CoachChange): void {
+  if (!env.COACH_SYNC_ENABLED) return;
+  try {
+    coachBroker.publish(change);
+  } catch {
+    /* Never fail a saved mutation. */
   }
 }

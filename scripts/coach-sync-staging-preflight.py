@@ -3,15 +3,11 @@ import argparse
 import json
 import os
 import subprocess
-import urllib.error
-import urllib.request
 
 PROJECT = "project-a2e260c1-839d-4f1d-b90"
 REGION = "europe-west1"
 SERVICE = "diewish-backend-staging"
 RUNTIME = f"diewish-staging-runtime@{PROJECT}.iam.gserviceaccount.com"
-DATABASE_SECRET = "diewish-staging-database-url"
-MIGRATION_SECRET = "diewish-staging-direct-database-url"
 
 
 def command(*args):
@@ -25,27 +21,6 @@ def report(check, **values):
     print("COACH_PREFLIGHT_" + json.dumps({"check": check, **values}, sort_keys=True), flush=True)
 
 
-def permissions(token, secret, requested):
-    request = urllib.request.Request(
-        f"https://secretmanager.googleapis.com/v1/projects/{PROJECT}/secrets/{secret}:testIamPermissions",
-        data=json.dumps({"permissions": requested}).encode(),
-        headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=25) as response:
-            granted = set(json.load(response).get("permissions", []))
-    except urllib.error.HTTPError as error:
-        report("secret-permissions", secret=secret, state="UNKNOWN", httpStatus=error.code)
-        return False
-    except (urllib.error.URLError, TimeoutError, ValueError):
-        report("secret-permissions", secret=secret, state="UNKNOWN")
-        return False
-    missing = sorted(set(requested) - granted)
-    report("secret-permissions", secret=secret, granted=sorted(granted), missing=missing)
-    return not missing
-
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--phase", choices=["deployer", "build"], required=True)
@@ -54,7 +29,11 @@ def main():
         raise RuntimeError("non-staging-project")
     if os.environ.get("GITHUB_REF") != "refs/heads/feature/staging-preview":
         raise RuntimeError("non-staging-ref")
-    token = command("gcloud", "auth", "print-access-token")
+    if phase == "build":
+        report("activation", state="NO_EXTRA_PERMISSION_REQUIRED",
+               transport="application-pool-revisions",
+               note="No listener account, new secret or secret write permission required")
+        return
     account = command("gcloud", "auth", "list", "--filter=status:ACTIVE", "--format=value(account)")
     report("identity", phase=phase, account=account, project=PROJECT)
     if phase == "deployer":
@@ -73,27 +52,13 @@ def main():
                applicationSha=env.get("DIEWISH_APPLICATION_SHA", {}).get("value"),
                image=container.get("image"),
                syncEnabled=env.get("COACH_SYNC_ENABLED", {}).get("value", "false"),
-               listenerConfigured="COACH_SYNC_DATABASE_URL" in env,
+               transport="application-pool-revisions",
+               obsoleteListenerSettingPresent="COACH_SYNC_DATABASE_URL" in env,
                concurrency=spec.get("containerConcurrency"),
                timeout=spec.get("timeoutSeconds"),
                limits=container.get("resources", {}).get("limits"))
-        permissions(token, DATABASE_SECRET, ["secretmanager.versions.add"])
-        build_identity = command("gcloud", "builds", "get-default-service-account", "--project", PROJECT)
-        report("build-identity", account=build_identity)
-        return
-    # The existing Cloud Build migration identity is the only identity that
-    # already receives the migration secret. A new secret resource is unnecessary:
-    # the existing runtime secret can hold one direct URL for DATABASE_URL and
-    # COACH_SYNC_DATABASE_URL; the migration secret remains separate and unchanged.
-    readable = permissions(token, MIGRATION_SECRET, ["secretmanager.versions.access"])
-    writable = permissions(token, DATABASE_SECRET, ["secretmanager.versions.add"])
-    if not readable or not writable:
-        report("activation", state="BLOCKED", reason="missing-existing-secret-permission")
-        # Cloud Build exposes the exit code as build metadata. This avoids
-        # broadening access to build-log buckets just to retrieve this result.
-        # 21: migration secret access; 22: runtime secret add; 23: both.
-        raise SystemExit(23 if not readable and not writable else 21 if not readable else 22)
-    report("activation", state="PREFLIGHT_PASS", note="No credentials or runtime settings changed")
+        report("activation", state="READ_ONLY_REVIEW",
+               note="Keep COACH_SYNC_ENABLED false until separate activation approval")
 
 
 if __name__ == "__main__":

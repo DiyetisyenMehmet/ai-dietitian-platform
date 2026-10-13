@@ -7,7 +7,7 @@ import type { IAIAdapter } from "../../modules/blood-test-analysis/ai-adapter/ai
 import type { AddressInfo } from "node:net";
 import { coachConnectionCount } from "../../modules/ai-chat/coach-stream";
 
-if (env.NODE_ENV !== "test" || !env.COACH_SYNC_ENABLED) throw new Error("Test-only Coach fixture");
+if (env.NODE_ENV !== "test") throw new Error("Test-only Coach fixture");
 const unused = async (): Promise<never> => {
   throw new Error("Unused synthetic provider method");
 };
@@ -20,8 +20,10 @@ const adapter: IAIAdapter = {
   chatWithDietitian: async () => ({ reply: "Sentetik test yanıtı." }),
 };
 setAIAdapter(adapter);
-let chatReads = 0;
+let chatReads = 0,
+  revisionReads = 0;
 prisma.$use(async (params, next) => {
+  if (params.model === "CoachSyncRevision" && params.action === "findMany") revisionReads++;
   if (
     ["ChatConversation", "ChatMessage"].includes(params.model ?? "") &&
     ["findMany", "findFirst", "findUnique"].includes(params.action)
@@ -41,6 +43,7 @@ process.on("message", (message) => {
     heap: memory.heapUsed,
     connections: coachConnectionCount(),
     chatReads,
+    revisionReads,
   });
 });
 const server = createApp().listen(process.send ? 0 : env.PORT, "127.0.0.1", () => {

@@ -125,7 +125,8 @@ export function mountCoachSync(): () => void {
     const event = raw as Partial<Change>;
     if (typeof event.version !== "string" || !/^(0|[1-9][0-9]{0,19})$/.test(event.version)) return;
     const version = BigInt(event.version);
-    if (type === "ready") {
+    if (type === "ready" || type === "revision") {
+      if (type === "revision" && lastVersion !== null && version <= lastVersion) return;
       if (lastVersion !== version) fullSnapshot = true;
       // Don't move backwards if a notification beat the snapshot.
       lastVersion = lastVersion === null || version > lastVersion ? version : lastVersion;
@@ -175,10 +176,16 @@ export function mountCoachSync(): () => void {
         await response.body?.cancel();
         return;
       }
-      if (response.status === 409) {
+      if (response.status === 409 || response.status === 503) {
         const payload = await response.json();
-        if (payload?.error?.code !== "COACH_SYNC_DISABLED") throw new Error("Stream refused");
-        // Explicit rollback switch ONLY. Network/auth/config errors never select polling.
+        if (
+          !(
+            (response.status === 409 && payload?.error?.code === "COACH_SYNC_DISABLED") ||
+            (response.status === 503 && payload?.error?.code === "COACH_SYNC_UNAVAILABLE")
+          )
+        )
+          throw new Error("Stream refused");
+        // Explicit disabled/transport-unavailable responses only; auth/network errors never select P1.
         void chatStore.refresh();
         legacy = setInterval(() => {
           if (active()) void chatStore.refresh();

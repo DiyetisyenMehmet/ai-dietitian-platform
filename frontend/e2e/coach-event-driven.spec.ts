@@ -128,7 +128,7 @@ test("three browser clients: six directions, zero idle list polling, lifecycle a
       page.on("requestfinished", finished);
       page.on("requestfailed", finished);
       await page.exposeFunction("coachTestEvent", (type: string) => {
-        if (type === "changed") changed[index]++;
+        if (type === "changed" || type === "revision") changed[index]++;
         if (type === "ready") readyCalls[index]++;
       });
       await page.addInitScript(() => {
@@ -162,7 +162,7 @@ test("three browser clients: six directions, zero idle list polling, lifecycle a
                       .find((item) => item.startsWith("event:"))
                       ?.slice(6)
                       .trim();
-                    if (!type || !["ready", "changed"].includes(type)) continue;
+                    if (!type || !["ready", "changed", "revision"].includes(type)) continue;
                     const line = frame.split("\n").find((item) => item.startsWith("data:"));
                     if (line)
                       await (

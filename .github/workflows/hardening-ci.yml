@@ -9,6 +9,7 @@ on:
       - feature/admin2-staff-password-b2-close-a1
       - feature/app5-bottom-nav-scroll-containment-a2
       - feature/app6-coach-event-driven-sync-p2-a1
+      - feature/app7-coach-p2-safe-completion-a1
       - feature/app6-coach-p2-listener-security-fix
       - feature/app6-coach-crossplatform-sync-p1-a1
       - security/braces-ghsa-2026-a1
@@ -295,9 +296,6 @@ jobs:
           npx prisma generate
           npx prisma migrate deploy
           npm run build
-      - name: Prepare notification-only account in the disposable CI database
-        working-directory: backend
-        run: node dist/integration/helpers/coach-listener-fixture.js
       - name: Start backend
         working-directory: backend
         run: |

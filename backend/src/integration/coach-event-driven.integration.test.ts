@@ -4,16 +4,9 @@ import { fork, type ChildProcess } from "node:child_process";
 import crypto from "node:crypto";
 import path from "node:path";
 import jwt from "jsonwebtoken";
-import { Client } from "pg";
 import { prisma } from "../lib/prisma";
 import { env } from "../config/env";
 import { signAccessToken } from "../utils/jwt";
-import {
-  COACH_CHANNEL,
-  COACH_LISTENER_ROLE,
-  verifyCoachListener,
-} from "../modules/ai-chat/coach-events";
-import { prepareCoachListenerFixture } from "./helpers/coach-listener-fixture";
 
 interface Frame {
   type: string;
@@ -27,6 +20,7 @@ interface Metrics {
   heap: number;
   connections: number;
   chatReads: number;
+  revisionReads: number;
 }
 const metrics = (child: ChildProcess) =>
   bounded(
@@ -57,10 +51,7 @@ const bounded = <T>(promise: Promise<T>, ms = 5000): Promise<T> =>
       },
     );
   });
-let listenerUrl: string;
-async function startServer(
-  connectionString = listenerUrl,
-): Promise<{ child: ChildProcess; base: string }> {
+async function startServer(enabled = true): Promise<{ child: ChildProcess; base: string }> {
   const child = fork(path.join(__dirname, "helpers/coach-server.ts"), [], {
     execArgv: ["--import", "tsx"],
     stdio: ["ignore", "ignore", "ignore", "ipc"],
@@ -68,8 +59,8 @@ async function startServer(
       ...process.env,
       NODE_ENV: "test",
       DIEWISH_ENVIRONMENT: "test",
-      COACH_SYNC_ENABLED: "true",
-      COACH_SYNC_DATABASE_URL: connectionString,
+      COACH_SYNC_ENABLED: String(enabled),
+      COACH_SYNC_DATABASE_URL: "",
     },
   });
   const port = await bounded(
@@ -146,8 +137,8 @@ async function connect(base: string, token: string) {
 }
 
 test(
-  "three separate Node servers deliver owner-only Coach events via real PostgreSQL",
-  { timeout: 60000 },
+  "three servers deliver owner-only revisions using the existing application pool",
+  { timeout: 90000 },
   async (t) => {
     assert.equal(env.NODE_ENV, "test");
     assert.ok(
@@ -157,8 +148,6 @@ test(
     const servers = [] as Awaited<ReturnType<typeof startServer>>[];
     const streams = [] as Awaited<ReturnType<typeof connect>>[];
     const users = [] as string[];
-    const fixture = await prepareCoachListenerFixture();
-    listenerUrl = fixture.url;
     t.after(async () => {
       for (const stream of streams) stream.abort.abort();
       await Promise.all(streams.map((stream) => stream.done));
@@ -173,105 +162,11 @@ test(
         ),
       );
       await prisma.user.deleteMany({ where: { id: { in: users } } });
-      await fixture.cleanup();
       await prisma.$disconnect();
     });
-    await t.test(
-      "restricted session can LISTEN but cannot read or mutate application tables",
-      async () => {
-        const listener = new Client({ connectionString: listenerUrl });
-        const owner = new Client({ connectionString: env.DATABASE_URL });
-        await listener.connect();
-        await owner.connect();
-        try {
-          await verifyCoachListener(listener);
-          await assert.rejects(verifyCoachListener(owner), /not restricted/);
-          await listener.query(`LISTEN ${COACH_CHANNEL}`);
-          for (const table of [
-            "users",
-            "user_profiles",
-            "chat_messages",
-            "blood_test_analyses",
-            "admin_user_roles",
-          ]) {
-            await assert.rejects(listener.query(`SELECT * FROM ${table} LIMIT 0`), {
-              code: "42501",
-            });
-            await assert.rejects(listener.query(`DELETE FROM ${table} WHERE false`), {
-              code: "42501",
-            });
-          }
-          // Every injected privilege exists only in the disposable local CI service
-          // and is restored before the multi-process delivery assertions.
-          const unsafe = [
-            [
-              `ALTER ROLE ${COACH_LISTENER_ROLE} SUPERUSER`,
-              `ALTER ROLE ${COACH_LISTENER_ROLE} NOSUPERUSER`,
-            ],
-            [
-              `ALTER ROLE ${COACH_LISTENER_ROLE} INHERIT`,
-              `ALTER ROLE ${COACH_LISTENER_ROLE} NOINHERIT`,
-            ],
-            [
-              `ALTER ROLE ${COACH_LISTENER_ROLE} CREATEDB`,
-              `ALTER ROLE ${COACH_LISTENER_ROLE} NOCREATEDB`,
-            ],
-            [
-              `ALTER ROLE ${COACH_LISTENER_ROLE} CREATEROLE`,
-              `ALTER ROLE ${COACH_LISTENER_ROLE} NOCREATEROLE`,
-            ],
-            [
-              `ALTER ROLE ${COACH_LISTENER_ROLE} BYPASSRLS`,
-              `ALTER ROLE ${COACH_LISTENER_ROLE} NOBYPASSRLS`,
-            ],
-            [
-              `ALTER ROLE ${COACH_LISTENER_ROLE} REPLICATION`,
-              `ALTER ROLE ${COACH_LISTENER_ROLE} NOREPLICATION`,
-            ],
-            [
-              `GRANT pg_read_all_data TO ${COACH_LISTENER_ROLE}`,
-              `REVOKE pg_read_all_data FROM ${COACH_LISTENER_ROLE}`,
-            ],
-            [
-              `GRANT SELECT ON chat_messages TO ${COACH_LISTENER_ROLE}`,
-              `REVOKE SELECT ON chat_messages FROM ${COACH_LISTENER_ROLE}`,
-            ],
-            [
-              `GRANT SELECT (id) ON users TO ${COACH_LISTENER_ROLE}`,
-              `REVOKE SELECT (id) ON users FROM ${COACH_LISTENER_ROLE}`,
-            ],
-            [`GRANT SELECT ON users TO PUBLIC`, `REVOKE SELECT ON users FROM PUBLIC`],
-            [
-              `GRANT CREATE ON SCHEMA public TO ${COACH_LISTENER_ROLE}`,
-              `REVOKE CREATE ON SCHEMA public FROM ${COACH_LISTENER_ROLE}`,
-            ],
-            [
-              `GRANT CREATE ON DATABASE diewish_test TO ${COACH_LISTENER_ROLE}`,
-              `REVOKE CREATE ON DATABASE diewish_test FROM ${COACH_LISTENER_ROLE}`,
-            ],
-            [
-              `CREATE SEQUENCE coach_listener_fixture_sequence; GRANT USAGE ON SEQUENCE coach_listener_fixture_sequence TO ${COACH_LISTENER_ROLE}`,
-              `DROP SEQUENCE coach_listener_fixture_sequence`,
-            ],
-            [
-              `CREATE FUNCTION coach_listener_fixture_function() RETURNS integer LANGUAGE sql SECURITY DEFINER AS 'SELECT 1'`,
-              `DROP FUNCTION coach_listener_fixture_function()`,
-            ],
-          ];
-          for (const [grant, restore] of unsafe) {
-            await owner.query(grant);
-            try {
-              await assert.rejects(verifyCoachListener(listener), /not restricted/);
-            } finally {
-              await owner.query(restore);
-            }
-          }
-          await verifyCoachListener(listener);
-        } finally {
-          await listener.end();
-          await owner.end();
-        }
-      },
+    assert.deepEqual(
+      await prisma.$queryRaw`SELECT rolname FROM pg_roles WHERE rolname = 'diewish_staging_coach_listener'`,
+      [],
     );
     for (let i = 0; i < 3; i++) servers.push(await startServer());
     const user = await prisma.user.create({
@@ -290,34 +185,25 @@ test(
     });
     users.push(user.id, stranger.id);
     const token = signAccessToken({ userId: user.id, email: user.email, role: user.role });
-    await t.test(
-      "application-owner listener is refused while history API stays available",
-      async () => {
-        const rejected = await startServer(env.DATABASE_URL);
-        servers.push(rejected);
-        try {
-          const headers = { authorization: `Bearer ${token}` };
-          const response = await fetch(rejected.base + "/ai-chat/events", { headers });
-          assert.equal(response.status, 503);
-          assert.equal(
-            ((await response.json()) as { error: { code: string } }).error.code,
-            "COACH_SYNC_UNAVAILABLE",
-          );
-          assert.equal(
-            (await fetch(rejected.base + "/ai-chat/conversations", { headers })).status,
-            200,
-          );
-        } finally {
-          await bounded(
-            new Promise<void>((resolve) => {
-              rejected.child.once("exit", () => resolve());
-              rejected.child.kill("SIGTERM");
-            }),
-          );
-          servers.pop();
-        }
-      },
-    );
+    await t.test("default-off P1 response needs no listener credential", async () => {
+      const disabled = await startServer(false);
+      servers.push(disabled);
+      const response = await fetch(disabled.base + "/ai-chat/events", {
+        headers: { authorization: `Bearer ${token}` },
+      });
+      assert.equal(response.status, 409);
+      assert.equal(
+        ((await response.json()) as { error: { code: string } }).error.code,
+        "COACH_SYNC_DISABLED",
+      );
+      await bounded(
+        new Promise<void>((resolve) => {
+          disabled.child.once("exit", () => resolve());
+          disabled.child.kill("SIGTERM");
+        }),
+      );
+      servers.pop();
+    });
     const otherToken = signAccessToken({
       userId: stranger.id,
       email: stranger.email,
@@ -367,6 +253,18 @@ test(
           after.map((value) => value.chatReads),
           before.map((value) => value.chatReads),
         );
+        for (let i = 0; i < 2; i++) {
+          const delta = after[i].revisionReads - before[i].revisionReads;
+          assert.ok(
+            delta >= 4 && delta <= 6,
+            "one bounded metadata batch per process, not per device",
+          );
+        }
+        assert.equal(
+          after[2].revisionReads,
+          before[2].revisionReads,
+          "no subscribers means no metadata polling",
+        );
         console.log(
           "COACH_IDLE_SERVER_METRICS=" +
             JSON.stringify(
@@ -392,13 +290,12 @@ test(
         assert.equal(sent.status, 201);
         id = sent.data!.conversationId;
         const [eventA, eventB] = await Promise.all([
-          a.wait("changed", (f) => f.data.conversationId === id),
-          b.wait("changed", (f) => f.data.conversationId === id),
+          a.wait("revision", (f) => BigInt(f.data.version) > 0n),
+          b.wait("revision", (f) => BigInt(f.data.version) > 0n),
         ]);
         version = eventA.data.version;
         for (const event of [eventA, eventB]) {
-          assert.deepEqual(Object.keys(event.data).sort(), ["conversationId", "type", "version"]);
-          assert.equal(event.data.type, "created");
+          assert.deepEqual(Object.keys(event.data), ["version"]);
           const persisted = await prisma.chatMessage.count({ where: { conversationId: id } });
           assert.equal(persisted, 2);
         }
@@ -420,14 +317,8 @@ test(
           assert.ok([200, 201].includes(sent.status));
           const previous = version;
           const events = await Promise.all([
-            a.wait(
-              "changed",
-              (f) => f.data.type === type && BigInt(f.data.version) > BigInt(previous),
-            ),
-            b.wait(
-              "changed",
-              (f) => f.data.type === type && BigInt(f.data.version) > BigInt(previous),
-            ),
+            a.wait("revision", (f) => BigInt(f.data.version) > BigInt(previous)),
+            b.wait("revision", (f) => BigInt(f.data.version) > BigInt(previous)),
           ]);
           version = events[0].data.version;
         }
@@ -441,11 +332,14 @@ test(
           (await request(0, `/ai-chat/conversations/${id}`, "GET", undefined, otherToken)).status,
           404,
         );
-        assert.equal(other.frames.filter((f) => f.type === "changed").length, 0);
+        assert.equal(
+          other.frames.filter((f) => f.type === "revision" && f.data.version !== "0").length,
+          0,
+        );
       },
     );
     await t.test(
-      "listener loss is repaired from durable watermark and authoritative history",
+      "server loss is repaired from durable watermark and authoritative history",
       async () => {
         b.abort.abort();
         await b.done;
@@ -503,7 +397,7 @@ test(
             .version,
           revision + 2n,
         );
-        await a.wait("changed", (frame) => BigInt(frame.data.version) >= revision + 2n);
+        await a.wait("revision", (frame) => BigInt(frame.data.version) >= revision + 2n);
       },
     );
     await t.test(
@@ -511,7 +405,11 @@ test(
       async () => {
         const temporary: Awaited<ReturnType<typeof connect>>[] = [];
         try {
-          for (let i = 0; i < 5; i++) temporary.push(await connect(servers[0].base, token));
+          temporary.push(
+            ...(await Promise.all(
+              Array.from({ length: 5 }, () => connect(servers[0].base, token)),
+            )),
+          );
           assert.equal(
             (
               await fetch(servers[0].base + "/ai-chat/events", {
@@ -540,8 +438,11 @@ test(
               email: fixture.email,
               role: fixture.role,
             });
-            for (let client = 0; client < 6; client++)
-              temporary.push(await connect(servers[0].base, bearer));
+            temporary.push(
+              ...(await Promise.all(
+                Array.from({ length: 6 }, () => connect(servers[0].base, bearer)),
+              )),
+            );
           }
           temporary.push(await connect(servers[0].base, token));
           const after = await metrics(servers[0].child);
@@ -593,10 +494,10 @@ test(
           revision,
         );
         const count = a.frames.length;
-        await prisma.$executeRaw`SELECT pg_notify(${COACH_CHANNEL}, ${JSON.stringify({ userId: user.id, conversationId: id, type: "turn", version: (revision + 1n).toString(), content: "must be rejected" })})`;
+        await prisma.$executeRaw`SELECT pg_notify(${"diewish_coach_change_v1"}, ${JSON.stringify({ userId: user.id, conversationId: id, type: "turn", version: (revision + 1n).toString(), content: "must be rejected" })})`;
         // Follow with a valid change as a delivery barrier, rather than arbitrary sleep.
         await request(2, `/ai-chat/conversations/${id}`, "PATCH", { title: "Bariyer" });
-        await a.wait("changed", (f) => BigInt(f.data.version) > revision);
+        await a.wait("revision", (f) => BigInt(f.data.version) > revision);
         assert.equal(a.frames.length, count + 1);
       },
     );
@@ -610,21 +511,27 @@ test(
         const expiring = jwt.sign(
           { type: "access", email: user.email, role: user.role },
           env.JWT_ACCESS_SECRET,
-          { subject: user.id, issuer: env.JWT_ISSUER, expiresIn: 2 },
+          { subject: user.id, issuer: env.JWT_ISSUER, expiresIn: 4 },
         );
         const short = await connect(servers[0].base, expiring);
         streams.push(short);
-        await bounded(short.done, 3500);
+        await bounded(short.done, 6500);
       },
     );
     await t.test(
       "delete event follows cascade commit and cannot expose a foreign owner's conversation",
       async () => {
         assert.equal((await request(2, `/ai-chat/conversations/${id}`, "DELETE")).status, 204);
-        await a.wait("changed", (f) => f.data.type === "deleted");
+        const expected = (
+          await prisma.coachSyncRevision.findUniqueOrThrow({ where: { userId: user.id } })
+        ).version;
+        await a.wait("revision", (f) => BigInt(f.data.version) === expected);
         assert.equal(await prisma.chatMessage.count({ where: { conversationId: id } }), 0);
         assert.equal((await request(1, `/ai-chat/conversations/${id}`)).status, 404);
-        assert.equal(other.frames.filter((f) => f.type === "changed").length, 0);
+        assert.equal(
+          other.frames.filter((f) => f.type === "revision" && f.data.version !== "0").length,
+          0,
+        );
       },
     );
   },

@@ -8,7 +8,13 @@ const settle = async () => {
   for (let i = 0; i < 8; i++) await new Promise(setImmediate);
 };
 
-function harness({ fail = false, busy = false, disabled = false } = {}) {
+function harness({
+  fail = false,
+  busy = false,
+  disabled = false,
+  status = null,
+  code = null,
+} = {}) {
   const window = new EventTarget(),
     document = new EventTarget();
   document.visibilityState = "visible";
@@ -82,6 +88,7 @@ function harness({ fail = false, busy = false, disabled = false } = {}) {
                 apiStream: async (options) => {
                   calls.push(options);
                   if (fail) throw new Error("offline");
+                  if (status) return Response.json({ error: { code } }, { status });
                   if (disabled)
                     return Response.json(
                       { error: { code: "COACH_SYNC_DISABLED" } },
@@ -342,4 +349,41 @@ test("decoder preserves split Unicode/CRLF frames, ignores keepalive and bounds 
     /too large/,
   );
   h.stop();
+});
+
+test("cross-server revision invalidates once; duplicate and stale revisions are ignored", async () => {
+  const h = harness();
+  await h.ready("5");
+  h.streams[0].send("revision", { version: "7" });
+  await settle();
+  assert.equal(h.snapshots.length, 2);
+  assert.equal(h.changes.length, 0);
+  h.streams[0].send("revision", { version: "7" });
+  h.streams[0].send("revision", { version: "6" });
+  await settle();
+  assert.equal(h.snapshots.length, 2);
+  h.stop();
+});
+test("explicit transport-unavailable uses P1 only while active and stops on logout", async () => {
+  const h = harness({ status: 503, code: "COACH_SYNC_UNAVAILABLE" });
+  await settle();
+  await h.advance(5000);
+  assert.ok(h.calls.includes("legacy"));
+  await h.visibility(false);
+  const count = h.calls.length;
+  await h.advance(20000);
+  assert.equal(h.calls.length, count);
+  await h.visibility(true); await settle();
+  await h.account(null); const loggedOutCount = h.calls.length;
+  await h.advance(20000); assert.equal(h.calls.length, loggedOutCount);
+  h.stop();
+});
+test("auth, capacity and unrelated errors never enable P1 polling", async () => {
+  for (const status of [401, 403, 429, 500, 503]) {
+    const h = harness({ status, code: "UNRELATED" });
+    await settle();
+    await h.advance(5000);
+    assert.ok(!h.calls.includes("legacy"));
+    h.stop();
+  }
 });

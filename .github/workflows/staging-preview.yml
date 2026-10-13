@@ -53,43 +53,6 @@ jobs:
           project_id: ${{ env.PROJECT_ID }}
       - name: Read serving runtime and exact staging identities
         run: python3 scripts/coach-sync-staging-preflight.py --phase deployer
-      - name: Check existing migration execution identity without changing IAM
-        shell: bash
-        env:
-          DIAGNOSTICS_ONLY: ${{ contains(github.event.head_commit.message, '[coach-sync-diagnostics]') }}
-        run: |
-          set -euo pipefail
-          if [[ "$DIAGNOSTICS_ONLY" == "true" ]]; then
-            build_id=53eac75b-eac9-4cbc-a8be-6e6038b682b2
-            gcloud builds describe "$build_id" --project "$PROJECT_ID" --region=global \
-              --format='yaml(status,statusDetail,failureInfo,steps.id,steps.status,serviceAccount)'
-            gcloud builds log "$build_id" --project "$PROJECT_ID" --region=global 2>&1 \
-              | grep -E 'COACH_PREFLIGHT_|ERROR:|PERMISSION_DENIED|does not have|not found|exited|denied' || true
-            exit 0
-          fi
-          build_id="$(gcloud builds submit --no-source --project "$PROJECT_ID" \
-            --config .github/cloudbuild/coach-sync-preflight-staging.yaml \
-            --substitutions "_GIT_SHA=${GITHUB_SHA}" --async --format='value(id)' --quiet)"
-          test -n "$build_id"
-          echo "Coach permission preflight Cloud Build: $build_id"
-          for attempt in {1..150}; do
-            status="$(gcloud builds describe "$build_id" --project "$PROJECT_ID" --region=global --format='value(status)')"
-            case "$status" in
-              SUCCESS|FAILURE|INTERNAL_ERROR|TIMEOUT|CANCELLED|EXPIRED) break ;;
-            esac
-            sleep 2
-          done
-          log_file="$(mktemp)"
-          trap 'rm -f "$log_file"' EXIT
-          gcloud builds describe "$build_id" --project "$PROJECT_ID" --region=global \
-            --format='yaml(status,failureInfo,steps.status,steps.exitCode,serviceAccount)'
-          echo "Safe permission result: exit 21 = migration secret access missing; 22 = runtime secret version-add missing; 23 = both missing."
-          gcloud builds log "$build_id" --project "$PROJECT_ID" >"$log_file" 2>&1 || true
-          grep 'COACH_PREFLIGHT_' "$log_file" || echo "Safe preflight details unavailable; inspect the Cloud Build log."
-          if [[ "$status" != "SUCCESS" ]]; then
-            echo "BLOCKED: existing-secret permission preflight status=$status; no role, secret or runtime configuration changed."
-            exit 1
-          fi
 
   deploy-staging:
     # [stage4-release] may start this workflow immediately, but no staging

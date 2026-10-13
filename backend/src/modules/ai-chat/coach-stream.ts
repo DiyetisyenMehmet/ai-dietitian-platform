@@ -4,12 +4,10 @@ import { authRepository } from "../auth/auth.repository";
 import { verifyAccessToken } from "../../utils/jwt";
 import { asyncHandler } from "../../utils/async-handler";
 import { ApiError } from "../../utils/api-error";
-import { CoachEventBroker, coachVersion, sameCoachDatabase } from "./coach-events";
-
-let broker: CoachEventBroker | null = null;
+import { coachBroker as broker } from "./coach-events";
 
 export function coachConnectionCount(): number {
-  return broker?.activeConnections ?? 0;
+  return broker.activeConnections;
 }
 export const coachStream = asyncHandler(async (req: Request, res: Response) => {
   if (!env.COACH_SYNC_ENABLED) {
@@ -18,14 +16,11 @@ export const coachStream = asyncHandler(async (req: Request, res: Response) => {
     });
   }
   const runtime = env.DIEWISH_ENVIRONMENT ?? env.NODE_ENV;
-  const url = env.COACH_SYNC_DATABASE_URL;
-  // Never reuse the migration credential or silently bypass transaction pooling.
-  if (runtime === "production" || !url || !sameCoachDatabase(env.DATABASE_URL, url)) {
+  if (!["staging", "test"].includes(runtime) || !broker.available) {
     throw new ApiError(503, "Coach live sync is not configured.", {
       code: "COACH_SYNC_UNAVAILABLE",
     });
   }
-  broker ??= new CoachEventBroker(url);
   // Preserve headroom in the existing 40-request Cloud Run instance.
   if (broker.activeConnections >= 20)
     throw ApiError.tooManyRequests("Coach connection capacity reached.");
@@ -40,7 +35,7 @@ export const coachStream = asyncHandler(async (req: Request, res: Response) => {
   let release: () => void = () => {};
   let ended = false;
   let ready = false;
-  const buffered: unknown[] = [];
+  const buffered: Record<string, unknown>[] = [];
   let heartbeat: ReturnType<typeof setInterval> | undefined;
   const close = () => {
     if (ended) return;
@@ -55,28 +50,45 @@ export const coachStream = asyncHandler(async (req: Request, res: Response) => {
     // No unbounded buffering for slow clients. Reconnect reads the watermark.
     if (!res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)) close();
   };
-  // Bound authentication/request lifetime even if LISTEN or the snapshot stalls.
+  // Bound authentication/request lifetime even if the initial snapshot stalls.
   const expiry = setTimeout(close, Math.max(0, lifetime));
   res.on("close", close);
-  release = await broker.subscribe(userId, {
-    changed: ({ type, conversationId, version }) => {
-      if (Date.now() >= claims.exp! * 1000) {
-        close();
-        return;
-      }
-      const event = { type, conversationId, version };
-      if (!ready) {
-        if (buffered.length >= 100) {
+  try {
+    release = await broker.subscribe(userId, {
+      changed: ({ type, conversationId, version }) => {
+        if (Date.now() >= claims.exp! * 1000) {
           close();
           return;
         }
-        buffered.push(event);
-      } else write("changed", event);
-    },
-    disconnected: () => {
-      if (res.headersSent) close();
-    },
-  });
+        const event = { type, conversationId, version };
+        if (!ready) {
+          if (buffered.length >= 100) {
+            close();
+            return;
+          }
+          buffered.push(event);
+        } else write("changed", event);
+      },
+      revised: (version) => {
+        if (Date.now() >= claims.exp! * 1000) {
+          close();
+          return;
+        }
+        if (ready) write("revision", { version });
+        else {
+          write("ready", { version });
+          ready = true;
+          for (const event of buffered) write("changed", event);
+          buffered.length = 0;
+        }
+      },
+      disconnected: close,
+    });
+  } catch (error) {
+    clearTimeout(expiry);
+    res.removeListener("close", close);
+    throw error;
+  }
   if (ended) {
     release();
     return;
@@ -89,10 +101,7 @@ export const coachStream = asyncHandler(async (req: Request, res: Response) => {
       Connection: "keep-alive",
     });
     res.flushHeaders();
-    // Subscription precedes snapshot. Earlier notifications may harmlessly repeat.
-    write("ready", { version: await coachVersion(userId) });
-    ready = true;
-    for (const event of buffered) write("changed", event);
+    // The broker's bounded first metadata batch sends ready. No query per device.
     if (ended) return;
     let checking = false;
     heartbeat = setInterval(() => {
