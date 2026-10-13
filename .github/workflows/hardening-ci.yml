@@ -6,6 +6,7 @@ on:
       - fix/production-hardening
       - feature/android-native-scanner
       - feature/staging-preview
+      - feature/mascot-mirmir-pilot-a1
       - feature/admin2-staff-password-b2-close-a1
       - feature/app5-bottom-nav-scroll-containment-a2
       - feature/app6-coach-event-driven-sync-p2-a1
@@ -130,7 +131,7 @@ jobs:
       - name: Test Food and Progress card coordinate contract
         run: node --test tests/dashboard-live-feature-card.test.cjs
       - name: Test Dashboard card personalization contracts
-        run: node --test tests/dashboard-card-personalization.test.cjs
+        run: node --test tests/dashboard-card-personalization.test.cjs tests/mascot-preferences.test.cjs
       - name: Test Journey dashboard activation and daily source reliability
         env:
           TZ: Europe/Istanbul
@@ -354,6 +355,7 @@ jobs:
           e2e/dashboard-edit-polish.spec.ts
           e2e/dashboard-and-coach-modal-polish.spec.ts
           e2e/dashboard-edit-sanity.spec.ts
+          e2e/mascot-preferences.spec.ts
           --workers=1 --reporter=line
       - name: Run browser smoke
         working-directory: frontend

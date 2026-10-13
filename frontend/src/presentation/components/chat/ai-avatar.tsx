@@ -1,12 +1,14 @@
 import Image from "next/image";
 
 import { cn } from "@/shared/lib/utils";
+import { SelectedMascot } from "@/presentation/components/mascot/selected-mascot";
 
 const COACH_AVATAR_SRC = "/images/diewish/semantic/diewish-coach-avatar.png";
 
 /** Diewish Coach identity avatar. Pulses gently while active. */
-export function AiAvatar({ active = false, className }: { active?: boolean; className?: string }) {
+export function AiAvatar({ active = false, className, personalized = false }: { active?: boolean; className?: string; personalized?: boolean }) {
   return (
+    <SelectedMascot enabled={personalized} className={cn("size-8", className)}>
     <span
       className={cn(
         "relative flex size-8 shrink-0 items-center justify-center rounded-full shadow-soft",
@@ -33,5 +35,6 @@ export function AiAvatar({ active = false, className }: { active?: boolean; clas
         />
       </span>
     </span>
+    </SelectedMascot>
   );
 }

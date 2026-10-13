@@ -66,6 +66,8 @@ test("dashboard card preferences are account-scoped UI data only", async (t) => 
       "hiddenCardIds",
       "hiddenQuickActionIds",
       "id",
+      "mascotId",
+      "mascotAnimation",
       "quickActionOrder",
       "updatedAt",
       "userId",

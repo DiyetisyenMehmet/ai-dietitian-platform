@@ -837,6 +837,8 @@ model DashboardCardPreference {
   hiddenCardIds        String[] @default([])
   quickActionOrder     String[] @default([])
   hiddenQuickActionIds String[] @default([])
+  mascotId             String   @default("classic")
+  mascotAnimation      Boolean  @default(true)
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 
