@@ -225,6 +225,7 @@ test("three browser clients: six directions, zero idle list polling, lifecycle a
       responseToUi: number[] = [];
     let sharedId = "",
       sharedTitle = "";
+    let deliveredDirections = 0;
     for (const [sourceIndex, targetIndex] of directions) {
       console.log(`COACH_DIRECTION_BEGIN=${sourceIndex},${targetIndex}`);
       const source = pages[sourceIndex],
@@ -260,6 +261,10 @@ test("three browser clients: six directions, zero idle list polling, lifecycle a
       latencies.push(performance.now() - sentAt);
       responseToUi.push(performance.now() - responseAt);
       console.log(`COACH_DIRECTION_DONE=${sourceIndex},${targetIndex}`);
+      // Wait for all clients before the next mutation; revision checks may
+      // legitimately coalesce concurrent changes into a single invalidation.
+      deliveredDirections++;
+      await expect.poll(() => changed.every((value) => value >= deliveredDirections)).toBe(true);
       expect(await nav.getByText(text, { exact: true }).count()).toBe(1);
       expect(
         (

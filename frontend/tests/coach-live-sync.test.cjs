@@ -373,9 +373,12 @@ test("explicit transport-unavailable uses P1 only while active and stops on logo
   const count = h.calls.length;
   await h.advance(20000);
   assert.equal(h.calls.length, count);
-  await h.visibility(true); await settle();
-  await h.account(null); const loggedOutCount = h.calls.length;
-  await h.advance(20000); assert.equal(h.calls.length, loggedOutCount);
+  await h.visibility(true);
+  await settle();
+  await h.account(null);
+  const loggedOutCount = h.calls.length;
+  await h.advance(20000);
+  assert.equal(h.calls.length, loggedOutCount);
   h.stop();
 });
 test("auth, capacity and unrelated errors never enable P1 polling", async () => {

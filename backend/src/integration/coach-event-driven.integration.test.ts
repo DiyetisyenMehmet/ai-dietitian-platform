@@ -122,7 +122,12 @@ async function connect(base: string, token: string) {
     bounded(
       new Promise<Frame>((resolve) => {
         const check = () => {
-          const frame = frames.find((item) => item.type === type && match(item));
+          const frame = frames.find(
+            (item) =>
+              (item.type === type ||
+                (type === "invalidation" && ["changed", "revision"].includes(item.type))) &&
+              match(item),
+          );
           if (frame) {
             callbacks.delete(check);
             resolve(frame);
@@ -397,7 +402,7 @@ test(
             .version,
           revision + 2n,
         );
-        await a.wait("revision", (frame) => BigInt(frame.data.version) >= revision + 2n);
+        await a.wait("invalidation", (frame) => BigInt(frame.data.version) >= revision + 2n);
       },
     );
     await t.test(
