@@ -1,0 +1,36 @@
+name: APP1 Weight UX A1 Temporary Verification
+on:
+  push:
+    branches:
+      - feature/app1-weight-tracking-ux-a1
+permissions:
+  contents: read
+jobs:
+  verify-weight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Check weight history/date/UX contracts
+        run: node --test tests/weight-tracking-ux-a1.test.cjs
+      - name: Check existing weight geometry and history tests
+        run: npx playwright test e2e/weight-data.spec.ts --workers=1 --reporter=line
+      - name: Check staging weight runtime script syntax
+        run: node --check e2e/staging-weight-runtime.spec.js
+      - name: TypeScript typecheck
+        run: npm run type-check
+      - name: Build without real service calls
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_BASE_URL: https://example.invalid/api
+          NEXT_PUBLIC_SITE_URL: https://example.invalid
