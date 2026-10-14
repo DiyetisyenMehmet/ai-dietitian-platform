@@ -75,7 +75,7 @@ Hareket azaltma ayarında SVG animasyon elemanları kaldırılır; ek CSS koruma
 filtreyi de kaldırır. Kapalı göz karesi yüklenmezse sabit açık kare korunur.
 Yer değiştirme haritası okunamazsa nötr harita ile sabit görsele dönüşür.
 
-`tests/mirmir-motion-browser.test.cjs` gerçek JSX/CSS ve WebP dosyalarının
+`tests/mirmir-motion-browser.cjs` gerçek JSX/CSS ve WebP dosyalarının
 Chromium/WebKit çıktısında kuyruk, nefes ve minder bölgelerinin piksel
 farkını; 56px kullanım boyutunu; 390/412/430 genişlik ve açık/koyu zemini
 ölçer. Önce/sonra kayıtlarını GitHub kontrol çıktısında saklar. Bu bağımsız
