@@ -262,9 +262,10 @@ for (const direction of ["mobile-to-web", "web-to-mobile"] as const) {
       expect(api.details).not.toContain(api.rows[0].id);
       await expect(target.getByLabel("Mesaj", { exact: true })).toHaveValue("Korunan taslak");
       await remoteRow.click();
-      await expect(target.getByText(text, { exact: true })).toBeVisible();
+      const savedMessage = target.getByText(text, { exact: true }).and(target.locator("p"));
+      await expect(savedMessage).toBeVisible();
       await target.reload();
-      await expect(target.getByText(text, { exact: true })).toBeVisible();
+      await expect(savedMessage).toBeVisible();
       nav = await openList(target);
       await expect(nav.getByRole("button", { name: `${text} Bugün`, exact: true })).toBeVisible();
       await target.goto(base + "/profile");
@@ -275,7 +276,7 @@ for (const direction of ["mobile-to-web", "web-to-mobile"] as const) {
       await target.getByRole("button", { name: "Giriş Yap", exact: true }).click();
       await expect(target).toHaveURL(/\/dashboard/);
       await target.goto(base + "/ai");
-      await expect(target.getByText(text, { exact: true })).toBeVisible();
+      await expect(savedMessage).toBeVisible();
       nav = await openList(target);
       await expect(nav.getByText("Boş", { exact: true })).toHaveCount(0);
       expect(api.rows).toHaveLength(3);
