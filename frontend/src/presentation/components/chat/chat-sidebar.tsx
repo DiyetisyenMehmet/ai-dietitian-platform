@@ -46,7 +46,11 @@ type ConversationTarget = { id: string; title: string; pinnedAt: number | null }
 const TITLE_MAX_LENGTH = 80;
 
 function relativeDay(ts: number): string {
-  const days = Math.floor((Date.now() - ts) / (1000 * 60 * 60 * 24));
+  const now = new Date();
+  const updated = new Date(ts);
+  // Compare local calendar dates, including midnight and daylight-saving changes.
+  const calendarDay = (date: Date) => Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+  const days = Math.round((calendarDay(now) - calendarDay(updated)) / (1000 * 60 * 60 * 24));
   if (days <= 0) return "Bugün";
   if (days === 1) return "Dün";
   return `${days} gün önce`;
@@ -119,10 +123,15 @@ export function ChatSidebar({ open, onClose, triggerRef }: ChatSidebarProps) {
     });
   };
 
-  const pinned = conversations
+  // Unsent drafts remain in the composer/store; only history visibility changes.
+  // Server summaries intentionally omit messages, so [] never proves a saved thread is empty.
+  const history = conversations.filter(
+    (conversation) => !isDraftConversationId(conversation.id) || conversation.messages.length > 0,
+  );
+  const pinned = history
     .filter((conversation) => conversation.pinnedAt !== null)
     .sort((a, b) => (b.pinnedAt ?? 0) - (a.pinnedAt ?? 0));
-  const regular = conversations
+  const regular = history
     .filter((conversation) => conversation.pinnedAt === null)
     .sort(sortByRecency);
 
@@ -239,7 +248,7 @@ export function ChatSidebar({ open, onClose, triggerRef }: ChatSidebarProps) {
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-medium">{conv.title}</span>
             <span className="block text-xs text-muted-foreground">
-              {conv.messages.length > 0 ? relativeDay(conv.updatedAt) : "Boş"}
+              {relativeDay(conv.updatedAt)}
             </span>
           </span>
         </button>
