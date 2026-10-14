@@ -2,6 +2,9 @@ name: Mirmir motion checks
 on:
   push:
     branches: [feature/mascot-mirmir-motion-a2]
+    paths:
+      - frontend/src/presentation/components/mascot/**
+      - frontend/tests/mirmir-motion-browser.test.cjs
 permissions:
   contents: read
 concurrency:
