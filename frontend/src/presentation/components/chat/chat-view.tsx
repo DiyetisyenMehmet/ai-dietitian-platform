@@ -79,7 +79,7 @@ export function ChatView({ initialPrompt }: { initialPrompt?: string | null }) {
           <Menu className="size-5" aria-hidden="true" />
         </button>
         <div className="flex flex-1 items-center gap-2">
-          <AiAvatar />
+          <AiAvatar personalized />
           <div className="leading-tight">
             <p className="text-sm font-semibold">Diewish Koç</p>
             <p className="text-[11px] text-muted-foreground">

@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import {
   Bell,
   Camera,
+  Cat,
   CreditCard,
   FlaskConical,
   LineChart,
@@ -183,6 +184,7 @@ export function ProfileView() {
       </section>
 
       <SettingGroup title="Hesap">
+        <SettingRow icon={Cat} label="Maskot tercihleri" description="Maskotunu ve animasyonunu seç" href="/profile/mascot" />
         <SettingRow
           icon={UserPen}
           label="Profili düzenle"

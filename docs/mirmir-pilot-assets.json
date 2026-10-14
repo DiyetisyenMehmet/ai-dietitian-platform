@@ -1,0 +1,26 @@
+{
+  "task": "DIEWISH-MASCOT-COLLECTION-A1-MIRMIR-PILOT",
+  "sourcePackage": "DIEWISH_MIRMIR_PILOT_REFERANSLAR.zip",
+  "commonCrop": [
+    64,
+    168,
+    1248,
+    1144
+  ],
+  "outputSize": [
+    512,
+    512
+  ],
+  "frames": {
+    "open": {
+      "sourceSha256": "0b6ee9fe071c4748078f97893673b98a7e66cb072e677497fa8a4f4943ddf9fe",
+      "outputSha256": "54069f04dfc0cf2c8e06bae2334251fcfaacc04f041d4cb7183dbd8bbc263571",
+      "bytes": 184302
+    },
+    "closed": {
+      "sourceSha256": "d963a9ba63c5d7629ea6fa9df23ffef7036fa41f85ce921d0a306927cf8ba99a",
+      "outputSha256": "be1daa7f4db9912eb3df964935669d34ca84b4c94f0f6f1f22ad0ba3be20589b",
+      "bytes": 182464
+    }
+  }
+}

@@ -7,6 +7,7 @@ import { Toaster } from "sonner";
 import { RouteGuard } from "@/presentation/components/auth/route-guard";
 import { PushDeviceSync } from "@/presentation/providers/push-device-sync";
 import { ThemeProvider } from "@/presentation/providers/theme-provider";
+import { MascotPreferencesProvider } from "@/application/account/mascot-preferences-provider";
 
 function RuntimeUserEffects() {
   const pathname = usePathname();
@@ -20,7 +21,7 @@ function RuntimeUserEffects() {
 export function AppProviders({ children }: { children: React.ReactNode }) {
   return (
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-      <RouteGuard>{children}</RouteGuard>
+      <MascotPreferencesProvider><RouteGuard>{children}</RouteGuard></MascotPreferencesProvider>
       <RuntimeUserEffects />
       <Toaster
         position="top-center"
