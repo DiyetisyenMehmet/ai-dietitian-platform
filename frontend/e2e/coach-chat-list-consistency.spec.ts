@@ -125,8 +125,13 @@ function fixture() {
 
 async function openList(page: Page) {
   const nav = page.getByRole("navigation", { name: "Sohbetler" });
-  if ((page.viewportSize()?.width ?? 0) < 1024 && !(await nav.isVisible()))
-    await page.getByRole("button", { name: "Sohbet geçmişi", exact: true }).click();
+  if ((page.viewportSize()?.width ?? 0) < 1024) {
+    const trigger = page.getByRole("button", { name: "Sohbet geçmişi", exact: true });
+    // A closing Radix drawer can remain visible during its exit animation.
+    // The trigger reflects the actual open state, including immediately after New Chat/Escape.
+    if ((await trigger.getAttribute("aria-expanded")) !== "true") await trigger.click();
+    await expect(trigger).toHaveAttribute("aria-expanded", "true");
+  }
   await expect(nav).toBeVisible();
   return nav;
 }
