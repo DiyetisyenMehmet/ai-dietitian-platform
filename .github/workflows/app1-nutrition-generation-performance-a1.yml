@@ -74,3 +74,27 @@ jobs:
         run: npx prisma migrate deploy
       - name: Plan generation and transaction lock integration
         run: node --import tsx --test --test-concurrency=1 src/modules/nutrition-plan/nutrition-plan-generation.integration.test.ts src/modules/nutrition-plan/nutrition-plan-generation-lock.integration.test.ts
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend
+        run: npm ci
+      - name: Existing nutrition-plan and safe timing tests
+        run: node --test tests/nutrition-plan-generation.test.cjs tests/nutrition-plan-performance-a1.test.cjs
+      - name: TypeScript
+        run: npm run type-check
+      - name: Build
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_BASE_URL: https://example.invalid/api
+          NEXT_PUBLIC_SITE_URL: https://example.invalid
