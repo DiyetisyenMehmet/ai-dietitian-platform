@@ -11,6 +11,10 @@
   object-fit: contain;
   user-select: none;
 }
+.motionLayer {
+  position: absolute;
+  inset: 0;
+}
 .closed {
   visibility: hidden;
 }
@@ -39,6 +43,9 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
+  .motionLayer {
+    filter: none !important;
+  }
   .mascot[data-blinking="true"] .open {
     animation: none;
     visibility: visible;
