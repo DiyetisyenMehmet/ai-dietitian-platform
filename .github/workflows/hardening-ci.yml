@@ -347,6 +347,9 @@ jobs:
           done
           cat /tmp/diewish-frontend.log
           exit 1
+      - name: Test Coach chat list consistency with P2 disabled
+        working-directory: frontend
+        run: npx playwright test e2e/coach-chat-list-consistency.spec.ts --workers=1 --reporter=line
       - name: Run targeted Dashboard card personalization E2E
         working-directory: frontend
         run: >-
@@ -361,7 +364,6 @@ jobs:
         run: >-
           npx playwright test
           e2e/onboarding-flow.spec.js
-          e2e/coach-chat-list-consistency.spec.ts
           e2e/auth-entry-points.spec.js
           e2e/history-data.spec.ts
           e2e/history-share-text.spec.ts

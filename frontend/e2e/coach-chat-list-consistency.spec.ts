@@ -147,7 +147,7 @@ test("unloaded saved summaries keep their date; unsent drafts stay out of histor
     nav.getByRole("button", { name: /Bugünkü öğünlerimi analiz eder misin\? Bugün/ }),
   ).toBeVisible();
   expect(api.details).not.toContain("saved-b");
-  await nav.getByRole("button", { name: "Yeni Sohbet", exact: true }).click();
+  await page.getByRole("button", { name: "Yeni Sohbet", exact: true }).click();
   await page.getByLabel("Mesaj", { exact: true }).fill("Gönderilmemiş taslak");
   nav = await openList(page);
   await expect(nav.getByText("Yeni sohbet", { exact: true })).toHaveCount(0);
@@ -187,7 +187,7 @@ test("a server-saved empty thread is retained while a local empty draft is hidde
   await expect(
     nav.getByRole("button", { name: "Yeni sohbet sohbet seçenekleri", exact: true }),
   ).toBeVisible();
-  await nav.getByRole("button", { name: "Yeni Sohbet", exact: true }).click();
+  await page.getByRole("button", { name: "Yeni Sohbet", exact: true }).click();
   nav = await openList(page);
   await expect(nav.getByText("Yeni sohbet", { exact: true })).toHaveCount(1);
   await expect(nav.getByText("Boş", { exact: true })).toHaveCount(0);
@@ -245,12 +245,12 @@ for (const direction of ["mobile-to-web", "web-to-mobile"] as const) {
         await expect(page.getByText("Kayıtlı mesaj saved-a", { exact: true })).toBeVisible();
       }
       let nav = await openList(target);
-      await nav.getByRole("button", { name: "Yeni Sohbet", exact: true }).click();
+      await target.getByRole("button", { name: "Yeni Sohbet", exact: true }).click();
       await target.getByLabel("Mesaj", { exact: true }).fill("Korunan taslak");
       nav = await openList(target);
       await expect(nav.getByText("Yeni sohbet", { exact: true })).toHaveCount(0);
-      const sourceNav = await openList(source);
-      await sourceNav.getByRole("button", { name: "Yeni Sohbet", exact: true }).click();
+      await openList(source);
+      await source.getByRole("button", { name: "Yeni Sohbet", exact: true }).click();
       const text = `Sentetik senkronizasyon ${direction}`;
       await source.getByLabel("Mesaj", { exact: true }).fill(text);
       await source.getByRole("button", { name: "Gönder", exact: true }).click();
