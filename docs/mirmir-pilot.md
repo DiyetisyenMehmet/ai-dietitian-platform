@@ -56,3 +56,30 @@ Test ortamına yayın için mevcut üç yayın kapısının aynı kod kimliğind
 başarılı olması ve başka yayınla çakışma olmaması gerekir.
 
 Diğer 16 görsel, canlı ortam ve ana dal bu pilotun kapsamı dışındadır.
+
+## Mırmır hareket A2
+
+Özgün PNG ve kullanılan iki WebP aynı kalır. Hafif, yerel SVG yer değiştirme
+alanı yalnız sağ kıvrık kuyruk ucunu hareket ettirir; görsel kesilmez, kuyruk
+silinmez veya yeniden çizilmez. Yumuşak sınırlar katman dikişi, çift kuyruk
+ve altından açılan şeffaf boşluk üretmez. Gövdenin üst alanında en fazla
+yaklaşık 3 kaynak pikseli (%0,6) nefes hareketi uygulanır. Minder sabit kalır.
+10,4 saniyelik döngünün son 2 saniyesinde iki küçük kuyruk salınımı vardır;
+nefes döngünün önceki bölümündedir. Göz kırpmanın iki özgün karesi ve
+5,6 saniyelik zamanlaması aynen korunur.
+
+SVG tarayıcının kendi animasyonunu kullanır. Yeni görsel isteği, video,
+üçüncü taraf hareket paketi, JavaScript zamanlayıcısı veya sunucu değişikliği
+yoktur. Mevcut görünürlük/Android/ekran dışı kontrolleri tüm hareketi kapatır.
+Hareket azaltma ayarında SVG animasyon elemanları kaldırılır; ek CSS koruması
+filtreyi de kaldırır. Kapalı göz karesi yüklenmezse sabit açık kare korunur.
+Yer değiştirme haritası okunamazsa nötr harita ile sabit görsele dönüşür.
+
+`tests/mirmir-motion-browser.test.cjs` gerçek JSX/CSS ve WebP dosyalarının
+Chromium/WebKit çıktısında kuyruk, nefes ve minder bölgelerinin piksel
+farkını; 56px kullanım boyutunu; 390/412/430 genişlik ve açık/koyu zemini
+ölçer. Önce/sonra kayıtlarını GitHub kontrol çıktısında saklar. Bu bağımsız
+görüntü testi uygulama oturumlarını taklit etmez; mevcut
+`e2e/mascot-preferences.spec.ts` gerçek uygulamada durdurma, kayıt ve Koç
+başlığı davranışlarını ayrıca doğrular. Fiziksel Android, pil/işlemci
+ölçümü ve kullanıcının görsel onayı ayrı son kalite kontrolüdür.
