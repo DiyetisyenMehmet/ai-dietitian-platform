@@ -11,7 +11,7 @@ import { ApiError } from "../../utils/api-error";
 import { generateOpaqueToken, hashToken } from "../../utils/jwt";
 import { hashPassword, verifyPassword } from "../../utils/password";
 import { accountRepository } from "./account.repository";
-import type { DashboardCardPreferencesInput } from "./account.schemas";
+import type { DashboardCardPreferencesInput, MascotPreferencesInput } from "./account.schemas";
 
 const MS_PER_MINUTE = 60 * 1000;
 const MS_PER_HOUR = 60 * MS_PER_MINUTE;
@@ -54,6 +54,16 @@ function bloodTestStorageNamespace(userId: string): string {
 }
 
 export const accountService = {
+  async getMascotPreferences(userId: string) {
+    const stored = await accountRepository.getMascotPreferences(userId);
+    return { mascotId: stored?.mascotId ?? "classic", animationEnabled: stored?.mascotAnimation ?? true };
+  },
+
+  async updateMascotPreferences(userId: string, input: MascotPreferencesInput) {
+    const stored = await accountRepository.upsertMascotPreferences(userId, input);
+    return { mascotId: stored.mascotId, animationEnabled: stored.mascotAnimation };
+  },
+
   async getDashboardCardPreferences(userId: string) {
     const stored = await accountRepository.getDashboardCardPreference(userId);
     return {

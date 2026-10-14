@@ -14,6 +14,26 @@ export interface AccountStorageRef {
  * wrapped in `$transaction`.
  */
 export const accountRepository = {
+  getMascotPreferences(userId: string) {
+    return prisma.dashboardCardPreference.findUnique({
+      where: { userId },
+      select: { mascotId: true, mascotAnimation: true },
+    });
+  },
+
+  upsertMascotPreferences(userId: string, input: { mascotId?: "classic" | "mirmir"; animationEnabled?: boolean }) {
+    const data = {
+      ...(input.mascotId !== undefined ? { mascotId: input.mascotId } : {}),
+      ...(input.animationEnabled !== undefined ? { mascotAnimation: input.animationEnabled } : {}),
+    };
+    return prisma.dashboardCardPreference.upsert({
+      where: { userId },
+      create: { userId, ...data },
+      update: data,
+      select: { mascotId: true, mascotAnimation: true },
+    });
+  },
+
   findUserByEmail(email: string): Promise<User | null> {
     return prisma.user.findUnique({ where: { email } });
   },

@@ -8,6 +8,7 @@ import {
   changePasswordSchema,
   confirmPasswordSchema,
   dashboardCardPreferencesSchema,
+  mascotPreferencesSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
   verifyEmailSchema,
@@ -22,6 +23,9 @@ import {
  * actions are also rate-limited because they trigger email or verify a secret.
  */
 export const accountRouter = Router();
+
+accountRouter.get("/mascot", authenticate, accountController.getMascotPreferences);
+accountRouter.patch("/mascot", authenticate, validate({ body: mascotPreferencesSchema }), accountController.updateMascotPreferences);
 
 accountRouter.get(
   "/dashboard-cards",

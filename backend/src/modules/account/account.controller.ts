@@ -9,6 +9,7 @@ import type {
   ChangePasswordInput,
   ConfirmPasswordInput,
   DashboardCardPreferencesInput,
+  MascotPreferencesInput,
   ForgotPasswordInput,
   ResetPasswordInput,
   VerifyEmailInput,
@@ -31,6 +32,13 @@ function requireUserId(req: Request): string {
 }
 
 export const accountController = {
+  getMascotPreferences: asyncHandler(async (req: Request, res: Response) => {
+    sendSuccess(res, { preferences: await accountService.getMascotPreferences(requireUserId(req)) });
+  }),
+  updateMascotPreferences: asyncHandler(async (req: Request, res: Response) => {
+    sendSuccess(res, { preferences: await accountService.updateMascotPreferences(requireUserId(req), req.body as MascotPreferencesInput) });
+  }),
+
   getDashboardCardPreferences: asyncHandler(async (req: Request, res: Response) => {
     const preferences = await accountService.getDashboardCardPreferences(requireUserId(req));
     sendSuccess(res, { preferences });

@@ -1,0 +1,50 @@
+.mascot {
+  position: relative;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+}
+.closed {
+  visibility: hidden;
+}
+.mascot[data-blinking="true"] .open {
+  animation: eyesOpen 5.6s step-end infinite;
+}
+.mascot[data-blinking="true"] .closed {
+  animation: eyesClosed 5.6s step-end infinite;
+}
+@keyframes eyesOpen {
+  0%,
+  100% {
+    visibility: visible;
+  }
+  97.5% {
+    visibility: hidden;
+  }
+}
+@keyframes eyesClosed {
+  0%,
+  100% {
+    visibility: hidden;
+  }
+  97.5% {
+    visibility: visible;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mascot[data-blinking="true"] .open {
+    animation: none;
+    visibility: visible;
+  }
+  .mascot[data-blinking="true"] .closed {
+    animation: none;
+    visibility: hidden;
+  }
+}
