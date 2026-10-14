@@ -24,6 +24,24 @@ async function frameState(mascot: Locator, time: number) {
   }, time);
 }
 
+async function framePlacement(mascot: Locator) {
+  return mascot.evaluate((node) => {
+    const banner = node.closest("[data-dashboard-coach-banner]");
+    if (!banner) throw new Error("Missing coach banner");
+    const frame = node.getBoundingClientRect();
+    const container = banner.getBoundingClientRect();
+    // Screenshots may scroll the page. Compare placement inside the banner,
+    // with 0.001px precision to remove browser rectangle rounding noise.
+    const rounded = (value: number) => Math.round(value * 1000) / 1000;
+    return {
+      x: rounded(frame.x - container.x),
+      y: rounded(frame.y - container.y),
+      width: rounded(frame.width),
+      height: rounded(frame.height),
+    };
+  });
+}
+
 test("Mirmir pilot preserves layout, persists across two sessions, and stops all blink conditions", async ({
   page,
   request,
@@ -50,11 +68,11 @@ test("Mirmir pilot preserves layout, persists across two sessions, and stops all
     width: classicBox!.width,
     height: classicBox!.height,
   });
-  const openBox = await mascot.boundingBox();
+  const openBox = await framePlacement(mascot);
   expect(await frameState(mascot, 100)).toEqual(["visible", "hidden"]);
   expect(await frameState(mascot, 5500)).toEqual(["hidden", "visible"]);
   await mascot.screenshot({ path: testInfo.outputPath("mirmir-eyes-closed.png") });
-  expect(await mascot.boundingBox()).toEqual(openBox);
+  expect(await framePlacement(mascot)).toEqual(openBox);
   expect(await frameState(mascot, 0)).toEqual(["visible", "hidden"]);
 
   await page.evaluate(() =>
