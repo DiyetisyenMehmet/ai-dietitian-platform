@@ -32,3 +32,45 @@ jobs:
         run: node --import tsx --test src/modules/nutrition-plan/meal-generator/meal-generator.service.test.ts src/modules/nutrition-plan/nutrition-plan-realism.test.ts src/modules/nutrition-plan/nutrition-plan-provider-budget.test.ts
       - name: TypeScript
         run: npm run type-check
+  plan-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: diewish
+          POSTGRES_PASSWORD: diewish
+          POSTGRES_DB: diewish_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U diewish -d diewish_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      NODE_ENV: test
+      DIEWISH_ENVIRONMENT: test
+      LOG_LEVEL: silent
+      DATABASE_URL: postgresql://diewish:diewish@localhost:5432/diewish_test?schema=public
+      JWT_ACCESS_SECRET: integration-access-secret-012345678901234567890123456789
+      JWT_REFRESH_SECRET: integration-refresh-secret-01234567890123456789012345678
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Install backend
+        run: npm ci
+      - name: Generate Prisma client
+        run: npx prisma generate
+      - name: Apply staging-equivalent test database migrations
+        run: npx prisma migrate deploy
+      - name: Plan generation and transaction lock integration
+        run: node --import tsx --test --test-concurrency=1 src/modules/nutrition-plan/nutrition-plan-generation.integration.test.ts src/modules/nutrition-plan/nutrition-plan-generation-lock.integration.test.ts
