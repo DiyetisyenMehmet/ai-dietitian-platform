@@ -126,7 +126,10 @@ function shiftedDaysFromContent(value: unknown): number {
  * the same clock time can represent different biological points across shifts.
  */
 export const nutritionPlanAdaptationService = {
-  async build(userId: string): Promise<NutritionAdaptationProfile> {
+  async build(
+    userId: string,
+    knownWorkScheduleType?: WorkScheduleType | null,
+  ): Promise<NutritionAdaptationProfile> {
     const since = new Date(Date.now() - LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
     const [memories, rawDeviations, activePlan, profile] = await Promise.all([
       prisma.aiMemory.findMany({
@@ -152,13 +155,19 @@ export const nutritionPlanAdaptationService = {
         orderBy: { updatedAt: "desc" },
         select: { dailyPlans: true },
       }),
-      prisma.userProfile.findUnique({
-        where: { userId },
-        select: { workScheduleType: true },
-      }),
+      // Plan generation already loaded this value. Do not query the same
+      // health profile again; other callers retain the original lookup.
+      knownWorkScheduleType === undefined
+        ? prisma.userProfile.findUnique({
+            where: { userId },
+            select: { workScheduleType: true },
+          })
+        : Promise.resolve(null),
     ]);
 
-    const workScheduleType = (profile?.workScheduleType ?? null) as WorkScheduleType | null;
+    const workScheduleType = knownWorkScheduleType === undefined
+      ? (profile?.workScheduleType ?? null) as WorkScheduleType | null
+      : knownWorkScheduleType;
     const hungerEvents = memories.filter(
       (memory) => objectValue(memory.content)?.kind === "HUNGER_EVENT",
     );
