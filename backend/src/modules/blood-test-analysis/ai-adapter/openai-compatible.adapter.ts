@@ -8,6 +8,10 @@ import {
 } from "../constants";
 import { NUTRITION_PLAN_SYSTEM_PROMPT } from "../../nutrition-plan/constants";
 import {
+  reserveNutritionProviderCall,
+  recordNutritionProviderUsage,
+} from "../../nutrition-plan/nutrition-provider-observer";
+import {
   checkNutritionProviderBudget,
   nutritionProviderSignal,
 } from "../../nutrition-plan/nutrition-plan-provider-budget";
@@ -89,6 +93,7 @@ export class OpenAICompatibleAdapter implements IAIAdapter {
     );
     const url = `${this.config.baseUrl.replace(/\/+$/, "")}/chat/completions`;
     let response: Response;
+    if (nutritionRequest) await reserveNutritionProviderCall();
     try {
       response = await fetch(url, {
         method: "POST",
@@ -116,7 +121,10 @@ export class OpenAICompatibleAdapter implements IAIAdapter {
 
     if (!response.ok) {
       const detail = await response.text().catch(() => "");
-      logger.error({ status: response.status, detail }, "AI provider returned an error");
+      logger.error(
+        nutritionRequest ? { status: response.status } : { status: response.status, detail },
+        "AI provider returned an error",
+      );
       throw new ApiError(502, "The AI provider returned an error.", {
         code: "AI_PROVIDER_ERROR",
         isOperational: false,
@@ -124,6 +132,19 @@ export class OpenAICompatibleAdapter implements IAIAdapter {
     }
 
     const body = (await response.json()) as ChatCompletionResponse;
+    if (nutritionRequest)
+      await recordNutritionProviderUsage(
+        (
+          body as ChatCompletionResponse & {
+            usage?: { prompt_tokens?: number; completion_tokens?: number };
+          }
+        ).usage
+          ? {
+              prompt: (body as { usage?: { prompt_tokens?: number } }).usage?.prompt_tokens,
+              output: (body as { usage?: { completion_tokens?: number } }).usage?.completion_tokens,
+            }
+          : {},
+      );
     const content = body.choices?.[0]?.message?.content;
     if (!content || typeof content !== "string") {
       throw new ApiError(502, "The AI provider returned an empty response.", {

@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { nutritionPlanStore, useNutritionPlan } from "@/application/health/nutrition-plan-store";
 import { useWeightCheckInStatus } from "@/application/health/weight-store";
 import { planError } from "./nutrition-plan-errors";
+import { NutritionMealChangeButton } from "./nutrition-meal-change-button";
 import {
   SUPPORTED_NUTRITION_PLAN_DURATIONS,
   type CreateNutritionPlanDeviationInput,
@@ -80,7 +81,7 @@ function safeContent(plan: NutritionPlanRecord): NutritionPlanContent | null {
 
 function dayPlan(content: NutritionPlanContent, dayNumber: number): DailyPlan | null {
   const mapping = content.calendar?.find((item) => item.dayNumber === dayNumber);
-  const index = mapping?.cycleIndex ?? ((dayNumber - 1) % content.cycle.length);
+  const index = mapping?.cycleIndex ?? (dayNumber - 1) % content.cycle.length;
   return content.cycle[index] ?? null;
 }
 
@@ -145,6 +146,7 @@ function number(value: number): string {
 }
 
 function MealBlock({
+  plan,
   dayNumber,
   mealIndex,
   meal,
@@ -154,13 +156,16 @@ function MealBlock({
   onCreateDeviation,
   onDeleteDeviation,
 }: {
+  plan: NutritionPlanRecord;
   dayNumber: number;
   mealIndex: number;
   meal: PlannedMeal;
   deviations: NutritionPlanDeviationRecord[];
   deviationsLoading: boolean;
   canLogKacamak: boolean;
-  onCreateDeviation(input: CreateNutritionPlanDeviationInput): Promise<NutritionPlanDeviationRecord>;
+  onCreateDeviation(
+    input: CreateNutritionPlanDeviationInput,
+  ): Promise<NutritionPlanDeviationRecord>;
   onDeleteDeviation(deviationId: string): Promise<void>;
 }) {
   return (
@@ -182,7 +187,10 @@ function MealBlock({
 
       <div className="mt-3 space-y-2">
         {meal.foods.map((food, index) => (
-          <div key={`${food.name}-${index}`} className="flex items-baseline justify-between gap-3 text-sm">
+          <div
+            key={`${food.name}-${index}`}
+            className="flex items-baseline justify-between gap-3 text-sm"
+          >
             <span className="min-w-0 font-medium">{food.name}</span>
             <span className="shrink-0 text-right text-muted-foreground">{food.portion}</span>
           </div>
@@ -190,14 +198,20 @@ function MealBlock({
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
-        <span className="rounded-full bg-muted px-2 py-1">Protein {number(meal.proteinGrams)} g</span>
-        <span className="rounded-full bg-muted px-2 py-1">Karbonhidrat {number(meal.carbsGrams)} g</span>
+        <span className="rounded-full bg-muted px-2 py-1">
+          Protein {number(meal.proteinGrams)} g
+        </span>
+        <span className="rounded-full bg-muted px-2 py-1">
+          Karbonhidrat {number(meal.carbsGrams)} g
+        </span>
         <span className="rounded-full bg-muted px-2 py-1">Yağ {number(meal.fatGrams)} g</span>
       </div>
 
       {meal.explanation?.trim() && (
         <details className="mt-3 rounded-xl bg-muted/50 px-3 py-2 text-sm">
-          <summary className="cursor-pointer select-none font-medium">Bu öğün neden seçildi?</summary>
+          <summary className="cursor-pointer select-none font-medium">
+            Bu öğün neden seçildi?
+          </summary>
           <p className="mt-2 leading-relaxed text-muted-foreground">{meal.explanation}</p>
         </details>
       )}
@@ -212,6 +226,7 @@ function MealBlock({
         onCreate={onCreateDeviation}
         onDelete={onDeleteDeviation}
       />
+      <NutritionMealChangeButton plan={plan} dayNumber={dayNumber} mealIndex={mealIndex} />
     </div>
   );
 }
@@ -242,7 +257,9 @@ function DayCard({
   generating: boolean;
   deviations: NutritionPlanDeviationRecord[];
   deviationsLoading: boolean;
-  onCreateDeviation(input: CreateNutritionPlanDeviationInput): Promise<NutritionPlanDeviationRecord>;
+  onCreateDeviation(
+    input: CreateNutritionPlanDeviationInput,
+  ): Promise<NutritionPlanDeviationRecord>;
   onDeleteDeviation(deviationId: string): Promise<void>;
   onRefreshDay(dayNumber: number): Promise<void>;
   onShiftDay(dayNumber: number): Promise<void>;
@@ -272,15 +289,23 @@ function DayCard({
         </span>
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-semibold">{dayNumber}. Gün</span>
-          <span className="block truncate text-xs capitalize text-muted-foreground">{planDayDateLabel}</span>
+          <span className="block truncate text-xs capitalize text-muted-foreground">
+            {planDayDateLabel}
+          </span>
         </span>
-        <span className="text-xs font-medium text-muted-foreground">~{number(day.totalCalories)} kcal</span>
-        <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" aria-hidden="true" />
+        <span className="text-xs font-medium text-muted-foreground">
+          ~{number(day.totalCalories)} kcal
+        </span>
+        <ChevronRight
+          className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90"
+          aria-hidden="true"
+        />
       </summary>
 
       <div className="space-y-3 border-t border-border/70 p-4">
         {day.meals.map((meal, index) => (
           <MealBlock
+            plan={plan}
             key={`${meal.name}-${meal.time}-${index}`}
             dayNumber={dayNumber}
             mealIndex={index}
@@ -299,7 +324,9 @@ function DayCard({
             <p className="mt-0.5 text-sm font-semibold">{number(day.totalProteinGrams)} g</p>
           </div>
           <div>
-            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Karbonhidrat</p>
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              Karbonhidrat
+            </p>
             <p className="mt-0.5 text-sm font-semibold">{number(day.totalCarbsGrams)} g</p>
           </div>
           <div>
@@ -308,19 +335,33 @@ function DayCard({
           </div>
         </div>
 
-        {day.notes?.trim() && <p className="text-xs leading-relaxed text-muted-foreground">{day.notes}</p>}
+        {day.notes?.trim() && (
+          <p className="text-xs leading-relaxed text-muted-foreground">{day.notes}</p>
+        )}
 
         {confirmShift && canShift && (
           <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
             <p className="text-sm font-semibold">Bugünü yarına taşı</p>
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              Bugünkü öğünlerin yarına taşınacak. Sonraki plan günlerin de bir gün ileri kayacak. Geçmiş günlerin değişmeyecek.
+              Bugünkü öğünlerin yarına taşınacak. Sonraki plan günlerin de bir gün ileri kayacak.
+              Geçmiş günlerin değişmeyecek.
             </p>
             <div className="mt-3 flex flex-wrap justify-end gap-2">
-              <Button variant="ghost" size="sm" disabled={shifting} onClick={() => setConfirmShift(false)}>Vazgeç</Button>
-              <Button size="sm" isLoading={shifting} onClick={() => void shift()}>Yarına taşı</Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={shifting}
+                onClick={() => setConfirmShift(false)}
+              >
+                Vazgeç
+              </Button>
+              <Button size="sm" isLoading={shifting} onClick={() => void shift()}>
+                Yarına taşı
+              </Button>
             </div>
-            <p className="mt-2 text-[11px] text-muted-foreground">Bu özellik Premium ve Premium Plus kullanıcıları içindir.</p>
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              Bu özellik Premium ve Premium Plus kullanıcıları içindir.
+            </p>
           </div>
         )}
 
@@ -339,15 +380,27 @@ function DayCard({
             </Button>
           )}
           {canRefresh && (
-            <Button type="button" variant="outline" size="sm" disabled={generating || checkInRequired} onClick={() => void onRefreshDay(dayNumber)}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={generating || checkInRequired}
+              onClick={() => void onRefreshDay(dayNumber)}
+            >
               <RefreshCw aria-hidden="true" />
               Bu günü yenile
             </Button>
           )}
-          <NutritionPlanDayShareButton dayNumber={dayNumber} dateLabel={planDayDateLabel} day={day} />
+          <NutritionPlanDayShareButton
+            dayNumber={dayNumber}
+            dateLabel={planDayDateLabel}
+            day={day}
+          />
         </div>
         {!canRefresh && (
-          <p className="text-right text-[11px] text-muted-foreground">Geçmiş günler plan geçmişini korumak için yenilenmez.</p>
+          <p className="text-right text-[11px] text-muted-foreground">
+            Geçmiş günler plan geçmişini korumak için yenilenmez.
+          </p>
         )}
       </div>
     </details>
@@ -367,17 +420,27 @@ function DurationOptions({
   const create = async (duration: SupportedNutritionPlanDuration) => {
     if (generating || checkInRequired) return;
     if (duration === currentPlan?.duration) return;
-    const currentDays = currentPlan ? safeContent(currentPlan)?.durationDays ?? DURATION_DAYS[currentPlan.duration] : 0;
+    const currentDays = currentPlan
+      ? (safeContent(currentPlan)?.durationDays ?? DURATION_DAYS[currentPlan.duration])
+      : 0;
     const targetDays = DURATION_DAYS[duration];
     const extending = Boolean(currentPlan && targetDays > currentDays);
 
     try {
       if (currentPlan && extending) {
         await nutritionPlanStore.extend(currentPlan.id, duration);
-        toast.success(`Planın mevcut günler korunarak ${targetDays} güne uzatıldı`);
+        toast.success(
+          nutritionPlanStore.getDurableMode()
+            ? "Plan uzatma hazırlığı başladı."
+            : `Planın mevcut günler korunarak ${targetDays} güne uzatıldı`,
+        );
       } else {
         await nutritionPlanStore.generate(duration);
-        toast.success(`${durationLabel(duration)} kişisel öğün planın hazırlandı`);
+        toast.success(
+          nutritionPlanStore.getDurableMode()
+            ? "Plan hazırlığı başladı."
+            : `${durationLabel(duration)} kişisel öğün planın hazırlandı`,
+        );
       }
     } catch (error) {
       toast.error(planError(error));
@@ -387,7 +450,9 @@ function DurationOptions({
   const durations = currentPlan
     ? SUPPORTED_NUTRITION_PLAN_DURATIONS.filter((duration) => duration !== currentPlan.duration)
     : SUPPORTED_NUTRITION_PLAN_DURATIONS;
-  const currentDays = currentPlan ? safeContent(currentPlan)?.durationDays ?? DURATION_DAYS[currentPlan.duration] : 0;
+  const currentDays = currentPlan
+    ? (safeContent(currentPlan)?.durationDays ?? DURATION_DAYS[currentPlan.duration])
+    : 0;
 
   return (
     <div className="grid gap-3 sm:grid-cols-3">
@@ -405,9 +470,17 @@ function DurationOptions({
                   ? `Mevcut ${currentDays} gün korunur, yalnızca ${targetDays - currentDays} yeni gün eklenir.`
                   : "Daha kısa süre seçildiğinde bugünden başlayan yeni bir plan hazırlanır."}
               </p>
-              <Button className="mt-4 w-full" disabled={generating || checkInRequired} onClick={() => void create(duration)}>
+              <Button
+                className="mt-4 w-full"
+                disabled={generating || checkInRequired}
+                onClick={() => void create(duration)}
+              >
                 <CalendarDays className={selected ? "animate-pulse" : ""} aria-hidden="true" />
-                {selected ? "Hazırlanıyor…" : extending ? `${targetDays} güne uzat` : "Yeni plan oluştur"}
+                {selected
+                  ? "Hazırlanıyor…"
+                  : extending
+                    ? `${targetDays} güne uzat`
+                    : "Yeni plan oluştur"}
               </Button>
             </CardContent>
           </Card>
@@ -417,7 +490,13 @@ function DurationOptions({
   );
 }
 
-function EmptyPlan({ generating, generatingDuration }: { generating: boolean; generatingDuration: SupportedNutritionPlanDuration | null }) {
+function EmptyPlan({
+  generating,
+  generatingDuration,
+}: {
+  generating: boolean;
+  generatingDuration: SupportedNutritionPlanDuration | null;
+}) {
   return (
     <div className="space-y-5">
       <Card className="overflow-hidden border-primary/20 bg-gradient-to-br from-primary/10 via-background to-background">
@@ -427,13 +506,16 @@ function EmptyPlan({ generating, generatingDuration }: { generating: boolean; ge
           </span>
           <h2 className="mt-4 text-xl font-bold">Kişisel öğün planını oluştur</h2>
           <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-            Diewish; profilindeki hedefleri, beslenme tercihini ve alerjilerini dikkate alır. Kalori ve makro hedefleri hesaplama motorundan gelir; seçtiğin 7, 14 veya 30 günün her biri ayrı plan günü olarak hazırlanır.
+            Diewish; profilindeki hedefleri, beslenme tercihini ve alerjilerini dikkate alır. Kalori
+            ve makro hedefleri hesaplama motorundan gelir; seçtiğin 7, 14 veya 30 günün her biri
+            ayrı plan günü olarak hazırlanır.
           </p>
         </CardContent>
       </Card>
       <DurationOptions generating={generating} generatingDuration={generatingDuration} />
       <p className="text-xs leading-relaxed text-muted-foreground">
-        Plan yalnızca gıda temellidir. Diewish bu özellikte takviye, vitamin/mineral ürünü, bitkisel kür veya doz önermez.
+        Plan yalnızca gıda temellidir. Diewish bu özellikte takviye, vitamin/mineral ürünü, bitkisel
+        kür veya doz önermez.
       </p>
     </div>
   );
@@ -447,8 +529,12 @@ export function NutritionPlanView() {
   const [showRefreshOptions, setShowRefreshOptions] = React.useState(false);
   const [confirmDelete, setConfirmDelete] = React.useState(false);
   const [deletingPlan, setDeletingPlan] = React.useState(false);
-  const { deviations, loading: deviationsLoading, createDeviation, deleteDeviation } =
-    useNutritionPlanDeviations(activePlan?.id ?? null);
+  const {
+    deviations,
+    loading: deviationsLoading,
+    createDeviation,
+    deleteDeviation,
+  } = useNutritionPlanDeviations(activePlan?.id ?? null);
 
   React.useEffect(() => {
     if (!hydrated && !loading) void nutritionPlanStore.hydrateFromBackend();
@@ -466,7 +552,9 @@ export function NutritionPlanView() {
   }, [activePlan]);
 
   if (!hydrated || loading) {
-    return <div className="py-16 text-center text-sm text-muted-foreground">Öğün planın yükleniyor…</div>;
+    return (
+      <div className="py-16 text-center text-sm text-muted-foreground">Öğün planın yükleniyor…</div>
+    );
   }
 
   if (!activePlan) {
@@ -478,7 +566,8 @@ export function NutritionPlanView() {
     return (
       <Card>
         <CardContent className="p-5 text-sm text-muted-foreground">
-          Bu planın öğün içeriği görüntülenemiyor. Planı yenileyerek güncel bir sürüm oluşturabilirsin.
+          Bu planın öğün içeriği görüntülenemiyor. Planı yenileyerek güncel bir sürüm
+          oluşturabilirsin.
         </CardContent>
       </Card>
     );
@@ -492,7 +581,10 @@ export function NutritionPlanView() {
   const safeWeekIndex = Math.min(totalWeeks - 1, Math.max(0, weekIndex));
   const weekStart = safeWeekIndex * 7 + 1;
   const weekEnd = Math.min(durationDays, weekStart + 6);
-  const visibleDays = Array.from({ length: weekEnd - weekStart + 1 }, (_, index) => weekStart + index);
+  const visibleDays = Array.from(
+    { length: weekEnd - weekStart + 1 },
+    (_, index) => weekStart + index,
+  );
   const todayTimestamp = startOfLocalDay(new Date());
   const elapsedDayNumbers = Array.from({ length: durationDays }, (_, index) => index + 1).filter(
     (dayNumber) => startOfLocalDay(dateForPlanDay(activePlan, dayNumber)) <= todayTimestamp,
@@ -508,7 +600,11 @@ export function NutritionPlanView() {
     if (generating || checkInRequired) return;
     try {
       await nutritionPlanStore.regenerate(activePlan.id);
-      toast.success("Bütün öğün planın yenilendi");
+      toast.success(
+        nutritionPlanStore.getDurableMode()
+          ? "Plan hazırlığı başladı."
+          : "Bütün öğün planın yenilendi",
+      );
     } catch (error) {
       toast.error(planError(error));
     }
@@ -518,7 +614,11 @@ export function NutritionPlanView() {
     if (generating || checkInRequired) return;
     try {
       await nutritionPlanStore.refresh(activePlan.id, { mode: "FROM_DAY", dayNumber: focusDay });
-      toast.success(`${focusDay}. günden sonraki planın yenilendi`);
+      toast.success(
+        nutritionPlanStore.getDurableMode()
+          ? "Plan yenileme hazırlığı başladı."
+          : `${focusDay}. günden sonraki planın yenilendi`,
+      );
     } catch (error) {
       toast.error(planError(error));
     }
@@ -528,7 +628,11 @@ export function NutritionPlanView() {
     if (generating || checkInRequired) return;
     try {
       await nutritionPlanStore.refresh(activePlan.id, { mode: "DAY", dayNumber });
-      toast.success(`${dayNumber}. gün yenilendi`);
+      toast.success(
+        nutritionPlanStore.getDurableMode()
+          ? "Plan günü hazırlığı başladı."
+          : `${dayNumber}. gün yenilendi`,
+      );
     } catch (error) {
       toast.error(planError(error));
     }
@@ -564,9 +668,15 @@ export function NutritionPlanView() {
         <CardContent className="p-5">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-primary">Öğün Planım</p>
-              <h2 className="mt-1 text-xl font-bold">{durationLabel(activePlan.duration)} kişisel plan</h2>
-              <p className="mt-1 text-xs text-muted-foreground">Sürüm {activePlan.version} · {statusLine}</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-primary">
+                Öğün Planım
+              </p>
+              <h2 className="mt-1 text-xl font-bold">
+                {durationLabel(activePlan.duration)} kişisel plan
+              </h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Sürüm {activePlan.version} · {statusLine}
+              </p>
             </div>
             <Button
               variant="ghost"
@@ -583,21 +693,44 @@ export function NutritionPlanView() {
           {showRefreshOptions && !position.completed && (
             <div className="mt-4 rounded-2xl border border-amber-500/25 bg-background/80 p-4">
               <p className="text-sm font-semibold">
-                {position.exactToday ? `Şu anda planının ${focusDay}. günündesin.` : `Bugün ara gün. Sıradaki plan günün ${focusDay}. gün.`}
+                {position.exactToday
+                  ? `Şu anda planının ${focusDay}. günündesin.`
+                  : `Bugün ara gün. Sıradaki plan günün ${focusDay}. gün.`}
               </p>
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                Bütün planı yeniden oluşturmak mevcut plan devamlılığını değiştirebilir. Geçmiş günleri korumak için sıradaki günden sonrasını yenilemen önerilir.
+                Bütün planı yeniden oluşturmak mevcut plan devamlılığını değiştirebilir. Geçmiş
+                günleri korumak için sıradaki günden sonrasını yenilemen önerilir.
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
-                <Button size="sm" disabled={generating || checkInRequired} onClick={() => void refreshFromFocus()}>
-                  {position.exactToday ? "Bugünden sonrasını yenile" : "Sıradaki günden sonrasını yenile"}
+                <Button
+                  size="sm"
+                  disabled={generating || checkInRequired}
+                  onClick={() => void refreshFromFocus()}
+                >
+                  {position.exactToday
+                    ? "Bugünden sonrasını yenile"
+                    : "Sıradaki günden sonrasını yenile"}
                 </Button>
-                <Button variant="outline" size="sm" disabled={generating || checkInRequired} onClick={() => void regenerateAll()}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={generating || checkInRequired}
+                  onClick={() => void regenerateAll()}
+                >
                   Bütün planı yenile
                 </Button>
-                <Button variant="ghost" size="sm" disabled={generating} onClick={() => setShowRefreshOptions(false)}>Vazgeç</Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={generating}
+                  onClick={() => setShowRefreshOptions(false)}
+                >
+                  Vazgeç
+                </Button>
               </div>
-              <p className="mt-2 text-[11px] text-muted-foreground">Kontrollü yenileme Premium ve Premium Plus özelliğidir.</p>
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                Kontrollü yenileme Premium ve Premium Plus özelliğidir.
+              </p>
             </div>
           )}
 
@@ -614,7 +747,10 @@ export function NutritionPlanView() {
             </div>
             <div className="rounded-xl bg-background/80 p-3">
               <Droplets className="size-4 text-primary" aria-hidden="true" />
-              <p className="mt-2 text-lg font-bold">{(activePlan.waterMl / 1000).toLocaleString("tr-TR", { maximumFractionDigits: 1 })} L</p>
+              <p className="mt-2 text-lg font-bold">
+                {(activePlan.waterMl / 1000).toLocaleString("tr-TR", { maximumFractionDigits: 1 })}{" "}
+                L
+              </p>
               <p className="text-[11px] text-muted-foreground">su hedefi</p>
             </div>
             <div className="rounded-xl bg-background/80 p-3">
@@ -625,9 +761,15 @@ export function NutritionPlanView() {
           </div>
 
           <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
-            <span className="rounded-full bg-background/80 px-2.5 py-1">Protein {number(activePlan.proteinGrams)} g</span>
-            <span className="rounded-full bg-background/80 px-2.5 py-1">Karbonhidrat {number(activePlan.carbsGrams)} g</span>
-            <span className="rounded-full bg-background/80 px-2.5 py-1">Yağ {number(activePlan.fatGrams)} g</span>
+            <span className="rounded-full bg-background/80 px-2.5 py-1">
+              Protein {number(activePlan.proteinGrams)} g
+            </span>
+            <span className="rounded-full bg-background/80 px-2.5 py-1">
+              Karbonhidrat {number(activePlan.carbsGrams)} g
+            </span>
+            <span className="rounded-full bg-background/80 px-2.5 py-1">
+              Yağ {number(activePlan.fatGrams)} g
+            </span>
           </div>
         </CardContent>
       </Card>
@@ -642,24 +784,44 @@ export function NutritionPlanView() {
       <section className="space-y-3" aria-labelledby="plan-days-heading">
         <div className="flex items-end justify-between gap-3">
           <div>
-            <h3 id="plan-days-heading" className="text-base font-semibold">Plan günleri</h3>
-            <p className="mt-1 text-xs text-muted-foreground">Bir günü açarak saat, porsiyon, öğün ve Kaçamak ayrıntılarını yönetebilirsin.</p>
+            <h3 id="plan-days-heading" className="text-base font-semibold">
+              Plan günleri
+            </h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Bir günü açarak saat, porsiyon, öğün ve Kaçamak ayrıntılarını yönetebilirsin.
+            </p>
           </div>
           {safeWeekIndex !== currentWeek && (
-            <Button variant="outline" size="sm" onClick={() => setWeekIndex(currentWeek)}>Bugün</Button>
+            <Button variant="outline" size="sm" onClick={() => setWeekIndex(currentWeek)}>
+              Bugün
+            </Button>
           )}
         </div>
 
         {totalWeeks > 1 && (
           <div className="flex items-center justify-between rounded-xl border border-border px-2 py-2">
-            <Button variant="ghost" size="icon" aria-label="Önceki hafta" disabled={safeWeekIndex === 0} onClick={() => setWeekIndex((value) => Math.max(0, value - 1))}>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Önceki hafta"
+              disabled={safeWeekIndex === 0}
+              onClick={() => setWeekIndex((value) => Math.max(0, value - 1))}
+            >
               <ChevronLeft aria-hidden="true" />
             </Button>
             <div className="text-center">
               <p className="text-sm font-semibold">{safeWeekIndex + 1}. Hafta</p>
-              <p className="text-[11px] text-muted-foreground">{weekStart}–{weekEnd}. günler</p>
+              <p className="text-[11px] text-muted-foreground">
+                {weekStart}–{weekEnd}. günler
+              </p>
             </div>
-            <Button variant="ghost" size="icon" aria-label="Sonraki hafta" disabled={safeWeekIndex >= totalWeeks - 1} onClick={() => setWeekIndex((value) => Math.min(totalWeeks - 1, value + 1))}>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Sonraki hafta"
+              disabled={safeWeekIndex >= totalWeeks - 1}
+              onClick={() => setWeekIndex((value) => Math.min(totalWeeks - 1, value + 1))}
+            >
               <ChevronRight aria-hidden="true" />
             </Button>
           </div>
@@ -696,16 +858,26 @@ export function NutritionPlanView() {
 
       {activePlan.summary?.trim() && (
         <details className="rounded-2xl border border-border bg-card p-4">
-          <summary className="cursor-pointer select-none text-sm font-semibold">Planın özeti</summary>
-          <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-muted-foreground">{activePlan.summary}</p>
+          <summary className="cursor-pointer select-none text-sm font-semibold">
+            Planın özeti
+          </summary>
+          <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
+            {activePlan.summary}
+          </p>
         </details>
       )}
 
       {Array.isArray(activePlan.recommendations) && activePlan.recommendations.length > 0 && (
         <details className="rounded-2xl border border-border bg-card p-4">
-          <summary className="cursor-pointer select-none text-sm font-semibold">Genel beslenme notları</summary>
+          <summary className="cursor-pointer select-none text-sm font-semibold">
+            Genel beslenme notları
+          </summary>
           <ol className="mt-3 space-y-2 pl-5 text-sm leading-relaxed text-muted-foreground">
-            {activePlan.recommendations.map((item, index) => <li key={`${item}-${index}`} className="list-decimal">{item}</li>)}
+            {activePlan.recommendations.map((item, index) => (
+              <li key={`${item}-${index}`} className="list-decimal">
+                {item}
+              </li>
+            ))}
           </ol>
         </details>
       )}
@@ -714,7 +886,8 @@ export function NutritionPlanView() {
         <div>
           <h3 className="text-sm font-semibold">Plan yönetimi</h3>
           <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-            Planını uzatabilir, daha kısa yeni bir plan başlatabilir veya artık kullanmadığın planı kaldırabilirsin.
+            Planını uzatabilir, daha kısa yeni bir plan başlatabilir veya artık kullanmadığın planı
+            kaldırabilirsin.
           </p>
         </div>
 
@@ -750,11 +923,26 @@ export function NutritionPlanView() {
           <div className="mt-4 rounded-2xl border border-destructive/30 bg-destructive/5 p-4">
             <p className="text-sm font-semibold">Bu planı silmek istediğine emin misin?</p>
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              Plan uygulamadaki aktif planlarından kaldırılır. Bu işlem yeni bir plan oluşturmaz ve Kaçamak geçmişini geriye dönük değiştirmez.
+              Plan uygulamadaki aktif planlarından kaldırılır. Bu işlem yeni bir plan oluşturmaz ve
+              Kaçamak geçmişini geriye dönük değiştirmez.
             </p>
             <div className="mt-3 flex flex-wrap justify-end gap-2">
-              <Button variant="outline" size="sm" disabled={deletingPlan} onClick={() => setConfirmDelete(false)}>Vazgeç</Button>
-              <Button variant="destructive" size="sm" isLoading={deletingPlan} onClick={() => void removePlan()}>Planı sil</Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={deletingPlan}
+                onClick={() => setConfirmDelete(false)}
+              >
+                Vazgeç
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                isLoading={deletingPlan}
+                onClick={() => void removePlan()}
+              >
+                Planı sil
+              </Button>
             </div>
           </div>
         )}
@@ -762,15 +950,21 @@ export function NutritionPlanView() {
         {showDurationOptions && (
           <div className="mt-4 border-t border-border/70 pt-4">
             <p className="mb-3 text-xs leading-relaxed text-muted-foreground">
-              Daha uzun plan seçersen mevcut günlerin bozulmadan korunur ve yalnızca yeni günler eklenir. Yeni plan başarıyla hazırlanana kadar mevcut plan ekranda kalır.
+              Daha uzun plan seçersen mevcut günlerin bozulmadan korunur ve yalnızca yeni günler
+              eklenir. Yeni plan başarıyla hazırlanana kadar mevcut plan ekranda kalır.
             </p>
-            <DurationOptions generating={generating} generatingDuration={generatingDuration} currentPlan={activePlan} />
+            <DurationOptions
+              generating={generating}
+              generatingDuration={generatingDuration}
+              currentPlan={activePlan}
+            />
           </div>
         )}
       </section>
 
       <p className="text-xs leading-relaxed text-muted-foreground">
-        Öğün içerikleri yaklaşık besin değerleriyle hazırlanır. Plan yalnızca gıda temellidir; takviye, ilaç veya doz önerisi içermez.
+        Öğün içerikleri yaklaşık besin değerleriyle hazırlanır. Plan yalnızca gıda temellidir;
+        takviye, ilaç veya doz önerisi içermez.
       </p>
     </div>
   );

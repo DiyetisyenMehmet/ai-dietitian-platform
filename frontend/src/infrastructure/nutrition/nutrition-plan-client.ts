@@ -14,7 +14,11 @@ export type NutritionPlanDeviationScope = "FOOD" | "MEAL" | "DAY";
 export type NutritionPlanDeviationType = "SKIPPED" | "REPLACED" | "EXTRA" | "PORTION_CHANGED";
 export type NutritionPlanRefreshMode = "DAY" | "FROM_DAY";
 export type HungerLevel = "LIGHT" | "HUNGRY" | "VERY_HUNGRY";
-export type HungerDecisionType = "WAIT_FOR_MEAL" | "EAT_PLANNED_MEAL" | "SMALL_SNACK" | "DAY_COMPLETE";
+export type HungerDecisionType =
+  | "WAIT_FOR_MEAL"
+  | "EAT_PLANNED_MEAL"
+  | "SMALL_SNACK"
+  | "DAY_COMPLETE";
 
 export function isSupportedNutritionPlanDuration(
   value: NutritionPlanDuration,
@@ -185,6 +189,35 @@ export interface AcceptedHungerSnackResult {
 }
 
 export type NutritionPlanSummary = NutritionPlanRecord;
+export interface NutritionPreparation {
+  id: string;
+  kind: "NEW_PLAN" | "MEAL_CHANGE";
+  duration: SupportedNutritionPlanDuration;
+  status:
+    | "QUEUED"
+    | "RUNNING"
+    | "RETRY_WAIT"
+    | "READY"
+    | "CONSUMED"
+    | "PAUSED"
+    | "FAILED"
+    | "INVALIDATED"
+    | "EXPIRED";
+  completedDays: number;
+  totalDays: number;
+  errorCode: string | null;
+  deliveredPlanId: string | null;
+  expiresAt: string;
+}
+export interface NutritionRights {
+  tier: "FREE" | "PREMIUM" | "PREMIUM_PLUS";
+  dayRemaining: number | null;
+  monthRemaining: number | null;
+  freeRemaining: number | null;
+  available: boolean;
+  resetsAt: string | null;
+  grandfathered: boolean;
+}
 
 function localDateYmd(date = new Date()): string {
   const year = date.getFullYear();
@@ -198,6 +231,100 @@ function localTimeHm(date = new Date()): string {
 }
 
 export const nutritionPlanClient = {
+  revisePreparation(
+    plan: NutritionPlanRecord,
+    duration: SupportedNutritionPlanDuration,
+    revisionMode: "DAY" | "FROM_DAY" | "EXTEND",
+    requestKey: string,
+    dayNumber?: number,
+  ) {
+    return apiRequest<{ job: NutritionPreparation }>({
+      path: "/nutrition-plans/generation-jobs/revision",
+      method: "POST",
+      auth: true,
+      body: JSON.stringify({
+        duration,
+        sourcePlanId: plan.id,
+        revisionMode,
+        requestKey,
+        dayNumber,
+      }),
+    });
+  },
+  capabilities() {
+    return apiRequest<{ resumable: boolean }>({
+      path: "/nutrition-plans/generation-jobs/capabilities",
+      auth: true,
+    });
+  },
+  currentPreparation() {
+    return apiRequest<{ job: NutritionPreparation | null }>({
+      path: "/nutrition-plans/generation-jobs/current",
+      auth: true,
+    });
+  },
+  preparation(id: string) {
+    return apiRequest<{ job: NutritionPreparation }>({
+      path: `/nutrition-plans/generation-jobs/${encodeURIComponent(id)}`,
+      auth: true,
+    });
+  },
+  pausePreparation(id: string) {
+    return apiRequest<{ job: NutritionPreparation }>({
+      path: `/nutrition-plans/generation-jobs/${encodeURIComponent(id)}/pause`,
+      method: "POST",
+      auth: true,
+    });
+  },
+  deliverPreparation(id: string) {
+    return apiRequest<{ plan: NutritionPlanRecord }>({
+      path: `/nutrition-plans/generation-jobs/${encodeURIComponent(id)}/deliver`,
+      method: "POST",
+      auth: true,
+    });
+  },
+  startPreparation(
+    duration: SupportedNutritionPlanDuration,
+    pantryText: string,
+    requestKey: string,
+  ) {
+    return apiRequest<{ job: NutritionPreparation }>({
+      path: "/nutrition-plans/generation-jobs",
+      method: "POST",
+      auth: true,
+      body: JSON.stringify({
+        duration,
+        pantryText: pantryText.trim(),
+        startDate: localDateYmd(),
+        requestKey,
+      }),
+    });
+  },
+  replaceMeal(plan: NutritionPlanRecord, dayNumber: number, mealIndex: number, requestKey: string) {
+    return apiRequest<{ job: NutritionPreparation }>({
+      path: "/nutrition-plans/generation-jobs/meal",
+      method: "POST",
+      auth: true,
+      body: JSON.stringify({
+        duration: plan.duration,
+        sourcePlanId: plan.id,
+        dayNumber,
+        mealIndex,
+        requestKey,
+      }),
+    });
+  },
+  rights(kind: "NEW_PLAN" | "MEAL_CHANGE", planId?: string, dayNumber?: number) {
+    const query = new URLSearchParams({
+      kind,
+      ...(planId ? { planId } : {}),
+      ...(dayNumber ? { dayNumber: String(dayNumber) } : {}),
+    });
+    return apiRequest<{ rights: NutritionRights }>({
+      path: `/nutrition-plans/generation-jobs/rights?${query}`,
+      auth: true,
+    });
+  },
   list() {
     return apiRequest<{ plans: NutritionPlanRecord[] }>({
       path: "/nutrition-plans",

@@ -21,6 +21,7 @@ import {
 import { findAllergenViolations } from "./allergen-validator";
 import { findNutritionTargetViolations } from "./nutrition-target-validator";
 import { checkNutritionProviderBudget } from "../nutrition-plan-provider-budget";
+import { checkNutritionCallAdmission } from "../nutrition-provider-observer";
 import type {
   DailyPlan,
   MealTimingRecommendation,
@@ -127,6 +128,7 @@ async function generateValidatedBatch(
   let retried = false;
   const requestOutput = async (requestInput = input) => {
     checkNutritionProviderBudget();
+    await checkNutritionCallAdmission();
     try {
       const result = await adapter.generateNutritionPlan(requestInput);
       checkNutritionProviderBudget();

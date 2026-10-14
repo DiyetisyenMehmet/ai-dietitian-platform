@@ -6,6 +6,22 @@ export function planError(error: unknown): string {
     error.details && typeof error.details === "object"
       ? (error.details as { reason?: string })
       : null;
+  if (error.code === "NUTRITION_RIGHT_EXHAUSTED")
+    return "Bu işlem için kullanım hakkın doldu. Yeni dönemde tekrar deneyebilirsin.";
+  if (error.code === "NUTRITION_PAUSE_SETTLING")
+    return "Başlamış hazırlık çağrısı güvenli biçimde tamamlanıyor. Kısa süre sonra tekrar devam edebilirsin.";
+  if (error.code === "NUTRITION_CONTEXT_CHANGED")
+    return "Profilin veya mevcut planın değişti. Güncel bilgilerine göre yeniden plan oluşturmalısın; kullanılmamış hakkın korunuyor.";
+  if (error.code === "NUTRITION_PLAN_RECREATE_REQUIRED")
+    return "Mevcut öğünler güncel hedeflerle uyumlu değil. Güncel profilinle yeni plan oluşturmalısın.";
+  if (error.code === "NUTRITION_ALREADY_DELIVERED")
+    return "Plan hazırlığı tamamlanarak teslim edildi. Güncel planın yeniden yükleniyor.";
+  if (error.code === "NUTRITION_DURABLE_REQUIRED")
+    return "Plan işlemi güncellenmiş hazırlık akışını gerektiriyor. Sayfayı yenileyerek tekrar deneyebilirsin.";
+  if (error.code === "NUTRITION_PERIOD_UNVERIFIED")
+    return "Abonelik kullanım dönemin doğrulanamadı. Haklarını korumak için işlem durduruldu; destekten yardım alabilirsin.";
+  if (error.code === "NUTRITION_COST_LIMIT")
+    return "Plan hazırlığı için geçici işlem sınırına ulaşıldı. Hazırlanmış uygun verilerin ve kullanılmamış hakkın korunuyor.";
   if (error.code === "SUBSCRIPTION_REQUIRED") {
     if (details?.reason === "FREE_DURATION_RESTRICTED")
       return "Ücretsiz planda 7 günlük başlangıç planı oluşturabilirsin. 14 ve 30 günlük planlar için Premium veya Premium Plus gerekir.";

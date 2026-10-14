@@ -3,6 +3,10 @@ import { logger } from "../../../lib/logger";
 import { ApiError } from "../../../utils/api-error";
 import { NUTRITION_PLAN_SYSTEM_PROMPT } from "../../nutrition-plan/constants";
 import {
+  reserveNutritionProviderCall,
+  recordNutritionProviderUsage,
+} from "../../nutrition-plan/nutrition-provider-observer";
+import {
   checkNutritionProviderBudget,
   nutritionProviderSignal,
 } from "../../nutrition-plan/nutrition-plan-provider-budget";
@@ -407,6 +411,7 @@ export class VertexAIAdapter extends OpenAICompatibleAdapter {
 
     for (let attempt = 1; attempt <= PROVIDER_REQUEST_ATTEMPTS; attempt += 1) {
       if (nutritionRequest) checkNutritionProviderBudget();
+      if (nutritionRequest) await reserveNutritionProviderCall();
       let response: Response;
       try {
         response = await fetch(url, {
@@ -486,7 +491,14 @@ export class VertexAIAdapter extends OpenAICompatibleAdapter {
       }
 
       try {
-        return (await response.json()) as VertexGenerateContentResponse;
+        const body = (await response.json()) as VertexGenerateContentResponse;
+        if (nutritionRequest)
+          await recordNutritionProviderUsage({
+            prompt: body.usageMetadata?.promptTokenCount,
+            output: body.usageMetadata?.candidatesTokenCount,
+            thinking: body.usageMetadata?.thoughtsTokenCount,
+          });
+        return body;
       } catch (error) {
         if (nutritionRequest) checkNutritionProviderBudget();
         if (attempt < PROVIDER_REQUEST_ATTEMPTS) {

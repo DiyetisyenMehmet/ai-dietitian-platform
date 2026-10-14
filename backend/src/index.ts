@@ -5,6 +5,10 @@ import { env, isTest } from "./config/env";
 import { logger } from "./lib/logger";
 import { checkDatabaseConnection, disconnectPrisma } from "./lib/prisma";
 import { startCoachScheduler, stopCoachScheduler } from "./scheduler/coach-scheduler";
+import {
+  startNutritionWorker,
+  stopNutritionWorker,
+} from "./modules/nutrition-plan/nutrition-worker-runner";
 
 async function bootstrap(): Promise<void> {
   const app = createApp();
@@ -30,6 +34,7 @@ async function bootstrap(): Promise<void> {
   }
 
   registerShutdownHandlers(server);
+  startNutritionWorker();
 }
 
 /** Gracefully drains connections and closes resources on termination. */
@@ -37,6 +42,7 @@ function registerShutdownHandlers(server: Server): void {
   const shutdown = (signal: string) => {
     logger.info({ signal }, "Shutting down gracefully...");
     stopCoachScheduler();
+    stopNutritionWorker();
     server.close(() => {
       void disconnectPrisma().finally(() => {
         logger.info("Shutdown complete.");

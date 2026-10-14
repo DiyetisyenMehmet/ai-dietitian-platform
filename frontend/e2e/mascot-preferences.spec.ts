@@ -64,6 +64,19 @@ test("Mirmir pilot preserves layout, persists across two sessions, and stops all
   await banner.scrollIntoViewIfNeeded();
   const mascot = banner.locator('[data-mascot="mirmir"]');
   await expect(mascot).toHaveAttribute("data-blinking", "true");
+  await expect(mascot).toHaveAttribute("data-moving", "true");
+  await expect(mascot.locator("animate")).toHaveCount(2);
+  const parts = await mascot.evaluate((node) => {
+    const svg = node.querySelector("svg") as SVGSVGElement;
+    svg.pauseAnimations();
+    svg.setCurrentTime(8.424);
+    return Array.from(node.querySelectorAll("feDisplacementMap")).map(
+      (part) => (part as SVGFEDisplacementMapElement).scale.animVal,
+    );
+  });
+  expect(parts[0]).toBeCloseTo(0.04, 3);
+  expect(parts[1]).toBe(0);
+  await mascot.evaluate((node) => (node.querySelector("svg") as SVGSVGElement).unpauseAnimations());
   expect(await banner.boundingBox()).toMatchObject({
     width: classicBox!.width,
     height: classicBox!.height,
@@ -79,15 +92,20 @@ test("Mirmir pilot preserves layout, persists across two sessions, and stops all
     window.dispatchEvent(new CustomEvent("diewish:app-visibility", { detail: { active: false } })),
   );
   await expect(mascot).toHaveAttribute("data-blinking", "false");
+  await expect(mascot).toHaveAttribute("data-moving", "false");
+  await expect(mascot.locator("animate")).toHaveCount(0);
   expect(await mascot.evaluate((node) => node.getAnimations({ subtree: true }).length)).toBe(0);
   await page.evaluate(() =>
     window.dispatchEvent(new CustomEvent("diewish:app-visibility", { detail: { active: true } })),
   );
   await expect(mascot).toHaveAttribute("data-blinking", "true");
+  await expect(mascot).toHaveAttribute("data-moving", "true");
   await mascot.evaluate((node) => {
     (node as HTMLElement).style.transform = "translateY(200vh)";
   });
   await expect(mascot).toHaveAttribute("data-blinking", "false");
+  await expect(mascot).toHaveAttribute("data-moving", "false");
+  await expect(mascot.locator("animate")).toHaveCount(0);
   await mascot.evaluate((node) => {
     (node as HTMLElement).style.removeProperty("transform");
   });
@@ -95,6 +113,8 @@ test("Mirmir pilot preserves layout, persists across two sessions, and stops all
   await expect(mascot).toHaveAttribute("data-blinking", "true");
 
   await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect(mascot).toHaveAttribute("data-moving", "false");
+  await expect(mascot.locator("animate")).toHaveCount(0);
   expect(await frameState(mascot, 5500)).toEqual(["visible", "hidden"]);
   expect(await mascot.evaluate((node) => node.getAnimations({ subtree: true }).length)).toBe(0);
   await page.emulateMedia({ reducedMotion: "no-preference" });
@@ -114,6 +134,10 @@ test("Mirmir pilot preserves layout, persists across two sessions, and stops all
   }
   await page.goto(base + "/ai");
   await expect(page.locator('header [data-mascot="mirmir"]')).toBeVisible();
+  await expect(page.locator('header [data-mascot="mirmir"]')).toHaveAttribute(
+    "data-moving",
+    "true",
+  );
   await expect(page.getByLabel("Mesaj", { exact: true })).toBeVisible();
 
   const otherContext = await browser.newContext({ viewport: { width: 412, height: 915 } });
@@ -130,6 +154,8 @@ test("Mirmir pilot preserves layout, persists across two sessions, and stops all
     await page.goto(base + "/dashboard");
     await banner.scrollIntoViewIfNeeded();
     await expect(mascot).toHaveAttribute("data-blinking", "false");
+    await expect(mascot).toHaveAttribute("data-moving", "false");
+    await expect(mascot.locator("animate")).toHaveCount(0);
     expect(await mascot.evaluate((node) => node.getAnimations({ subtree: true }).length)).toBe(0);
     await page.goto(base + "/profile/mascot");
     await page.route("**/api/account/mascot", async (route) => {

@@ -50,7 +50,7 @@ function ymdFromDate(value: Date): string {
   return value.toISOString().slice(0, 10);
 }
 
-async function buildProfile(userId: string): Promise<NutritionProfile> {
+export async function buildProfile(userId: string): Promise<NutritionProfile> {
   const profile = await prisma.userProfile.findUnique({ where: { userId } });
   if (!profile) {
     throw ApiError.badRequest(
@@ -74,7 +74,7 @@ async function buildProfile(userId: string): Promise<NutritionProfile> {
   };
 }
 
-function assertOrdinaryPlanSafety(profile: NutritionProfile): void {
+export function assertOrdinaryPlanSafety(profile: NutritionProfile): void {
   const assessment = assessNutritionPlanSafety(profile);
   if (assessment.eligible) return;
 
@@ -90,7 +90,7 @@ function assertOrdinaryPlanSafety(profile: NutritionProfile): void {
   );
 }
 
-async function loadBloodTestImplications(userId: string): Promise<{
+export async function loadBloodTestImplications(userId: string): Promise<{
   analysisId: string | null;
   implications: BloodTestImplicationInput[];
 }> {

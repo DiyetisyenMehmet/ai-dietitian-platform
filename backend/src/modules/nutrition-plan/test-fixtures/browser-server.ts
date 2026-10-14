@@ -3,6 +3,7 @@ import { createApp } from "../../../app";
 import { prisma } from "../../../lib/prisma";
 import { setAIAdapter } from "../../blood-test-analysis/ai-adapter/ai-adapter.factory";
 import { FixtureAdapter } from "./provider";
+import { startNutritionWorker, stopNutritionWorker } from "../nutrition-worker-runner";
 
 async function main() {
   if (process.env.NODE_ENV !== "test" || process.env.DIEWISH_ENVIRONMENT !== "test")
@@ -28,7 +29,7 @@ async function main() {
     if (!res.ok) throw new Error(`Fixture setup failed: ${path} HTTP ${res.status}`);
     return value;
   };
-  for (const name of ["free", "premium7", "premium14", "premium30", "weightDue", "slow7"]) {
+  for (const name of ["free", "premium7", "premium14", "premium30", "weightDue", "slow7", "resume14", "meal7", "plus30"]) {
     const email = `nutrition-browser-${name}-${Date.now()}@example.com`,
       password = "NutritionFixture123!";
     const reg = await post("/auth/register", {
@@ -60,13 +61,15 @@ async function main() {
       },
       token,
     );
-    if (name.startsWith("premium")) {
-      await prisma.user.update({ where: { id }, data: { subscriptionTier: "PREMIUM" } });
+    if (name.startsWith("premium") || name === "resume14" || name === "plus30") {
+      const tier=name === "plus30"?"PREMIUM_PLUS":"PREMIUM";
+      await prisma.user.update({ where: { id }, data: { subscriptionTier: tier } });
       await prisma.subscription.create({
         data: {
           userId: id,
-          tier: "PREMIUM",
+          tier,
           status: "ACTIVE",
+          currentPeriodStart: new Date(Date.now()-86_400_000),
           currentPeriodEnd: new Date(Date.now() + 86400000 * 30),
         },
       });
@@ -84,7 +87,9 @@ async function main() {
     { mode: 0o600 },
   );
   console.log("Isolated nutrition browser fixtures ready");
+  startNutritionWorker();
   process.on("SIGTERM", () => {
+    stopNutritionWorker();
     server.closeAllConnections();
     server.close(() => {
       void prisma.$disconnect().then(() => process.exit(0));
