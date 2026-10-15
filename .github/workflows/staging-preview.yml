@@ -738,3 +738,51 @@ jobs:
             echo "- USDA: official low-limit DEMO_KEY (staging only)"
             echo "- APK artifact: \`diewish-staging-apk-${GITHUB_RUN_NUMBER}\`"
           } >> "$GITHUB_STEP_SUMMARY"
+
+
+  nutrition-release-verification:
+    # Verification only: never deploy, migrate, change IAM or enable a scheduler.
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feature/staging-preview' && contains(github.event.head_commit.message, '[nutrition-staging-verify]') }}
+    name: Verify already deployed nutrition-disabled staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: staging
+    env:
+      RELEASE_SHA: 390e3567c37b4529d3b18da3ee040148d63750d9
+      BACKEND_IMAGE: europe-west1-docker.pkg.dev/project-a2e260c1-839d-4f1d-b90/diewish-staging/backend:390e3567c37b4529d3b18da3ee040148d63750d9
+      FRONTEND_IMAGE: europe-west1-docker.pkg.dev/project-a2e260c1-839d-4f1d-b90/diewish-staging/frontend:390e3567c37b4529d3b18da3ee040148d63750d9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOY_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+      - name: Verify serving digests, exact source, disabled jobs and paused or absent nutrition scheduler
+        run: >-
+          python3 scripts/nutrition-staging-release-guard.py --phase post
+          --expected-sha "$RELEASE_SHA"
+          --backend-build 3f314534-e18b-46e7-8919-0c5b5544108b
+          --frontend-build 5a02ac4b-fd57-4add-b85b-91cdc740c3bb
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Check health, session, Dashboard, Coach and legacy nutrition on published code
+        working-directory: frontend
+        env:
+          E2E_WEB_BASE_URL: https://staging.diewish.com
+          E2E_API_BASE_URL: https://staging.diewish.com/api
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          npx playwright test e2e/dashboard-edit-sanity.spec.ts e2e/journey-compact.spec.ts e2e/staging-notification-sanity.spec.ts e2e/mascot-preferences.spec.ts e2e/staging-nutrition-disabled-sanity.spec.ts --workers=1 --reporter=line
+      - name: Recheck disabled runtime after smoke tests
+        run: >-
+          python3 scripts/nutrition-staging-release-guard.py --phase post
+          --expected-sha "$RELEASE_SHA"
+          --backend-build 3f314534-e18b-46e7-8919-0c5b5544108b
+          --frontend-build 5a02ac4b-fd57-4add-b85b-91cdc740c3bb

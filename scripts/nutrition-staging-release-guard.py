@@ -12,7 +12,7 @@ SERVICES = ("diewish-backend-staging", "diewish-frontend-staging")
 def command(*args):
     result = subprocess.run(args, capture_output=True, text=True, timeout=45, check=False)
     if result.returncode:
-        raise RuntimeError("staging-read-unavailable")
+        raise RuntimeError("staging-read-unavailable:" + "-".join(args[:3]))
     return result.stdout.strip()
 
 
@@ -29,14 +29,20 @@ def disabled(container, explicit):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--phase", choices=("pre", "post"), required=True)
-    phase = parser.parse_args().phase
+    parser.add_argument("--expected-sha")
+    parser.add_argument("--backend-build")
+    parser.add_argument("--frontend-build")
+    options = parser.parse_args()
+    phase = options.phase
     if os.environ.get("PROJECT_ID") != PROJECT:
         raise RuntimeError("unexpected-project")
     if os.environ.get("GITHUB_REF") != "refs/heads/feature/staging-preview":
         raise RuntimeError("unexpected-ref")
-    expected = os.environ["GITHUB_SHA"]
+    expected = options.expected_sha or os.environ["GITHUB_SHA"]
+    if len(expected) != 40 or any(c not in "0123456789abcdef" for c in expected):
+        raise RuntimeError("invalid-expected-sha")
     head = command("git", "ls-remote", "origin", "refs/heads/feature/staging-preview").split()[0]
-    if head != expected:
+    if head != os.environ["GITHUB_SHA"]:
         raise RuntimeError("staging-head-moved")
     for service in SERVICES:
         data = json.loads(command("gcloud", "run", "services", "describe", service,
@@ -59,8 +65,29 @@ def main():
                     raise RuntimeError("application-sha-mismatch")
             if phase == "post":
                 image = os.environ["BACKEND_IMAGE" if service == SERVICES[0] else "FRONTEND_IMAGE"]
-                digest = command("gcloud", "artifacts", "docker", "images", "describe", image,
-                                 "--project", PROJECT, "--format=value(image_summary.digest)")
+                if not image.endswith(":" + expected):
+                    raise RuntimeError("image-tag-mismatch")
+                try:
+                    digest = command("gcloud", "artifacts", "docker", "images", "describe", image,
+                                     "--project", PROJECT, "--format=value(image_summary.digest)")
+                except RuntimeError:
+                    build_id = options.backend_build if service == SERVICES[0] else options.frontend_build
+                    if not build_id:
+                        raise
+                    # Existing successful build metadata proves the immutable digest without adding IAM rights.
+                    build = json.loads(command("gcloud", "builds", "describe", build_id,
+                                               "--project", PROJECT, "--region", "global", "--format=json"))
+                    if (build.get("status") != "SUCCESS" or
+                            build.get("substitutions", {}).get("_GIT_SHA") != expected or
+                            build.get("substitutions", {}).get("_IMAGE") != image):
+                        raise RuntimeError("build-source-mismatch")
+                    images = [row for row in build.get("results", {}).get("images", []) if row.get("name") == image]
+                    if len(images) != 1:
+                        raise RuntimeError("build-image-unverified")
+                    digest = images[0].get("digest", "")
+                    print("NUTRITION_RELEASE_GUARD " + json.dumps({
+                        "service": service, "artifactLookup": "unavailable", "digestEvidence": "successful-exact-sha-cloud-build",
+                    }), flush=True)
                 actual = runtime.get("status", {}).get("imageDigest", container.get("image", ""))
                 if not digest.startswith("sha256:") or not actual.endswith("@" + digest):
                     raise RuntimeError("serving-image-mismatch")
