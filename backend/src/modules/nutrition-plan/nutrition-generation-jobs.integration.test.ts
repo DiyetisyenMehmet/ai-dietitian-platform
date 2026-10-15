@@ -164,6 +164,14 @@ test("durable nutrition: health gates, checkpoint, pause/resume, rights and one-
       const paused = await jobs.pause(id, job.id);
       assert.equal(paused.status, "PAUSED");
       assert.equal(await runNutritionWorkerStep(), false);
+      await prisma.nutritionGenerationJob.update({
+        where: { id: job.id },
+        data: {
+          createdAt: new Date(Date.now() - 2 * 86_400_000),
+          updatedAt: new Date(Date.now() - 2 * 86_400_000),
+          expiresAt: new Date(Date.now() + 5 * 86_400_000),
+        },
+      });
       const before = provider.calls;
       const resumed = await start(id);
       assert.equal(resumed.id, job.id);

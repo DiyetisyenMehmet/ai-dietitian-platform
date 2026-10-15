@@ -17,6 +17,11 @@ import { buildRealLifePlanningContext, findRealLifePlanViolations } from "./nutr
 import { findAllergenViolations } from "./meal-generator/allergen-validator";
 import { findNutritionTargetViolations } from "./meal-generator/nutrition-target-validator";
 import { DURATION_DAYS } from "./constants";
+import {
+  createNutritionTimings,
+  timeNutritionPhase,
+  timeNutritionCheck,
+} from "./nutrition-plan-generation-timings";
 import type { DailyPlan, NutritionPlanGenerationInput, PlanDuration } from "./types";
 
 export function contextDigest(value: unknown): string {
@@ -27,6 +32,7 @@ export async function prepareNutritionContext(
   userId: string,
   duration: PlanDuration,
   pantryText?: string,
+  metrics = createNutritionTimings(),
 ) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -37,16 +43,24 @@ export async function prepareNutritionContext(
   if ((await legalService.getMissingMandatoryConsents(userId)).length)
     throw new ApiError(403, "Consent required.", { code: "CONSENT_REQUIRED" });
   await trackingService.requireCurrentWeightCheckIn(userId);
-  const profile = await buildProfile(userId);
-  assertOrdinaryPlanSafety(profile);
-  const [{ analysisId, implications }, adaptation, active] = await Promise.all([
-    loadBloodTestImplications(userId),
-    nutritionPlanAdaptationService.build(userId),
-    prisma.nutritionPlan.findFirst({
-      where: { userId, isActive: true, deletedAt: null },
-      orderBy: { updatedAt: "desc" },
-    }),
-  ]);
+  const profile = await timeNutritionPhase(metrics, "goalPreparationMs", () =>
+    buildProfile(userId),
+  );
+  timeNutritionCheck(metrics, "healthValidationMs", () => assertOrdinaryPlanSafety(profile));
+  const [{ analysisId, implications }, adaptation, active] = await timeNutritionPhase(
+    metrics,
+    "nutritionDataMs",
+    () =>
+      Promise.all([
+        loadBloodTestImplications(userId),
+        nutritionPlanAdaptationService.build(userId, profile.workScheduleType),
+        prisma.nutritionPlan.findFirst({
+          where: { userId, isActive: true, deletedAt: null },
+          orderBy: { updatedAt: "desc" },
+        }),
+      ]),
+  );
+  const goalsStartedAt = performance.now();
   const calories = calculateCalories(profile),
     macros = calculateMacros(profile, calories.dailyCalories, calories.goal),
     water = calculateWater(profile);
@@ -72,6 +86,7 @@ export async function prepareNutritionContext(
     realLifePlanning: buildRealLifePlanningContext(pantryText),
     durationDays: DURATION_DAYS[duration],
   };
+  metrics.goalPreparationMs += performance.now() - goalsStartedAt;
   // Water-only changes may reuse foods. All health/target/timing changes fail closed.
   const { waterMl: _water, ...foodInput } = input;
   const { dailyWaterGoalMl: _waterGoal, ...foodProfile } = profile;

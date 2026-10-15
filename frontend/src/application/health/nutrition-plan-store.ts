@@ -57,6 +57,7 @@ async function watchPreparation(job: NutritionPreparation, epoch = accountEpoch)
   if (watchId === job.id) return;
   watchId = job.id;
   const watcher = ++watchEpoch;
+  let refreshBeforeDelivery = false;
   try {
     while (epoch === accountEpoch && watchId === job.id && watcher === watchEpoch) {
       patch({
@@ -68,18 +69,23 @@ async function watchPreparation(job: NutritionPreparation, epoch = accountEpoch)
         try {
           const { plan } = await nutritionPlanClient.get(job.deliveredPlanId);
           if (epoch !== accountEpoch || watcher !== watchEpoch) return;
+          pendingRequest = null;
           completeGeneration(plan);
-          patch({ preparation: null });
+          patch({ preparation: null, preparationOffline: false });
           return;
         } catch {
+          if (epoch !== accountEpoch || watcher !== watchEpoch) return;
           patch({ preparationOffline: true });
           await new Promise((resolve) => setTimeout(resolve, 5000));
           continue;
         }
       }
-      if (!isPreparing(job)) {pendingRequest=null;return;}
+      if (!isPreparing(job)) {
+        pendingRequest = null;
+        return;
+      }
       try {
-        if (job.status === "READY") {
+        if (job.status === "READY" && !refreshBeforeDelivery) {
           const { plan } = await nutritionPlanClient.deliverPreparation(job.id);
           if (epoch !== accountEpoch || watcher !== watchEpoch) return;
           pendingRequest = null;
@@ -92,19 +98,26 @@ async function watchPreparation(job: NutritionPreparation, epoch = accountEpoch)
         const response = await nutritionPlanClient.preparation(job.id);
         if (epoch !== accountEpoch || watcher !== watchEpoch) return;
         job = response.job;
+        refreshBeforeDelivery = false;
         patch({ preparationOffline: false });
       } catch (error) {
         if (epoch !== accountEpoch || watcher !== watchEpoch) return;
-        if (error instanceof ApiError && error.code === "NUTRITION_PLAN_GENERATION_IN_PROGRESS") {
-          await new Promise((resolve) => setTimeout(resolve, 2000));
-          if (epoch !== accountEpoch || watcher !== watchEpoch) return;
-          job = (await nutritionPlanClient.preparation(job.id)).job;
+        if (
+          error instanceof ApiError &&
+          ["NUTRITION_PLAN_GENERATION_IN_PROGRESS", "NUTRITION_JOB_NOT_READY"].includes(
+            error.code ?? "",
+          )
+        ) {
+          // The server may have paused/completed this job on another device.
+          // Refresh in the main guarded try/catch so a failed read stays retryable.
+          refreshBeforeDelivery = true;
           continue;
         }
         if (
           error instanceof ApiError &&
           error.status > 0 &&
-          (! [408,429,502,503,504].includes(error.status) || error.code === "NUTRITION_RIGHT_EXHAUSTED")
+          (![408, 429, 502, 503, 504].includes(error.status) ||
+            error.code === "NUTRITION_RIGHT_EXHAUSTED")
         ) {
           patch({
             preparation: {
@@ -115,7 +128,7 @@ async function watchPreparation(job: NutritionPreparation, epoch = accountEpoch)
             generating: false,
             generatingDuration: null,
           });
-          pendingRequest=null;
+          pendingRequest = null;
           return;
         }
         patch({ preparationOffline: true });
@@ -196,6 +209,33 @@ function completeGeneration(plan: NutritionPlanRecord): NutritionPlanRecord {
   return plan;
 }
 
+/**
+ * Browser QA can inspect these anonymous measurements in Performance entries.
+ * The second animation frame is only a post-update paint opportunity, not a
+ * guarantee of visual completion on background tabs. No user data is recorded.
+ */
+function recordPlanDisplayTiming(startedAt: number): void {
+  if (typeof window === "undefined" || typeof window.requestAnimationFrame !== "function") return;
+  const responseAt = performance.now();
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
+      try {
+        const frameAt = performance.now();
+        performance.measure("diewish:nutrition-plan:request-ms", {
+          start: startedAt,
+          end: responseAt,
+        });
+        performance.measure("diewish:nutrition-plan:post-response-frame-ms", {
+          start: responseAt,
+          end: frameAt,
+        });
+      } catch {
+        // Diagnostic instrumentation must never change meal-plan behavior.
+      }
+    });
+  });
+}
+
 function failGeneration(error: unknown): never {
   patch({ generating: false, generatingDuration: null });
   throw error;
@@ -265,7 +305,7 @@ export const nutritionPlanStore = {
       return activePlan;
     } catch {
       // A failed concurrent read must not unlock an ongoing generation.
-      if(epoch===accountEpoch)patch({ loading: false, hydrated: true });
+      if (epoch === accountEpoch) patch({ loading: false, hydrated: true });
       return state.activePlan;
     }
   },
@@ -302,10 +342,13 @@ export const nutritionPlanStore = {
         throw error;
       }
     }
+    const startedAt = typeof performance !== "undefined" ? performance.now() : 0;
     patch({ generating: true, generatingDuration: duration });
     try {
       const { plan } = await nutritionPlanClient.generate(duration, pantryText);
-      return completeGeneration(plan);
+      const result = completeGeneration(plan);
+      recordPlanDisplayTiming(startedAt);
+      return result;
     } catch (error) {
       return failGeneration(error);
     }

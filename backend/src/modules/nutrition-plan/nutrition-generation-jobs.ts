@@ -19,6 +19,12 @@ import {
 } from "./nutrition-rights.service";
 import { withNutritionProviderBudget } from "./nutrition-plan-provider-budget";
 import { withNutritionCallObserver } from "./nutrition-provider-observer";
+import {
+  createNutritionTimings,
+  roundNutritionTimings,
+  timeNutritionPhase,
+  timeNutritionCheck,
+} from "./nutrition-plan-generation-timings";
 import { DURATION_DAYS, isSupportedPlanDuration } from "./constants";
 import type {
   DailyPlan,
@@ -598,12 +604,14 @@ export async function runNutritionWorkerStep(): Promise<boolean> {
   if (!claim) return false;
   const started = Date.now(),
     { job, token, attempt } = claim;
+  const metrics = createNutritionTimings();
   try {
     const original = job.input as unknown as NutritionPlanGenerationInput;
     const context = await prepareNutritionContext(
       job.userId,
       job.duration as PlanDuration,
       original.realLifePlanning?.pantryText,
+      metrics,
     );
     const selected = job.sourcePlanId
       ? await mealSource(job.userId, job.sourcePlanId, job.dayNumber ?? 1, job.mealIndex ?? 0)
@@ -777,63 +785,73 @@ export async function runNutritionWorkerStep(): Promise<boolean> {
         }
       };
       generated = (
-        await withNutritionCallObserver({ check, reserve, usage }, () =>
-          withNutritionProviderBudget(STEP_MS, () =>
-            mealGeneratorService.generateRange(input, start, count, preceding),
+        await timeNutritionPhase(metrics, "aiWallMs", () =>
+          withNutritionCallObserver({ check, reserve, usage }, () =>
+            withNutritionProviderBudget(STEP_MS, () =>
+              mealGeneratorService.generateRange(input, start, count, preceding, metrics),
+            ),
           ),
         )
       ).output;
     }
-    await userTransaction(job.userId, async (tx) => {
-      const current = await ownJob(job.userId, job.id, tx);
-      if (
-        current.claimToken !== token ||
-        !current.leaseUntil ||
-        current.leaseUntil <= new Date() ||
-        !["RUNNING", "PAUSED"].includes(current.status)
-      )
-        return;
-      const latest = await prepareNutritionContext(
-        job.userId,
-        job.duration as PlanDuration,
-        original.realLifePlanning?.pantryText,
-      );
-      if (
-        (selected ? latest.hash : latest.reuseHash) !==
-        (selected ? context.hash : context.reuseHash)
-      )
-        throw new ApiError(409, "Context changed.", { code: "NUTRITION_CONTEXT_CHANGED" });
-      if (generated)
-        await tx.nutritionGenerationBatch.create({
+    await timeNutritionPhase(metrics, "persistenceMs", () =>
+      userTransaction(job.userId, async (tx) => {
+        const current = await ownJob(job.userId, job.id, tx);
+        if (
+          current.claimToken !== token ||
+          !current.leaseUntil ||
+          current.leaseUntil <= new Date() ||
+          !["RUNNING", "PAUSED"].includes(current.status)
+        )
+          return;
+        const latest = await prepareNutritionContext(
+          job.userId,
+          job.duration as PlanDuration,
+          original.realLifePlanning?.pantryText,
+        );
+        if (
+          (selected ? latest.hash : latest.reuseHash) !==
+          (selected ? context.hash : context.reuseHash)
+        )
+          throw new ApiError(409, "Context changed.", { code: "NUTRITION_CONTEXT_CHANGED" });
+        if (generated)
+          await tx.nutritionGenerationBatch.create({
+            data: {
+              jobId: job.id,
+              startDayNumber: job.kind === "MEAL_CHANGE" ? job.dayNumber! : prior.length + 1,
+              dayCount: generated.cycle.length,
+              output: json(generated),
+            },
+          });
+        const complete = [...prior, ...(generated?.cycle ?? [])];
+        if (complete.length === total) {
+          const outputs = [
+            ...batches.map((batch) => batch.output as unknown as NutritionPlanAIOutput),
+            ...(generated ? [generated] : []),
+          ];
+          timeNutritionCheck(metrics, "healthValidationMs", () =>
+            assertCompleteNutrition(assembleCycle(job, outputs, selected?.content), latest.input),
+          );
+        }
+        await tx.nutritionGenerationJob.update({
+          where: { id: job.id },
           data: {
-            jobId: job.id,
-            startDayNumber: job.kind === "MEAL_CHANGE" ? job.dayNumber! : prior.length + 1,
-            dayCount: generated.cycle.length,
-            output: json(generated),
+            completedDays:
+              job.revisionMode === "DAY" && complete.length === total
+                ? context.input.durationDays
+                : complete.length,
+            status:
+              current.status === "PAUSED"
+                ? "PAUSED"
+                : complete.length === total
+                  ? "READY"
+                  : "QUEUED",
+            claimToken: null,
+            leaseUntil: null,
           },
         });
-      const complete = [...prior, ...(generated?.cycle ?? [])];
-      if (complete.length === total) {
-        const outputs = [
-          ...batches.map((batch) => batch.output as unknown as NutritionPlanAIOutput),
-          ...(generated ? [generated] : []),
-        ];
-        assertCompleteNutrition(assembleCycle(job, outputs, selected?.content), latest.input);
-      }
-      await tx.nutritionGenerationJob.update({
-        where: { id: job.id },
-        data: {
-          completedDays:
-            job.revisionMode === "DAY" && complete.length === total
-              ? context.input.durationDays
-              : complete.length,
-          status:
-            current.status === "PAUSED" ? "PAUSED" : complete.length === total ? "READY" : "QUEUED",
-          claimToken: null,
-          leaseUntil: null,
-        },
-      });
-    });
+      }),
+    );
     await prisma.nutritionWorkerAttempt.update({
       where: { id: attempt.id },
       data: {
@@ -884,6 +902,14 @@ export async function runNutritionWorkerStep(): Promise<boolean> {
       where: { id: job.id, claimToken: token, status: "PAUSED" },
       data: { claimToken: null, leaseUntil: null },
     });
+    logger.info(
+      {
+        duration: job.duration,
+        elapsedMs: Date.now() - started,
+        phasesMs: roundNutritionTimings(metrics),
+      },
+      "Nutrition preparation step timings",
+    );
   }
   return true;
 }

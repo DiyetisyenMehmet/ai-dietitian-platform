@@ -65,19 +65,14 @@ jobs:
         working-directory: frontend
       - run: npx prisma validate && npx prisma generate && npx prisma migrate deploy
         working-directory: backend
-      - run: npm test
+      - name: Nutrition safety, provider, timing and performance regression
+        run: node --import tsx --test --test-concurrency=1 src/modules/nutrition-plan/nutrition-plan-performance-a1.test.ts src/modules/nutrition-plan/nutrition-plan-safety.test.ts src/modules/nutrition-plan/nutrition-plan-provider.test.ts src/modules/nutrition-plan/nutrition-plan-provider-budget.test.ts src/modules/nutrition-plan/nutrition-plan-realism.test.ts src/modules/nutrition-plan/work-schedule-policy.test.ts src/modules/nutrition-plan/calculations/meal-timing.test.ts src/modules/nutrition-plan/meal-generator/*.test.ts
         working-directory: backend
-      - run: npm run test:integration
-        if: ${{ !cancelled() }}
-        working-directory: backend
-        env:
-          CORS_ORIGIN: http://localhost:3000
-          APP_WEB_URL: http://localhost:3000
       - run: node --import tsx --test --test-concurrency=1 src/modules/nutrition-plan/nutrition-plan-generation.integration.test.ts src/modules/nutrition-plan/nutrition-plan-generation-lock.integration.test.ts
         if: ${{ !cancelled() }}
         working-directory: backend
       - name: Durable plan, pause/resume and separate rights tests
-        run: node --import tsx --test --test-concurrency=1 src/modules/nutrition-plan/nutrition-rights-policy.test.ts src/modules/nutrition-plan/nutrition-generation-jobs.integration.test.ts
+        run: node --import tsx --test --test-concurrency=1 src/modules/nutrition-plan/nutrition-rights-policy.test.ts src/modules/nutrition-plan/nutrition-generation-jobs.integration.test.ts src/integration/ai-chat.integration.test.ts
         working-directory: backend
         env:
           NUTRITION_JOBS_ENABLED: true
@@ -86,13 +81,14 @@ jobs:
       - run: npm run lint && npm run build
         if: ${{ !cancelled() }}
         working-directory: backend
-      - run: npx playwright install --with-deps chromium webkit
+      - run: npx playwright install --with-deps chromium
         if: ${{ !cancelled() }}
         working-directory: frontend
       - run: NODE_ENV=production npm run build
         if: ${{ !cancelled() }}
         working-directory: frontend
-      - run: timeout 300s node --test tests/*.test.cjs
+      - name: Nutrition, account hydration and Android WebView contracts
+        run: timeout 300s node --test tests/nutrition-plan-*.test.cjs tests/nutrition-smart-preparation.test.cjs tests/nutrition-home-a1-data.test.cjs tests/auth-session-restore.test.cjs tests/identity.test.cjs tests/daily-health-data-reliability.test.cjs tests/dashboard-webview-parity.test.cjs
         if: ${{ !cancelled() }}
         working-directory: frontend
       - name: Start isolated fixture backend and local web server

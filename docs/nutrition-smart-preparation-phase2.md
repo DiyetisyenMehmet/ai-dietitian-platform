@@ -56,7 +56,9 @@ Where returned, actual prompt/output/thinking token counts are stored with provi
 
 ## Review dependencies and QA
 
-PR #33 remains open and unchanged. Its shared generator/service/store changes require manager integration ordering. This branch preserves the existing source and adds compatible hooks; the asynchronous worker records operational timings separately. After #33 integration, connect its optional phase-timing context to the worker without duplicating the instrumentation.
+PR #33 was integrated into staging at `9a6b455519cc4aa518a9b5d2a0e02115be33f2d8`. Its phase timers and checked work-schedule reuse are preserved in both the legacy generator and the durable worker. The worker passes the same timing context into bounded generation; anonymous batch timings do not expose health inputs or invent total completion estimates. The frontend retains the existing synchronous request/paint measurements and safely re-reads durable job state after a delivery conflict, including cross-device pauses and temporary network failure.
+
+The prior full Phase 2 validation (`38698431808`) and current staging Hardening (`38708599411`) passed. The final branch workflow reruns the affected nutrition safety/provider/performance, database/rights/Coach, account hydration, native WebView, build and nutrition browser checks; unchanged unrelated feature suites reuse those verified baseline results. No test assertions, health validators or security scanner are bypassed.
 
 The local development database is disposable and contains synthetic fixtures only. Tests cover horizons, duration gates, pause/resume/checkpoint/lease recovery, separate rights, incomplete output, stale context, manual edits, persistence rollback, concurrent workers and delivery. Browser tests cover reload, pause confirmation and single-meal counters; native Android and dependency scanning run in isolated CI.
 

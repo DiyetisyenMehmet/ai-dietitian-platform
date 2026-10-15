@@ -29,7 +29,19 @@ async function main() {
     if (!res.ok) throw new Error(`Fixture setup failed: ${path} HTTP ${res.status}`);
     return value;
   };
-  for (const name of ["free", "premium7", "premium14", "premium30", "weightDue", "slow7", "resume14", "meal7", "plus30"]) {
+  for (const name of [
+    "free",
+    "premium7",
+    "premium14",
+    "premium30",
+    "weightDue",
+    "slow7",
+    "resume14",
+    "meal7",
+    "plus30",
+    "reopen14",
+    "offline14",
+  ]) {
     const email = `nutrition-browser-${name}-${Date.now()}@example.com`,
       password = "NutritionFixture123!";
     const reg = await post("/auth/register", {
@@ -61,15 +73,18 @@ async function main() {
       },
       token,
     );
-    if (name.startsWith("premium") || name === "resume14" || name === "plus30") {
-      const tier=name === "plus30"?"PREMIUM_PLUS":"PREMIUM";
+    if (
+      name.startsWith("premium") ||
+      ["resume14", "plus30", "reopen14", "offline14"].includes(name)
+    ) {
+      const tier = name === "plus30" ? "PREMIUM_PLUS" : "PREMIUM";
       await prisma.user.update({ where: { id }, data: { subscriptionTier: tier } });
       await prisma.subscription.create({
         data: {
           userId: id,
           tier,
           status: "ACTIVE",
-          currentPeriodStart: new Date(Date.now()-86_400_000),
+          currentPeriodStart: new Date(Date.now() - 86_400_000),
           currentPeriodEnd: new Date(Date.now() + 86400000 * 30),
         },
       });
