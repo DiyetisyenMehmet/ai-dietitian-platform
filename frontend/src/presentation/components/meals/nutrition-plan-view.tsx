@@ -189,10 +189,12 @@ function MealBlock({
         {meal.foods.map((food, index) => (
           <div
             key={`${food.name}-${index}`}
-            className="flex items-baseline justify-between gap-3 text-sm"
+            className="grid min-w-0 grid-cols-1 gap-1 text-sm sm:grid-cols-2 sm:gap-3"
           >
-            <span className="min-w-0 font-medium">{food.name}</span>
-            <span className="shrink-0 text-right text-muted-foreground">{food.portion}</span>
+            <span className="min-w-0 font-medium [overflow-wrap:anywhere]">{food.name}</span>
+            <span className="min-w-0 text-muted-foreground [overflow-wrap:anywhere] sm:text-right">
+              {food.portion}
+            </span>
           </div>
         ))}
       </div>
