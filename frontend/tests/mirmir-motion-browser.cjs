@@ -91,12 +91,13 @@ for (const [name, engine] of [
       });
       await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
       const base = `http://127.0.0.1:${server.address().port}`;
-      const browser = await engine.launch();
-      const context = await browser.newContext({
-        viewport: { width: 390, height: 844 },
-        recordVideo: { dir: output, size: { width: 390, height: 844 } },
-      });
+      let browser, context;
       try {
+        browser = await engine.launch();
+        context = await browser.newContext({
+          viewport: { width: 390, height: 844 },
+          recordVideo: { dir: output, size: { width: 390, height: 844 } },
+        });
         const page = await context.newPage();
         await page.goto(base);
         await page
@@ -185,8 +186,8 @@ for (const [name, engine] of [
           "none",
         );
       } finally {
-        await context.close();
-        await browser.close();
+        await context?.close();
+        await browser?.close();
         await new Promise((resolve) => server.close(resolve));
       }
     },
