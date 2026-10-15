@@ -112,7 +112,10 @@ export class OpenAICompatibleAdapter implements IAIAdapter {
       });
     } catch (error) {
       if (nutritionRequest) checkNutritionProviderBudget();
-      logger.error({ err: error }, "AI provider request failed");
+      logger.error(
+        nutritionRequest ? { code: "AI_PROVIDER_UNREACHABLE" } : { err: error },
+        "AI provider request failed",
+      );
       throw new ApiError(502, "The AI provider could not be reached.", {
         code: "AI_PROVIDER_UNREACHABLE",
         isOperational: false,

@@ -461,7 +461,12 @@ export class VertexAIAdapter extends OpenAICompatibleAdapter {
           continue;
         }
 
-        logger.error({ err: error, model: this.vertex.model }, "Vertex AI request failed");
+        logger.error(
+          nutritionRequest
+            ? { code: "AI_PROVIDER_UNREACHABLE", model: this.vertex.model }
+            : { err: error, model: this.vertex.model },
+          "Vertex AI request failed",
+        );
         throw new ApiError(502, "Vertex AI could not be reached.", {
           code: "AI_PROVIDER_UNREACHABLE",
           isOperational: false,
@@ -511,7 +516,9 @@ export class VertexAIAdapter extends OpenAICompatibleAdapter {
         }
 
         logger.error(
-          { err: error, model: this.vertex.model },
+          nutritionRequest
+            ? { code: "AI_PROVIDER_MALFORMED", model: this.vertex.model }
+            : { err: error, model: this.vertex.model },
           "Vertex AI returned an invalid response envelope",
         );
         throw new ApiError(502, "Vertex AI returned an invalid response.", {
