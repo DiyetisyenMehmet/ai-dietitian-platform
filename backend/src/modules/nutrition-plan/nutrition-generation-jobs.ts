@@ -82,6 +82,8 @@ export function publicNutritionJob(job: NutritionGenerationJob) {
 }
 
 async function ownJob(userId: string, id: string, tx: Prisma.TransactionClient = prisma) {
+  if (tx !== prisma)
+    await tx.$queryRaw`SELECT "id" FROM "nutrition_generation_jobs" WHERE "id"=${id} AND "userId"=${userId} FOR UPDATE`;
   const job = await tx.nutritionGenerationJob.findFirst({ where: { id, userId } });
   if (!job) throw ApiError.notFound("Nutrition job not found.");
   return job;
@@ -164,6 +166,7 @@ export const nutritionGenerationJobs = {
           });
         return existing;
       }
+      await purgeExpiredJobs(tx, userId);
       const kind = request.sourcePlanId && !request.revisionMode ? "MEAL_CHANGE" : "NEW_PLAN";
       const settling = await tx.nutritionGenerationJob.findFirst({
         where: {
@@ -340,7 +343,8 @@ export const nutritionGenerationJobs = {
         throw new ApiError(409, "Plan was already delivered.", {
           code: "NUTRITION_ALREADY_DELIVERED",
         });
-      if (job.status === "EXPIRED") return job;
+      if (["PAUSED", "EXPIRED", "INVALIDATED"].includes(job.status) || job.expiresAt <= new Date())
+        return job;
       // Preserve the in-flight claim: its validated result may checkpoint, never deliver.
       return tx.nutritionGenerationJob.update({
         where: { id },
@@ -884,26 +888,33 @@ export async function runNutritionWorkerStep(): Promise<boolean> {
   return true;
 }
 
+async function purgeExpiredJobs(tx: Prisma.TransactionClient, userId?: string): Promise<void> {
+  // Select and fence the same rows that are cleared. Pause/delivery must not
+  // race an earlier out-of-transaction expiry snapshot.
+  const owner = userId ? Prisma.sql`AND "userId"=${userId}` : Prisma.empty;
+  const expired = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    SELECT "id" FROM "nutrition_generation_jobs"
+    WHERE "expiresAt" <= ${new Date()} AND "input" IS NOT NULL AND "status" <> 'CONSUMED'
+    ${owner} ORDER BY "id" FOR UPDATE
+  `);
+  if (!expired.length) return;
+  await tx.nutritionGenerationBatch.deleteMany({
+    where: { jobId: { in: expired.map((job) => job.id) } },
+  });
+  await tx.nutritionGenerationJob.updateMany({
+    where: { id: { in: expired.map((job) => job.id) } },
+    data: {
+      status: "EXPIRED",
+      input: Prisma.DbNull,
+      contextHash: "expired",
+      baseStateHash: null,
+      claimToken: null,
+      leaseUntil: null,
+    },
+  });
+}
+
 export async function expireNutritionJobs(): Promise<void> {
   requireNutritionJobs();
-  const expired = await prisma.nutritionGenerationJob.findMany({
-    where: { expiresAt: { lte: new Date() }, input: { not: Prisma.DbNull } },
-    select: { id: true },
-  });
-  await prisma.$transaction(async (tx) => {
-    await tx.nutritionGenerationBatch.deleteMany({
-      where: { jobId: { in: expired.map((job) => job.id) } },
-    });
-    await tx.nutritionGenerationJob.updateMany({
-      where: { id: { in: expired.map((job) => job.id) } },
-      data: {
-        status: "EXPIRED",
-        input: Prisma.DbNull,
-        contextHash: "expired",
-        baseStateHash: null,
-        claimToken: null,
-        leaseUntil: null,
-      },
-    });
-  });
+  await prisma.$transaction((tx) => purgeExpiredJobs(tx));
 }

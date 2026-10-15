@@ -86,13 +86,13 @@ jobs:
       - run: npm run lint && npm run build
         if: ${{ !cancelled() }}
         working-directory: backend
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install --with-deps chromium webkit
         if: ${{ !cancelled() }}
         working-directory: frontend
       - run: NODE_ENV=production npm run build
         if: ${{ !cancelled() }}
         working-directory: frontend
-      - run: node --test tests/*.test.cjs
+      - run: timeout 300s node --test tests/*.test.cjs
         if: ${{ !cancelled() }}
         working-directory: frontend
       - name: Start isolated fixture backend and local web server
@@ -114,6 +114,16 @@ jobs:
       - run: npx playwright test --config=playwright.nutrition-smart.config.ts
         if: ${{ !cancelled() }}
         working-directory: frontend
+      - name: Preserve failed browser evidence
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: nutrition-browser-failure
+          path: |
+            frontend/test-results/
+            /tmp/nutrition-backend.log
+            /tmp/nutrition-web.log
+          retention-days: 7
   android-sanity:
     runs-on: ubuntu-latest
     steps:

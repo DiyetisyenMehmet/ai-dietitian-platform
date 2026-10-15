@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { createApp } from "../../app";
+import { signAccessToken } from "../../utils/jwt";
 import test from "node:test";
 import { prisma } from "../../lib/prisma";
 import { legalService } from "../legal/legal.service";
@@ -13,8 +17,20 @@ import {
 import { nutritionRights } from "./nutrition-rights.service";
 import { ApiError } from "../../utils/api-error";
 import type { NutritionPlanContent, PlanDuration } from "./types";
+import {
+  reserveNutritionProviderCall,
+  recordNutritionProviderUsage,
+} from "./nutrition-provider-observer";
+import type { ChatMessage } from "../blood-test-analysis/ai-adapter/openai-compatible.adapter";
+import { publicNutritionPlan } from "./nutrition-plan-public";
 
 test("durable nutrition: health gates, checkpoint, pause/resume, rights and one-meal changes", async (t) => {
+  assert.equal(process.env.NODE_ENV, "test", "Integration fixtures require the test runtime");
+  assert.match(
+    process.env.DATABASE_URL ?? "",
+    /@(?:127\.0\.0\.1|localhost):/,
+    "Use an isolated local database only",
+  );
   const ids: string[] = [];
   t.after(async () => {
     await prisma.user.deleteMany({ where: { id: { in: ids } } });
@@ -83,6 +99,57 @@ test("durable nutrition: health gates, checkpoint, pause/resume, rights and one-
     error instanceof ApiError && error.code === code;
   const provider = new FixtureAdapter();
   setAIAdapter(provider);
+
+  await t.test("HTTP acceptance is 202, owner scoped, private and safely pausable", async () => {
+    const id = await fixture(),
+      other = await fixture();
+    const user = await prisma.user.findUniqueOrThrow({ where: { id } });
+    const token = signAccessToken({ userId: id, email: user.email, role: user.role });
+    const second = await prisma.user.findUniqueOrThrow({ where: { id: other } });
+    const otherToken = signAccessToken({ userId: other, email: second.email, role: second.role });
+    const server = createApp().listen(0, "127.0.0.1");
+    await new Promise<void>((resolve) => server.once("listening", resolve));
+    const address = server.address();
+    assert.ok(address && typeof address !== "string");
+    const base = `http://127.0.0.1:${address.port}/api/nutrition-plans/generation-jobs`;
+    const request = async (path: string, access = token, body?: unknown) => {
+      const res = await fetch(base + path, {
+        method: body === undefined ? "GET" : "POST",
+        headers: { authorization: `Bearer ${access}`, "content-type": "application/json" },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+      return {
+        status: res.status,
+        body: (await res.json()) as {
+          data: { job: { id: string; status: string; expiresAt: string } };
+          error: { code: string };
+        },
+      };
+    };
+    try {
+      const payload = { duration: "SEVEN_DAY", requestKey: randomUUID() };
+      const accepted = await request("", token, payload);
+      assert.equal(accepted.status, 202);
+      assert.equal("input" in accepted.body.data.job, false);
+      assert.equal((await request("", token, payload)).body.data.job.id, accepted.body.data.job.id);
+      const path = `/${accepted.body.data.job.id}`;
+      assert.equal((await request(path, otherToken)).status, 404);
+      const first = await request(path + "/pause", token, {}),
+        secondPause = await request(path + "/pause", token, {});
+      assert.equal(first.status, 200);
+      assert.equal(first.body.data.job.status, "PAUSED");
+      assert.equal(secondPause.body.data.job.expiresAt, first.body.data.job.expiresAt);
+      await prisma.consentRecord.updateMany({ where: { userId: id }, data: { granted: false } });
+      const blocked = await request("", token, { ...payload, requestKey: randomUUID() });
+      assert.equal(blocked.status, 403);
+      assert.equal(blocked.body.error.code, "CONSENT_REQUIRED");
+      assert.equal((await request(path)).body.data.job.status, "PAUSED");
+      assert.equal(await prisma.nutritionRightsEvent.count({ where: { userId: id } }), 0);
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
 
   await t.test(
     "FREE duration restriction; unsuccessful work never consumes the five-month right",
@@ -504,6 +571,242 @@ test("durable nutrition: health gates, checkpoint, pause/resume, rights and one-
           day.meals.map((meal) => meal.time),
           slots.slots.map((slot) => slot.time),
         );
+    },
+  );
+  await t.test("pause is idempotent and cannot revive an expired preparation", async () => {
+    const id = await fixture(),
+      job = await start(id);
+    const first = await jobs.pause(id, job.id),
+      second = await jobs.pause(id, job.id);
+    assert.equal(second.expiresAt.getTime(), first.expiresAt.getTime());
+    const expiry = new Date(Date.now() - 1);
+    await prisma.nutritionGenerationJob.update({
+      where: { id: job.id },
+      data: { expiresAt: expiry },
+    });
+    assert.equal((await jobs.pause(id, job.id)).expiresAt.getTime(), expiry.getTime());
+    await expireNutritionJobs();
+    assert.equal((await jobs.get(id, job.id)).status, "EXPIRED");
+    assert.equal((await nutritionRights(id, "NEW_PLAN")).freeRemaining, 1);
+  });
+  await t.test(
+    "an expired active job is cleaned atomically before a fresh user request",
+    async () => {
+      const id = await fixture(),
+        old = await start(id);
+      await runNutritionWorkerStep();
+      await prisma.nutritionGenerationJob.update({
+        where: { id: old.id },
+        data: { expiresAt: new Date(Date.now() - 1) },
+      });
+      const next = await start(id);
+      assert.notEqual(next.id, old.id);
+      const expired = await jobs.get(id, old.id);
+      assert.equal(expired.status, "EXPIRED");
+      assert.equal(expired.input, null);
+      assert.equal(await prisma.nutritionGenerationBatch.count({ where: { jobId: old.id } }), 0);
+      assert.equal((await nutritionRights(id, "NEW_PLAN")).freeRemaining, 1);
+      await jobs.pause(id, next.id);
+    },
+  );
+  await t.test(
+    "a newly started server process continues the persisted five-day checkpoint",
+    async () => {
+      const id = await fixture(),
+        job = await start(id);
+      await runNutritionWorkerStep();
+      assert.equal((await jobs.get(id, job.id)).completedDays, 5);
+      const script = `
+      const {setAIAdapter}=require('./src/modules/blood-test-analysis/ai-adapter/ai-adapter.factory.ts');
+      const {FixtureAdapter}=require('./src/modules/nutrition-plan/test-fixtures/provider.ts');
+      const {runNutritionWorkerStep}=require('./src/modules/nutrition-plan/nutrition-generation-jobs.ts');
+      const {prisma}=require('./src/lib/prisma.ts');
+      const adapter=new FixtureAdapter();setAIAdapter(adapter);
+      runNutritionWorkerStep().then(async()=>{
+        await prisma.$disconnect();
+        console.log('RESTARTED_PROVIDER_CALLS:'+adapter.calls);
+      }).catch(async()=>{await prisma.$disconnect();process.exitCode=1;});
+    `;
+      const result = await promisify(execFile)(
+        process.execPath,
+        ["--import", "tsx", "--eval", script],
+        { cwd: process.cwd(), env: process.env, timeout: 15000, maxBuffer: 4 * 1024 * 1024 },
+      );
+      assert.match(result.stdout, /RESTARTED_PROVIDER_CALLS:1/);
+      assert.equal((await jobs.get(id, job.id)).status, "READY");
+      assert.equal((await jobs.get(id, job.id)).completedDays, 7);
+      await jobs.deliver(id, job.id);
+      assert.equal(
+        await prisma.nutritionRightsEvent.count({ where: { userId: id, kind: "NEW_PLAN" } }),
+        1,
+      );
+    },
+  );
+  await t.test(
+    "changed targets resume in a new safe context; old accepted chunks stay paused",
+    async () => {
+      const id = await fixture(),
+        job = await start(id);
+      await runNutritionWorkerStep();
+      await jobs.pause(id, job.id);
+      await prisma.userProfile.update({ where: { userId: id }, data: { targetWeightKg: 72 } });
+      const next = await start(id);
+      assert.notEqual(next.id, job.id);
+      assert.equal(next.completedDays, 0);
+      assert.equal((await jobs.get(id, job.id)).completedDays, 5);
+      assert.equal((await jobs.get(id, job.id)).status, "PAUSED");
+      await jobs.pause(id, next.id);
+    },
+  );
+  await t.test(
+    "unverified legacy plan context is never assumed safe; internal fields remain private",
+    async () => {
+      const id = await fixture(),
+        job = await start(id);
+      await drain(id, job.id);
+      const plan = await jobs.deliver(id, job.id);
+      const publicPlan = publicNutritionPlan(plan);
+      assert.equal("nutritionContextHash" in publicPlan, false);
+      assert.equal("originPlanId" in publicPlan, false);
+      await prisma.nutritionPlan.update({
+        where: { id: plan.id },
+        data: { nutritionContextHash: null },
+      });
+      await assert.rejects(
+        jobs.start(id, {
+          duration: "SEVEN_DAY",
+          requestKey: randomUUID(),
+          sourcePlanId: plan.id,
+          dayNumber: 1,
+          mealIndex: 0,
+        }),
+        rejectCode("NUTRITION_PLAN_RECREATE_REQUIRED"),
+      );
+      assert.equal((await nutritionRights(id, "MEAL_CHANGE", prisma, plan.id, 1)).freeRemaining, 1);
+    },
+  );
+  await t.test(
+    "actual provider admission and returned tokens include failed-output retries",
+    async () => {
+      class ObservedFixture extends FixtureAdapter {
+        protected async chat(messages: ChatMessage[]): Promise<string> {
+          await reserveNutritionProviderCall();
+          const result = await super.chat(messages);
+          await recordNutritionProviderUsage({ prompt: 10, output: 20 });
+          return result;
+        }
+      }
+      const observed = new ObservedFixture();
+      observed.mode = "malformed-once";
+      setAIAdapter(observed);
+      const id = await fixture(),
+        job = await start(id);
+      try {
+        await runNutritionWorkerStep();
+        const attempt = await prisma.nutritionWorkerAttempt.findFirstOrThrow({
+          where: { jobId: job.id },
+        });
+        assert.equal(attempt.providerCalls, 2);
+        assert.equal(attempt.promptTokens, 20);
+        assert.equal(attempt.outputTokens, 40);
+        await jobs.pause(id, job.id);
+        assert.equal(await runNutritionWorkerStep(), false);
+        assert.equal(observed.calls, 2);
+      } finally {
+        setAIAdapter(provider);
+      }
+    },
+  );
+  await t.test("annual monthly rights renew at the original subscription anniversary", async () => {
+    const id = await fixture("PREMIUM");
+    await prisma.subscription.updateMany({
+      where: { userId: id },
+      data: { currentPeriodStart: new Date("2026-01-31T12:00:00Z") },
+    });
+    const old = await prisma.nutritionGenerationJob.create({
+      data: {
+        userId: id,
+        kind: "NEW_PLAN",
+        duration: "SEVEN_DAY",
+        status: "CONSUMED",
+        requestKey: randomUUID(),
+        contextHash: "synthetic",
+        startDate: new Date(),
+        expiresAt: new Date(Date.now() + 86400000),
+      },
+    });
+    await prisma.nutritionRightsEvent.create({
+      data: {
+        userId: id,
+        jobId: old.id,
+        kind: "NEW_PLAN",
+        createdAt: new Date("2026-02-01T12:00:00Z"),
+      },
+    });
+    const before = await nutritionRights(
+      id,
+      "NEW_PLAN",
+      prisma,
+      undefined,
+      undefined,
+      new Date("2026-02-28T11:59:59Z"),
+    );
+    assert.equal(before.monthRemaining, 4);
+    assert.equal(before.resetsAt, "2026-02-28T12:00:00.000Z");
+    const after = await nutritionRights(
+      id,
+      "NEW_PLAN",
+      prisma,
+      undefined,
+      undefined,
+      new Date("2026-02-28T12:00:00Z"),
+    );
+    assert.equal(after.monthRemaining, 5);
+    assert.equal(after.resetsAt, "2026-03-31T12:00:00.000Z");
+  });
+  await t.test(
+    "existing sold plan rights keep original windows; new meal rights require a verified period",
+    async () => {
+      const id = await fixture("PREMIUM");
+      await prisma.subscription.updateMany({
+        where: { userId: id },
+        data: { createdAt: new Date("1999-01-01"), currentPeriodStart: null },
+      });
+      const legacy = await prisma.nutritionGenerationJob.create({
+        data: {
+          userId: id,
+          kind: "NEW_PLAN",
+          duration: "SEVEN_DAY",
+          status: "CONSUMED",
+          requestKey: randomUUID(),
+          contextHash: "synthetic",
+          startDate: new Date(),
+          expiresAt: new Date(Date.now() + 86400000),
+        },
+      });
+      await prisma.nutritionRightsEvent.create({
+        data: {
+          userId: id,
+          jobId: legacy.id,
+          kind: "NEW_PLAN",
+          createdAt: new Date("2026-10-14T00:01:00Z"),
+        },
+      });
+      const old = await nutritionRights(
+        id,
+        "NEW_PLAN",
+        prisma,
+        undefined,
+        undefined,
+        new Date("2026-10-14T22:00:00Z"),
+      );
+      assert.equal(old.grandfathered, true);
+      assert.equal(old.dayRemaining, 14);
+      assert.equal(old.monthRemaining, 99);
+      await assert.rejects(
+        nutritionRights(id, "MEAL_CHANGE"),
+        rejectCode("NUTRITION_PERIOD_UNVERIFIED"),
+      );
     },
   );
 });

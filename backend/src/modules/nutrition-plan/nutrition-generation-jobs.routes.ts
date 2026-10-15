@@ -81,8 +81,7 @@ nutritionGenerationJobsRouter.post(
   validate({ body: generatePlanSchema.extend({ requestKey: z.string().uuid() }).strict() }),
   asyncHandler(async (req, res) => {
     const job = await nutritionGenerationJobs.start(req.user!.id, req.body);
-    res.status(202);
-    sendSuccess(res, { job: publicNutritionJob(job) });
+    sendSuccess(res, { job: publicNutritionJob(job) }, 202);
   }),
 );
 nutritionGenerationJobsRouter.post(
@@ -102,8 +101,7 @@ nutritionGenerationJobsRouter.post(
   }),
   asyncHandler(async (req, res) => {
     const job = await nutritionGenerationJobs.start(req.user!.id, req.body);
-    res.status(202);
-    sendSuccess(res, { job: publicNutritionJob(job) });
+    sendSuccess(res, { job: publicNutritionJob(job) }, 202);
   }),
 );
 const param = z.object({ id: z.string().uuid() });
@@ -128,8 +126,7 @@ nutritionGenerationJobsRouter.post(
   }),
   asyncHandler(async (req, res) => {
     const job = await nutritionGenerationJobs.start(req.user!.id, req.body);
-    res.status(202);
-    sendSuccess(res, { job: publicNutritionJob(job) });
+    sendSuccess(res, { job: publicNutritionJob(job) }, 202);
   }),
 );
 nutritionGenerationJobsRouter.get(
