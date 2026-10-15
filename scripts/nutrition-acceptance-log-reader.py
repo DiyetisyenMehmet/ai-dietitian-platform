@@ -47,6 +47,20 @@ NUMBERS = ('elapsedMs', 'processingTimeMs', 'attempt', 'startDayNumber', 'batchD
            'durationDays', 'requestedDays', 'receivedDays', 'violationCount', 'status', 'statusCode')
 
 
+def window_query(start, end):
+    # Shared provider and generic request errors can belong to Coach or other
+    # features. Query only nutrition-plan events and the exact generation route.
+    messages = ' OR '.join(json.dumps(message) for message in MESSAGES
+                           if message.startswith(('Nutrition plan ', 'Nutrition-plan ')))
+    return (f'resource.type="cloud_run_revision" AND resource.labels.service_name=("{SERVICES[0]}" OR "{SERVICES[1]}") '
+            f'AND timestamp>="{start}" AND timestamp<="{end}" AND ('
+            '(httpRequest.requestMethod="POST" AND '
+            'httpRequest.requestUrl=~"^https?://[^/]+/api/nutrition-plans/generate([?].*)?$") OR '
+            f'jsonPayload.msg=({messages}) OR '
+            '(jsonPayload.msg="Request failed" AND jsonPayload.req.method="POST" AND '
+            'jsonPayload.req.url="/api/nutrition-plans/generate"))')
+
+
 def project_entry(row):
     # No arbitrary message, stack, URL, error detail, header or user field survives.
     payload = row.get('jsonPayload', {})
@@ -57,6 +71,10 @@ def project_entry(row):
             payload = {}
     if not isinstance(payload, dict):
         payload = {}
+    if payload.get('msg') == 'Request failed':
+        request_context = payload.get('req', {})
+        if not isinstance(request_context, dict) or request_context.get('method') != 'POST' or request_context.get('url') != '/api/nutrition-plans/generate':
+            return None
     output = {}
     if payload.get('msg') in MESSAGES:
         output['event'] = MESSAGES[payload['msg']]
@@ -117,13 +135,12 @@ def main():
                 report['runtimeStaging'] = variables.get('DIEWISH_ENVIRONMENT', {}).get('value') == 'staging'
             print(json.dumps({'runtime': report}), flush=True)
     for label, start, end in WINDOWS:
-        query = (f'resource.type="cloud_run_revision" AND resource.labels.service_name=("{SERVICES[0]}" OR "{SERVICES[1]}") '
-                 f'AND timestamp>="{start}" AND timestamp<="{end}" '
-                 'AND (httpRequest.requestUrl:"/api/nutrition-plans/generate" OR jsonPayload.msg:"Nutrition" OR jsonPayload.msg:"Vertex AI" OR jsonPayload.msg="Request failed")')
+        query = window_query(start, end)
         rows = read('gcloud', 'logging', 'read', query, '--project', PROJECT,
                     '--limit', '1000', '--order=asc', '--format=json')
         safe = [entry for row in rows if (entry := project_entry(row))]
         print(json.dumps({'window': label, 'state': 'DATA' if safe else 'NO_RECOGNIZED_EVENTS',
+                          'correlation': 'bounded-time-and-route-not-request-identity',
                           'rowsRead': len(rows), 'possiblyTruncated': len(rows) == 1000,
                           'events': safe}), flush=True)
 

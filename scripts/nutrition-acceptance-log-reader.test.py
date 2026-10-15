@@ -14,6 +14,22 @@ spec.loader.exec_module(reader)
 
 
 class ProjectionTests(unittest.TestCase):
+    def test_query_excludes_shared_provider_and_unscoped_request_errors(self):
+        query = reader.window_query(reader.WINDOWS[0][1], reader.WINDOWS[0][2])
+        self.assertIn('jsonPayload.req.url="/api/nutrition-plans/generate"', query)
+        self.assertIn('jsonPayload.req.method="POST"', query)
+        self.assertIn('httpRequest.requestMethod="POST"', query)
+        self.assertNotIn('Vertex AI', query)
+        self.assertNotIn('jsonPayload.msg:"Nutrition"', query)
+        self.assertIn('"Nutrition plan generation failed"', query)
+
+    def test_unrelated_request_failure_is_not_exported(self):
+        payload = {'msg': 'Request failed', 'code': 'AI_PROVIDER_ERROR',
+                   'req': {'method': 'POST', 'url': '/api/ai-chat/messages'}}
+        self.assertIsNone(reader.project_entry({'jsonPayload': payload}))
+        payload['req']['url'] = '/api/nutrition-plans/generate'
+        self.assertEqual(reader.project_entry({'jsonPayload': payload})['code'], 'AI_PROVIDER_ERROR')
+
     def test_provider_error_preserves_code_not_sensitive_fields(self):
         row = {'timestamp': '2026-10-15T20:12:00Z', 'jsonPayload': {
             'msg': 'Nutrition plan generation failed', 'elapsedMs': 61000,
