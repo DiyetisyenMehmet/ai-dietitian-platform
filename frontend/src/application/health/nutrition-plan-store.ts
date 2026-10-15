@@ -102,6 +102,33 @@ function completeGeneration(plan: NutritionPlanRecord): NutritionPlanRecord {
   return plan;
 }
 
+/**
+ * Browser QA can inspect these anonymous measurements in Performance entries.
+ * The second animation frame is only a post-update paint opportunity, not a
+ * guarantee of visual completion on background tabs. No user data is recorded.
+ */
+function recordPlanDisplayTiming(startedAt: number): void {
+  if (typeof window === "undefined" || typeof window.requestAnimationFrame !== "function") return;
+  const responseAt = performance.now();
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
+      try {
+        const frameAt = performance.now();
+        performance.measure("diewish:nutrition-plan:request-ms", {
+          start: startedAt,
+          end: responseAt,
+        });
+        performance.measure("diewish:nutrition-plan:post-response-frame-ms", {
+          start: responseAt,
+          end: frameAt,
+        });
+      } catch {
+        // Diagnostic instrumentation must never change meal-plan behavior.
+      }
+    });
+  });
+}
+
 function failGeneration(error: unknown): never {
   patch({ generating: false, generatingDuration: null });
   throw error;
@@ -162,10 +189,13 @@ export const nutritionPlanStore = {
     pantryText = state.pantryDraft,
   ): Promise<NutritionPlanRecord> {
     assertNotGenerating();
+    const startedAt = typeof performance !== "undefined" ? performance.now() : 0;
     patch({ generating: true, generatingDuration: duration });
     try {
       const { plan } = await nutritionPlanClient.generate(duration, pantryText);
-      return completeGeneration(plan);
+      const result = completeGeneration(plan);
+      recordPlanDisplayTiming(startedAt);
+      return result;
     } catch (error) {
       return failGeneration(error);
     }
