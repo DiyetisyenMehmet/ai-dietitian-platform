@@ -717,6 +717,28 @@ test("durable nutrition: health gates, checkpoint, pause/resume, rights and one-
       }
     },
   );
+  await t.test(
+    "nutrition rights use the existing verified 30-day iyzico billing window",
+    async () => {
+      const id = await fixture("PREMIUM");
+      const start = new Date();
+      start.setUTCDate(1);
+      start.setUTCHours(0, 0, 0, 0);
+      const end = new Date(start.getTime() + 30 * 86_400_000);
+      // Keep this synthetic subscription active in the real test clock too.
+      if (end <= new Date()) start.setUTCDate(2);
+      const actualEnd = new Date(start.getTime() + 30 * 86_400_000);
+      await prisma.subscription.updateMany({
+        where: { userId: id },
+        data: { currentPeriodStart: start, currentPeriodEnd: actualEnd },
+      });
+      for (const kind of ["NEW_PLAN", "MEAL_CHANGE"] as const) {
+        const rights = await nutritionRights(id, kind);
+        assert.equal(rights.resetsAt, actualEnd.toISOString());
+        assert.equal(rights.monthRemaining, 5);
+      }
+    },
+  );
   await t.test("annual monthly rights renew at the original subscription anniversary", async () => {
     const id = await fixture("PREMIUM");
     await prisma.subscription.updateMany({

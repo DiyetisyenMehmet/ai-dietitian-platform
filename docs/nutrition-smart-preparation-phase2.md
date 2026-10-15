@@ -42,7 +42,7 @@ Existing day/from-day refresh and extension use the same durable worker and immu
 - PREMIUM: 2/day and 5/subscription-month successful plan deliveries.
 - PREMIUM PLUS: 3/day and 10/subscription-month successful plan deliveries.
 - Paid single-meal rights are independently 2/5 and 3/10. FREE has one successful selected-meal change per origin-plan day, independently across seven days.
-- Daily windows use Türkiye calendar days. Monthly windows derive from the current canonical subscription start (or original Play start), preserving original month-end anniversaries even within annual subscriptions.
+- Daily windows use Türkiye calendar days. Monthly windows derive from the current canonical subscription start (or original Play start), preserving original month-end anniversaries even within annual subscriptions. Existing iyzico checkouts explicitly store 30-day billing periods: those verified start/end boundaries are used directly, without editing payment data or inventing a calendar-month renewal date.
 - A missing paid-period anchor fails closed with a clear message; an arbitrary calendar period is not invented.
 - Paid subscription records created before the explicit cutover retain their existing 15/100 or 60/600 new-plan limits and their original UTC-day/calendar-month windows until a separately reviewed promise migration. They are not bulk rewritten. Existing successful legacy usage before the cutover remains counted; failed/abandoned work has no successful usage event.
 - Plan, successful usage, rights event and consumed-job link commit/roll back together. Display, pause/resume, failure and incomplete work do not consume a delivered-plan allowance.

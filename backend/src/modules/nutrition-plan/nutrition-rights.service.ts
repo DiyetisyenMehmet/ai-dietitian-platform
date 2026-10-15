@@ -3,6 +3,7 @@ import { prisma } from "../../lib/prisma";
 import { env } from "../../config/env";
 import { ApiError } from "../../utils/api-error";
 import { readEffectiveSubscriptionState } from "../payments/subscription-state";
+import { BILLING_PERIOD_DAYS } from "../payments/constants";
 import {
   freeAvailableAt,
   nutritionLimits,
@@ -105,12 +106,21 @@ export async function nutritionRights(
       code: "NUTRITION_PERIOD_UNVERIFIED",
     });
   // Retain the original UTC/calendar windows as well as sold plan allowances.
+  // Existing iyzico checkout records use an explicit 30-day billing period,
+  // which is not always a calendar month. Use that verified period verbatim.
+  const periodEnd = state.source === "IYZICO" ? state.subscription?.currentPeriodEnd : null;
+  const monthlyBillingPeriod =
+    anchor &&
+    periodEnd &&
+    periodEnd.getTime() - anchor.getTime() === BILLING_PERIOD_DAYS * 86_400_000;
   const month = grandfathered
     ? {
         start: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)),
         end: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)),
       }
-    : subscriptionMonth(anchor!, now);
+    : monthlyBillingPeriod
+      ? { start: anchor!, end: periodEnd! }
+      : subscriptionMonth(anchor!, now);
   const utcStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   const day = grandfathered
     ? { start: utcStart, end: new Date(utcStart.getTime() + 86_400_000) }
