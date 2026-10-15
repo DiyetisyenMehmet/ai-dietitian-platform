@@ -32,13 +32,15 @@ export interface CreatePlanData {
   aiProvider: string;
   aiModel: string;
   processingTimeMs: number;
+  nutritionContextHash?: string;
 }
 
 export type DeviationCopyPolicy =
   | { mode: "NONE" }
   | { mode: "ALL" }
   | { mode: "BEFORE_DAY"; dayNumber: number }
-  | { mode: "EXCEPT_DAY"; dayNumber: number };
+  | { mode: "EXCEPT_DAY"; dayNumber: number }
+  | { mode: "EXCEPT_MEAL"; dayNumber: number; mealIndex: number };
 
 export interface CreateRevisionVersionData {
   userId: string;
@@ -51,6 +53,7 @@ export interface CreateRevisionVersionData {
   aiModel: string | null;
   processingTimeMs: number;
   deviationCopyPolicy: DeviationCopyPolicy;
+  waterMl?: number;
 }
 
 function deviationWhere(
@@ -62,6 +65,12 @@ function deviationWhere(
   const where: Prisma.NutritionPlanDeviationWhereInput = { planId, userId };
   if (policy.mode === "BEFORE_DAY") where.dayNumber = { lt: policy.dayNumber };
   if (policy.mode === "EXCEPT_DAY") where.NOT = { dayNumber: policy.dayNumber };
+  if (policy.mode === "EXCEPT_MEAL")
+    where.OR = [
+      { dayNumber: { not: policy.dayNumber } },
+      { mealIndex: null },
+      { mealIndex: { not: policy.mealIndex } },
+    ];
   return where;
 }
 
@@ -117,6 +126,7 @@ export const nutritionPlanRepository = {
           aiProvider: data.aiProvider,
           aiModel: data.aiModel,
           processingTimeMs: data.processingTimeMs,
+          nutritionContextHash: data.nutritionContextHash,
         },
       });
       // The completed plan and its quota event commit or roll back together.
@@ -134,8 +144,11 @@ export const nutritionPlanRepository = {
   },
 
   /** Creates a new immutable version from an existing plan and optionally carries adherence history forward. */
-  async createRevisionVersion(data: CreateRevisionVersionData): Promise<NutritionPlan> {
-    return prisma.$transaction(async (tx) => {
+  async createRevisionVersion(
+    data: CreateRevisionVersionData,
+    transaction?: Prisma.TransactionClient,
+  ): Promise<NutritionPlan> {
+    const persist = async (tx: Prisma.TransactionClient) => {
       const latest = await tx.nutritionPlan.findFirst({
         where: { userId: data.userId, duration: data.duration },
         orderBy: { version: "desc" },
@@ -159,13 +172,15 @@ export const nutritionPlanRepository = {
           isActive: true,
           status: "COMPLETED",
           bloodTestAnalysisId: data.source.bloodTestAnalysisId,
+          originPlanId: data.source.originPlanId ?? data.source.id,
+          nutritionContextHash: data.source.nutritionContextHash,
           bmr: data.source.bmr,
           tdee: data.source.tdee,
           dailyCalories: data.source.dailyCalories,
           proteinGrams: data.source.proteinGrams,
           carbsGrams: data.source.carbsGrams,
           fatGrams: data.source.fatGrams,
-          waterMl: data.source.waterMl,
+          waterMl: data.waterMl ?? data.source.waterMl,
           mealsPerDay: mealTiming.mealsPerDay,
           mealTiming: toJson(mealTiming),
           dailyPlans: toJson(data.content),
@@ -204,7 +219,8 @@ export const nutritionPlanRepository = {
       }
 
       return plan;
-    });
+    };
+    return transaction ? persist(transaction) : prisma.$transaction(persist);
   },
 
   /** Fetches a plan by id, scoped to the user. Callers decide whether history may include deleted rows. */

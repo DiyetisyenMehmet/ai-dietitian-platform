@@ -1,4 +1,5 @@
 import type { AiUsageEvent, AiUsageFeature, SubscriptionTier } from "@prisma/client";
+import { env } from "../../config/env";
 
 import { ApiError } from "../../utils/api-error";
 import { ENTITLEMENT_REQUIRED_CODE } from "../payments/constants";
@@ -90,6 +91,38 @@ export const aiUsageService = {
     feature: AiUsageFeature,
     tier?: SubscriptionTier,
   ): Promise<FeatureQuotaStatus> {
+    if (
+      feature === "NUTRITION_PLAN" &&
+      env.NUTRITION_JOBS_ENABLED &&
+      env.NUTRITION_RIGHTS_EFFECTIVE_AT
+    ) {
+      const { nutritionRights } = await import("../nutrition-plan/nutrition-rights.service");
+      const { nutritionLimits } = await import("../nutrition-plan/nutrition-rights-policy");
+      const status = await nutritionRights(userId, "NEW_PLAN");
+      const limits = nutritionLimits(status.tier, status.grandfathered);
+      const resetsAt = status.resetsAt ? new Date(status.resetsAt) : new Date();
+      // FREE is a recurring cooldown, never a lifetime trial/paywall.
+      return {
+        feature,
+        tier: status.tier,
+        day: {
+          used: limits.day === null ? 0 : limits.day - status.dayRemaining!,
+          limit: limits.day,
+          remaining: status.dayRemaining,
+          resetsAt,
+        },
+        month: {
+          used:
+            status.tier === "FREE"
+              ? 1 - status.freeRemaining!
+              : limits.month! - status.monthRemaining!,
+          limit: status.tier === "FREE" ? 1 : limits.month,
+          remaining: status.tier === "FREE" ? status.freeRemaining : status.monthRemaining,
+          resetsAt,
+        },
+        exceeded: !status.available,
+      };
+    }
     const effectiveTier = tier ?? (await this.resolveTier(userId));
     const now = new Date();
     const limits = await resolveFeatureQuota(userId, effectiveTier, feature, now);
@@ -159,14 +192,18 @@ export const aiUsageService = {
 
     if (status.exceeded) {
       const which = status.day.remaining === 0 ? status.day : status.month;
-      throw new ApiError(429, "Planındaki kullanım sınırına ulaştın. Lütfen daha sonra tekrar dene.", {
-        code: QUOTA_EXCEEDED_CODE,
-        details: {
-          feature,
-          tier: status.tier,
-          resetsAt: which.resetsAt.toISOString(),
+      throw new ApiError(
+        429,
+        "Planındaki kullanım sınırına ulaştın. Lütfen daha sonra tekrar dene.",
+        {
+          code: QUOTA_EXCEEDED_CODE,
+          details: {
+            feature,
+            tier: status.tier,
+            resetsAt: which.resetsAt.toISOString(),
+          },
         },
-      });
+      );
     }
     return status;
   },

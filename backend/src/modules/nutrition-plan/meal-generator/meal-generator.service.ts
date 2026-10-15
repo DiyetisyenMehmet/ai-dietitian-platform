@@ -21,6 +21,7 @@ import {
 import { findAllergenViolations } from "./allergen-validator";
 import { findNutritionTargetViolations } from "./nutrition-target-validator";
 import { checkNutritionProviderBudget } from "../nutrition-plan-provider-budget";
+import { checkNutritionCallAdmission } from "../nutrition-provider-observer";
 import {
   timeNutritionCheck,
   timeNutritionPhase,
@@ -133,6 +134,7 @@ async function generateValidatedBatch(
   let retried = false;
   const requestOutput = async (requestInput = input) => {
     checkNutritionProviderBudget();
+    await checkNutritionCallAdmission();
     try {
       const result = metrics
         ? await timeNutritionPhase(metrics, "aiProviderMs", () =>
@@ -510,12 +512,7 @@ async function generateRangeInternal(
   }
 
   const finalRealismViolations = timeNutritionCheck(metrics, "healthValidationMs", () =>
-    findRealLifePlanViolations(
-      days,
-      startDayNumber,
-      priorDays,
-      input.realLifePlanning,
-    ),
+    findRealLifePlanViolations(days, startDayNumber, priorDays, input.realLifePlanning),
   );
   if (finalRealismViolations.length > 0) {
     throw new ApiError(502, "The nutrition-plan provider returned an impractical meal pattern.", {

@@ -5,6 +5,8 @@ import { NUTRITION_PLAN_SYSTEM_PROMPT } from "./constants";
 import { DOCUMENT_VALIDATION_SYSTEM_PROMPT } from "../blood-test-analysis/validation/document-validation.constants";
 import { ApiError } from "../../utils/api-error";
 import { withNutritionProviderBudget } from "./nutrition-plan-provider-budget";
+import { OpenAICompatibleAdapter } from "../blood-test-analysis/ai-adapter/openai-compatible.adapter";
+import { logger } from "../../lib/logger";
 
 class Provider extends VertexAIAdapter {
   complete(system: string) {
@@ -23,6 +25,54 @@ function provider() {
     temperature: 0.2,
   });
 }
+
+test("nutrition provider error logs exclude request-derived transport and envelope details", async (t) => {
+  const originalFetch = global.fetch;
+  const originalError = logger.error;
+  t.after(() => {
+    global.fetch = originalFetch;
+    logger.error = originalError;
+  });
+  const canary = "SYNTHETIC_PRIVATE_NUTRITION_CONTEXT";
+  const records: unknown[] = [];
+  logger.error = ((...args: unknown[]) => {
+    records.push(args);
+  }) as typeof logger.error;
+  class CompatibleProvider extends OpenAICompatibleAdapter {
+    complete() {
+      return this.chat([{ role: "system", content: NUTRITION_PLAN_SYSTEM_PROMPT }]);
+    }
+  }
+  const compatible = new CompatibleProvider({
+    apiKey: "fixture", baseUrl: "https://fixture.invalid", model: "fixture",
+    maxTokens: 4096, temperature: 0,
+  });
+  for (const scenario of ["vertex-envelope", "vertex-transport", "compatible-transport"]) {
+    records.length = 0;
+    global.fetch = async (url) => {
+      if (String(url).includes("metadata.google.internal"))
+        return Response.json({ access_token: "fixture-token", expires_in: 300 });
+      if (scenario === "vertex-envelope") return new Response(canary, { status: 200 });
+      throw new Error(canary);
+    };
+    await assert.rejects(
+      scenario === "compatible-transport"
+        ? compatible.complete()
+        : provider().complete(NUTRITION_PLAN_SYSTEM_PROMPT),
+      (error) => error instanceof ApiError && error.code === (
+        scenario === "vertex-envelope" ? "AI_PROVIDER_MALFORMED" : "AI_PROVIDER_UNREACHABLE"
+      ),
+    );
+    assert.equal(records.length, 1, scenario);
+    // Include Error.message/stack: JSON.stringify alone silently omits them.
+    const logged = JSON.stringify(records, (_key, value) =>
+      value instanceof Error ? { message: value.message, stack: value.stack } : value,
+    );
+    assert.equal(logged.includes(canary), false, scenario);
+    assert.equal(logged.includes('"err"'), false, scenario);
+    assert.match(logged, /AI_PROVIDER_(MALFORMED|UNREACHABLE)/);
+  }
+});
 
 test("nutrition alone uses supported MINIMAL thinking; JSON schema and other tasks remain intact", async (t) => {
   const original = global.fetch;

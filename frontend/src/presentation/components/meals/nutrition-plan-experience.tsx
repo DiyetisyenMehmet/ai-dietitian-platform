@@ -11,6 +11,7 @@ import { NutritionPlanHungerCoach } from "@/presentation/components/meals/nutrit
 import { NutritionPlanReminders } from "@/presentation/components/meals/nutrition-plan-reminders";
 import { NutritionPlanShareButton } from "@/presentation/components/meals/nutrition-plan-share-button";
 import { NutritionPlanView } from "@/presentation/components/meals/nutrition-plan-view";
+import { NutritionPreparationStatus } from "./nutrition-preparation-status";
 import { Button } from "@/presentation/components/ui/button";
 import { Card, CardContent } from "@/presentation/components/ui/card";
 
@@ -177,6 +178,7 @@ export function NutritionPlanExperience() {
   return (
     <div className="space-y-5">
       <WeightCheckInNotice />
+      <NutritionPreparationStatus />
       <div className="flex justify-end">
         <Button asChild variant="outline" className="rounded-xl">
           <Link href="/meals/plan/history">

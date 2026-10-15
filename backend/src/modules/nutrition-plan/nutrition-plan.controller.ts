@@ -7,6 +7,7 @@ import { nutritionPlanDeviationService } from "./nutrition-plan-deviation.servic
 import { nutritionPlanHungerService } from "./nutrition-plan-hunger.service";
 import { nutritionPlanRevisionService } from "./nutrition-plan-revision.service";
 import { nutritionPlanService } from "./nutrition-plan.service";
+import { publicNutritionPlan } from "./nutrition-plan-public";
 import type {
   AcceptHungerSnackInput,
   ActivePlanQuery,
@@ -38,14 +39,14 @@ export const nutritionPlanController = {
     const userId = requireUserId(req);
     const { duration, startDate, pantryText } = req.body as GeneratePlanInput;
     const plan = await nutritionPlanService.generate(userId, duration, startDate, pantryText);
-    sendCreated(res, { plan });
+    sendCreated(res, { plan: publicNutritionPlan(plan) });
   }),
 
   regenerate: asyncHandler(async (req: Request, res: Response) => {
     const userId = requireUserId(req);
     const { id } = req.params as PlanIdParam;
     const plan = await nutritionPlanService.regenerate(userId, id);
-    sendCreated(res, { plan });
+    sendCreated(res, { plan: publicNutritionPlan(plan) });
   }),
 
   refresh: asyncHandler(async (req: Request, res: Response) => {
@@ -53,7 +54,7 @@ export const nutritionPlanController = {
     const { id } = req.params as PlanIdParam;
     const input = req.body as RefreshPlanInput;
     const plan = await nutritionPlanRevisionService.refresh(userId, id, input);
-    sendCreated(res, { plan });
+    sendCreated(res, { plan: publicNutritionPlan(plan) });
   }),
 
   extend: asyncHandler(async (req: Request, res: Response) => {
@@ -61,7 +62,7 @@ export const nutritionPlanController = {
     const { id } = req.params as PlanIdParam;
     const input = req.body as ExtendPlanInput;
     const plan = await nutritionPlanRevisionService.extend(userId, id, input);
-    sendCreated(res, { plan });
+    sendCreated(res, { plan: publicNutritionPlan(plan) });
   }),
 
   shiftDay: asyncHandler(async (req: Request, res: Response) => {
@@ -69,7 +70,7 @@ export const nutritionPlanController = {
     const { id } = req.params as PlanIdParam;
     const input = req.body as ShiftPlanDayInput;
     const plan = await nutritionPlanRevisionService.shiftDay(userId, id, input);
-    sendCreated(res, { plan });
+    sendCreated(res, { plan: publicNutritionPlan(plan) });
   }),
 
   reportHunger: asyncHandler(async (req: Request, res: Response) => {
@@ -91,21 +92,21 @@ export const nutritionPlanController = {
   list: asyncHandler(async (req: Request, res: Response) => {
     const userId = requireUserId(req);
     const plans = await nutritionPlanService.list(userId);
-    sendSuccess(res, { plans });
+    sendSuccess(res, { plans: plans.map(publicNutritionPlan) });
   }),
 
   getActive: asyncHandler(async (req: Request, res: Response) => {
     const userId = requireUserId(req);
     const { duration } = req.query as unknown as ActivePlanQuery;
     const plan = await nutritionPlanService.getActive(userId, duration);
-    sendSuccess(res, { plan });
+    sendSuccess(res, { plan: publicNutritionPlan(plan) });
   }),
 
   getById: asyncHandler(async (req: Request, res: Response) => {
     const userId = requireUserId(req);
     const { id } = req.params as PlanIdParam;
     const plan = await nutritionPlanService.getById(userId, id);
-    sendSuccess(res, { plan });
+    sendSuccess(res, { plan: publicNutritionPlan(plan) });
   }),
 
   deletePlan: asyncHandler(async (req: Request, res: Response) => {

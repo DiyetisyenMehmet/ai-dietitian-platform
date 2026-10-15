@@ -9,6 +9,7 @@ import {
   type NutritionPlanRecord,
   type RefreshNutritionPlanInput,
   type SupportedNutritionPlanDuration,
+  type NutritionPreparation,
 } from "@/infrastructure/nutrition/nutrition-plan-client";
 
 interface NutritionPlanState {
@@ -21,6 +22,9 @@ interface NutritionPlanState {
   generatingDuration: SupportedNutritionPlanDuration | null;
   /** Optional household ingredients for the next generated plan. Never persisted in browser storage. */
   pantryDraft: string;
+  preparation: NutritionPreparation | null;
+  durable: boolean;
+  preparationOffline: boolean;
 }
 
 type SupportedNutritionPlanRecord = NutritionPlanRecord & {
@@ -35,9 +39,112 @@ const EMPTY_STATE: NutritionPlanState = {
   generating: false,
   generatingDuration: null,
   pantryDraft: "",
+  preparation: null,
+  durable: false,
+  preparationOffline: false,
 };
 
 let state: NutritionPlanState = { ...EMPTY_STATE };
+let accountEpoch = 0;
+let watchId: string | null = null;
+let watchEpoch = 0;
+let pendingRequest: { key: string; payload: string } | null = null;
+
+function isPreparing(job: NutritionPreparation): boolean {
+  return ["QUEUED", "RUNNING", "RETRY_WAIT", "READY"].includes(job.status);
+}
+async function watchPreparation(job: NutritionPreparation, epoch = accountEpoch): Promise<void> {
+  if (watchId === job.id) return;
+  watchId = job.id;
+  const watcher = ++watchEpoch;
+  let refreshBeforeDelivery = false;
+  try {
+    while (epoch === accountEpoch && watchId === job.id && watcher === watchEpoch) {
+      patch({
+        preparation: job,
+        generating: isPreparing(job),
+        generatingDuration: isPreparing(job) ? job.duration : null,
+      });
+      if (job.status === "CONSUMED" && job.deliveredPlanId) {
+        try {
+          const { plan } = await nutritionPlanClient.get(job.deliveredPlanId);
+          if (epoch !== accountEpoch || watcher !== watchEpoch) return;
+          pendingRequest = null;
+          completeGeneration(plan);
+          patch({ preparation: null, preparationOffline: false });
+          return;
+        } catch {
+          if (epoch !== accountEpoch || watcher !== watchEpoch) return;
+          patch({ preparationOffline: true });
+          await new Promise((resolve) => setTimeout(resolve, 5000));
+          continue;
+        }
+      }
+      if (!isPreparing(job)) {
+        pendingRequest = null;
+        return;
+      }
+      try {
+        if (job.status === "READY" && !refreshBeforeDelivery) {
+          const { plan } = await nutritionPlanClient.deliverPreparation(job.id);
+          if (epoch !== accountEpoch || watcher !== watchEpoch) return;
+          pendingRequest = null;
+          completeGeneration(plan);
+          patch({ preparation: null, preparationOffline: false });
+          return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        if (epoch !== accountEpoch || watcher !== watchEpoch) return;
+        const response = await nutritionPlanClient.preparation(job.id);
+        if (epoch !== accountEpoch || watcher !== watchEpoch) return;
+        job = response.job;
+        refreshBeforeDelivery = false;
+        patch({ preparationOffline: false });
+      } catch (error) {
+        if (epoch !== accountEpoch || watcher !== watchEpoch) return;
+        if (
+          error instanceof ApiError &&
+          ["NUTRITION_PLAN_GENERATION_IN_PROGRESS", "NUTRITION_JOB_NOT_READY"].includes(
+            error.code ?? "",
+          )
+        ) {
+          // The server may have paused/completed this job on another device.
+          // Refresh in the main guarded try/catch so a failed read stays retryable.
+          refreshBeforeDelivery = true;
+          continue;
+        }
+        if (
+          error instanceof ApiError &&
+          error.status > 0 &&
+          (![408, 429, 502, 503, 504].includes(error.status) ||
+            error.code === "NUTRITION_RIGHT_EXHAUSTED")
+        ) {
+          patch({
+            preparation: {
+              ...job,
+              status: "FAILED",
+              errorCode: error.code ?? "NUTRITION_JOB_FAILED",
+            },
+            generating: false,
+            generatingDuration: null,
+          });
+          pendingRequest = null;
+          return;
+        }
+        patch({ preparationOffline: true });
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+      }
+    }
+  } finally {
+    if (epoch === accountEpoch && watchId === job.id && watcher === watchEpoch) watchId = null;
+  }
+}
+
+function requestKey(payload: string): string {
+  if (!pendingRequest || pendingRequest.payload !== payload)
+    pendingRequest = { payload, key: crypto.randomUUID() };
+  return pendingRequest.key;
+}
 const listeners = new Set<() => void>();
 
 function emit(next: NutritionPlanState): void {
@@ -153,11 +260,19 @@ function requireSupportedSource(planId: string): SupportedNutritionPlanRecord {
 }
 
 export const nutritionPlanStore = {
+  getDurableMode(): boolean {
+    return state.durable;
+  },
   async hydrateFromBackend(): Promise<NutritionPlanRecord | null> {
+    const epoch = accountEpoch;
     const previousActiveId = state.activePlan?.id;
     patch({ loading: true });
     try {
-      const { plans } = await nutritionPlanClient.list();
+      const [{ plans }, capability] = await Promise.all([
+        nutritionPlanClient.list(),
+        nutritionPlanClient.capabilities().catch(() => ({ resumable: false })),
+      ]);
+      if (epoch !== accountEpoch) return null;
       // An older list response must not replace a plan generated meanwhile.
       if (state.activePlan?.id !== previousActiveId) {
         patch({ loading: false, hydrated: true });
@@ -171,11 +286,26 @@ export const nutritionPlanStore = {
         hydrated: true,
         loading: false,
         pantryDraft: planPantryText(activePlan) ?? state.pantryDraft,
+        durable: capability.resumable,
       });
+      if (epoch !== accountEpoch) return null;
+      patch({ durable: capability.resumable });
+      if (capability.resumable) {
+        const { job } = await nutritionPlanClient.currentPreparation();
+        if (epoch !== accountEpoch) return null;
+        if (job) {
+          patch({
+            preparation: job,
+            generating: isPreparing(job),
+            generatingDuration: isPreparing(job) ? job.duration : null,
+          });
+          void watchPreparation(job, epoch);
+        }
+      }
       return activePlan;
     } catch {
       // A failed concurrent read must not unlock an ongoing generation.
-      patch({ loading: false, hydrated: true });
+      if (epoch === accountEpoch) patch({ loading: false, hydrated: true });
       return state.activePlan;
     }
   },
@@ -187,8 +317,31 @@ export const nutritionPlanStore = {
   async generate(
     duration: SupportedNutritionPlanDuration,
     pantryText = state.pantryDraft,
-  ): Promise<NutritionPlanRecord> {
+  ): Promise<NutritionPlanRecord | null> {
     assertNotGenerating();
+    if (state.durable) {
+      const epoch = accountEpoch;
+      patch({ generating: true, generatingDuration: duration });
+      try {
+        const { job } = await nutritionPlanClient.startPreparation(
+          duration,
+          pantryText,
+          requestKey(JSON.stringify({ duration, pantryText })),
+        );
+        if (epoch !== accountEpoch) throw new Error("Account changed");
+        patch({
+          preparation: job,
+          generating: isPreparing(job),
+          generatingDuration: isPreparing(job) ? job.duration : null,
+        });
+        void watchPreparation(job, epoch);
+        // Existing callers only await acceptance; the server owns completion.
+        return null;
+      } catch (error) {
+        if (epoch === accountEpoch) failGeneration(error);
+        throw error;
+      }
+    }
     const startedAt = typeof performance !== "undefined" ? performance.now() : 0;
     patch({ generating: true, generatingDuration: duration });
     try {
@@ -200,10 +353,54 @@ export const nutritionPlanStore = {
       return failGeneration(error);
     }
   },
+  async pausePreparation(): Promise<void> {
+    const job = state.preparation,
+      epoch = accountEpoch;
+    if (!job) return;
+    const response = await nutritionPlanClient.pausePreparation(job.id);
+    if (epoch !== accountEpoch) return;
+    watchId = null;
+    watchEpoch++;
+    pendingRequest = null;
+    patch({
+      preparation: response.job,
+      generating: false,
+      generatingDuration: null,
+      preparationOffline: false,
+    });
+  },
+  async replaceMeal(
+    plan: NutritionPlanRecord,
+    dayNumber: number,
+    mealIndex: number,
+  ): Promise<void> {
+    assertNotGenerating();
+    const epoch = accountEpoch;
+    patch({
+      generating: true,
+      generatingDuration: plan.duration as SupportedNutritionPlanDuration,
+    });
+    try {
+      const { job } = await nutritionPlanClient.replaceMeal(
+        plan,
+        dayNumber,
+        mealIndex,
+        requestKey(JSON.stringify({ plan: plan.id, dayNumber, mealIndex })),
+      );
+      if (epoch !== accountEpoch) return;
+      patch({ preparation: job });
+      void watchPreparation(job, epoch);
+    } catch (error) {
+      if (epoch === accountEpoch) failGeneration(error);
+      throw error;
+    }
+  },
 
-  async regenerate(planId: string): Promise<NutritionPlanRecord> {
+  async regenerate(planId: string): Promise<NutritionPlanRecord | null> {
     assertNotGenerating();
     const source = requireSupportedSource(planId);
+    if (state.durable)
+      return this.generate(source.duration, planPantryText(source) ?? state.pantryDraft);
     patch({ generating: true, generatingDuration: source.duration });
     try {
       const { plan } = await nutritionPlanClient.regenerate(planId);
@@ -213,10 +410,33 @@ export const nutritionPlanStore = {
     }
   },
 
-  async refresh(planId: string, input: RefreshNutritionPlanInput): Promise<NutritionPlanRecord> {
+  async refresh(
+    planId: string,
+    input: RefreshNutritionPlanInput,
+  ): Promise<NutritionPlanRecord | null> {
     assertNotGenerating();
     const source = requireSupportedSource(planId);
     patch({ generating: true, generatingDuration: source.duration });
+    if (state.durable) {
+      const epoch = accountEpoch;
+      try {
+        const { job } = await nutritionPlanClient.revisePreparation(
+          source,
+          source.duration,
+          input.mode,
+          requestKey(JSON.stringify({ planId, input })),
+          input.dayNumber,
+        );
+        if (epoch === accountEpoch) {
+          patch({ preparation: job });
+          void watchPreparation(job, epoch);
+        }
+        return null;
+      } catch (error) {
+        if (epoch === accountEpoch) return failGeneration(error);
+        throw error;
+      }
+    }
     try {
       const { plan } = await nutritionPlanClient.refresh(planId, input);
       return completeGeneration(plan);
@@ -228,10 +448,29 @@ export const nutritionPlanStore = {
   async extend(
     planId: string,
     duration: SupportedNutritionPlanDuration,
-  ): Promise<NutritionPlanRecord> {
+  ): Promise<NutritionPlanRecord | null> {
     assertNotGenerating();
-    requireSupportedSource(planId);
+    const source = requireSupportedSource(planId);
     patch({ generating: true, generatingDuration: duration });
+    if (state.durable) {
+      const epoch = accountEpoch;
+      try {
+        const { job } = await nutritionPlanClient.revisePreparation(
+          source,
+          duration,
+          "EXTEND",
+          requestKey(JSON.stringify({ planId, duration })),
+        );
+        if (epoch === accountEpoch) {
+          patch({ preparation: job });
+          void watchPreparation(job, epoch);
+        }
+        return null;
+      } catch (error) {
+        if (epoch === accountEpoch) return failGeneration(error);
+        throw error;
+      }
+    }
     try {
       const { plan } = await nutritionPlanClient.extend(planId, duration);
       return completeGeneration(plan);
@@ -265,6 +504,10 @@ export const nutritionPlanStore = {
   },
 
   reset(): void {
+    accountEpoch++;
+    watchEpoch++;
+    watchId = null;
+    pendingRequest = null;
     emit({ ...EMPTY_STATE });
   },
 };
