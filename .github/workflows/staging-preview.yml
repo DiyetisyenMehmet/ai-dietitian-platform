@@ -748,6 +748,7 @@ jobs:
     timeout-minutes: 20
     environment: staging
     env:
+      NUTRITION_ONLY: ${{ contains(github.event.head_commit.message, '[nutrition-only]') }}
       RELEASE_SHA: 390e3567c37b4529d3b18da3ee040148d63750d9
       BACKEND_IMAGE: europe-west1-docker.pkg.dev/project-a2e260c1-839d-4f1d-b90/diewish-staging/backend:390e3567c37b4529d3b18da3ee040148d63750d9
       FRONTEND_IMAGE: europe-west1-docker.pkg.dev/project-a2e260c1-839d-4f1d-b90/diewish-staging/frontend:390e3567c37b4529d3b18da3ee040148d63750d9
@@ -779,7 +780,11 @@ jobs:
         run: |
           npm ci
           npx playwright install --with-deps chromium
-          npx playwright test e2e/dashboard-edit-sanity.spec.ts e2e/journey-compact.spec.ts e2e/staging-notification-sanity.spec.ts e2e/mascot-preferences.spec.ts e2e/staging-nutrition-disabled-sanity.spec.ts --workers=1 --reporter=line
+          if [[ "$NUTRITION_ONLY" == "true" ]]; then
+            npx playwright test e2e/staging-nutrition-disabled-sanity.spec.ts --workers=1 --reporter=line
+          else
+            npx playwright test e2e/dashboard-edit-sanity.spec.ts e2e/journey-compact.spec.ts e2e/staging-notification-sanity.spec.ts e2e/mascot-preferences.spec.ts e2e/staging-nutrition-disabled-sanity.spec.ts --workers=1 --reporter=line
+          fi
       - name: Recheck disabled runtime after smoke tests
         run: >-
           python3 scripts/nutrition-staging-release-guard.py --phase post

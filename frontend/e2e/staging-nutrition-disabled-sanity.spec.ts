@@ -12,6 +12,11 @@ for (const target of [web, api]) {
 test("staging nutrition remains disabled; legacy plan, session, Dashboard and Coach remain usable", async ({ page, request }) => {
   test.setTimeout(300_000);
   const account = await createDashboardSession(page, request);
+  const browserNutritionStatuses: number[] = [];
+  page.on("response", (response) => {
+    if (new URL(response.url()).pathname === "/api/nutrition-plans")
+      browserNutritionStatuses.push(response.status());
+  });
   const headers = { authorization: `Bearer ${account.token}` };
   const read = (path: string) => request.get(`${api}${path}`, { headers });
   for (const path of ["/health", "/health/ready"]) expect((await read(path)).ok(), path).toBe(true);
@@ -41,10 +46,15 @@ test("staging nutrition remains disabled; legacy plan, session, Dashboard and Co
   expect(generated.status()).toBe(201);
   const plan = (await generated.json()).data.plan;
   expect(plan.status).toBe("COMPLETED");
+  expect(plan.isActive).toBe(true);
   expect(plan.dailyPlans.cycle).toHaveLength(7);
   const saved = await read(`/nutrition-plans/${plan.id}`);
   expect(saved.ok()).toBe(true);
   expect((await saved.json()).data.plan.id).toBe(plan.id);
+  const listed = await read("/nutrition-plans");
+  expect(listed.ok()).toBe(true);
+  const listedPlans = (await listed.json()).data.plans;
+  expect(listedPlans.some((row: { id: string; isActive: boolean }) => row.id === plan.id && row.isActive)).toBe(true);
   const after = await read("/ai-usage?feature=NUTRITION_PLAN");
   expect(after.ok()).toBe(true);
   expect((await after.json()).data.usage[0].trial.remaining).toBe(0);
@@ -54,10 +64,30 @@ test("staging nutrition remains disabled; legacy plan, session, Dashboard and Co
     await expect(page.locator("body")).not.toContainText(/Application error|Internal Server Error/);
   }
   await expect(page.getByRole("button", { name: "Öğünü Değiştir", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "7 günlük kişisel plan", exact: true })).toBeVisible();
+  try {
+    await expect(page.getByRole("heading", { name: "7 günlük kişisel plan", exact: true })).toBeVisible({ timeout: 20_000 });
+  } catch (error) {
+    console.log("STAGING_NUTRITION_UI_DIAGNOSTIC " + JSON.stringify({
+      pathname: new URL(page.url()).pathname, browserNutritionStatuses,
+      loading: await page.getByText("Öğün planın yükleniyor…", { exact: true }).count(),
+      contentUnavailable: await page.getByText(/Bu planın öğün içeriği görüntülenemiyor/).count(),
+      expectedHeadingCount: await page.getByRole("heading", { name: "7 günlük kişisel plan", exact: true }).count(),
+    }));
+    throw error;
+  }
   await page.context().clearCookies();
   await loginDashboardSession(page, account.email, account.password);
   await page.goto(`${web}/meals/plan`);
-  await expect(page.getByRole("heading", { name: "7 günlük kişisel plan", exact: true })).toBeVisible();
+  try {
+    await expect(page.getByRole("heading", { name: "7 günlük kişisel plan", exact: true })).toBeVisible({ timeout: 20_000 });
+  } catch (error) {
+    console.log("STAGING_NUTRITION_UI_DIAGNOSTIC " + JSON.stringify({
+      pathname: new URL(page.url()).pathname, browserNutritionStatuses,
+      loading: await page.getByText("Öğün planın yükleniyor…", { exact: true }).count(),
+      contentUnavailable: await page.getByText(/Bu planın öğün içeriği görüntülenemiyor/).count(),
+      expectedHeadingCount: await page.getByRole("heading", { name: "7 günlük kişisel plan", exact: true }).count(),
+    }));
+    throw error;
+  }
   console.log("STAGING_NUTRITION_DISABLED: legacy 7-day plan, session/relogin, Dashboard, Coach, unchanged Free quotas and disabled job/meal controls PASS");
 });
