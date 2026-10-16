@@ -19,3 +19,8 @@ staging release recovery
 task=STAGING-RELEASE-RECOVERY-A1
 verified_source_sha=2c26a745dd8692e92adfc509a7c5824f6662ce1d
 purpose=release current verified staging tree after exact-SHA gates passed
+
+staging Mirmir A4 verification recovery
+task=MIRMIR-A4-DIRECT-INTEGRATION
+verified_application_sha=f8544b948396aacba7647371d358b3da51cad752
+purpose=pass existing successful Cloud Build IDs to strict serving-image verification; no IAM, application, feature-flag or guard-policy changes

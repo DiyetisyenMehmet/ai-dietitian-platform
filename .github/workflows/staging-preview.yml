@@ -271,6 +271,7 @@ jobs:
             --format='value(id)' \
             --quiet)"
           test -n "$BACKEND_BUILD_ID"
+          echo "BACKEND_BUILD_ID=$BACKEND_BUILD_ID" >> "$GITHUB_ENV"
           echo "Backend Cloud Build: $BACKEND_BUILD_ID"
 
           for attempt in {1..180}; do
@@ -347,6 +348,7 @@ jobs:
             --format='value(id)' \
             --quiet)"
           test -n "$FRONTEND_BUILD_ID"
+          echo "FRONTEND_BUILD_ID=$FRONTEND_BUILD_ID" >> "$GITHUB_ENV"
           echo "Frontend Cloud Build: $FRONTEND_BUILD_ID"
 
           for attempt in {1..180}; do
@@ -475,7 +477,9 @@ jobs:
           gcloud scheduler jobs run "$NOTIFICATION_SCHEDULER_JOB"             --project "$PROJECT_ID"             --location "$REGION"             --quiet
 
       - name: Verify serving images and disabled nutrition policy
-        run: python3 scripts/nutrition-staging-release-guard.py --phase post
+        run: >-
+          python3 scripts/nutrition-staging-release-guard.py --phase post
+          --backend-build "$BACKEND_BUILD_ID" --frontend-build "$FRONTEND_BUILD_ID"
 
       - name: Verify staging health and Authentication runtime
         shell: bash
