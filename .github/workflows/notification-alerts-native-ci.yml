@@ -5,6 +5,7 @@ on:
     branches:
       - feature/workmode-notification-preferences-a1
       - feature/staging-preview
+      - feature/mirmir-a4-direct-integration
     paths:
       - ".github/staging-deploy-trigger"
       - "android/**"

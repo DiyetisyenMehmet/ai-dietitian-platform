@@ -182,7 +182,9 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
         settings.setAllowContentAccess(true);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         settings.setSupportMultipleWindows(false);
-        settings.setMediaPlaybackRequiresUserGesture(true);
+        // The user-controlled mascot is a muted inline video. Its web component
+        // owns opt-out, reduced-motion and background/viewport suspension.
+        settings.setMediaPlaybackRequiresUserGesture(false);
 
         // Android WebView can inherit device/vendor text scaling and font boosting
         // differently from Chrome. Keep CSS pixel typography at the web source-of-truth

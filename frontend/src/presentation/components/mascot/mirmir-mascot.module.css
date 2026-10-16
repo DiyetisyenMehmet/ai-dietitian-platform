@@ -2,6 +2,7 @@
   position: relative;
   display: inline-block;
   flex-shrink: 0;
+  overflow: hidden;
 }
 .frame {
   position: absolute;
@@ -10,48 +11,22 @@
   height: 100%;
   object-fit: contain;
   user-select: none;
+  pointer-events: none;
 }
-.motionLayer {
-  position: absolute;
-  inset: 0;
-}
-.closed {
+.video {
   visibility: hidden;
 }
-.mascot[data-blinking="true"] .open {
-  animation: eyesOpen 5.6s step-end infinite;
+.mascot[data-moving="true"] .video {
+  visibility: visible;
 }
-.mascot[data-blinking="true"] .closed {
-  animation: eyesClosed 5.6s step-end infinite;
-}
-@keyframes eyesOpen {
-  0%,
-  100% {
-    visibility: visible;
-  }
-  97.5% {
-    visibility: hidden;
-  }
-}
-@keyframes eyesClosed {
-  0%,
-  100% {
-    visibility: hidden;
-  }
-  97.5% {
-    visibility: visible;
-  }
+.mascot[data-moving="true"] .still {
+  visibility: hidden;
 }
 @media (prefers-reduced-motion: reduce) {
-  .motionLayer {
-    filter: none !important;
-  }
-  .mascot[data-blinking="true"] .open {
-    animation: none;
-    visibility: visible;
-  }
-  .mascot[data-blinking="true"] .closed {
-    animation: none;
+  .mascot[data-moving="true"] .video {
     visibility: hidden;
+  }
+  .mascot[data-moving="true"] .still {
+    visibility: visible;
   }
 }

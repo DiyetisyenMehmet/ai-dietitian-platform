@@ -6,6 +6,7 @@ on:
       - fix/production-hardening
       - feature/android-native-scanner
       - feature/staging-preview
+      - feature/mirmir-a4-direct-integration
       - feature/mascot-mirmir-pilot-a1
       - feature/mascot-mirmir-motion-a2
       - feature/admin2-staff-password-b2-close-a1
@@ -173,6 +174,16 @@ jobs:
 
       - name: Install browser for Admin password setup regression
         run: npx playwright install --with-deps chromium
+      - name: Test Mirmir video lifecycle and fallback
+        run: npx playwright test --config playwright.mirmir-video.config.ts
+      - name: Upload Mirmir video evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mirmir-video-browser-evidence
+          path: frontend/test-results/mirmir-video/
+          if-no-files-found: ignore
+          retention-days: 14
       - name: Test mobile meal text and onboarding time entry
         run: npx playwright test --config playwright.mobile-overflow.config.ts
       - name: Upload mobile overflow browser evidence
