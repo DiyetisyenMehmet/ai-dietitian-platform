@@ -4,6 +4,7 @@ export default defineConfig({
   testDir: "./e2e",
   testMatch: "mobile-nutrition-onboarding-overflow.spec.ts",
   workers: 1,
+  maxFailures: 1,
   timeout: 30000,
   reporter: "list",
   use: {

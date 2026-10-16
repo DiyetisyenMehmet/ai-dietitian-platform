@@ -110,6 +110,7 @@ async function setup(page: Page, onboardingCompleted: boolean, theme: "light" | 
     }
     if (route.request().method() !== "GET") unexpectedWrites.push(path);
     if (path.endsWith("/legal/consents")) return ok({ allMandatoryGranted: true, items: [] });
+    if (path.endsWith("/legal/documents")) return ok({ documents: [] });
     if (path.endsWith("/onboarding")) return ok({ profile: null });
     if (path.endsWith("/nutrition-plans")) return ok({ plans: [savedPlan()] });
     if (path.endsWith("/generation-jobs/capabilities")) return ok({ resumable: false });
@@ -171,6 +172,7 @@ async function mealLayout(page: Page) {
 
 async function dailySchedule(page: Page) {
   await page.goto("/onboarding");
+  await expect(page.getByRole("heading", { name: "Sizi tanıyalım", exact: true })).toBeVisible();
   await page.getByLabel("Ad Soyad").fill("Görünüm Testi");
   await page.getByLabel("Doğum Tarihi").fill("1990-05-20");
   await page.getByRole("radio", { name: "Belirtmek istemiyorum" }).click();

@@ -175,6 +175,14 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Test mobile meal text and onboarding time entry
         run: npx playwright test --config playwright.mobile-overflow.config.ts
+      - name: Upload mobile overflow browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-overflow-browser-evidence
+          path: frontend/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Test branded Admin password setup and action isolation
         run: npx playwright test --config playwright.admin-password.config.ts
 
