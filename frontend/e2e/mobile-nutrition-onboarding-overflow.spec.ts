@@ -205,6 +205,8 @@ async function dailySchedule(page: Page) {
   await expect(wake).toHaveAttribute("aria-invalid", "true");
   await expect(sleep).toHaveAttribute("aria-invalid", "true");
   await expect(page.getByRole("alert")).toHaveCount(2);
+  await expect(wake).toHaveAccessibleDescription(/24 saat.*SS:DD.*Geçerli bir saat seçin/);
+  await expect(sleep).toHaveAccessibleDescription(/24 saat.*SS:DD.*Geçerli bir saat seçin/);
   await wake.fill("17:00");
   await sleep.fill("09:00");
   await page.getByRole("button", { name: /Geri/ }).click();

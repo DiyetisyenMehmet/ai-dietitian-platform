@@ -356,7 +356,7 @@ export function OnboardingWizard() {
                   autoComplete="off"
                   maxLength={5}
                   placeholder="07:30"
-                  aria-description="24 saat biçiminde yazın: SS:DD. Örneğin 07:30."
+                  aria-describedby="onboarding-time-format"
                   {...register("usualWakeTime")}
                 />
               </FormField>
@@ -371,11 +371,11 @@ export function OnboardingWizard() {
                   autoComplete="off"
                   maxLength={5}
                   placeholder="23:00"
-                  aria-description="24 saat biçiminde yazın: SS:DD. Örneğin 23:00."
+                  aria-describedby="onboarding-time-format"
                   {...register("usualSleepTime")}
                 />
               </FormField>
-              <p className="text-xs leading-relaxed text-muted-foreground">
+              <p id="onboarding-time-format" className="text-xs leading-relaxed text-muted-foreground">
                 Saatleri 24 saat biçiminde yazın: SS:DD (ör. 07:30 veya 23:00).
               </p>
               {workScheduleType === "VARIABLE_SHIFT" && (
