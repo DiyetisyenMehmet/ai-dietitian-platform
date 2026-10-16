@@ -89,7 +89,8 @@ export function MascotPreferencesView() {
           </span>
         </label>
         <p className="mt-2 text-xs text-muted-foreground">
-          Mırmır arada bir göz kırpar. Cihazının hareket azaltma tercihi her zaman korunur.
+          Mırmır doğal hareketleriyle sana eşlik eder. Cihazının hareket azaltma tercihi her zaman
+          korunur.
         </p>
       </div>
       <p className="text-xs text-muted-foreground" role="status">

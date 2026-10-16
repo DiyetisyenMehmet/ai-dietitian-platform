@@ -4,9 +4,11 @@ import * as React from "react";
 import Image from "next/image";
 import { cn } from "@/shared/lib/utils";
 import styles from "./mirmir-mascot.module.css";
-import { MirmirMotion } from "./mirmir-motion";
 
-/** Original frames; native SVG motion needs no JS timer or rendering loop. */
+const VIDEO = "/images/mascots/mirmir/approved-a4.mp4";
+const STILL = "/images/mascots/mirmir/still-a4.png";
+
+/** User-approved footage; no synthetic blink, breath or tail deformation. */
 export function MirmirMascot({
   animationEnabled = false,
   className,
@@ -15,13 +17,13 @@ export function MirmirMascot({
   className?: string;
 }) {
   const element = React.useRef<HTMLSpanElement>(null);
+  const video = React.useRef<HTMLVideoElement>(null);
   const [visible, setVisible] = React.useState(false);
   const [inViewport, setInViewport] = React.useState(false);
-  const [openReady, setOpenReady] = React.useState(false);
-  const [closedReady, setClosedReady] = React.useState(false);
+  const [playing, setPlaying] = React.useState(false);
+  const [failed, setFailed] = React.useState(false);
   const [nativeActive, setNativeActive] = React.useState(true);
   const [reducedMotion, setReducedMotion] = React.useState(true);
-  const filterId = `mirmir-motion-${React.useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   React.useEffect(() => {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
     const motionPreference = () => setReducedMotion(media.matches);
@@ -51,47 +53,66 @@ export function MirmirMascot({
       observer?.disconnect();
     };
   }, []);
-  const blinking =
-    animationEnabled && visible && nativeActive && inViewport && openReady && closedReady;
-  const moving = blinking && !reducedMotion;
+  const shouldPlay = animationEnabled && visible && nativeActive && inViewport && !reducedMotion;
+  const loadVideo = shouldPlay && !failed;
+  React.useEffect(() => {
+    setPlaying(false);
+    const player = video.current;
+    if (!loadVideo || !player) return;
+    let disposed = false;
+    // Set the property as well as the attribute before play() for WebView/iOS.
+    player.muted = true;
+    if (!player.getAttribute("src")) player.src = VIDEO;
+    void player.play().catch(() => {
+      if (!disposed) setFailed(true);
+    });
+    return () => {
+      disposed = true;
+      player.pause();
+      player.removeAttribute("src");
+      player.load(); // Release decoder and cancel an unfinished media request.
+    };
+  }, [loadVideo]);
+  const moving = loadVideo && playing;
   return (
     <span
       ref={element}
       className={cn(styles.mascot, "size-14", className)}
       aria-hidden="true"
       data-mascot="mirmir"
-      data-blinking={blinking}
       data-moving={moving}
+      data-video-state={failed ? "fallback" : moving ? "playing" : loadVideo ? "loading" : "still"}
     >
-      <MirmirMotion id={filterId} active={moving} />
-      <span
-        className={styles.motionLayer}
-        style={moving ? { filter: `url(#${filterId})` } : undefined}
-      >
-        <Image
-          src="/images/mascots/mirmir/eyes-open.webp"
-          alt=""
-          width={512}
-          height={512}
-          unoptimized
-          draggable={false}
-          onLoad={() => setOpenReady(true)}
-          className={cn(styles.frame, styles.open)}
+      <Image
+        src={STILL}
+        alt=""
+        width={512}
+        height={512}
+        unoptimized
+        draggable={false}
+        className={cn(styles.frame, styles.still)}
+      />
+      {loadVideo && (
+        <video
+          ref={video}
+          src={VIDEO}
+          poster={STILL}
+          width={1280}
+          height={720}
+          className={cn(styles.frame, styles.video)}
+          autoPlay
+          loop
+          muted
+          playsInline
+          preload="none"
+          disablePictureInPicture
+          disableRemotePlayback
+          tabIndex={-1}
+          onPlaying={() => setPlaying(true)}
+          onPause={() => setPlaying(false)}
+          onError={() => setFailed(true)}
         />
-        {animationEnabled && (
-          <Image
-            src="/images/mascots/mirmir/eyes-closed.webp"
-            alt=""
-            width={512}
-            height={512}
-            unoptimized
-            draggable={false}
-            onLoad={() => setClosedReady(true)}
-            onError={() => setClosedReady(false)}
-            className={cn(styles.frame, styles.closed)}
-          />
-        )}
-      </span>
+      )}
     </span>
   );
 }

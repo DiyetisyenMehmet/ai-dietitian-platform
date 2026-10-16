@@ -1,0 +1,16 @@
+{
+  "task": "MIRMIR-A4-DIRECT-INTEGRATION",
+  "video_has_alpha": false,
+  "static_has_alpha": true,
+  "approved_video_unchanged": true,
+  "files": {
+    "approved-a4.mp4": {
+      "bytes": 2307407,
+      "sha256": "41a8603eb2693fb41dd6cc32a37ab3990764f67499370f6e06992f45a0b4c065"
+    },
+    "still-a4.png": {
+      "bytes": 284110,
+      "sha256": "ea14c4935e437539e159b9d7db9b063e4beb22c499db12b9cd9ea21b74d9eeeb"
+    }
+  }
+}

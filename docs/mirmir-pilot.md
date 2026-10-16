@@ -83,3 +83,48 @@ görüntü testi uygulama oturumlarını taklit etmez; mevcut
 `e2e/mascot-preferences.spec.ts` gerçek uygulamada durdurma, kayıt ve Koç
 başlığı davranışlarını ayrıca doğrular. Fiziksel Android, pil/işlemci
 ölçümü ve kullanıcının görsel onayı ayrı son kalite kontrolüdür.
+
+
+## Mırmır A4 — Onaylanan videonun entegrasyonu
+
+Görev: MIRMIR-A4-DIRECT-INTEGRATION. Kullanıcı renk önizlemesini gördükten
+sonra 16 Ekim 2026 tarihinde hareketli maskot olarak kullanılmasını onayladı.
+`approved-a4.mp4` onaylanan `Mirmir-Referans-Renk-Onizleme.mp4` dosyasının
+birebir kopyasıdır: 1280×720, 24 kare/sn, 240 kare, 10 saniye, 2.307.407 bayt.
+Video sesi her zaman kapalıdır. Yeni hareket, arka plan temizliği veya renk
+üretimi yapılmadı. Videonun başlangıç/sonu doğal olarak eşleşmez; HTML video
+10 saniyelik özgün akışı tekrar başlatır, ileri/geri kurgu uygulanmaz.
+
+**Şeffaflık sınırı:** Kullanıcıya açıklandığı üzere bu H.264/yuv420p MP4 gerçek
+alfa içermez; dama deseni görüntüye işlenmiştir. Onay bu dosyanın gösterilen
+hali içindir. Video şeffaf diye raporlanmaz. Sabit alternatif gerçek alfa
+kanallı `still-a4.png` dosyasıdır; mevcut kayıpsız `eyes-open.webp` görselinin
+512×512 PNG kodlamasıdır, pikselleri ve karakter tasarımı aynıdır.
+
+A2 SVG kuyruk/nefes deformasyonu ve iki kareli göz kırpma kaldırıldı. Eski
+özgün görseller silinmedi. Ortak `MirmirMascot` bileşeni ana sayfa Koç bannerı,
+Koç başlığı/karşılama ve mevcut tercih önizlemesini besler. Klasik varsayılan,
+hesap tercihleri ve Koç P1/P2 kodu değişmez.
+
+Oynatıcı yalnız animasyon tercihi açık, sayfa/Android uygulaması aktif,
+maskot ekran içinde ve hareket azaltma kapalıyken oluşturulur. Bu koşullardan
+biri kaybolduğunda oynatıcı durdurulur, kaynak kaldırılır ve video çözücüsü
+serbest bırakılır. Koşullar geri geldiğinde özgün akış baştan oynar. Ağ,
+biçim veya otomatik oynatma hatasında sabit PNG kalır. Sabit çerçevede
+`object-fit: contain` kullanılır; karakter kesilmez, çevreye taşmaz. Video
+Klasik/animasyon kapalı/hareket azaltma durumlarında istenmez. 2,31 MB video
+onaylanan hali korumak için yeniden sıkıştırılmadı.
+
+Android WebView `setMediaPlaybackRequiresUserGesture(false)` ile sessiz
+video otomatik oynatmasına izin verir. Bu bir WebView medya politikasıdır;
+mevcut ilk taraf gezinme, çerez, köprü ve ağ güvenliği ayarları değişmez.
+Kullanıcı tercihi ve uygulama görünürlük kontrolleri web bileşeninde uygulanır.
+Yeni Android kabuk ayarı ancak güncel APK kurulduğunda geçerlidir.
+
+`playwright.mirmir-video.config.ts` gerçek Next uygulamasında sentetik API
+cevaplarıyla masaüstü ve Android Chrome emülasyonunu test eder: gerçek kare
+ilerlemesi, sessizlik/inline/loop, ekran dışı ve native arka plan, sekme
+ömrü, azaltılmış hareket, ağ hatası, tercih kapalı/açık ve Klasik dönüşü.
+Üç mobil genişlikte taşmama ve açık/koyu banner kanıtları alınır. Bu test
+fiziksel Android/WebView testi değildir. `mascot-preferences.spec.ts` iki
+sunucu hesabı oturumunda tercih kalıcılığı kontrolünü korur.

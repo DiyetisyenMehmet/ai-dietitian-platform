@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/staging-preview
+      - feature/mirmir-a4-direct-integration
       - feature/app7-coach-p2-safe-completion-a1
       - feature/admin2-staff-password-b2-close-a1
       - fix/production-hardening

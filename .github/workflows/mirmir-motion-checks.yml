@@ -1,10 +1,13 @@
-name: Mirmir motion checks
+name: Mirmir video checks
 on:
   push:
-    branches: [feature/mascot-mirmir-motion-a2]
+    branches: [feature/mirmir-a4-direct-integration, feature/staging-preview]
     paths:
       - frontend/src/presentation/components/mascot/**
-      - frontend/tests/mirmir-motion-browser.cjs
+      - frontend/public/images/mascots/mirmir/**
+      - frontend/e2e/mirmir-video.spec.ts
+      - frontend/playwright.mirmir-video.config.ts
+      - .github/workflows/mirmir-motion-checks.yml
 permissions:
   contents: read
 concurrency:
@@ -13,7 +16,7 @@ concurrency:
 jobs:
   motion:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: frontend
@@ -28,12 +31,15 @@ jobs:
       - run: npm run type-check
       - run: npm run lint
       - run: node --test tests/mascot-preferences.test.cjs tests/coach-crossplatform-sync.test.cjs tests/coach-live-sync.test.cjs tests/auth-session-restore.test.cjs
-      - run: npx playwright install --with-deps chromium webkit
-      - run: node --test tests/mirmir-motion-browser.cjs
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+        env:
+          NEXT_PUBLIC_API_BASE_URL: https://example.invalid/api
+          NEXT_PUBLIC_SITE_URL: https://example.invalid
+      - run: npx playwright test --config playwright.mirmir-video.config.ts
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: mirmir-motion-visual-evidence
-          path: frontend/test-results/mirmir-motion/
+          name: mirmir-video-visual-evidence
+          path: frontend/test-results/mirmir-video/
           retention-days: 14
-      - run: npm run build
