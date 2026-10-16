@@ -196,6 +196,8 @@ async function dailySchedule(page: Page) {
   await expect(wake).toHaveAttribute("type", "text");
   await expect(sleep).toHaveAttribute("type", "text");
   await expect(wake).toHaveAccessibleDescription(/24 saat.*SS:DD/);
+  await expect(page.locator("#usualWakeTime-error")).toHaveCount(0);
+  await expect(page.locator("#usualSleepTime-error")).toHaveCount(0);
   await wake.click();
   await expect(wake).toBeFocused();
   await wake.fill("24:00");
@@ -214,7 +216,10 @@ async function dailySchedule(page: Page) {
   await next();
   await expect(wake).toHaveValue("17:00");
   await expect(sleep).toHaveValue("09:00");
-  await sleep.press("Tab");
+  await expect(page).toHaveURL(/\/onboarding$/);
+  await sleep.focus();
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("button", { name: /Geri/ })).toBeFocused();
   await noOverflow(page);
   await submit.click();
   await expect(page).toHaveURL(/\/dashboard$/);

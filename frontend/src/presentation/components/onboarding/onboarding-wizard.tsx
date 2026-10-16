@@ -394,11 +394,11 @@ export function OnboardingWizard() {
               </Button>
             )}
             {isLastStep ? (
-              <Button type="submit" size="lg" className="flex-1" isLoading={isSubmitting}>
+              <Button key="complete" type="submit" size="lg" className="flex-1" isLoading={isSubmitting}>
                 {isSubmitting ? "Kaydediliyor..." : "Tamamla"}
               </Button>
             ) : (
-              <Button type="button" size="lg" className="flex-1" onClick={goNext}>
+              <Button key="next" type="button" size="lg" className="flex-1" onClick={goNext}>
                 Devam <ArrowRight aria-hidden="true" />
               </Button>
             )}
