@@ -350,15 +350,34 @@ export function OnboardingWizard() {
                 label="Genellikle kaçta uyanırsınız?"
                 error={errors.usualWakeTime?.message}
               >
-                <Input type="time" {...register("usualWakeTime")} />
+                <Input
+                  type="text"
+                  inputMode="text"
+                  autoComplete="off"
+                  maxLength={5}
+                  placeholder="07:30"
+                  aria-describedby="onboarding-time-format"
+                  {...register("usualWakeTime")}
+                />
               </FormField>
               <FormField
                 id="usualSleepTime"
                 label="Genellikle kaçta uyursunuz?"
                 error={errors.usualSleepTime?.message}
               >
-                <Input type="time" {...register("usualSleepTime")} />
+                <Input
+                  type="text"
+                  inputMode="text"
+                  autoComplete="off"
+                  maxLength={5}
+                  placeholder="23:00"
+                  aria-describedby="onboarding-time-format"
+                  {...register("usualSleepTime")}
+                />
               </FormField>
+              <p id="onboarding-time-format" className="text-xs leading-relaxed text-muted-foreground">
+                Saatleri 24 saat biçiminde yazın: SS:DD (ör. 07:30 veya 23:00).
+              </p>
               {workScheduleType === "VARIABLE_SHIFT" && (
                 <p className="text-xs leading-relaxed text-muted-foreground">
                   Vardiyalarınız değişiyorsa en sık kullandığınız düzeni girin. Günlük planlama ileride
@@ -375,11 +394,11 @@ export function OnboardingWizard() {
               </Button>
             )}
             {isLastStep ? (
-              <Button type="submit" size="lg" className="flex-1" isLoading={isSubmitting}>
+              <Button key="complete" type="submit" size="lg" className="flex-1" isLoading={isSubmitting}>
                 {isSubmitting ? "Kaydediliyor..." : "Tamamla"}
               </Button>
             ) : (
-              <Button type="button" size="lg" className="flex-1" onClick={goNext}>
+              <Button key="next" type="button" size="lg" className="flex-1" onClick={goNext}>
                 Devam <ArrowRight aria-hidden="true" />
               </Button>
             )}

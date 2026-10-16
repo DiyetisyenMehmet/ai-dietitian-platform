@@ -12,6 +12,7 @@ on:
       - feature/app5-bottom-nav-scroll-containment-a2
       - feature/app6-coach-event-driven-sync-p2-a1
       - feature/app7-coach-p2-safe-completion-a1
+      - feature/app7-mobile-nutrition-onboarding-overflow-a1
       - feature/app6-coach-p2-listener-security-fix
       - feature/app6-coach-crossplatform-sync-p1-a1
       - security/braces-ghsa-2026-a1
@@ -172,6 +173,16 @@ jobs:
 
       - name: Install browser for Admin password setup regression
         run: npx playwright install --with-deps chromium
+      - name: Test mobile meal text and onboarding time entry
+        run: npx playwright test --config playwright.mobile-overflow.config.ts
+      - name: Upload mobile overflow browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-overflow-browser-evidence
+          path: frontend/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Test branded Admin password setup and action isolation
         run: npx playwright test --config playwright.admin-password.config.ts
 
