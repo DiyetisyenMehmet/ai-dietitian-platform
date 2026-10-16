@@ -14,7 +14,7 @@ export function SelectedMascot({
 }) {
   const { preferences } = useMascotPreferences();
   return enabled && preferences.mascotId === "mirmir" ? (
-    <MirmirMascot animationEnabled={preferences.animationEnabled} className={className} />
+    <MirmirMascot className={className} />
   ) : (
     children
   );

@@ -7,6 +7,7 @@ on:
       - feature/android-native-scanner
       - feature/staging-preview
       - feature/mirmir-a4-direct-integration
+      - feature/mirmir-final-animation-decision-a1
       - feature/mascot-mirmir-pilot-a1
       - feature/mascot-mirmir-motion-a2
       - feature/admin2-staff-password-b2-close-a1
@@ -14,6 +15,7 @@ on:
       - feature/app6-coach-event-driven-sync-p2-a1
       - feature/app7-coach-p2-safe-completion-a1
       - feature/app7-mobile-nutrition-onboarding-overflow-a1
+      - feature/app7-nutrition-session-test-hardening-a1
       - feature/app6-coach-p2-listener-security-fix
       - feature/app6-coach-crossplatform-sync-p1-a1
       - security/braces-ghsa-2026-a1
@@ -174,9 +176,11 @@ jobs:
 
       - name: Install browser for Admin password setup regression
         run: npx playwright install --with-deps chromium
-      - name: Test Mirmir video lifecycle and fallback
+      - name: Test nutrition session readiness without accounts or AI
+        run: npx playwright test e2e/nutrition-session-check.spec.ts --workers=1 --reporter=line
+      - name: Test Mirmir default blink and retired video
         run: npx playwright test --config playwright.mirmir-video.config.ts
-      - name: Upload Mirmir video evidence
+      - name: Upload Mirmir final mascot evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:

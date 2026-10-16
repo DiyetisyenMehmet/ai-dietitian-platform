@@ -52,10 +52,7 @@ export function MascotPreferencesView() {
                 className="size-24 object-contain"
               />
             ) : (
-              <MirmirMascot
-                className="size-24"
-                animationEnabled={preferences.mascotId === "mirmir" && preferences.animationEnabled}
-              />
+              <MirmirMascot className="size-24" />
             )}
             <span className="text-sm font-semibold">
               {id === "classic" ? "Diewish Klasik" : "Mırmır"}
@@ -72,27 +69,6 @@ export function MascotPreferencesView() {
           </label>
         ))}
       </fieldset>
-      <div className="rounded-2xl border border-border bg-card p-4 shadow-card">
-        <label className="flex items-center justify-between gap-3 text-sm font-medium">
-          <span>Maskot animasyonu</span>
-          <span className="flex items-center gap-2">
-            <span aria-hidden="true">{preferences.animationEnabled ? "Açık" : "Kapalı"}</span>
-            <input
-              type="checkbox"
-              role="switch"
-              aria-label="Maskot animasyonu"
-              checked={preferences.animationEnabled}
-              disabled={saving || error}
-              onChange={(event) => void update({ animationEnabled: event.target.checked })}
-              className="size-5 accent-primary"
-            />
-          </span>
-        </label>
-        <p className="mt-2 text-xs text-muted-foreground">
-          Mırmır doğal hareketleriyle sana eşlik eder. Cihazının hareket azaltma tercihi her zaman
-          korunur.
-        </p>
-      </div>
       <p className="text-xs text-muted-foreground" role="status">
         {saving
           ? "Kaydediliyor…"

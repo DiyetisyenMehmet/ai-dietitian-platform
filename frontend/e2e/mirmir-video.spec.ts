@@ -5,7 +5,7 @@ const mascot = (page: Page) => page.locator('[data-dashboard-coach-banner] [data
 
 async function setup(page: Page, mascotId = "mirmir", animationEnabled = true) {
   let preferences = { mascotId, animationEnabled };
-  const writes: string[] = [];
+  const writes: { path: string; body: unknown }[] = [];
   // Only synthetic account responses. No staging account or API is touched.
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
@@ -29,11 +29,14 @@ async function setup(page: Page, mascotId = "mirmir", animationEnabled = true) {
         tokens: { accessToken: "synthetic-only-token" },
       });
     if (path.endsWith("/account/mascot")) {
-      if (route.request().method() === "PATCH")
-        preferences = { ...preferences, ...route.request().postDataJSON() };
+      if (route.request().method() === "PATCH") {
+        const body = route.request().postDataJSON();
+        writes.push({ path, body });
+        preferences = { ...preferences, ...body };
+      }
       return ok({ preferences });
     }
-    if (route.request().method() !== "GET") writes.push(path);
+    if (route.request().method() !== "GET") writes.push({ path, body: route.request().postData() });
     if (path.endsWith("/legal/consents")) return ok({ allMandatoryGranted: true, items: [] });
     if (path.endsWith("/legal/documents")) return ok({ documents: [] });
     return route.fulfill({
@@ -48,171 +51,166 @@ async function setup(page: Page, mascotId = "mirmir", animationEnabled = true) {
   return writes;
 }
 
-test("real footage plays, loops and releases the player on native/background/offscreen/reduced motion", async ({
+// The historical filename is retained for existing CI entry points. Video must never load.
+const blinkState = (page: Page) => mascot(page).getAttribute("data-blinking");
+
+for (const legacyValue of [true, false]) {
+  test(`default blink ignores retired video preference (${legacyValue}) and retains original poses`, async ({
+    page,
+  }) => {
+    const videos: string[] = [];
+    page.on("request", (r) => {
+      if (r.url().includes(VIDEO)) videos.push(r.url());
+    });
+    await setup(page, "mirmir", legacyValue);
+    await page.goto("/dashboard");
+    const m = mascot(page);
+    await m.scrollIntoViewIfNeeded();
+    await expect(m).toHaveAttribute("data-blinking", "true");
+    await expect(m.locator("video, svg, animate, feDisplacementMap")).toHaveCount(0);
+    const images = m.locator("img");
+    await expect(images).toHaveCount(2);
+    expect(
+      await images.evaluateAll((nodes) => nodes.map((n) => (n as HTMLImageElement).naturalWidth)),
+    ).toEqual([512, 512]);
+    // Observe the original 5.6 second CSS cycle, including the brief closed pose.
+    const poses = () =>
+      images.evaluateAll((nodes) => nodes.map((n) => getComputedStyle(n).visibility));
+    await expect.poll(poses).toEqual(["visible", "hidden"]);
+    await expect.poll(poses, { timeout: 7000, intervals: [25] }).toEqual(["hidden", "visible"]);
+    await expect.poll(poses, { timeout: 1500, intervals: [25] }).toEqual(["visible", "hidden"]);
+    await page.goto("/ai");
+    await expect(page.locator('header [data-mascot="mirmir"]')).toHaveAttribute(
+      "data-blinking",
+      "true",
+    );
+    await expect(page.getByLabel("Mesaj", { exact: true })).toBeVisible();
+    expect(videos).toEqual([]);
+  });
+}
+
+test("default blink stops for native background, hidden page, offscreen and reduced motion", async ({
   page,
-}, info) => {
+}) => {
   const writes = await setup(page);
   await page.goto("/dashboard");
   const m = mascot(page);
   await m.scrollIntoViewIfNeeded();
-  await expect(m).toHaveAttribute("data-moving", "true");
-  const video = m.locator("video");
-  await expect
-    .poll(() => video.evaluate((v) => (v as HTMLVideoElement).currentTime))
-    .toBeGreaterThan(1);
-  const playback = await video.evaluate((node) => {
-    const v = node as HTMLVideoElement;
-    const q = v.getVideoPlaybackQuality();
-    return {
-      muted: v.muted,
-      inline: v.playsInline,
-      loop: v.loop,
-      controls: v.controls,
-      width: v.videoWidth,
-      height: v.videoHeight,
-      totalFrames: q.totalVideoFrames,
-      droppedFrames: q.droppedVideoFrames,
-    };
-  });
-  expect(playback).toMatchObject({
-    muted: true,
-    inline: true,
-    loop: true,
-    controls: false,
-    width: 1280,
-    height: 720,
-  });
-  expect(playback.totalFrames).toBeGreaterThan(0);
-  await expect(m.locator("svg, animate, feDisplacementMap")).toHaveCount(0);
-  const bounds = await m.boundingBox();
-  await video.evaluate((v) => {
-    (v as HTMLVideoElement).currentTime = 9.85;
-  });
-  await expect
-    .poll(() => video.evaluate((v) => (v as HTMLVideoElement).currentTime))
-    .toBeLessThan(2);
-  for (const theme of ["light", "dark"]) {
-    await page.evaluate((value) => {
-      document.documentElement.classList.remove("light", "dark");
-      document.documentElement.classList.add(value);
-    }, theme);
-    await page
-      .locator("[data-dashboard-coach-banner]")
-      .screenshot({ path: info.outputPath(`banner-${theme}.png`) });
-    expect((await m.boundingBox())?.width).toBe(bounds?.width);
-  }
-  await info.attach("video-playback", {
-    body: JSON.stringify(playback),
-    contentType: "application/json",
-  });
-  // Retain old DOM references to prove removal also pauses/releases decoders.
-  await video.evaluate((v) => {
-    (window as unknown as { oldMirmirPlayer: HTMLVideoElement }).oldMirmirPlayer =
-      v as HTMLVideoElement;
-  });
+  await expect(m).toHaveAttribute("data-blinking", "true");
+  const stopped = async () => {
+    await expect(m).toHaveAttribute("data-blinking", "false");
+    expect(await m.evaluate((n) => n.getAnimations({ subtree: true }).length)).toBe(0);
+    await expect(m.locator("img").first()).toBeVisible();
+    await expect(m.locator("img").last()).toBeHidden();
+  };
   await page.evaluate(() =>
     window.dispatchEvent(new CustomEvent("diewish:app-visibility", { detail: { active: false } })),
   );
-  await expect(video).toHaveCount(0);
-  expect(
-    await page.evaluate(() => {
-      const v = (window as unknown as { oldMirmirPlayer: HTMLVideoElement }).oldMirmirPlayer;
-      return v.paused && !v.getAttribute("src");
-    }),
-  ).toBe(true);
-  await expect(m.locator("img")).toBeVisible();
+  await stopped();
   await page.evaluate(() =>
     window.dispatchEvent(new CustomEvent("diewish:app-visibility", { detail: { active: true } })),
   );
-  await expect(m).toHaveAttribute("data-moving", "true");
-  await m.evaluate((v) => {
-    (v as HTMLElement).style.transform = "translateY(200vh)";
+  await expect(m).toHaveAttribute("data-blinking", "true");
+  await m.evaluate((n) => {
+    (n as HTMLElement).style.transform = "translateY(200vh)";
   });
-  await expect(video).toHaveCount(0);
-  await m.evaluate((v) => {
-    (v as HTMLElement).style.removeProperty("transform");
+  await stopped();
+  await m.evaluate((n) => {
+    (n as HTMLElement).style.removeProperty("transform");
   });
   await m.scrollIntoViewIfNeeded();
-  await expect(m).toHaveAttribute("data-moving", "true");
+  await expect(m).toHaveAttribute("data-blinking", "true");
   await page.evaluate(() => {
     Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
     document.dispatchEvent(new Event("visibilitychange"));
   });
-  await expect(video).toHaveCount(0);
+  await stopped();
   await page.evaluate(() => {
     Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
     document.dispatchEvent(new Event("visibilitychange"));
   });
-  await expect(m).toHaveAttribute("data-moving", "true");
+  await expect(m).toHaveAttribute("data-blinking", "true");
+  await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
+  await stopped();
+  await page.evaluate(() => window.dispatchEvent(new Event("pageshow")));
+  await expect(m).toHaveAttribute("data-blinking", "true");
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await expect(video).toHaveCount(0);
-  await expect(m.locator("img")).toBeVisible();
+  await stopped();
   await page.emulateMedia({ reducedMotion: "no-preference" });
-  await expect(m).toHaveAttribute("data-moving", "true");
-  await page.goto("/ai");
-  await expect(page.locator('header [data-mascot="mirmir"]')).toHaveAttribute(
-    "data-moving",
-    "true",
-  );
-  await expect(page.getByLabel("Mesaj", { exact: true })).toBeVisible();
+  await expect(m).toHaveAttribute("data-blinking", "true");
   expect(writes).toEqual([]);
 });
 
-for (const condition of ["classic", "disabled", "reduced"] as const) {
-  test(`${condition} makes no video request and preserves static layout`, async ({ page }) => {
-    const requests: string[] = [];
-    page.on("request", (r) => {
-      if (r.url().includes(VIDEO)) requests.push(r.url());
-    });
-    await setup(page, condition === "classic" ? "classic" : "mirmir", condition !== "disabled");
-    if (condition === "reduced") await page.emulateMedia({ reducedMotion: "reduce" });
-    await page.goto("/dashboard");
-    const banner = page.locator("[data-dashboard-coach-banner]");
-    await banner.scrollIntoViewIfNeeded();
-    if (condition === "classic") await expect(mascot(page)).toHaveCount(0);
-    else {
-      await expect(mascot(page)).toHaveAttribute("data-video-state", "still");
-      await expect(mascot(page).locator("img")).toBeVisible();
-    }
-    await expect(banner.locator("video")).toHaveCount(0);
-    expect(requests).toEqual([]);
-    for (const width of [390, 412, 430]) {
-      await page.setViewportSize({ width, height: 844 });
-      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
-        true,
-      );
-    }
-  });
-}
-
-test("broken media falls back to the transparent PNG; preference off/on and classic still work", async ({
+test("retired movement control is absent; mascot selection writes only identity and preserves classic", async ({
   page,
 }) => {
-  await setup(page);
-  await page.route(`**${VIDEO}`, (route) => route.abort());
+  const writes = await setup(page, "classic", false);
+  const videos: string[] = [];
+  page.on("request", (r) => {
+    if (r.url().includes(VIDEO)) videos.push(r.url());
+  });
   await page.goto("/dashboard");
-  const m = mascot(page);
-  await m.scrollIntoViewIfNeeded();
-  await expect(m).toHaveAttribute("data-video-state", "fallback");
-  await expect(m.locator("img")).toBeVisible();
-  await expect(m.locator("video")).toHaveCount(0);
-  await page.unroute(`**${VIDEO}`);
+  await expect(mascot(page)).toHaveCount(0);
   await page.goto("/profile/mascot");
-  const toggle = page.getByRole("switch", { name: "Maskot animasyonu" });
-  await toggle.click();
-  await expect(toggle).not.toBeChecked();
+  await expect(page.getByRole("switch")).toHaveCount(0);
+  await expect(page.getByRole("checkbox")).toHaveCount(0);
+  await expect(page.getByText("Maskot animasyonu", { exact: true })).toHaveCount(0);
+  await page.getByRole("radio", { name: "Mırmır", exact: true }).click();
+  await expect(page.getByRole("radio", { name: "Mırmır", exact: true })).toBeChecked();
+  await page.reload();
+  await expect(page.getByRole("radio", { name: "Mırmır", exact: true })).toBeChecked();
   await page.goto("/dashboard");
-  await m.scrollIntoViewIfNeeded();
-  await expect(m).toHaveAttribute("data-video-state", "still");
-  await page.goto("/profile/mascot");
-  await toggle.click();
-  await expect(toggle).toBeChecked();
-  await page.goto("/dashboard");
-  await m.scrollIntoViewIfNeeded();
-  await expect(m).toHaveAttribute("data-moving", "true");
+  await mascot(page).scrollIntoViewIfNeeded();
+  await expect.poll(() => blinkState(page)).toBe("true");
   await page.goto("/profile/mascot");
   await page.getByRole("radio", { name: "Diewish Klasik", exact: true }).click();
   await expect(page.getByRole("radio", { name: "Diewish Klasik", exact: true })).toBeChecked();
   await page.goto("/dashboard");
-  await expect(m).toHaveCount(0);
+  await expect(mascot(page)).toHaveCount(0);
+  expect(writes.map((w) => w.body)).toEqual([{ mascotId: "mirmir" }, { mascotId: "classic" }]);
+  expect(videos).toEqual([]);
+});
+
+test("failed closed-eye asset keeps the existing transparent PNG still", async ({ page }) => {
+  await setup(page);
+  await page.route("**/images/mascots/mirmir/eyes-closed.webp", (route) => route.abort());
+  await page.goto("/dashboard");
+  const m = mascot(page);
+  await m.scrollIntoViewIfNeeded();
+  await expect(m.locator("img").first()).toBeVisible();
+  await expect(m).toHaveAttribute("data-blinking", "false");
+  expect(await m.evaluate((n) => n.getAnimations({ subtree: true }).length)).toBe(0);
+  await expect(m.locator("video")).toHaveCount(0);
+});
+
+test("both poses stay inside the banner in light/dark at 390, 412, 430 pixels", async ({
+  page,
+}, info) => {
+  await setup(page);
+  await page.goto("/dashboard");
+  const m = mascot(page),
+    banner = page.locator("[data-dashboard-coach-banner]");
+  for (const width of [390, 412, 430]) {
+    await page.setViewportSize({ width, height: 844 });
+    await banner.scrollIntoViewIfNeeded();
+    await expect(m).toHaveAttribute("data-blinking", "true");
+    const bounds = await m.boundingBox();
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate((t) => {
+        document.documentElement.classList.remove("light", "dark");
+        document.documentElement.classList.add(t);
+      }, theme);
+      const boxes = await m.evaluate((n) => {
+        const b = n.closest("[data-dashboard-coach-banner]")!.getBoundingClientRect(),
+          r = n.getBoundingClientRect();
+        return {
+          inside: r.left >= b.left && r.right <= b.right && r.top >= b.top && r.bottom <= b.bottom,
+          noOverflow: document.documentElement.scrollWidth <= innerWidth,
+        };
+      });
+      expect(boxes).toEqual({ inside: true, noOverflow: true });
+      expect(await m.boundingBox()).toEqual(bounds);
+      await banner.screenshot({ path: info.outputPath(`final-banner-${width}-${theme}.png`) });
+    }
+  }
 });
