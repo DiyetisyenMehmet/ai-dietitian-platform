@@ -13,20 +13,40 @@
   user-select: none;
   pointer-events: none;
 }
-.video {
+.closed {
   visibility: hidden;
 }
-.mascot[data-moving="true"] .video {
-  visibility: visible;
+.mascot[data-blinking="true"] .open {
+  animation: eyesOpen 5.6s step-end infinite;
 }
-.mascot[data-moving="true"] .still {
-  visibility: hidden;
+.mascot[data-blinking="true"] .closed {
+  animation: eyesClosed 5.6s step-end infinite;
 }
-@media (prefers-reduced-motion: reduce) {
-  .mascot[data-moving="true"] .video {
+@keyframes eyesOpen {
+  0%,
+  100% {
+    visibility: visible;
+  }
+  97.5% {
     visibility: hidden;
   }
-  .mascot[data-moving="true"] .still {
+}
+@keyframes eyesClosed {
+  0%,
+  100% {
+    visibility: hidden;
+  }
+  97.5% {
     visibility: visible;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mascot[data-blinking="true"] .open {
+    animation: none;
+    visibility: visible;
+  }
+  .mascot[data-blinking="true"] .closed {
+    animation: none;
+    visibility: hidden;
   }
 }

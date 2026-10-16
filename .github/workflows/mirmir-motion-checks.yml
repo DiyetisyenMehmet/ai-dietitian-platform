@@ -1,9 +1,11 @@
-name: Mirmir video checks
+name: Mirmir final mascot checks
 on:
   push:
-    branches: [feature/mirmir-a4-direct-integration, feature/staging-preview]
+    branches: [feature/mirmir-final-animation-decision-a1, feature/staging-preview]
     paths:
       - frontend/src/presentation/components/mascot/**
+      - frontend/src/presentation/components/profile/mascot-preferences-view.tsx
+      - frontend/src/domain/account/mascot-preferences.ts
       - frontend/public/images/mascots/mirmir/**
       - frontend/e2e/mirmir-video.spec.ts
       - frontend/playwright.mirmir-video.config.ts
@@ -40,6 +42,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: mirmir-video-visual-evidence
+          name: mirmir-final-mascot-evidence
           path: frontend/test-results/mirmir-video/
           retention-days: 14

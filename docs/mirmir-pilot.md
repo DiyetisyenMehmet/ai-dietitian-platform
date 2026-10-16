@@ -1,3 +1,7 @@
+> Güncel karar — MIRMIR-FINAL-ANIMATION-DECISION-A1: Video pilotu kapatıldı.
+> Aşağıdaki A1/A2/A4 bölümleri çalışma geçmişidir. Güncel davranış, dosyanın
+> sonundaki “Final karar” bölümündedir.
+
 # Diewish Mırmır pilotu
 
 Görev: DIEWISH-MASCOT-COLLECTION-A1-MIRMIR-PILOT
@@ -128,3 +132,41 @@ ilerlemesi, sessizlik/inline/loop, ekran dışı ve native arka plan, sekme
 Üç mobil genişlikte taşmama ve açık/koyu banner kanıtları alınır. Bu test
 fiziksel Android/WebView testi değildir. `mascot-preferences.spec.ts` iki
 sunucu hesabı oturumunda tercih kalıcılığı kontrolünü korur.
+
+
+## Final karar — Video pilotunun kapatılması
+
+Son arka plan temizleme denemesi gerçek alfa üretse de kulak, sırt ve minder
+kenarlarında kalıntı/tüy kaybı nedeniyle görsel kaliteyi geçmedi. Video
+animasyonundan vazgeçildi; temizleme ve yeni animasyon üretimi sürdürülmez.
+
+Tek mevcut `MirmirMascot` bileşeni korunur. Bileşen yalnız mevcut şeffaf
+`still-a4.png` (açık göz) ve `eyes-closed.webp` karelerini, önceki 5,6 saniyelik
+iki kareli göz kırpma zamanlamasıyla gösterir. Yeni görsel veya hareket
+üretilmedi; kuyruk/nefes deformasyonu geri getirilmedi. Video elemanı, medya
+oynatıcısı ve video kaynağına uygulama başvurusu yoktur. MP4 geçmiş dosyası
+silinmez/değiştirilmez, çalışma sırasında istenmez.
+
+Hareket/animasyon anahtarı tercih ekranından kaldırıldı. Eski hesapların
+`animationEnabled` alanı API uyumluluğu için korunur; bu alan artık Mırmır'ın
+varsayılan göz kırpmasını yönetmez ve arayüzden yazılmaz. Maskot seçimi yalnız
+`mascotId` gönderir; Klasik varsayılanı ve hesaplar arası ayrım aynen kalır.
+
+Göz kırpma yalnız her iki görsel yüklenmiş, sayfa/Android uygulaması görünür,
+maskot ekran içinde ve hareket azaltma kapalıyken çalışır. Bir koşul
+sağlanmazsa açık gözlü PNG sabit kalır. Kapalı göz dosyası yüklenemediğinde de
+PNG korunur. CSS animasyonu dışında zamanlayıcı veya çizim döngüsü yoktur.
+Android'in video için eklenen otomatik oynatma izni kaldırılarak önceki
+`setMediaPlaybackRequiresUserGesture(true)` politikası geri getirildi.
+
+56×56 aynı çerçevede kare görseller kullanıldığı için önceki 16:9 videonun
+küçük görünme nedeni ortadan kalkar; banner geometrisi, Koç P1/P2, klasik
+maskot, diğer maskotlar ve backend değiştirilmez. Staging/production yayını
+bu kararın parçası değildir.
+
+Mevcut `playwright.mirmir-video.config.ts` ve test dosyası adları CI çağrı
+uyumluluğu için korunur; içerikleri artık varsayılan göz kırpmayı, hiçbir
+video isteği oluşmamasını, eski true/false kayıtların etkisizliğini, kaldırılan
+anahtarı, maskot seçimini, statik geri dönüşü ve görünürlük durdurmalarını
+sınar. Masaüstü/Android Chrome emülasyonu gerçek Android WebView cihaz testi
+yerine geçmez.

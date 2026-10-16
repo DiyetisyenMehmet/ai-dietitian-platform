@@ -32,7 +32,7 @@ async function framePlacement(mascot: Locator) {
   });
 }
 
-test("Mirmir pilot preserves layout, persists across two sessions, and stops video in every inactive condition", async ({
+test("Mirmir default blink preserves layout and selection across two sessions, with no video or movement control", async ({
   page,
   request,
   browser,
@@ -45,7 +45,7 @@ test("Mirmir pilot preserves layout, persists across two sessions, and stops vid
   const classicBox = await banner.boundingBox();
   await page.goto(base + "/profile/mascot");
   await expect(page.getByRole("radio", { name: "Diewish Klasik", exact: true })).toBeChecked();
-  await expect(page.getByRole("switch", { name: "Maskot animasyonu" })).toBeChecked();
+  await expect(page.getByRole("switch", { name: "Maskot animasyonu" })).toHaveCount(0);
   await page.getByRole("radio", { name: "Mırmır", exact: true }).click();
   await expect(page.getByText("Maskot tercihin kaydedildi.", { exact: true })).toBeVisible();
   await page.reload();
@@ -53,35 +53,32 @@ test("Mirmir pilot preserves layout, persists across two sessions, and stops vid
   await page.goto(base + "/dashboard");
   await banner.scrollIntoViewIfNeeded();
   const mascot = banner.locator('[data-mascot="mirmir"]');
-  await expect(mascot).toHaveAttribute("data-moving", "true");
-  const video = mascot.locator("video");
-  await expect(video).toBeVisible();
-  await expect
-    .poll(() => video.evaluate((v) => (v as HTMLVideoElement).currentTime))
-    .toBeGreaterThan(0.2);
+  await expect(mascot).toHaveAttribute("data-blinking", "true");
+  await expect(mascot.locator("video")).toHaveCount(0);
+  await expect(mascot.locator("img")).toHaveCount(2);
   await expect(mascot.locator("svg, animate, feDisplacementMap")).toHaveCount(0);
   expect(await banner.boundingBox()).toMatchObject({
     width: classicBox!.width,
     height: classicBox!.height,
   });
   const openBox = await framePlacement(mascot);
-  await mascot.screenshot({ path: testInfo.outputPath("mirmir-video.png") });
+  await mascot.screenshot({ path: testInfo.outputPath("mirmir-default-blink.png") });
   expect(await framePlacement(mascot)).toEqual(openBox);
 
   await page.evaluate(() =>
     window.dispatchEvent(new CustomEvent("diewish:app-visibility", { detail: { active: false } })),
   );
-  await expect(mascot).toHaveAttribute("data-moving", "false");
+  await expect(mascot).toHaveAttribute("data-blinking", "false");
   await expect(mascot.locator("video")).toHaveCount(0);
   expect(await mascot.evaluate((node) => node.getAnimations({ subtree: true }).length)).toBe(0);
   await page.evaluate(() =>
     window.dispatchEvent(new CustomEvent("diewish:app-visibility", { detail: { active: true } })),
   );
-  await expect(mascot).toHaveAttribute("data-moving", "true");
+  await expect(mascot).toHaveAttribute("data-blinking", "true");
   await mascot.evaluate((node) => {
     (node as HTMLElement).style.transform = "translateY(200vh)";
   });
-  await expect(mascot).toHaveAttribute("data-moving", "false");
+  await expect(mascot).toHaveAttribute("data-blinking", "false");
   await expect(mascot.locator("video")).toHaveCount(0);
   await mascot.evaluate((node) => {
     (node as HTMLElement).style.removeProperty("transform");
@@ -89,9 +86,9 @@ test("Mirmir pilot preserves layout, persists across two sessions, and stops vid
   await banner.scrollIntoViewIfNeeded();
 
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await expect(mascot).toHaveAttribute("data-moving", "false");
+  await expect(mascot).toHaveAttribute("data-blinking", "false");
   await expect(mascot.locator("video")).toHaveCount(0);
-  await expect(mascot.locator("img")).toBeVisible();
+  await expect(mascot.locator("img").first()).toBeVisible();
   expect(await mascot.evaluate((node) => node.getAnimations({ subtree: true }).length)).toBe(0);
   await page.emulateMedia({ reducedMotion: "no-preference" });
   for (const theme of ["dark", "light"] as const) {
@@ -111,7 +108,7 @@ test("Mirmir pilot preserves layout, persists across two sessions, and stops vid
   await page.goto(base + "/ai");
   await expect(page.locator('header [data-mascot="mirmir"]')).toBeVisible();
   await expect(page.locator('header [data-mascot="mirmir"]')).toHaveAttribute(
-    "data-moving",
+    "data-blinking",
     "true",
   );
   await expect(page.getByLabel("Mesaj", { exact: true })).toBeVisible();
@@ -122,17 +119,17 @@ test("Mirmir pilot preserves layout, persists across two sessions, and stops vid
     await loginDashboardSession(other, account.email, account.password);
     await other.goto(base + "/profile/mascot");
     await expect(other.getByRole("radio", { name: "Mırmır", exact: true })).toBeChecked();
-    await other.getByRole("switch", { name: "Maskot animasyonu" }).click();
-    await expect(other.getByRole("switch", { name: "Maskot animasyonu" })).not.toBeChecked();
-    await expect(other.getByRole("switch", { name: "Maskot animasyonu" })).toBeEnabled();
+    await expect(other.getByRole("switch", { name: "Maskot animasyonu" })).toHaveCount(0);
+    await other.getByRole("radio", { name: "Diewish Klasik", exact: true }).click();
+    await expect(other.getByRole("radio", { name: "Diewish Klasik", exact: true })).toBeChecked();
     await page.goto(base + "/profile/mascot");
-    await expect(page.getByRole("switch", { name: "Maskot animasyonu" })).not.toBeChecked();
+    await expect(page.getByRole("radio", { name: "Diewish Klasik", exact: true })).toBeChecked();
     await page.goto(base + "/dashboard");
-    await banner.scrollIntoViewIfNeeded();
-    await expect(mascot).toHaveAttribute("data-moving", "false");
-    await expect(mascot.locator("video")).toHaveCount(0);
-    expect(await mascot.evaluate((node) => node.getAnimations({ subtree: true }).length)).toBe(0);
+    await expect(banner.locator('[data-mascot="mirmir"]')).toHaveCount(0);
+    await other.getByRole("radio", { name: "Mırmır", exact: true }).click();
+    await expect(other.getByRole("radio", { name: "Mırmır", exact: true })).toBeChecked();
     await page.goto(base + "/profile/mascot");
+    await expect(page.getByRole("radio", { name: "Mırmır", exact: true })).toBeChecked();
     await page.route("**/api/account/mascot", async (route) => {
       if (route.request().method() !== "PATCH") return route.continue();
       return route.fulfill({
