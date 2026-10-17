@@ -73,11 +73,16 @@ for (const legacyValue of [true, false]) {
     expect(
       await images.evaluateAll((nodes) => nodes.map((n) => (n as HTMLImageElement).naturalWidth)),
     ).toEqual([512, 512]);
-    // Observe the original 5.6 second CSS cycle, including the brief closed pose.
+    // Blink every 3 seconds, retaining the brief (~140 ms) closed pose.
+    expect(
+      await m.evaluate((n) =>
+        n.getAnimations({ subtree: true }).map((a) => a.effect!.getComputedTiming().duration),
+      ),
+    ).toEqual([3000, 3000]);
     const poses = () =>
       images.evaluateAll((nodes) => nodes.map((n) => getComputedStyle(n).visibility));
     await expect.poll(poses).toEqual(["visible", "hidden"]);
-    await expect.poll(poses, { timeout: 7000, intervals: [25] }).toEqual(["hidden", "visible"]);
+    await expect.poll(poses, { timeout: 4000, intervals: [25] }).toEqual(["hidden", "visible"]);
     await expect.poll(poses, { timeout: 1500, intervals: [25] }).toEqual(["visible", "hidden"]);
     await page.goto("/ai");
     await expect(page.locator('header [data-mascot="mirmir"]')).toHaveAttribute(

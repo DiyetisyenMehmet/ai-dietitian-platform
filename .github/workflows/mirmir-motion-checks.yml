@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - feature/mirmir-final-animation-decision-a1
+      - feature/mirmir-blink-three-seconds-a1
       - feature/staging-preview
       - feature/app7-mascot-nutrition-joint-integration-a1
     paths:

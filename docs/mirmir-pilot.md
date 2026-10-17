@@ -141,8 +141,9 @@ kenarlarında kalıntı/tüy kaybı nedeniyle görsel kaliteyi geçmedi. Video
 animasyonundan vazgeçildi; temizleme ve yeni animasyon üretimi sürdürülmez.
 
 Tek mevcut `MirmirMascot` bileşeni korunur. Bileşen yalnız mevcut şeffaf
-`still-a4.png` (açık göz) ve `eyes-closed.webp` karelerini, önceki 5,6 saniyelik
-iki kareli göz kırpma zamanlamasıyla gösterir. Yeni görsel veya hareket
+`still-a4.png` (açık göz) ve `eyes-closed.webp` karelerini, 3 saniyelik
+iki kareli göz kırpma döngüsüyle gösterir. Gözün kapalı kalma süresi yaklaşık
+140 milisaniye olarak korunur. Yeni görsel veya hareket
 üretilmedi; kuyruk/nefes deformasyonu geri getirilmedi. Video elemanı, medya
 oynatıcısı ve video kaynağına uygulama başvurusu yoktur. MP4 geçmiş dosyası
 silinmez/değiştirilmez, çalışma sırasında istenmez.
