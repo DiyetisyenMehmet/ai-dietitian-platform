@@ -34,6 +34,9 @@ export function AuthAlternatives() {
   const router = useRouter();
   const [busy, setBusy] = React.useState(false);
   const inFlight = React.useRef(false);
+  const googleAttempt = React.useRef<AbortController | null>(null);
+
+  React.useEffect(() => () => { googleAttempt.current?.abort(); }, [pathname]);
 
   if (pathname !== "/login" && pathname !== "/register") return null;
 
@@ -41,16 +44,22 @@ export function AuthAlternatives() {
     if (inFlight.current) return;
     inFlight.current = true;
     setBusy(true);
+    const attempt = new AbortController();
+    googleAttempt.current = attempt;
     try {
-      const firebaseToken = await signInWithGoogle();
+      const firebaseToken = await signInWithGoogle(attempt.signal);
+      if (attempt.signal.aborted) return;
       const session = await identityClient.external(firebaseToken);
+      if (attempt.signal.aborted) return;
       authStore.setSession(session);
       router.replace(session.user.onboardingCompleted ? "/dashboard" : "/consent");
     } catch (error) {
+      if (attempt.signal.aborted) return;
       toast.error("Google ile giriş yapılamadı.", {
         description: authErrorMessage(error),
       });
     } finally {
+      if (googleAttempt.current === attempt) googleAttempt.current = null;
       inFlight.current = false;
       setBusy(false);
     }

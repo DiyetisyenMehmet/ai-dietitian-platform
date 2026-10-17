@@ -30,6 +30,9 @@ val productionFirebaseProjectId = providers.gradleProperty("DIEWISH_PRODUCTION_F
 val productionFirebaseAppId = providers.gradleProperty("DIEWISH_PRODUCTION_FIREBASE_APP_ID").orElse("").get()
 val productionFirebaseApiKey = providers.gradleProperty("DIEWISH_PRODUCTION_FIREBASE_API_KEY").orElse("").get()
 val productionFirebaseSenderId = providers.gradleProperty("DIEWISH_PRODUCTION_FIREBASE_SENDER_ID").orElse("").get()
+// Google OAuth web client from the same Firebase project (not the Android client ID).
+val stagingGoogleWebClientId = providers.gradleProperty("DIEWISH_GOOGLE_WEB_CLIENT_ID").orElse("").get()
+val productionGoogleWebClientId = providers.gradleProperty("DIEWISH_PRODUCTION_GOOGLE_WEB_CLIENT_ID").orElse("").get()
 val buildRevision = providers.environmentVariable("GITHUB_SHA")
     .orElse("local")
     .get()
@@ -60,6 +63,7 @@ android {
             // deployment workflow supplies DIEWISH_WEB_BASE_URL explicitly.
             buildConfigField("String", "WEB_BASE_URL", buildConfigString(stagingWebBaseUrl))
             buildConfigField("String", "APP_ENVIRONMENT", "\"staging\"")
+            buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", buildConfigString(stagingGoogleWebClientId))
             buildConfigField("String", "FIREBASE_PROJECT_ID", buildConfigString(stagingFirebaseProjectId))
             buildConfigField("String", "FIREBASE_APP_ID", buildConfigString(stagingFirebaseAppId))
             buildConfigField("String", "FIREBASE_API_KEY", buildConfigString(stagingFirebaseApiKey))
@@ -69,6 +73,7 @@ android {
             isMinifyEnabled = true
             buildConfigField("String", "WEB_BASE_URL", buildConfigString(productionWebBaseUrl))
             buildConfigField("String", "APP_ENVIRONMENT", "\"production\"")
+            buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", buildConfigString(productionGoogleWebClientId))
             buildConfigField("String", "FIREBASE_PROJECT_ID", buildConfigString(productionFirebaseProjectId))
             buildConfigField("String", "FIREBASE_APP_ID", buildConfigString(productionFirebaseAppId))
             buildConfigField("String", "FIREBASE_API_KEY", buildConfigString(productionFirebaseApiKey))
@@ -102,6 +107,9 @@ dependencies {
     implementation("androidx.activity:activity:1.13.0")
     // Install the session cookie checkpoint before startup's first fetch.
     implementation("androidx.webkit:webkit:1.17.1")
+    implementation("androidx.credentials:credentials:1.6.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.6.0")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.2.1")
 
     // CameraX owns Diewish capture/scanning UX consistently across vendors.
     val cameraXVersion = "1.6.2"

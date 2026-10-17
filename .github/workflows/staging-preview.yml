@@ -698,6 +698,11 @@ jobs:
             exit 1
           fi
           firebase_app_id="$(jq -r '.client_info.mobilesdk_app_id // empty' <<<"$client_json")"
+          google_web_client_id="$(jq -r '[.oauth_client[]? | select(.client_type == 3) | .client_id] | unique | if length == 1 then .[0] else empty end' <<<"$client_json")"
+          if [[ ! "$google_web_client_id" =~ ^[0-9]+-[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$ ]]; then
+            echo "Staging Google OAuth web client is missing or ambiguous; refusing an APK with broken Google sign-in." >&2
+            exit 1
+          fi
           firebase_api_key="$(jq -r '.api_key[0].current_key // empty' <<<"$client_json")"
 
           if [[ "$firebase_project_id" != "$PROJECT_ID" || "$firebase_sender_id" != "$PROJECT_NUMBER" ]]; then
@@ -716,6 +721,7 @@ jobs:
             echo "DIEWISH_FIREBASE_APP_ID=${firebase_app_id}"
             echo "DIEWISH_FIREBASE_API_KEY=${firebase_api_key}"
             echo "DIEWISH_FIREBASE_SENDER_ID=${firebase_sender_id}"
+            echo "DIEWISH_GOOGLE_WEB_CLIENT_ID=${google_web_client_id}"
             echo "DIEWISH_ANDROID_FCM_STATUS=verified"
           } >> "$GITHUB_ENV"
 
@@ -750,7 +756,8 @@ jobs:
             -PDIEWISH_FIREBASE_PROJECT_ID="${DIEWISH_FIREBASE_PROJECT_ID}" \
             -PDIEWISH_FIREBASE_APP_ID="${DIEWISH_FIREBASE_APP_ID}" \
             -PDIEWISH_FIREBASE_API_KEY="${DIEWISH_FIREBASE_API_KEY}" \
-            -PDIEWISH_FIREBASE_SENDER_ID="${DIEWISH_FIREBASE_SENDER_ID}"
+            -PDIEWISH_FIREBASE_SENDER_ID="${DIEWISH_FIREBASE_SENDER_ID}" \
+            -PDIEWISH_GOOGLE_WEB_CLIENT_ID="${DIEWISH_GOOGLE_WEB_CLIENT_ID}"
 
           short_sha="${GITHUB_SHA::7}"
           mkdir -p android/app/build/staging-apk
