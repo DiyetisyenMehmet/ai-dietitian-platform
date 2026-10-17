@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import test from "node:test";
+import jwt from "jsonwebtoken";
 import type { AddressInfo } from "node:net";
 import { env } from "../config/env";
 import { createApp } from "../app";
@@ -8,6 +9,7 @@ import { prisma } from "../lib/prisma";
 import { hashPassword } from "../utils/password";
 import { hashToken, signAccessToken } from "../utils/jwt";
 import { ApiError } from "../utils/api-error";
+import { accountRepository } from "../modules/account/account.repository";
 import { accountLinkService } from "../modules/identity/account-link.service";
 import { accountLinkDelivery } from "../modules/identity/account-link-delivery";
 import {
@@ -69,19 +71,21 @@ test("A2 safe linking: explicit old-account proof, current target proof, isolati
     ids.push(user.id);
     return user;
   }
-  const session = (account: Awaited<ReturnType<typeof user>>, tag = "") => {
-    // tag creates a distinct signed access token without accepting arbitrary selectors.
-    const token = signAccessToken({ userId: account.id, email: account.email, role: account.role });
-    return tag ? token + tag : token;
-  };
+  const session = (account: Awaited<ReturnType<typeof user>>) =>
+    signAccessToken({ userId: account.id, email: account.email, role: account.role });
   const google = (
     address: string | null,
     subject = `google-${unique()}`,
     override: Partial<VerifiedExternalIdentity> = {},
   ) => {
-    const token = `synthetic-external-token-${unique()}`;
+    const uid = `firebase-${unique()}`;
+    const token = jwt.sign(
+      { sub: uid, firebase: { sign_in_provider: override.signInProvider ?? "google.com" } },
+      "synthetic-provider-fixture-secret",
+      { jwtid: unique() },
+    );
     external.set(token, {
-      uid: `firebase-${unique()}`,
+      uid,
       email: address,
       emailVerified: true,
       phoneNumber: null,
@@ -95,9 +99,14 @@ test("A2 safe linking: explicit old-account proof, current target proof, isolati
     return { token, subject };
   };
   const sms = (number: string, override: Partial<VerifiedExternalIdentity> = {}) => {
-    const token = `synthetic-sms-token-${unique()}`;
+    const uid = `sms-${unique()}`;
+    const token = jwt.sign(
+      { sub: uid, firebase: { sign_in_provider: override.signInProvider ?? "phone" } },
+      "synthetic-provider-fixture-secret",
+      { jwtid: unique() },
+    );
     external.set(token, {
-      uid: `sms-${unique()}`,
+      uid,
       email: null,
       emailVerified: false,
       phoneNumber: number,
@@ -467,6 +476,36 @@ test("A2 safe linking: explicit old-account proof, current target proof, isolati
     "legacy Google sign-in never adopts an email match; explicit mailbox transition retains userId",
     async () => {
       const owner = await user({ hasUsablePassword: null });
+      await prisma.weightLog.create({
+        data: { userId: owner.id, weightKg: 72, note: "Synthetic legacy health" },
+      });
+      await prisma.chatConversation.create({
+        data: {
+          userId: owner.id,
+          title: "Synthetic legacy Coach",
+          messages: { create: { role: "USER", content: "Synthetic legacy history" } },
+        },
+      });
+      await prisma.subscription.create({
+        data: { userId: owner.id, tier: "PREMIUM", status: "ACTIVE", provider: "IYZICO" },
+      });
+      const related = async () => {
+        const row = await prisma.user.findUniqueOrThrow({
+          where: { id: owner.id },
+          include: {
+            weightLogs: true,
+            chatConversations: { include: { messages: true } },
+            subscriptions: true,
+          },
+        });
+        return {
+          id: row.id,
+          weightLogs: row.weightLogs,
+          chatConversations: row.chatConversations,
+          subscriptions: row.subscriptions,
+        };
+      };
+      const beforeRelated = await related();
       const beforeHash = owner.passwordHash;
       const proof = google(owner.email);
       const beforeCount = await prisma.user.count();
@@ -500,6 +539,7 @@ test("A2 safe linking: explicit old-account proof, current target proof, isolati
       const row = await prisma.user.findUniqueOrThrow({ where: { id: owner.id } });
       assert.equal(row.passwordHash, beforeHash);
       assert.equal(row.hasUsablePassword, null);
+      assert.deepEqual(await related(), beforeRelated);
       await assert.rejects(
         accountLinkService.completeGoogleTransition(
           {
@@ -638,6 +678,96 @@ test("A2 safe linking: explicit old-account proof, current target proof, isolati
         where: { kind_identifier: { kind: "EMAIL", identifier: target } },
       });
       assert.ok((binding?.userId === owner.id && !createdId) || (!binding && createdId));
+    },
+  );
+  await t.test(
+    "new Google sign-in retains the existing Android HTTP and refresh-cookie contract",
+    async () => {
+      const proof = google(email());
+      const response = await post("/external", { idToken: proof.token });
+      assert.equal(response.status, 200);
+      assert.ok(response.headers.get("set-cookie")?.includes("HttpOnly"));
+      const body = (await response.json()) as {
+        data: { user: { id: string }; tokens: { accessToken: string } };
+      };
+      ids.push(body.data.user.id);
+      assert.ok(body.data.tokens.accessToken);
+      const again = await post("/external", { idToken: google(email(), proof.subject).token });
+      assert.equal(again.status, 200);
+      const next = (await again.json()) as { data: { user: { id: string } } };
+      assert.equal(next.data.user.id, body.data.user.id);
+      assert.equal(
+        await prisma.accountIdentity.count({
+          where: { userId: body.data.user.id, kind: "GOOGLE" },
+        }),
+        1,
+      );
+    },
+  );
+  await t.test(
+    "self-deactivated legacy Google account restores only after independent mailbox proof",
+    async () => {
+      const owner = await user({
+        isActive: false,
+        deactivatedAt: new Date(),
+        hasUsablePassword: null,
+      });
+      const proof = google(owner.email);
+      await assert.rejects(
+        externalLoginService.login(proof.token, {}),
+        code("ACCOUNT_OWNERSHIP_REQUIRED"),
+      );
+      const op = await accountLinkService.startGoogleTransition(proof.token);
+      assert.equal(
+        (await prisma.user.findUniqueOrThrow({ where: { id: owner.id } })).isActive,
+        false,
+      );
+      const result = await accountLinkService.completeGoogleTransition(
+        {
+          operationId: op.operationId,
+          idToken: proof.token,
+          token: mail.get(op.operationId)!.token,
+        },
+        {},
+      );
+      assert.equal(result.user.id, owner.id);
+      assert.equal(
+        (await prisma.user.findUniqueOrThrow({ where: { id: owner.id } })).isActive,
+        true,
+      );
+    },
+  );
+  await t.test(
+    "the existing password-reset primitive invalidates a pending link and revokes sessions",
+    async () => {
+      const owner = await user();
+      const access = session(owner);
+      const op = await start(owner.id, access, "EMAIL", email());
+      const reset = await prisma.accountToken.create({
+        data: {
+          userId: owner.id,
+          type: "PASSWORD_RESET",
+          tokenHash: hashToken(unique()),
+          expiresAt: new Date(Date.now() + 60_000),
+        },
+      });
+      const changed = await hashPassword("A2ResetProofPassword123");
+      assert.equal(
+        await accountRepository.consumeTokenAndResetPassword(reset.id, owner.id, changed),
+        true,
+      );
+      await assert.rejects(
+        accountLinkService.complete(owner.id, access, {
+          operationId: op.operationId,
+          token: mail.get(op.operationId)!.token,
+        }),
+        code("ACCOUNT_LINK_PROOF_INVALID"),
+      );
+      assert.equal(
+        await prisma.refreshToken.count({ where: { userId: owner.id, revokedAt: null } }),
+        0,
+      );
+      assert.equal(await prisma.accountIdentity.count({ where: { userId: owner.id } }), 0);
     },
   );
   await t.test(
