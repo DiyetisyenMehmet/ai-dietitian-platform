@@ -87,7 +87,11 @@ function assertFirstPasswordOwner(user: Owner, number: string, authenticatedUser
     });
 }
 function requireSms(identity: VerifiedExternalIdentity, expected?: string): string {
-  requireFreshExternal(identity);
+  try {
+    requireFreshExternal(identity);
+  } catch {
+    throw invalid();
+  }
   if (
     identity.signInProvider !== "phone" ||
     identity.phoneAuthenticationVerified !== true ||

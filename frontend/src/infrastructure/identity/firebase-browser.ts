@@ -34,6 +34,7 @@ function clearRecaptcha(verifier: FirebaseRecaptchaLike): void {
 }
 
 interface FirebaseAuthLike {
+  setPersistence(value: "none"): Promise<void>;
   languageCode: string | null;
   signInWithPopup(provider: FirebaseProviderLike): Promise<FirebaseUserCredentialLike>;
   signInWithPhoneNumber(
@@ -183,12 +184,16 @@ export async function startPhoneVerification(
   phoneNumber: string,
   containerId: string,
   onDiagnostic?: (value: PhoneAuthDiagnostic) => void,
+  memoryOnly = false,
 ): Promise<{ confirm(code: string): Promise<string>; clear(): void }> {
   const diagnostic = startPhoneDiagnostic(FIREBASE_CDN_VERSION, onDiagnostic);
   let verifier: FirebaseRecaptchaLike | undefined;
   try {
     const sdk = await firebase();
     const auth = sdk.auth();
+    // A3 proof credentials must never enter Firebase's default disk persistence.
+    // Await it before any SMS request; failure has no local-storage fallback.
+    if (memoryOnly) await auth.setPersistence("none");
     auth.languageCode = "tr";
     diagnostic.stage("recaptcha-create");
     const activeVerifier = new sdk.auth.RecaptchaVerifier(containerId, {

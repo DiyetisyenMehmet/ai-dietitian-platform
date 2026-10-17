@@ -68,6 +68,7 @@ export function PhonePasswordFlow({
     return () => clearInterval(timer);
   }, [expiresAt, step]);
   const finish = (session: AuthSession) => {
+    if (!live.current) return;
     setPassword("");
     setRepeat("");
     setCode("");
@@ -127,7 +128,12 @@ export function PhonePasswordFlow({
         finish(await identityClient.phonePasswordLogin(normalized, supplied));
       } else {
         confirmation.current?.clear();
-        const next = await startPhoneVerification(normalized, "diewish-phone-password-request");
+        const next = await startPhoneVerification(
+          normalized,
+          "diewish-phone-password-request",
+          undefined,
+          true,
+        );
         if (!live.current) {
           next.clear();
           return;

@@ -106,6 +106,20 @@ test("A3 new phone/password behavior only", async (t) => {
         verifiedAt: new Date(),
       }),
     );
+  // Optional continuation of only a failed/changed case on an exact source tree.
+  // The full isolated #49 compatibility run leaves this filter unset.
+  const scenario = (name: string, fn: () => Promise<void>) =>
+    t.test(
+      name,
+      {
+        skip:
+          process.env.APP11_A3_TEST_FILTER &&
+          !new RegExp(process.env.APP11_A3_TEST_FILTER).test(name)
+            ? "Already passed on recorded A3 source"
+            : false,
+      },
+      fn,
+    );
   const post = (path: string, body: unknown, cookie?: string, extra: Record<string, string> = {}) =>
     fetch(base + path, {
       method: "POST",
@@ -118,22 +132,25 @@ test("A3 new phone/password behavior only", async (t) => {
       body: JSON.stringify(body),
     });
 
-  await t.test("both approval gates default off and fail before verifying any proof", async () => {
-    assert.deepEqual(await service.status(), { enabled: false, pending: false });
-    for (const [safe, phone] of [
-      [false, true],
-      [true, false],
-      [false, false],
-    ]) {
-      env.ACCOUNT_SAFE_LINKING_ENABLED = safe;
-      env.PHONE_PASSWORD_AUTH_ENABLED = phone;
-      assert.equal((await post("/phone-password/start", {})).status, 503);
-      await assert.rejects(start(number()), isCode("PHONE_PASSWORD_DISABLED"));
-    }
-    env.ACCOUNT_SAFE_LINKING_ENABLED = true;
-    env.PHONE_PASSWORD_AUTH_ENABLED = true;
-  });
-  await t.test("fresh actual SMS, exact matching phone and auth-time required", async () => {
+  await scenario(
+    "both approval gates default off and fail before verifying any proof",
+    async () => {
+      assert.deepEqual(await service.status(), { enabled: false, pending: false });
+      for (const [safe, phone] of [
+        [false, true],
+        [true, false],
+        [false, false],
+      ]) {
+        env.ACCOUNT_SAFE_LINKING_ENABLED = safe;
+        env.PHONE_PASSWORD_AUTH_ENABLED = phone;
+        assert.equal((await post("/phone-password/start", {})).status, 503);
+        await assert.rejects(start(number()), isCode("PHONE_PASSWORD_DISABLED"));
+      }
+      env.ACCOUNT_SAFE_LINKING_ENABLED = true;
+      env.PHONE_PASSWORD_AUTH_ENABLED = true;
+    },
+  );
+  await scenario("fresh actual SMS, exact matching phone and auth-time required", async () => {
     const n = number();
     for (const override of [
       { signInProvider: "google.com" },
@@ -147,7 +164,7 @@ test("A3 new phone/password behavior only", async (t) => {
     await assert.rejects(start(other, sms(number())), isCode("PHONE_SETUP_INVALID"));
     assert.equal(await prisma.user.count({ where: { email: email(n) } }), 0);
   });
-  await t.test(
+  await scenario(
     "SMS creates only a short pending operation; resume needs the exact browser secret",
     async () => {
       const n = number(),
@@ -170,7 +187,7 @@ test("A3 new phone/password behavior only", async (t) => {
       await assert.rejects(start(n, token), isCode("PHONE_SETUP_INVALID"));
     },
   );
-  await t.test(
+  await scenario(
     "new user, one verified phone, existing bcrypt password and normal no-SMS login",
     async () => {
       const n = number(),
@@ -218,7 +235,7 @@ test("A3 new phone/password behavior only", async (t) => {
       );
     },
   );
-  await t.test(
+  await scenario(
     "a non-SMS provider's merely linked phone cannot enter or create a phone/password account",
     async () => {
       const n = number(),
@@ -248,7 +265,7 @@ test("A3 new phone/password behavior only", async (t) => {
       assert.equal(await prisma.user.count({ where: { email: email(other) } }), 0);
     },
   );
-  await t.test(
+  await scenario(
     "strict HTTP password policy, confirmation, Unicode byte bound and no target substitution",
     async () => {
       const n = number(),
@@ -267,7 +284,7 @@ test("A3 new phone/password behavior only", async (t) => {
       assert.equal((await post("/phone-password/complete", fields())).status, 400);
     },
   );
-  await t.test(
+  await scenario(
     "HTTP proof cookie is HttpOnly/scoped, status is secret-free, completion uses existing refresh cookie",
     async () => {
       const n = number(),
@@ -299,7 +316,7 @@ test("A3 new phone/password behavior only", async (t) => {
       assert.equal(current.status, 200);
     },
   );
-  await t.test(
+  await scenario(
     "untrusted origins and form/simple requests cannot consume the setup cookie",
     async () => {
       const n = number(),
@@ -321,7 +338,7 @@ test("A3 new phone/password behavior only", async (t) => {
       assert.equal((await service.status(op.secret)).pending, true);
     },
   );
-  await t.test(
+  await scenario(
     "interrupted/cancelled/expired setup grants no account and requires a new SMS",
     async () => {
       const n = number(),
@@ -344,20 +361,23 @@ test("A3 new phone/password behavior only", async (t) => {
       assert.equal(await prisma.user.count({ where: { email: email(n) } }), 0);
     },
   );
-  await t.test("two completions of one proof produce exactly one account and session", async () => {
-    const n = number(),
-      op = await start(n);
-    const results = await Promise.allSettled([
-      service.complete(op.secret, fields(), {}),
-      service.complete(op.secret, fields(nextPass), {}),
-    ]);
-    assert.equal(results.filter((r) => r.status === "fulfilled").length, 1);
-    const users = await prisma.user.findMany({ where: { email: email(n) } });
-    assert.equal(users.length, 1);
-    ids.push(users[0]!.id);
-    assert.equal(await prisma.refreshToken.count({ where: { userId: users[0]!.id } }), 1);
-  });
-  await t.test(
+  await scenario(
+    "two completions of one proof produce exactly one account and session",
+    async () => {
+      const n = number(),
+        op = await start(n);
+      const results = await Promise.allSettled([
+        service.complete(op.secret, fields(), {}),
+        service.complete(op.secret, fields(nextPass), {}),
+      ]);
+      assert.equal(results.filter((r) => r.status === "fulfilled").length, 1);
+      const users = await prisma.user.findMany({ where: { email: email(n) } });
+      assert.equal(users.length, 1);
+      ids.push(users[0]!.id);
+      assert.equal(await prisma.refreshToken.count({ where: { userId: users[0]!.id } }), 1);
+    },
+  );
+  await scenario(
     "independent pending proofs for same number cannot adopt a late-created owner",
     async () => {
       const n = number(),
@@ -371,7 +391,7 @@ test("A3 new phone/password behavior only", async (t) => {
       assert.equal(await prisma.user.count({ where: { email: email(n) } }), 1);
     },
   );
-  await t.test(
+  await scenario(
     "legacy SMS-only first password retains userId, health, Coach and subscription",
     async () => {
       const n = number(),
@@ -413,7 +433,7 @@ test("A3 new phone/password behavior only", async (t) => {
       assert.equal((await service.login({ phoneNumber: n, password: pass }, {})).user.id, owner.id);
     },
   );
-  await t.test(
+  await scenario(
     "unknown legacy password provenance requires the exact existing principal plus fresh SMS",
     async () => {
       const n = number(),
@@ -437,7 +457,7 @@ test("A3 new phone/password behavior only", async (t) => {
       assert.equal((await service.complete(secret, fields(), {})).user.id, owner.id);
     },
   );
-  await t.test(
+  await scenario(
     "new SMS sign-in cannot bypass mandatory password setup or create an account",
     async () => {
       const n = number();
@@ -448,7 +468,7 @@ test("A3 new phone/password behavior only", async (t) => {
       assert.equal(await prisma.user.count({ where: { email: email(n) } }), 0);
     },
   );
-  await t.test(
+  await scenario(
     "recovery phone on Google/email account cannot create or overwrite a password",
     async () => {
       const n = number(),
@@ -464,7 +484,7 @@ test("A3 new phone/password behavior only", async (t) => {
       assert.equal(await prisma.user.count({ where: { email: email(n) } }), 0);
     },
   );
-  await t.test(
+  await scenario(
     "verified phone on an email account uses that account's one existing password",
     async () => {
       const n = number(),
@@ -481,7 +501,7 @@ test("A3 new phone/password behavior only", async (t) => {
       );
     },
   );
-  await t.test(
+  await scenario(
     "suspended/deleting/Admin users blocked; self-deactivated legacy SMS retains controlled restoration",
     async () => {
       for (const extra of [
@@ -503,7 +523,7 @@ test("A3 new phone/password behavior only", async (t) => {
       );
     },
   );
-  await t.test(
+  await scenario(
     "password/reset/security-state changes invalidate pending initial-password proof",
     async () => {
       const n = number(),
@@ -523,7 +543,7 @@ test("A3 new phone/password behavior only", async (t) => {
       await assert.rejects(service.complete(pending.secret, fields(), {}));
     },
   );
-  await t.test(
+  await scenario(
     "one SMS event cannot be replayed between A2 linking and A3 registration (both directions)",
     async () => {
       const n = number(),
@@ -567,7 +587,7 @@ test("A3 new phone/password behavior only", async (t) => {
       await assert.rejects(start(m, smsProof), isCode("PHONE_SETUP_INVALID"));
     },
   );
-  await t.test(
+  await scenario(
     "identifier reservation races never steal or duplicate another account",
     async () => {
       const n = number(),
@@ -592,7 +612,7 @@ test("A3 new phone/password behavior only", async (t) => {
       );
     },
   );
-  await t.test(
+  await scenario(
     "phone password guessing and setup retries share durable per-number limits",
     async () => {
       const n = number();
@@ -610,7 +630,7 @@ test("A3 new phone/password behavior only", async (t) => {
       await assert.rejects(start(m), isCode("TOO_MANY_REQUESTS"));
     },
   );
-  await t.test(
+  await scenario(
     "with PR49: initial password increments session version and invalidates the prior access token",
     async () => {
       const n = number(),

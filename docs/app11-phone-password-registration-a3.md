@@ -28,7 +28,10 @@ old-SMS-only transition entry. Normal login never initializes Firebase or asks
 for SMS. Google/native Android and email recovery implementations are untouched.
 
 Registration uses the existing Firebase SMS/reCAPTCHA client and online server
-verifier. Require actual SMS provider, matching signed/lookup E.164 phone and
+verifier. A3 explicitly awaits Firebase memory-only persistence before requesting
+SMS, so its provider credentials are cleared on reload rather than written to
+Firebase's default local storage. Google/native sign-in functions are unchanged.
+Require actual SMS provider, matching signed/lookup E.164 phone and
 fresh auth_time. SMS alone creates no User or Diewish session for a new phone.
 `/identity/phone-password/start` creates only pending state with a random 256-bit
 HttpOnly cookie and its server-side hash. Never return the secret in JSON or

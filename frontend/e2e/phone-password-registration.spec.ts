@@ -1,6 +1,9 @@
 import { test, expect, type Page } from "@playwright/test";
 
-async function fixture(page: Page, options: { enabled?: boolean; pending?: boolean } = {}) {
+async function fixture(
+  page: Page,
+  options: { enabled?: boolean; pending?: boolean; persistenceFailure?: boolean } = {},
+) {
   const state = {
     pending: options.pending ?? false,
     loginCalls: 0,
@@ -8,10 +11,14 @@ async function fixture(page: Page, options: { enabled?: boolean; pending?: boole
     startCalls: 0,
     cancelled: 0,
   };
-  await page.addInitScript(() => {
+  await page.addInitScript((persistenceFailure) => {
     const auth = Object.assign(
       () => ({
         languageCode: "tr",
+        setPersistence: async (value: string) => {
+          if (persistenceFailure) throw { code: "auth/operation-not-allowed" };
+          Object.assign(window, { phonePersistence: value });
+        },
         signInWithPhoneNumber: async () => {
           (window as unknown as { smsCalls: number }).smsCalls =
             ((window as unknown as { smsCalls: number }).smsCalls || 0) + 1;
@@ -31,7 +38,7 @@ async function fixture(page: Page, options: { enabled?: boolean; pending?: boole
       },
     );
     Object.assign(window, { firebase: { apps: [{}], initializeApp: () => {}, auth } });
-  });
+  }, options.persistenceFailure ?? false);
   await page.route("https://www.gstatic.com/firebasejs/**", (route) =>
     route.fulfill({ contentType: "application/javascript", body: "" }),
   );
@@ -122,6 +129,11 @@ test("new phone SMS -> password/confirmation -> consent; resume stores no form s
   await page.getByRole("button", { name: "Telefonu doğrula", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Diewish şifrenizi oluşturun" })).toBeVisible();
   expect(state.startCalls).toBe(1);
+  expect(
+    await page.evaluate(
+      () => (window as unknown as { phonePersistence?: string }).phonePersistence,
+    ),
+  ).toBe("none");
   await page.getByLabel("Şifre oluştur", { exact: true }).fill("SyntheticPhone123");
   await page.getByLabel("Şifreyi tekrar gir", { exact: true }).fill("MismatchPhone123");
   await page.getByRole("button", { name: "Şifremi kaydet ve devam et" }).click();
@@ -184,4 +196,17 @@ test("default-off preserves legacy SMS UI; config error fails closed", async ({ 
   await page.reload();
   await expect(page.locator("p[role=alert]")).toContainText("Giriş seçenekleri yüklenemedi");
   await expect(page.getByRole("button", { name: "SMS kodu gönder", exact: true })).toHaveCount(0);
+});
+
+test("memory-only provider failure sends no SMS and has no storage fallback", async ({ page }) => {
+  const state = await fixture(page, { persistenceFailure: true });
+  await page.goto("/phone-auth");
+  await page.getByRole("button", { name: "Telefon ile kayıt ol / İlk şifremi oluştur" }).click();
+  await page.getByLabel("Telefon numarası", { exact: true }).fill("0555 111 22 33");
+  await page.getByRole("button", { name: "SMS kodu gönder", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("Bu giriş yöntemi şu anda kullanılamıyor");
+  expect(state.startCalls).toBe(0);
+  expect(
+    await page.evaluate(() => (window as unknown as { smsCalls?: number }).smsCalls ?? 0),
+  ).toBe(0);
 });
