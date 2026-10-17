@@ -14,6 +14,7 @@ on:
       - feature/app5-bottom-nav-scroll-containment-a2
       - feature/app6-coach-event-driven-sync-p2-a1
       - feature/app7-coach-p2-safe-completion-a1
+      - feature/app7-coach-web-chat-list-consistency-a1
       - feature/app7-mobile-nutrition-onboarding-overflow-a1
       - feature/app7-nutrition-session-test-hardening-a1
       - feature/app6-coach-p2-listener-security-fix
@@ -374,6 +375,9 @@ jobs:
           done
           cat /tmp/diewish-frontend.log
           exit 1
+      - name: Test Coach chat list consistency with P2 disabled
+        working-directory: frontend
+        run: npx playwright test e2e/coach-chat-list-consistency.spec.ts --workers=1 --reporter=line
       - name: Run targeted Dashboard card personalization E2E
         working-directory: frontend
         run: >-
