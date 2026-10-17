@@ -174,7 +174,7 @@ export const accountRepository = {
         data: { usedAt: new Date() },
       });
       if (claimed.count === 0) return false;
-      await tx.user.update({ where: { id: userId }, data: { passwordHash } });
+      await tx.user.update({ where: { id: userId }, data: { passwordHash, hasUsablePassword: true } });
       await tx.refreshToken.updateMany({
         where: { userId, revokedAt: null },
         data: { revokedAt: new Date() },
@@ -189,7 +189,7 @@ export const accountRepository = {
    */
   async changePassword(userId: string, passwordHash: string): Promise<void> {
     await prisma.$transaction([
-      prisma.user.update({ where: { id: userId }, data: { passwordHash } }),
+      prisma.user.update({ where: { id: userId }, data: { passwordHash, hasUsablePassword: true } }),
       prisma.refreshToken.updateMany({
         where: { userId, revokedAt: null },
         data: { revokedAt: new Date() },

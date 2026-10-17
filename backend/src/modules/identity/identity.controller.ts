@@ -6,6 +6,7 @@ import { sendCreated, sendSuccess } from "../../utils/api-response";
 import { asyncHandler } from "../../utils/async-handler";
 import type { LoginInput } from "../auth/auth.schemas";
 import type { SessionContext } from "../auth/auth.service";
+import { accountMethodsService } from "./account-methods.service";
 import { externalLoginService } from "./external-login.service";
 import type { GuestConversionInput } from "./guest-conversion.schemas";
 import { guestConversionService } from "./guest-conversion.service";
@@ -44,6 +45,11 @@ function userId(req: Request): string {
 }
 
 export const identityController = {
+  accountMethods: asyncHandler(async (req: Request, res: Response) => {
+    res.setHeader("Cache-Control", "no-store");
+    sendSuccess(res, await accountMethodsService.getForUser(userId(req)));
+  }),
+
   firebaseConfig: asyncHandler(async (_req: Request, res: Response) => {
     const apiKey = env.FIREBASE_WEB_API_KEY.trim();
     const projectId = env.GOOGLE_CLOUD_PROJECT.trim();

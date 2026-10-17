@@ -44,6 +44,8 @@ identityRouter.post(
   identityController.deactivate,
 );
 
+identityRouter.get("/account-methods", authenticate, identityController.accountMethods);
+
 identityRouter.get("/sessions", authenticate, identityController.sessions);
 identityRouter.delete(
   "/sessions/:id",
