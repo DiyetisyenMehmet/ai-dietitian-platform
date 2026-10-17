@@ -98,3 +98,12 @@ test("forgot screen acknowledges request without falsely claiming delivery", asy
   await expect(page.getByText(/kayıtlı uygun bir hesabınız varsa/)).toBeVisible();
   await expect(page.getByText(/bağlantısı gönderdik/)).toHaveCount(0);
 });
+
+test("legacy query links survive URL scrubbing without losing the captured token", async ({
+  page,
+}) => {
+  await page.goto("/reset-password?token=synthetic-legacy-token");
+  await expect(page.getByRole("heading", { name: "Yeni şifre belirleyin" })).toBeVisible();
+  await expect(page).toHaveURL(/\/reset-password$/);
+  await expect(page.getByLabel("Yeni Şifre", { exact: true })).toBeVisible();
+});

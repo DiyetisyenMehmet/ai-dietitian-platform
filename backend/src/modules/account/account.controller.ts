@@ -5,6 +5,7 @@ import { ApiError } from "../../utils/api-error";
 import { sendSuccess } from "../../utils/api-response";
 import { asyncHandler } from "../../utils/async-handler";
 import { drainPasswordResetDeliveries } from "./password-reset-delivery";
+import { clearRefreshCookie } from "../auth/auth.controller";
 import { accountService } from "./account.service";
 import type {
   ChangePasswordInput,
@@ -88,6 +89,7 @@ export const accountController = {
     res.setHeader("Cache-Control", "no-store");
     const { token, newPassword } = req.body as ResetPasswordInput;
     await accountService.resetPassword(token, newPassword, auditContext(req));
+    clearRefreshCookie(res);
     sendSuccess(res, {
       message: "Your password has been reset. Please sign in with your new password.",
     });

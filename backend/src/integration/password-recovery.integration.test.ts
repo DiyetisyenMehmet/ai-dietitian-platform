@@ -143,6 +143,30 @@ test("normal user password recovery: HTTP, persistence, delivery and isolation",
   );
 
   await t.test(
+    "equivalent and bcrypt-truncated passwords cannot count as a successful reset",
+    async () => {
+      const same = await post("/auth/reset-password", {
+        token: delivered[0]!.token,
+        newPassword: oldPassword,
+      });
+      assert.equal(same.status, 422);
+      const tooLong = await post("/auth/reset-password", {
+        token: delivered[0]!.token,
+        newPassword: "Strong1" + "ş".repeat(40),
+      });
+      assert.equal(tooLong.status, 422);
+      assert.equal(
+        (
+          await prisma.accountToken.findFirstOrThrow({
+            where: { tokenHash: hashToken(delivered[0]!.token) },
+          })
+        ).usedAt,
+        null,
+      );
+    },
+  );
+
+  await t.test(
     "reset changes the actual login password and immediately revokes old access/refresh sessions",
     async () => {
       const before = await authService.login({ email: normal.email, password: oldPassword }, {});
