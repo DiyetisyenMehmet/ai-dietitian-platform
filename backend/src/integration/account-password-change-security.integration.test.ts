@@ -5,6 +5,7 @@ import type { AddressInfo } from "node:net";
 
 import { createApp } from "../app";
 import { prisma } from "../lib/prisma";
+import { accountRepository } from "../modules/account/account.repository";
 import { accountService } from "../modules/account/account.service";
 import { authRepository } from "../modules/auth/auth.repository";
 import { authService } from "../modules/auth/auth.service";
