@@ -204,6 +204,12 @@ export const accountService = {
     if (!ok) {
       throw ApiError.unauthorized("Current password is incorrect.");
     }
+    if (Buffer.byteLength(newPassword, "utf8") > 72) {
+      throw ApiError.unprocessable("Yeni şifre en fazla 72 UTF-8 bayt olabilir.");
+    }
+    if (await verifyPassword(newPassword, user.passwordHash)) {
+      throw ApiError.unprocessable("Yeni şifre mevcut şifreden farklı olmalıdır.");
+    }
 
     const passwordHash = await hashPassword(newPassword);
     await accountRepository.changePassword(user.id, passwordHash);
