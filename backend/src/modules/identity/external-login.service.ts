@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { phonePasswordEnabled, phonePasswordService } from "./phone-password.service";
 
 import { env } from "../../config/env";
 import { prisma } from "../../lib/prisma";
@@ -27,6 +28,9 @@ function accountEmail(identity: {
 export const externalLoginService = {
   async login(idToken: string, context: SessionContext): Promise<AuthResult> {
     const identity = await firebaseAuthProvider.verifyIdToken(idToken);
+    if (phonePasswordEnabled() && identity.signInProvider === "phone") {
+      return phonePasswordService.legacySmsLogin(identity, context);
+    }
     if (env.ACCOUNT_SAFE_LINKING_ENABLED) {
       if (identity.signInProvider === "google.com") return safeGoogleLogin(identity, context);
       if (!["phone", "apple.com"].includes(identity.signInProvider ?? "")) {
