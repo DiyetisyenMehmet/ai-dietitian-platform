@@ -205,7 +205,7 @@ export const accountRepository = {
   async changePassword(
     userId: string,
     passwordHash: string,
-    expected: { passwordHash: string; authVersion: number },
+    expected?: { passwordHash: string; authVersion: number },
   ): Promise<boolean> {
     return prisma.$transaction(async (tx) => {
       // Bind the write to the exact credential state that was reauthenticated
@@ -216,10 +216,11 @@ export const accountRepository = {
         where: { id: userId },
         select: { passwordHash: true, authVersion: true },
       });
+      if (!current) return false;
       if (
-        !current ||
-        current.passwordHash !== expected.passwordHash ||
-        current.authVersion !== expected.authVersion
+        expected &&
+        (current.passwordHash !== expected.passwordHash ||
+          current.authVersion !== expected.authVersion)
       ) {
         return false;
       }
