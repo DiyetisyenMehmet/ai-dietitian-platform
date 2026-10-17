@@ -68,7 +68,7 @@ async function resolveOwner(
 }
 async function lockPhone(tx: Prisma.TransactionClient, number: string) {
   // Same identifier reservation used by A2 and its legacy User.email trigger.
-  await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`diewish-identity:PHONE:${number}`}, 0))`;
+  await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`diewish-identity:PHONE:${number}`}, 0))::text`;
 }
 async function lockOwner(tx: Prisma.TransactionClient, id: string) {
   await tx.$queryRaw`SELECT id FROM users WHERE id = ${id} FOR UPDATE`;
@@ -103,7 +103,7 @@ async function budget(purpose: "setup" | "login", number: string, max: number) {
     .update(`${purpose}:${number}`)
     .digest("hex");
   const allowed = await prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`diewish-phone-budget:${key}`}, 0))`;
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`diewish-phone-budget:${key}`}, 0))::text`;
     const current = await tx.phonePasswordBudget.findUnique({ where: { key } });
     const now = new Date();
     if (!current || now.getTime() - current.windowStartedAt.getTime() >= 10 * 60_000) {

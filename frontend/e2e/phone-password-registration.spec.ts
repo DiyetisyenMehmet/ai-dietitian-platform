@@ -182,6 +182,6 @@ test("default-off preserves legacy SMS UI; config error fails closed", async ({ 
   await expect(page.getByRole("button", { name: "SMS kodu gönder", exact: true })).toBeVisible();
   await page.route("**/api/identity/phone-password/status", (route) => route.abort());
   await page.reload();
-  await expect(page.getByRole("alert")).toContainText("Giriş seçenekleri yüklenemedi");
+  await expect(page.locator("p[role=alert]")).toContainText("Giriş seçenekleri yüklenemedi");
   await expect(page.getByRole("button", { name: "SMS kodu gönder", exact: true })).toHaveCount(0);
 });

@@ -10,6 +10,7 @@ import { ApiError } from "../utils/api-error";
 import { hashPassword, verifyPassword } from "../utils/password";
 import { hashToken, signAccessToken } from "../utils/jwt";
 import { authService } from "../modules/auth/auth.service";
+import { accountRepository } from "../modules/account/account.repository";
 import { phonePasswordService as service } from "../modules/identity/phone-password.service";
 import {
   firebaseAuthProvider,
@@ -215,6 +216,36 @@ test("A3 new phone/password behavior only", async (t) => {
         externalLoginService.login(sms(n), {}),
         isCode("PHONE_PASSWORD_REQUIRED"),
       );
+    },
+  );
+  await t.test(
+    "a non-SMS provider's merely linked phone cannot enter or create a phone/password account",
+    async () => {
+      const n = number(),
+        op = await start(n);
+      await service.complete(op.secret, fields(), {});
+      const token = sms(n, {
+        signInProvider: "apple.com",
+        phoneAuthenticationVerified: false,
+        providers: ["apple.com"],
+      });
+      await assert.rejects(
+        externalLoginService.login(token, {}),
+        isCode("ACCOUNT_OWNERSHIP_REQUIRED"),
+      );
+      const other = number();
+      await assert.rejects(
+        externalLoginService.login(
+          sms(other, {
+            signInProvider: "apple.com",
+            phoneAuthenticationVerified: false,
+            providers: ["apple.com"],
+          }),
+          {},
+        ),
+        isCode("ACCOUNT_OWNERSHIP_REQUIRED"),
+      );
+      assert.equal(await prisma.user.count({ where: { email: email(other) } }), 0);
     },
   );
   await t.test(
@@ -478,10 +509,7 @@ test("A3 new phone/password behavior only", async (t) => {
       const n = number(),
         owner = await user(n),
         op = await start(n);
-      await prisma.user.update({
-        where: { id: owner.id },
-        data: { passwordHash: await hashPassword(nextPass), hasUsablePassword: true },
-      });
+      await accountRepository.changePassword(owner.id, await hashPassword(nextPass));
       await assert.rejects(service.complete(op.secret, fields(), {}));
       const saved = await prisma.user.findUniqueOrThrow({ where: { id: owner.id } });
       assert.ok(await verifyPassword(nextPass, saved.passwordHash));

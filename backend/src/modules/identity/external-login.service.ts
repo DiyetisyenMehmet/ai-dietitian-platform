@@ -56,6 +56,10 @@ export const externalLoginService = {
       throw ApiError.forbidden("This sign-in provider is not enabled for Diewish.");
     }
 
+    // A2 routes Google by stable subject above. No remaining external provider
+    // may enter or create a phone account merely through a linked profile phone.
+    if (phonePasswordEnabled() && identity.phoneNumber) throw ownershipRequired();
+
     const email = accountEmail(identity);
     let user = await authRepository.findUserByEmail(email);
     if (!user) {

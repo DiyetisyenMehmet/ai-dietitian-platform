@@ -11,7 +11,8 @@ Both `PHONE_PASSWORD_AUTH_ENABLED` and accepted A2's
 `ACCOUNT_SAFE_LINKING_ENABLED` must be true for the new paths. Both default off;
 no runtime setting has been changed. Requiring A2 prevents an old Google token
 with a merely linked phone from entering a new phone/password account through
-legacy email matching. All A2 activation prerequisites still apply, including
+legacy email matching. The remaining unsupported external-provider path also
+refuses to claim a phone from linked profile metadata. All A2 activation prerequisites still apply, including
 its old-Google confirmation UI, secure mail readiness and security acceptance.
 
 No staging migration, deploy, APK, production/main change, force push or other
