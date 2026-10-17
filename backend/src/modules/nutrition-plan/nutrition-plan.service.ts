@@ -17,6 +17,12 @@ import { buildRealLifePlanningContext } from "./nutrition-plan-realism";
 import { nutritionPlanRepository } from "./nutrition-plan.repository";
 import { assessNutritionPlanSafety } from "./nutrition-plan-safety";
 import { withNutritionGenerationLock } from "./nutrition-plan-generation-lock";
+import {
+  createNutritionTimings,
+  roundNutritionTimings,
+  timeNutritionCheck,
+  timeNutritionPhase,
+} from "./nutrition-plan-generation-timings";
 import type {
   BloodTestImplicationInput,
   CalendarDay,
@@ -50,7 +56,7 @@ function ymdFromDate(value: Date): string {
   return value.toISOString().slice(0, 10);
 }
 
-async function buildProfile(userId: string): Promise<NutritionProfile> {
+export async function buildProfile(userId: string): Promise<NutritionProfile> {
   const profile = await prisma.userProfile.findUnique({ where: { userId } });
   if (!profile) {
     throw ApiError.badRequest(
@@ -74,7 +80,7 @@ async function buildProfile(userId: string): Promise<NutritionProfile> {
   };
 }
 
-function assertOrdinaryPlanSafety(profile: NutritionProfile): void {
+export function assertOrdinaryPlanSafety(profile: NutritionProfile): void {
   const assessment = assessNutritionPlanSafety(profile);
   if (assessment.eligible) return;
 
@@ -90,7 +96,7 @@ function assertOrdinaryPlanSafety(profile: NutritionProfile): void {
   );
 }
 
-async function loadBloodTestImplications(userId: string): Promise<{
+export async function loadBloodTestImplications(userId: string): Promise<{
   analysisId: string | null;
   implications: BloodTestImplicationInput[];
 }> {
@@ -135,8 +141,11 @@ export const nutritionPlanService = {
   ): Promise<NutritionPlan> {
     return withNutritionGenerationLock(userId, async (transaction) => {
       const startedAt = Date.now();
+      const metrics = createNutritionTimings();
       try {
-        const tier = await aiUsageService.resolveTier(userId);
+        const tier = await timeNutritionPhase(metrics, "entitlementMs", () =>
+          aiUsageService.resolveTier(userId),
+        );
         if (tier === "FREE" && duration !== "SEVEN_DAY") {
           throw new ApiError(
             403,
@@ -153,19 +162,29 @@ export const nutritionPlanService = {
           );
         }
 
-        const profile = await buildProfile(userId);
-        assertOrdinaryPlanSafety(profile);
+        const profile = await timeNutritionPhase(metrics, "goalPreparationMs", () =>
+          buildProfile(userId),
+        );
+        timeNutritionCheck(metrics, "healthValidationMs", () => assertOrdinaryPlanSafety(profile));
 
         // Quota is only asserted after deterministic safety eligibility. Usage is
         // recorded only after a complete plan is persisted, so safety/provider
         // failures never consume a successful generation right.
-        await aiUsageService.assertWithinQuota(userId, "NUTRITION_PLAN", tier);
+        await timeNutritionPhase(metrics, "quotaMs", () =>
+          aiUsageService.assertWithinQuota(userId, "NUTRITION_PLAN", tier),
+        );
 
-        const [{ analysisId, implications }, adaptation] = await Promise.all([
-          loadBloodTestImplications(userId),
-          nutritionPlanAdaptationService.build(userId),
-        ]);
+        const [{ analysisId, implications }, adaptation] = await timeNutritionPhase(
+          metrics,
+          "nutritionDataMs",
+          () => Promise.all([
+            loadBloodTestImplications(userId),
+            // The profile was already read and safety-checked above.
+            nutritionPlanAdaptationService.build(userId, profile.workScheduleType),
+          ]),
+        );
 
+        const goalsStartedAt = performance.now();
         const calories = calculateCalories(profile);
         const macros = calculateMacros(profile, calories.dailyCalories, calories.goal);
         const water = calculateWater(profile);
@@ -178,8 +197,10 @@ export const nutritionPlanService = {
         const durationDays = DURATION_DAYS[duration];
         const startDate = dateOnlyFromYmd(startDateYmd);
         const realLifePlanning = buildRealLifePlanningContext(pantryText);
+        metrics.goalPreparationMs += performance.now() - goalsStartedAt;
 
-        const generation = await mealGeneratorService.generate({
+        const generation = await timeNutritionPhase(metrics, "aiWallMs", () =>
+          mealGeneratorService.generate({
           goal: calories.goal,
           dailyCalories: calories.dailyCalories,
           proteinGrams: macros.proteinGrams,
@@ -194,7 +215,8 @@ export const nutritionPlanService = {
           behaviorInsights: adaptation.behaviorInsights,
           realLifePlanning,
           durationDays,
-        });
+          }, metrics),
+        );
 
         const cycle = generation.output.cycle;
         if (cycle.length !== durationDays) {
@@ -212,7 +234,8 @@ export const nutritionPlanService = {
           planningContext: realLifePlanning,
         };
 
-        const plan = await nutritionPlanRepository.createVersioned(
+        const plan = await timeNutritionPhase(metrics, "persistenceMs", () =>
+          nutritionPlanRepository.createVersioned(
           {
             userId,
             duration,
@@ -231,11 +254,23 @@ export const nutritionPlanService = {
             processingTimeMs: Date.now() - startedAt,
           },
           transaction,
+          ),
         );
-
+        logger.info(
+          {
+            duration,
+            durationDays,
+            elapsedMs: Date.now() - startedAt,
+            phasesMs: roundNutritionTimings(metrics),
+          },
+          "Nutrition plan generation phase timings",
+        );
         return plan;
       } catch (error) {
-        logger.error({ err: error, userId, duration }, "Nutrition plan generation failed");
+        logger.error(
+          { err: error, userId, duration, elapsedMs: Date.now() - startedAt, phasesMs: roundNutritionTimings(metrics) },
+          "Nutrition plan generation failed",
+        );
         if (error instanceof ApiError) throw error;
         // The generation lock maps expired transactions to an explicit timeout.
         if (error && typeof error === "object" && "code" in error && error.code === "P2028")

@@ -15,7 +15,10 @@ const envSchema = z.object({
   // Explicit Management Center runtime identity. Staging sets this at deploy
   // time; local/test/production safely derive from NODE_ENV when it is absent.
   DIEWISH_ENVIRONMENT: z.enum(["development", "test", "staging", "production"]).optional(),
-  DIEWISH_APPLICATION_SHA: z.string().regex(/^[0-9a-f]{40}$/i).optional(),
+  DIEWISH_APPLICATION_SHA: z
+    .string()
+    .regex(/^[0-9a-f]{40}$/i)
+    .optional(),
   PORT: z.coerce.number().int().positive().default(4000),
   API_PREFIX: z.string().startsWith("/").default("/api"),
   CORS_ORIGIN: z.string().default("http://localhost:3000"),
@@ -24,13 +27,31 @@ const envSchema = z.object({
   // API documentation can be disabled in production without changing code.
   ENABLE_API_DOCS: booleanFromEnv.default(true),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
-  RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(15 * 60 * 1000),
+  RATE_LIMIT_WINDOW_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(15 * 60 * 1000),
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(100),
-  ADMIN_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(15 * 60 * 1000),
+  ADMIN_RATE_LIMIT_WINDOW_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(15 * 60 * 1000),
   ADMIN_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(60),
-  AUTH_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(15 * 60 * 1000),
+  AUTH_RATE_LIMIT_WINDOW_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(15 * 60 * 1000),
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
   COACH_SYNC_ENABLED: booleanFromEnv.default(false),
+  // Explicit-request resumable nutrition pilot only; no speculative generation.
+  NUTRITION_JOBS_ENABLED: booleanFromEnv.default(false),
+  NUTRITION_RIGHTS_EFFECTIVE_AT: z.string().datetime().optional(),
+  NUTRITION_WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(2).default(1),
+  NUTRITION_WORKER_DAILY_BATCH_LIMIT: z.coerce.number().int().min(1).max(500).default(50),
+  NUTRITION_WORKER_DAILY_CALL_LIMIT: z.coerce.number().int().min(1).max(1000).default(150),
   DATABASE_URL: z.string().url({ message: "DATABASE_URL must be a valid connection string" }),
   JWT_ACCESS_SECRET: z.string().min(32, "JWT_ACCESS_SECRET must be at least 32 characters"),
   JWT_REFRESH_SECRET: z.string().min(32, "JWT_REFRESH_SECRET must be at least 32 characters"),
@@ -67,13 +88,41 @@ const envSchema = z.object({
   USDA_FDC_BASE_URL: z.string().url().default("https://api.nal.usda.gov/fdc/v1"),
   OPEN_FOOD_FACTS_BASE_URL: z.string().url().default("https://world.openfoodfacts.org"),
   OPEN_FOOD_FACTS_USER_AGENT: z.string().min(8).default("Diewish/0.1 (diewishdestek@gmail.com)"),
-  CNF_API_BASE_URL: z.string().url().default("https://food-nutrition.canada.ca/api/canadian-nutrient-file"),
-  CNF_INDEX_CACHE_TTL_HOURS: z.coerce.number().int().positive().max(24 * 30).default(24),
-  CNF_CACHE_TTL_HOURS: z.coerce.number().int().positive().max(24 * 365).default(720),
-  DIEWISH_CONSENSUS_CACHE_TTL_HOURS: z.coerce.number().int().positive().max(24 * 365).default(720),
+  CNF_API_BASE_URL: z
+    .string()
+    .url()
+    .default("https://food-nutrition.canada.ca/api/canadian-nutrient-file"),
+  CNF_INDEX_CACHE_TTL_HOURS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(24 * 30)
+    .default(24),
+  CNF_CACHE_TTL_HOURS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(24 * 365)
+    .default(720),
+  DIEWISH_CONSENSUS_CACHE_TTL_HOURS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(24 * 365)
+    .default(720),
   NUTRITION_PROVIDER_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(30_000).default(8_000),
-  USDA_CACHE_TTL_HOURS: z.coerce.number().int().positive().max(24 * 365).default(168),
-  OPEN_FOOD_FACTS_CACHE_TTL_HOURS: z.coerce.number().int().positive().max(24 * 30).default(24),
+  USDA_CACHE_TTL_HOURS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(24 * 365)
+    .default(168),
+  OPEN_FOOD_FACTS_CACHE_TTL_HOURS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(24 * 30)
+    .default(24),
 
   AI_API_KEY: z.string().optional(),
   AI_API_BASE_URL: z.string().url().default("https://api.openai.com/v1"),
@@ -130,30 +179,40 @@ export type Env = z.infer<typeof envSchema>;
 function loadEnv(): Env {
   const parsed = envSchema.safeParse(process.env);
   if (!parsed.success) {
-    const issues = parsed.error.issues.map((issue) => `  - ${issue.path.join(".")}: ${issue.message}`).join("\n");
+    const issues = parsed.error.issues
+      .map((issue) => `  - ${issue.path.join(".")}: ${issue.message}`)
+      .join("\n");
     console.error(`❌ Invalid environment configuration:\n${issues}`);
     process.exit(1);
   }
   if (parsed.data.STORAGE_PROVIDER === "gcs" && !parsed.data.STORAGE_GCS_BUCKET.trim()) {
-    console.error("❌ Invalid environment configuration:\n  - STORAGE_GCS_BUCKET: required when STORAGE_PROVIDER=gcs");
+    console.error(
+      "❌ Invalid environment configuration:\n  - STORAGE_GCS_BUCKET: required when STORAGE_PROVIDER=gcs",
+    );
     process.exit(1);
   }
 
   if (parsed.data.SCHEDULER_TRIGGER_ENABLED) {
     const runtimeEnvironment = parsed.data.DIEWISH_ENVIRONMENT ?? parsed.data.NODE_ENV;
     if (runtimeEnvironment === "production") {
-      console.error("❌ Invalid environment configuration:\n  - SCHEDULER_TRIGGER_ENABLED: production activation requires an explicit reviewed change");
+      console.error(
+        "❌ Invalid environment configuration:\n  - SCHEDULER_TRIGGER_ENABLED: production activation requires an explicit reviewed change",
+      );
       process.exit(1);
     }
     try {
       const audience = new URL(parsed.data.SCHEDULER_OIDC_AUDIENCE);
       if (!["http:", "https:"].includes(audience.protocol)) throw new Error("invalid protocol");
     } catch {
-      console.error("❌ Invalid environment configuration:\n  - SCHEDULER_OIDC_AUDIENCE: required valid URL when scheduler trigger is enabled");
+      console.error(
+        "❌ Invalid environment configuration:\n  - SCHEDULER_OIDC_AUDIENCE: required valid URL when scheduler trigger is enabled",
+      );
       process.exit(1);
     }
     if (!parsed.data.SCHEDULER_SERVICE_ACCOUNT_EMAIL.endsWith(".iam.gserviceaccount.com")) {
-      console.error("❌ Invalid environment configuration:\n  - SCHEDULER_SERVICE_ACCOUNT_EMAIL: expected Google service-account email");
+      console.error(
+        "❌ Invalid environment configuration:\n  - SCHEDULER_SERVICE_ACCOUNT_EMAIL: expected Google service-account email",
+      );
       process.exit(1);
     }
   }
@@ -164,4 +223,6 @@ export const env: Env = loadEnv();
 export const isProduction = env.NODE_ENV === "production";
 export const isDevelopment = env.NODE_ENV === "development";
 export const isTest = env.NODE_ENV === "test";
-export const corsOrigins: string[] = env.CORS_ORIGIN.split(",").map((origin) => origin.trim()).filter(Boolean);
+export const corsOrigins: string[] = env.CORS_ORIGIN.split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);

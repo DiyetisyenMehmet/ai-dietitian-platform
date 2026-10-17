@@ -21,6 +21,12 @@ import {
 import { findAllergenViolations } from "./allergen-validator";
 import { findNutritionTargetViolations } from "./nutrition-target-validator";
 import { checkNutritionProviderBudget } from "../nutrition-plan-provider-budget";
+import { checkNutritionCallAdmission } from "../nutrition-provider-observer";
+import {
+  timeNutritionCheck,
+  timeNutritionPhase,
+  type NutritionGenerationTimings,
+} from "../nutrition-plan-generation-timings";
 import type {
   DailyPlan,
   MealTimingRecommendation,
@@ -121,14 +127,20 @@ function applyDeterministicMealTimes(
 async function generateValidatedBatch(
   input: NutritionPlanAIInput,
   priorDays: DailyPlan[],
+  metrics?: NutritionGenerationTimings,
 ): Promise<NutritionPlanAIOutput> {
   const adapter = getAIAdapter();
 
   let retried = false;
   const requestOutput = async (requestInput = input) => {
     checkNutritionProviderBudget();
+    await checkNutritionCallAdmission();
     try {
-      const result = await adapter.generateNutritionPlan(requestInput);
+      const result = metrics
+        ? await timeNutritionPhase(metrics, "aiProviderMs", () =>
+            adapter.generateNutritionPlan(requestInput),
+          )
+        : await adapter.generateNutritionPlan(requestInput);
       checkNutritionProviderBudget();
       return {
         ...result,
@@ -164,13 +176,19 @@ async function generateValidatedBatch(
     );
     output = await requestOutput();
   }
-  let allergenViolations = findAllergenViolations(output.cycle, input.allergies);
-  let nutritionViolations = findNutritionTargetViolations(output.cycle, input);
-  let realismViolations = findRealLifePlanViolations(
-    output.cycle,
-    input.startDayNumber ?? 1,
-    priorDays,
-    input.realLifePlanning,
+  let allergenViolations = timeNutritionCheck(metrics, "healthValidationMs", () =>
+    findAllergenViolations(output.cycle, input.allergies),
+  );
+  let nutritionViolations = timeNutritionCheck(metrics, "nutritionValidationMs", () =>
+    findNutritionTargetViolations(output.cycle, input),
+  );
+  let realismViolations = timeNutritionCheck(metrics, "healthValidationMs", () =>
+    findRealLifePlanViolations(
+      output.cycle,
+      input.startDayNumber ?? 1,
+      priorDays,
+      input.realLifePlanning,
+    ),
   );
   let wrongDayCount = output.cycle.length !== input.cycleLengthDays;
   let invalidMealStructure = hasInvalidMealStructure(output.cycle, input.mealTiming);
@@ -293,13 +311,19 @@ async function generateValidatedBatch(
     } else {
       output = await requestOutput({ ...input, validationFeedback: feedback });
     }
-    allergenViolations = findAllergenViolations(output.cycle, input.allergies);
-    nutritionViolations = findNutritionTargetViolations(output.cycle, input);
-    realismViolations = findRealLifePlanViolations(
-      output.cycle,
-      input.startDayNumber ?? 1,
-      priorDays,
-      input.realLifePlanning,
+    allergenViolations = timeNutritionCheck(metrics, "healthValidationMs", () =>
+      findAllergenViolations(output.cycle, input.allergies),
+    );
+    nutritionViolations = timeNutritionCheck(metrics, "nutritionValidationMs", () =>
+      findNutritionTargetViolations(output.cycle, input),
+    );
+    realismViolations = timeNutritionCheck(metrics, "healthValidationMs", () =>
+      findRealLifePlanViolations(
+        output.cycle,
+        input.startDayNumber ?? 1,
+        priorDays,
+        input.realLifePlanning,
+      ),
     );
     wrongDayCount = output.cycle.length !== input.cycleLengthDays;
     invalidMealStructure = hasInvalidMealStructure(output.cycle, input.mealTiming);
@@ -384,6 +408,7 @@ async function generateBatch(
   spec: BatchSpec,
   avoidMealSignatures: string[],
   priorDays: DailyPlan[],
+  metrics?: NutritionGenerationTimings,
 ): Promise<GeneratedBatch> {
   const startedAt = Date.now();
   const metadata = {
@@ -418,6 +443,7 @@ async function generateBatch(
         avoidMealSignatures,
       },
       priorDays,
+      metrics,
     );
 
     logger.info(
@@ -439,6 +465,7 @@ async function generateRangeInternal(
   startDayNumber: number,
   daysToGenerate: number,
   priorDays: DailyPlan[],
+  metrics?: NutritionGenerationTimings,
 ): Promise<MealGenerationResult> {
   if (
     !Number.isInteger(startDayNumber) ||
@@ -466,7 +493,7 @@ async function generateRangeInternal(
     );
     const knownPriorDays = [...priorDays, ...orderedGeneratedDays(generated)];
     const results = await Promise.all(
-      wave.map((spec) => generateBatch(input, spec, avoidMealSignatures, knownPriorDays)),
+      wave.map((spec) => generateBatch(input, spec, avoidMealSignatures, knownPriorDays, metrics)),
     );
     generated.push(...results);
   }
@@ -484,11 +511,8 @@ async function generateRangeInternal(
     });
   }
 
-  const finalRealismViolations = findRealLifePlanViolations(
-    days,
-    startDayNumber,
-    priorDays,
-    input.realLifePlanning,
+  const finalRealismViolations = timeNutritionCheck(metrics, "healthValidationMs", () =>
+    findRealLifePlanViolations(days, startDayNumber, priorDays, input.realLifePlanning),
   );
   if (finalRealismViolations.length > 0) {
     throw new ApiError(502, "The nutrition-plan provider returned an impractical meal pattern.", {
@@ -510,8 +534,11 @@ async function generateRangeInternal(
 }
 
 export const mealGeneratorService = {
-  generate(input: NutritionPlanGenerationInput): Promise<MealGenerationResult> {
-    return generateRangeInternal(input, 1, input.durationDays, []);
+  generate(
+    input: NutritionPlanGenerationInput,
+    metrics?: NutritionGenerationTimings,
+  ): Promise<MealGenerationResult> {
+    return generateRangeInternal(input, 1, input.durationDays, [], metrics);
   },
 
   /** Generates only the requested contiguous range while preserving full-horizon context. */
@@ -520,7 +547,8 @@ export const mealGeneratorService = {
     startDayNumber: number,
     daysToGenerate: number,
     priorDays: DailyPlan[] = [],
+    metrics?: NutritionGenerationTimings,
   ): Promise<MealGenerationResult> {
-    return generateRangeInternal(input, startDayNumber, daysToGenerate, priorDays);
+    return generateRangeInternal(input, startDayNumber, daysToGenerate, priorDays, metrics);
   },
 };

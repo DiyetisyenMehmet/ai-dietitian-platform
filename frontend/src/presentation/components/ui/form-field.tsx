@@ -26,12 +26,16 @@ interface FormFieldProps {
  */
 export function FormField({ id, label, error, labelAction, className, children }: FormFieldProps) {
   const errorId = `${id}-error`;
+  const hintId = React.isValidElement<React.AriaAttributes>(children)
+    ? children.props["aria-describedby"]
+    : undefined;
 
   const control = React.isValidElement(children)
     ? React.cloneElement(children as React.ReactElement<Record<string, unknown>>, {
         id,
         "aria-invalid": error ? true : undefined,
-        "aria-describedby": error ? errorId : undefined,
+        "aria-describedby":
+          [hintId, error ? errorId : undefined].filter(Boolean).join(" ") || undefined,
       })
     : children;
 

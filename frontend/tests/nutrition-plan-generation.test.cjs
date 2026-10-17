@@ -76,7 +76,7 @@ function store(client) {
     "@/infrastructure/api/http-client": { ApiError },
     react: { useSyncExternalStore: (_subscribe, snapshot) => snapshot() },
     "@/infrastructure/nutrition/nutrition-plan-client": {
-      nutritionPlanClient: client,
+      nutritionPlanClient: { capabilities: async () => ({ resumable: false }), ...client },
       isSupportedNutritionPlanDuration: (d) =>
         ["SEVEN_DAY", "FOURTEEN_DAY", "THIRTY_DAY"].includes(d),
     },

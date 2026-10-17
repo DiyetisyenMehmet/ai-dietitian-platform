@@ -44,6 +44,9 @@ model User {
   bloodTestUploads  BloodTestUpload[]
   bloodTestAnalyses BloodTestAnalysis[]
   nutritionPlans    NutritionPlan[]
+  nutritionGenerationJobs NutritionGenerationJob[]
+  nutritionRightsEvents NutritionRightsEvent[]
+  nutritionJobRequests NutritionJobRequest[]
   nutritionPlanDeviations NutritionPlanDeviation[]
   chatConversations ChatConversation[]
   coachSyncRevision CoachSyncRevision?
@@ -364,12 +367,111 @@ model NutritionPlan {
   aiModel          String?
   processingTimeMs Int?
   errorMessage     String?
+  originPlanId     String?
+  nutritionContextHash String?
   deviations       NutritionPlanDeviation[]
 
   @@index([userId])
   @@index([userId, duration, isActive])
   @@index([userId, deletedAt])
   @@map("nutrition_plans")
+}
+
+/// Explicit user requests only. No partial content is exposed through plan history.
+model NutritionGenerationJob {
+  id String @id @default(uuid())
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind String
+  duration NutritionPlanDuration
+  status String @default("QUEUED")
+  requestKey String
+  contextHash String
+  input Json?
+  startDate DateTime @db.Date
+  basePlanId String?
+  baseStateHash String?
+  sourcePlanId String?
+  revisionMode String?
+  dayNumber Int?
+  mealIndex Int?
+  completedDays Int @default(0)
+  claimToken String?
+  leaseUntil DateTime?
+  attempts Int @default(0)
+  nextAttemptAt DateTime @default(now())
+  errorCode String?
+  deliveredPlanId String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  batches NutritionGenerationBatch[]
+  attemptsLog NutritionWorkerAttempt[]
+  requests NutritionJobRequest[]
+  rightsEvent NutritionRightsEvent?
+  @@unique([userId, requestKey])
+  @@index([status, nextAttemptAt, leaseUntil])
+  @@index([userId, updatedAt])
+  @@map("nutrition_generation_jobs")
+}
+
+model NutritionJobRequest {
+  id String @id @default(uuid())
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  requestKey String
+  jobId String
+  job NutritionGenerationJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  @@unique([userId, requestKey])
+  @@map("nutrition_job_requests")
+}
+
+model NutritionGenerationBatch {
+  id String @id @default(uuid())
+  jobId String
+  job NutritionGenerationJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  startDayNumber Int
+  dayCount Int
+  output Json
+  createdAt DateTime @default(now())
+  @@unique([jobId, startDayNumber])
+  @@map("nutrition_generation_batches")
+}
+
+/// Successful delivery only; independent meal and new-plan allowances.
+model NutritionRightsEvent {
+  id String @id @default(uuid())
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobId String @unique
+  job NutritionGenerationJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  kind String
+  originPlanId String?
+  dayNumber Int?
+  createdAt DateTime @default(now())
+  @@index([userId, kind, createdAt])
+  @@index([userId, originPlanId, dayNumber, kind])
+  @@map("nutrition_rights_events")
+}
+
+/// Cost protection counts started calls, including failures/cancelled responses.
+model NutritionWorkerAttempt {
+  id String @id @default(uuid())
+  jobId String
+  job NutritionGenerationJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  claimToken String
+  status String @default("STARTED")
+  provider String?
+  model String?
+  elapsedMs Int?
+  providerCalls Int @default(0)
+  promptTokens Int?
+  outputTokens Int?
+  thinkingTokens Int?
+  errorCode String?
+  createdAt DateTime @default(now())
+  @@index([createdAt])
+  @@map("nutrition_worker_attempts")
 }
 
 model NutritionPlanDeviation {

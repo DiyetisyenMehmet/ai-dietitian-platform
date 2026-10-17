@@ -1,0 +1,59 @@
+name: Mirmir final mascot checks
+on:
+  push:
+    branches:
+      - feature/mirmir-final-animation-decision-a1
+      - feature/staging-preview
+      - feature/app7-mascot-nutrition-joint-integration-a1
+    paths:
+      - frontend/src/presentation/components/mascot/**
+      - frontend/src/presentation/components/profile/mascot-preferences-view.tsx
+      - frontend/src/domain/account/mascot-preferences.ts
+      - frontend/public/images/mascots/mirmir/**
+      - frontend/e2e/mirmir-video.spec.ts
+      - frontend/e2e/nutrition-session-check*.ts
+      - frontend/e2e/staging-nutrition-disabled-sanity.spec.ts
+      - frontend/e2e/mobile-nutrition-onboarding-overflow.spec.ts
+      - frontend/playwright.mirmir-video.config.ts
+      - .github/workflows/mirmir-motion-checks.yml
+permissions:
+  contents: read
+concurrency:
+  group: mirmir-motion-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  motion:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run type-check
+      - run: npm run lint
+      - run: node --test tests/mascot-preferences.test.cjs tests/coach-crossplatform-sync.test.cjs tests/coach-live-sync.test.cjs tests/auth-session-restore.test.cjs
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+        env:
+          NEXT_PUBLIC_API_BASE_URL: https://example.invalid/api
+          NEXT_PUBLIC_SITE_URL: https://example.invalid
+      - run: npx playwright test --config playwright.mirmir-video.config.ts
+      - name: Test joint nutrition session readiness without accounts or AI
+        if: github.ref == 'refs/heads/feature/app7-mascot-nutrition-joint-integration-a1'
+        run: npx playwright test e2e/nutrition-session-check.spec.ts --workers=1 --reporter=line
+      - name: Test joint mobile meal text and onboarding time entry
+        if: github.ref == 'refs/heads/feature/app7-mascot-nutrition-joint-integration-a1'
+        run: npx playwright test --config playwright.mobile-overflow.config.ts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mirmir-final-mascot-evidence
+          path: frontend/test-results/mirmir-video/
+          retention-days: 14

@@ -5,6 +5,9 @@ import { requireConsent } from "../../middleware/require-consent";
 import { requireCurrentWeightCheckIn } from "../../middleware/require-weight-check-in";
 import { validate } from "../../middleware/validate";
 import { nutritionPlanController } from "./nutrition-plan.controller";
+import { nutritionGenerationJobsRouter } from "./nutrition-generation-jobs.routes";
+import { env } from "../../config/env";
+import { ApiError } from "../../utils/api-error";
 import {
   acceptHungerSnackSchema,
   activePlanQuerySchema,
@@ -26,6 +29,24 @@ import {
  * after consent withdrawal.
  */
 export const nutritionPlanRouter = Router();
+nutritionPlanRouter.use("/generation-jobs", nutritionGenerationJobsRouter);
+// Do not let old clients bypass the pilot's separate delivery rights.
+nutritionPlanRouter.use((req, _res, next) => {
+  if (
+    env.NUTRITION_JOBS_ENABLED &&
+    env.NUTRITION_RIGHTS_EFFECTIVE_AT &&
+    req.method === "POST" &&
+    (req.path === "/generate" || /\/(regenerate|refresh|extend)$/.test(req.path))
+  ) {
+    next(
+      new ApiError(409, "Use durable nutrition preparation.", {
+        code: "NUTRITION_DURABLE_REQUIRED",
+      }),
+    );
+    return;
+  }
+  next();
+});
 
 nutritionPlanRouter.post(
   "/generate",

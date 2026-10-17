@@ -5,6 +5,17 @@ on:
     branches:
       - feature/staging-preview
   workflow_dispatch:
+    inputs:
+      run_live_acceptance_tests:
+        description: "Run live acceptance QA (creates synthetic accounts and an AI nutrition plan)"
+        type: boolean
+        required: false
+        default: false
+      build_android_apk:
+        description: "Build a staging Android test APK (no distribution)"
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   actions: read
@@ -60,6 +71,10 @@ jobs:
     # below are both completed successfully.
     if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (contains(github.event.head_commit.message, '[deploy-staging]') || contains(github.event.head_commit.message, '[stage4-release]') || contains(github.event.head_commit.message, '[stage4-ai-share-release]') || contains(github.event.head_commit.message, '[admin-phase1-release]') || contains(github.event.head_commit.message, '[admin-users-a1]') || contains(github.event.head_commit.message, '[admin-users-a2]'))) }}
     name: Deploy isolated staging
+    outputs:
+      frontend_url: ${{ steps.runtime.outputs.frontend_url }}
+      canonical_frontend_url: ${{ steps.runtime.outputs.canonical_frontend_url }}
+      backend_url: ${{ steps.runtime.outputs.backend_url }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     environment: staging
@@ -157,6 +172,9 @@ jobs:
             "$JWT_REFRESH_SECRET_NAME"; do
             gcloud secrets describe "$secret" --project "$PROJECT_ID" >/dev/null
           done
+
+      - name: Verify nutrition remains disabled before staging changes
+        run: python3 scripts/nutrition-staging-release-guard.py --phase pre
 
       - name: Reconcile durable private health-document storage
         shell: bash
@@ -268,6 +286,7 @@ jobs:
             --format='value(id)' \
             --quiet)"
           test -n "$BACKEND_BUILD_ID"
+          echo "BACKEND_BUILD_ID=$BACKEND_BUILD_ID" >> "$GITHUB_ENV"
           echo "Backend Cloud Build: $BACKEND_BUILD_ID"
 
           for attempt in {1..180}; do
@@ -318,7 +337,7 @@ jobs:
             --timeout 170 \
             --min 0 \
             --max 2 \
-            --update-env-vars "API_PREFIX=/api,DIEWISH_ENVIRONMENT=staging,DIEWISH_APPLICATION_SHA=${GITHUB_SHA},TRUST_PROXY_HOPS=1,RATE_LIMIT_WINDOW_MS=60000,RATE_LIMIT_MAX=1800,ENABLE_API_DOCS=false,LOG_LEVEL=info,JWT_ISSUER=diewish-staging,REFRESH_COOKIE_NAME=diewish_staging_refresh,REFRESH_COOKIE_SAME_SITE=lax,STORAGE_PROVIDER=gcs,STORAGE_GCS_BUCKET=${HEALTH_STORAGE_BUCKET},STORAGE_GCS_PREFIX=diewish-staging,AI_PROVIDER=vertex,GOOGLE_CLOUD_PROJECT=${PROJECT_ID},FIREBASE_MESSAGING_SENDER_ID=${PROJECT_NUMBER},VERTEX_AI_LOCATION=global,VERTEX_AI_MODEL=gemini-3.5-flash,USDA_FDC_API_KEY=DEMO_KEY,OPEN_FOOD_FACTS_USER_AGENT=Diewish-Staging/0.1" \
+            --update-env-vars "API_PREFIX=/api,DIEWISH_ENVIRONMENT=staging,DIEWISH_APPLICATION_SHA=${GITHUB_SHA},NUTRITION_JOBS_ENABLED=false,TRUST_PROXY_HOPS=1,RATE_LIMIT_WINDOW_MS=60000,RATE_LIMIT_MAX=1800,ENABLE_API_DOCS=false,LOG_LEVEL=info,JWT_ISSUER=diewish-staging,REFRESH_COOKIE_NAME=diewish_staging_refresh,REFRESH_COOKIE_SAME_SITE=lax,STORAGE_PROVIDER=gcs,STORAGE_GCS_BUCKET=${HEALTH_STORAGE_BUCKET},STORAGE_GCS_PREFIX=diewish-staging,AI_PROVIDER=vertex,GOOGLE_CLOUD_PROJECT=${PROJECT_ID},FIREBASE_MESSAGING_SENDER_ID=${PROJECT_NUMBER},VERTEX_AI_LOCATION=global,VERTEX_AI_MODEL=gemini-3.5-flash,USDA_FDC_API_KEY=DEMO_KEY,OPEN_FOOD_FACTS_USER_AGENT=Diewish-Staging/0.1" \
             --set-secrets "DATABASE_URL=${DATABASE_SECRET_NAME}:latest,JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET_NAME}:latest,JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET_NAME}:latest" \
             --quiet
 
@@ -344,6 +363,7 @@ jobs:
             --format='value(id)' \
             --quiet)"
           test -n "$FRONTEND_BUILD_ID"
+          echo "FRONTEND_BUILD_ID=$FRONTEND_BUILD_ID" >> "$GITHUB_ENV"
           echo "Frontend Cloud Build: $FRONTEND_BUILD_ID"
 
           for attempt in {1..180}; do
@@ -471,6 +491,11 @@ jobs:
           # safe even if an in-process tick overlaps this invocation.
           gcloud scheduler jobs run "$NOTIFICATION_SCHEDULER_JOB"             --project "$PROJECT_ID"             --location "$REGION"             --quiet
 
+      - name: Verify serving images and disabled nutrition policy
+        run: >-
+          python3 scripts/nutrition-staging-release-guard.py --phase post
+          --backend-build "$BACKEND_BUILD_ID" --frontend-build "$FRONTEND_BUILD_ID"
+
       - name: Verify staging health and Authentication runtime
         shell: bash
         run: |
@@ -542,6 +567,29 @@ jobs:
             fi
           done
 
+      - name: Export verified staging runtime
+        id: runtime
+        shell: bash
+        run: |
+          {
+            echo "frontend_url=${FRONTEND_URL}"
+            echo "canonical_frontend_url=${CANONICAL_FRONTEND_URL}"
+            echo "backend_url=${BACKEND_URL}"
+          } >> "$GITHUB_OUTPUT"
+
+  live-acceptance:
+    # Deliberately separate from deployment: these tests write synthetic data.
+    needs: deploy-staging
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_live_acceptance_tests && needs.deploy-staging.result == 'success' }}
+    name: Optional live acceptance QA
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: staging
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
       - name: Set up Node for Dashboard staging sanity
         uses: actions/setup-node@v4
         with:
@@ -558,7 +606,7 @@ jobs:
           npm ci
           sudo find /etc/apt/sources.list.d -maxdepth 1 -type f -iname '*google*chrome*' -delete
           npx playwright install --with-deps chromium
-          npx playwright test e2e/dashboard-edit-sanity.spec.ts e2e/journey-compact.spec.ts e2e/staging-notification-sanity.spec.ts e2e/mascot-preferences.spec.ts --workers=1 --reporter=line
+          npx playwright test e2e/dashboard-edit-sanity.spec.ts e2e/journey-compact.spec.ts e2e/staging-notification-sanity.spec.ts e2e/mascot-preferences.spec.ts e2e/staging-nutrition-disabled-sanity.spec.ts --workers=1 --reporter=line
 
       - name: Upload Dashboard staging sanity evidence
         if: always()
@@ -568,6 +616,28 @@ jobs:
           path: frontend/test-results/
           if-no-files-found: warn
           retention-days: 7
+
+  staging-apk:
+    # Independent opt-in: a QA failure cannot suppress the APK result, or vice versa.
+    needs: deploy-staging
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_android_apk && needs.deploy-staging.result == 'success' }}
+    name: Optional staging Android test APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: staging
+    env:
+      FRONTEND_URL: ${{ needs.deploy-staging.outputs.frontend_url }}
+      CANONICAL_FRONTEND_URL: ${{ needs.deploy-staging.outputs.canonical_frontend_url }}
+      BACKEND_URL: ${{ needs.deploy-staging.outputs.backend_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOY_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
 
       - name: Resolve staging Android Firebase config
         shell: bash
@@ -710,25 +780,92 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  release-summary:
+    needs: [deploy-staging, live-acceptance, staging-apk]
+    if: ${{ always() && (github.event_name == 'workflow_dispatch' || needs.deploy-staging.result != 'skipped') }}
+    name: Report deployment and optional QA separately
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
       - name: Staging summary
         shell: bash
+        env:
+          DEPLOY_RESULT: ${{ needs.deploy-staging.result }}
+          LIVE_QA_RESULT: ${{ needs.live-acceptance.result }}
+          APK_RESULT: ${{ needs.staging-apk.result }}
+          FRONTEND_URL: ${{ needs.deploy-staging.outputs.frontend_url }}
+          CANONICAL_FRONTEND_URL: ${{ needs.deploy-staging.outputs.canonical_frontend_url }}
+          BACKEND_URL: ${{ needs.deploy-staging.outputs.backend_url }}
         run: |
+          set -euo pipefail
+          result_label() {
+            case "$1" in
+              success) echo 'PASS' ;;
+              failure) echo 'FAIL' ;;
+              cancelled) echo 'CANCELLED' ;;
+              *) echo 'NOT RUN' ;;
+            esac
+          }
           {
             echo "## Diewish staging preview"
             echo ""
             echo "- Commit: \`${GITHUB_SHA}\`"
-            echo "- Frontend status URL: ${FRONTEND_URL}"
-            echo "- Frontend canonical URL: ${CANONICAL_FRONTEND_URL}"
-            echo "- Frontend custom URL: ${CUSTOM_FRONTEND_URL}"
-            echo "- Admin staging URL: ${ADMIN_STAGING_URL} (custom-domain mapping/DNS required)"
-            echo "- Backend: ${BACKEND_URL}"
-            echo "- Browser API: same-origin ${FRONTEND_URL}/api"
-            echo "- Authentication: Google + phone enabled; anonymous disabled; Cloud Run and custom staging origins authorized"
-            echo "- Android FCM: ${DIEWISH_ANDROID_FCM_STATUS} (mandatory for staging APK)"
-            echo "- Web FCM config: messaging sender verified; browser permission/token validated at runtime"
-            echo "- SMS regions: ${DIEWISH_STAGING_SMS_REGIONS}"
-            echo "- Database: isolated Diewish Staging Neon project"
-            echo "- Migration: direct Neon endpoint via Cloud Build"
-            echo "- USDA: official low-limit DEMO_KEY (staging only)"
-            echo "- APK artifact: \`diewish-staging-apk-${GITHUB_RUN_NUMBER}\`"
+            echo "- Staging deployment and mandatory verification: $(result_label "$DEPLOY_RESULT")"
+            echo "- Live acceptance QA (synthetic accounts and AI plan): $(result_label "$LIVE_QA_RESULT")"
+            echo "- Android test APK: $(result_label "$APK_RESULT")"
+            if [[ "$DEPLOY_RESULT" == "success" ]]; then
+              echo "- Frontend status URL: ${FRONTEND_URL}"
+              echo "- Frontend canonical URL: ${CANONICAL_FRONTEND_URL}"
+              echo "- Frontend custom URL: ${CUSTOM_FRONTEND_URL}"
+              echo "- Admin staging URL: ${ADMIN_STAGING_URL} (custom-domain mapping/DNS required)"
+              echo "- Backend: ${BACKEND_URL}"
+              echo "- Browser API: same-origin ${FRONTEND_URL}/api"
+              echo "- Authentication: Google + phone enabled; anonymous disabled; Cloud Run and custom staging origins authorized"
+              echo "- Web FCM config: messaging sender verified; browser permission/token requires client QA"
+              echo "- SMS regions: ${DIEWISH_STAGING_SMS_REGIONS}"
+              echo "- Database: isolated Diewish Staging Neon project"
+              echo "- Migration: direct Neon endpoint via Cloud Build"
+              echo "- USDA: official low-limit DEMO_KEY (staging only)"
+            fi
+            if [[ "$APK_RESULT" == "success" ]]; then
+              echo "- Android FCM: verified (mandatory for this APK)"
+              echo "- APK artifact: \`diewish-staging-apk-${GITHUB_RUN_NUMBER}\` (not distributed)"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
+
+
+  nutrition-release-verification:
+    # Verification only: never deploy, migrate, change IAM or enable a scheduler.
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feature/staging-preview' && contains(github.event.head_commit.message, '[nutrition-staging-verify]') }}
+    name: Verify already deployed nutrition-disabled staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: staging
+    env:
+      RELEASE_SHA: 390e3567c37b4529d3b18da3ee040148d63750d9
+      BACKEND_IMAGE: europe-west1-docker.pkg.dev/project-a2e260c1-839d-4f1d-b90/diewish-staging/backend:390e3567c37b4529d3b18da3ee040148d63750d9
+      FRONTEND_IMAGE: europe-west1-docker.pkg.dev/project-a2e260c1-839d-4f1d-b90/diewish-staging/frontend:390e3567c37b4529d3b18da3ee040148d63750d9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOY_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+      - name: Verify serving digests, exact source, disabled jobs and paused or absent nutrition scheduler
+        run: >-
+          python3 scripts/nutrition-staging-release-guard.py --phase post
+          --expected-sha "$RELEASE_SHA"
+          --backend-build 3f314534-e18b-46e7-8919-0c5b5544108b
+          --frontend-build 5a02ac4b-fd57-4add-b85b-91cdc740c3bb
+      - name: Report live acceptance QA not requested
+        run: |
+          echo "Live acceptance QA: NOT RUN (select run_live_acceptance_tests in a manual staging release)." >> "$GITHUB_STEP_SUMMARY"
+      - name: Recheck disabled runtime after read-only verification
+        run: >-
+          python3 scripts/nutrition-staging-release-guard.py --phase post
+          --expected-sha "$RELEASE_SHA"
+          --backend-build 3f314534-e18b-46e7-8919-0c5b5544108b
+          --frontend-build 5a02ac4b-fd57-4add-b85b-91cdc740c3bb
