@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { drainPasswordResetDeliveries } from "../modules/account/password-reset-delivery";
 
 import { requireSchedulerIdentity } from "../middleware/require-scheduler-identity";
 import { sendSuccess } from "../utils/api-response";
@@ -30,6 +31,9 @@ schedulerTriggerRouter.post(
   "/tick",
   requireSchedulerIdentity,
   asyncHandler(async (_req, res) => {
+    // Await durable recovery delivery inside the existing authenticated request.
+    // Cloud Run can suspend CPU after public requests; timers alone are insufficient.
+    await drainPasswordResetDeliveries();
     await tick();
     sendSuccess(res, { triggered: true });
   }),

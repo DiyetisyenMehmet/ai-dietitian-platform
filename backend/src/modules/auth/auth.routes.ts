@@ -1,4 +1,10 @@
 import { Router } from "express";
+import { accountController } from "../account/account.controller";
+import { forgotPasswordSchema, resetPasswordSchema } from "../account/account.schemas";
+import {
+  passwordForgotRateLimiter,
+  passwordResetRateLimiter,
+} from "../../middleware/auth-rate-limit";
 
 import { authenticate } from "../../middleware/authenticate";
 import {
@@ -16,6 +22,18 @@ import { loginSchema, logoutSchema, refreshSchema, registerSchema } from "./auth
  * `/me` requires a valid access token via `authenticate`.
  */
 export const authRouter = Router();
+authRouter.post(
+  "/forgot-password",
+  passwordForgotRateLimiter,
+  validate({ body: forgotPasswordSchema }),
+  accountController.forgotPassword,
+);
+authRouter.post(
+  "/reset-password",
+  passwordResetRateLimiter,
+  validate({ body: resetPasswordSchema }),
+  accountController.resetPassword,
+);
 
 /**
  * @openapi
@@ -67,12 +85,7 @@ authRouter.post(
  *       401: { description: Invalid credentials. }
  *       403: { description: Account deactivated. }
  */
-authRouter.post(
-  "/login",
-  loginRateLimiter,
-  validate({ body: loginSchema }),
-  authController.login,
-);
+authRouter.post("/login", loginRateLimiter, validate({ body: loginSchema }), authController.login);
 
 /**
  * @openapi
