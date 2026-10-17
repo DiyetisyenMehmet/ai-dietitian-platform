@@ -120,6 +120,10 @@ test("A3 new phone/password behavior only", async (t) => {
       },
       fn,
     );
+  if (process.env.APP11_A3_TEST_FILTER) {
+    env.ACCOUNT_SAFE_LINKING_ENABLED = true;
+    env.PHONE_PASSWORD_AUTH_ENABLED = true;
+  }
   const post = (path: string, body: unknown, cookie?: string, extra: Record<string, string> = {}) =>
     fetch(base + path, {
       method: "POST",
