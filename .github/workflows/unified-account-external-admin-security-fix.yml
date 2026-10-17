@@ -53,3 +53,39 @@ jobs:
         run: npx eslint src/modules/identity/external-login.service.ts src/integration/external-login-admin-isolation.integration.test.ts
       - name: Run only external-login Admin isolation regression
         run: node --import tsx --test --test-concurrency=1 src/integration/external-login-admin-isolation.integration.test.ts
+      - name: Prepare isolated PR58 plus unified-account stack
+        shell: bash
+        run: |
+          set -euo pipefail
+          recovery_sha="15aa8dc44785de3ce5dee975cc65e3111a5e53b4"
+          base_sha="de3bbc689d8e5f8b6bdfa74e93f6ba6877fb79b5"
+          git fetch --no-tags origin "$recovery_sha" "$base_sha"
+          preview_script="${RUNNER_TEMP}/app11-security-preview.py"
+          cp scripts/app11-a2-pr49-preview.py "$preview_script"
+          python3 - "$preview_script" "$recovery_sha" <<'PY'
+          from pathlib import Path
+          import sys
+          path = Path(sys.argv[1])
+          recovery = sys.argv[2]
+          text = path.read_text()
+          old = 'RECOVERY = "e5291d66b8537bcc24f3dc3053869e9883b14bb6"'
+          new = f'RECOVERY = "{recovery}"'
+          if old not in text:
+              raise SystemExit("Pinned PR49 marker changed; inspect before continuing.")
+          path.write_text(text.replace(old, new, 1))
+          PY
+          python3 "$preview_script" --source "$GITHUB_WORKSPACE" --output "${RUNNER_TEMP}/unified-security-preview"
+      - name: Verify combined password and external-login security fixes only
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "${RUNNER_TEMP}/unified-security-preview/backend"
+          export DATABASE_URL="postgresql://diewish:diewish@127.0.0.1:5432/external_guard?schema=combined_security"
+          npm ci
+          npx prisma validate
+          npx prisma generate
+          npx prisma migrate deploy
+          npm run type-check
+          node --import tsx --test --test-concurrency=1 \
+            src/integration/account-password-change-security.integration.test.ts \
+            src/integration/external-login-admin-isolation.integration.test.ts
