@@ -25,6 +25,8 @@ model User {
   id                  String           @id @default(uuid())
   email               String           @unique
   passwordHash        String
+  // null = legacy provenance unknown; a random external secret is not a usable password.
+  hasUsablePassword   Boolean?
   fullName            String?
   role                UserRole         @default(USER)
   isActive            Boolean          @default(true)
@@ -38,6 +40,7 @@ model User {
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
 
+  accountIdentities AccountIdentity[]
   refreshTokens     RefreshToken[]
   profile           UserProfile?
   accountTokens     AccountToken[]
@@ -76,6 +79,27 @@ model User {
   adminInvitationsSent     AdminInvitation[] @relation("AdminInvitationInviter")
 
   @@map("users")
+}
+
+// Verified identifiers only. This registry does not itself authorize sign-in or recovery.
+enum AccountIdentityKind {
+  EMAIL
+  PHONE
+  GOOGLE
+}
+
+model AccountIdentity {
+  id         String              @id @default(uuid())
+  userId     String
+  user       User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind       AccountIdentityKind
+  identifier String              @db.VarChar(320)
+  verifiedAt DateTime
+  createdAt  DateTime            @default(now())
+
+  @@unique([kind, identifier])
+  @@unique([userId, kind])
+  @@map("account_identities")
 }
 
 enum Gender {

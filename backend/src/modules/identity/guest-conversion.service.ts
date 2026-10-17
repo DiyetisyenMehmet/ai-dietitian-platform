@@ -31,6 +31,7 @@ export const guestConversionService = {
         data: {
           email: input.email,
           passwordHash: await hashPassword(input.password),
+          hasUsablePassword: true,
           fullName: input.fullName ?? current.fullName,
         },
       });

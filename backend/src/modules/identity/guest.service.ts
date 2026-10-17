@@ -10,6 +10,7 @@ export const guestService = {
     const user = await authRepository.createUser({
       email: `guest.${guestId}@guest.diewish.invalid`,
       passwordHash: "guest-account-has-no-password",
+      hasUsablePassword: false,
     });
     return issueIdentitySession(user, context, { isGuest: true });
   },
