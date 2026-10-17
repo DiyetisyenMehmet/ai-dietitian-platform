@@ -203,13 +203,21 @@ export const accountRepository = {
    * sessions are logged out after a deliberate password change.
    */
   async changePassword(userId: string, passwordHash: string): Promise<void> {
-    await prisma.$transaction([
-      prisma.user.update({ where: { id: userId }, data: { passwordHash } }),
-      prisma.refreshToken.updateMany({
+    await prisma.$transaction(async (tx) => {
+      // Share the same user-row serialization point as session issuance/reset.
+      // Whichever operation wins the lock first, no stale login may leave a
+      // surviving refresh token after this password change commits.
+      await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`;
+      const now = new Date();
+      await tx.user.update({
+        where: { id: userId },
+        data: { passwordHash, authVersion: { increment: 1 } },
+      });
+      await tx.refreshToken.updateMany({
         where: { userId, revokedAt: null },
-        data: { revokedAt: new Date() },
-      }),
-    ]);
+        data: { revokedAt: now },
+      });
+    });
   },
 
   /**
