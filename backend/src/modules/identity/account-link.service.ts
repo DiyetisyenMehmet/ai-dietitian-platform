@@ -335,6 +335,12 @@ export const accountLinkService = {
     const operation = await prisma.$transaction(async (tx) => {
       const user = await lockUser(tx, candidate.id, true);
       if (user.email !== candidate.email) throw ownershipRequired();
+      const previouslyVerifiedMailbox =
+        user.emailVerifiedAt !== null ||
+        user.accountIdentities.some(
+          (x) => x.kind === "EMAIL" && x.identifier === user.email.toLowerCase(),
+        );
+      if (!previouslyVerifiedMailbox) throw ownershipRequired();
       await enforceBudget(tx, user.id);
       if (user.accountIdentities.some((x) => x.kind === "GOOGLE")) throw ownershipRequired();
       return tx.accountIdentityOperation.create({

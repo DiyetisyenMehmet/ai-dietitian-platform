@@ -475,7 +475,10 @@ test("A2 safe linking: explicit old-account proof, current target proof, isolati
   await t.test(
     "legacy Google sign-in never adopts an email match; explicit mailbox transition retains userId",
     async () => {
-      const owner = await user({ hasUsablePassword: null });
+      const owner = await user({
+        hasUsablePassword: null,
+        emailVerifiedAt: new Date("2026-01-01"),
+      });
       await prisma.weightLog.create({
         data: { userId: owner.id, weightKg: 72, note: "Synthetic legacy health" },
       });
@@ -711,6 +714,7 @@ test("A2 safe linking: explicit old-account proof, current target proof, isolati
         isActive: false,
         deactivatedAt: new Date(),
         hasUsablePassword: null,
+        emailVerifiedAt: new Date("2026-01-01"),
       });
       const proof = google(owner.email);
       await assert.rejects(
@@ -766,6 +770,43 @@ test("A2 safe linking: explicit old-account proof, current target proof, isolati
       assert.equal(
         await prisma.refreshToken.count({ where: { userId: owner.id, revokedAt: null } }),
         0,
+      );
+      assert.equal(await prisma.accountIdentity.count({ where: { userId: owner.id } }), 0);
+    },
+  );
+  await t.test(
+    "a legacy unverified email is never promoted to a recovery method by a Google match",
+    async () => {
+      const owner = await user({ emailVerifiedAt: null });
+      const proof = google(owner.email);
+      await assert.rejects(
+        accountLinkService.startGoogleTransition(proof.token),
+        code("ACCOUNT_OWNERSHIP_REQUIRED"),
+      );
+      assert.equal(await prisma.accountIdentity.count({ where: { userId: owner.id } }), 0);
+      assert.equal(await prisma.accountIdentityOperation.count({ where: { userId: owner.id } }), 0);
+    },
+  );
+  await t.test(
+    "revoked old-mail verification invalidates an outstanding Google transition",
+    async () => {
+      const owner = await user({
+        hasUsablePassword: false,
+        emailVerifiedAt: new Date("2026-01-01"),
+      });
+      const proof = google(owner.email);
+      const op = await accountLinkService.startGoogleTransition(proof.token);
+      await prisma.user.update({ where: { id: owner.id }, data: { emailVerifiedAt: null } });
+      await assert.rejects(
+        accountLinkService.completeGoogleTransition(
+          {
+            operationId: op.operationId,
+            idToken: proof.token,
+            token: mail.get(op.operationId)!.token,
+          },
+          {},
+        ),
+        code("ACCOUNT_LINK_PROOF_INVALID"),
       );
       assert.equal(await prisma.accountIdentity.count({ where: { userId: owner.id } }), 0);
     },

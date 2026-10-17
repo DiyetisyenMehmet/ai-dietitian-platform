@@ -36,6 +36,8 @@ export function securityStamp(user: User, identities: AccountIdentity[]): string
   const state = JSON.stringify([
     user.passwordHash,
     user.email,
+    user.emailVerifiedAt,
+    (user as User & { authVersion?: number }).authVersion ?? 0,
     user.role,
     user.isActive,
     user.deactivatedAt,

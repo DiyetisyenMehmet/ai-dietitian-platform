@@ -32,7 +32,7 @@ export const accountLinkDelivery = {
       await (existingMailer as SafeMailer).deliver!({
         to,
         subject: "Diewish — Hesap bağlantısını doğrulayın",
-        text: `Bu bağlantı beş dakika geçerlidir. İşlemi siz başlatmadıysanız kullanmayın.\n\n${link}`,
+        text: `Bu bağlantı en fazla beş dakika geçerlidir. İşlemi siz başlatmadıysanız kullanmayın.\n\n${link}`,
       });
     } catch {
       throw unavailable();

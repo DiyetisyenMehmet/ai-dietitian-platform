@@ -69,7 +69,7 @@ their stable anchor are created atomically; a collision rolls everything back.
 
 `POST /identity/google-transition/start` requires fresh Google authentication and
 exactly one eligible old account. It sends a new one-time proof to that account's
-existing real mailbox, never a supplied replacement address. Completion requires
+existing real mailbox that was already verified on the old account, never a supplied replacement or unverified address. Completion requires
 both the same verified Google token and the emailed secret; it atomically records
 the stable Google binding and preserves the original userId/password/data. It
 uses the existing shared session issuer and HttpOnly refresh-cookie contract.
@@ -118,3 +118,10 @@ expiry/reset/lifecycle invalidation, replay, concurrent completion, cross-table
 registration races, rollback, legacy transition and preservation. Schema
 validation/generation, types, lint and build cover the changed server source.
 No deployment/native/device/mailbox test is triggered by this workflow.
+
+The same workflow also prepares an isolated integration preview from pinned #49
+head `e5291d66b8537bcc24f3dc3053869e9883b14bb6`. Known A1 overlaps are resolved
+explicitly, its real SMTP and account service stay byte-identical, and its exact
+provider/reset/authVersion/session guards are asserted before only the new A2
+checks run on the combined source. No GitHub branch is merged or altered by that
+preview, and unknown conflicts abort for review.
