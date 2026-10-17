@@ -1,3 +1,4 @@
+import { env } from "../../config/env";
 import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/api-error";
 
@@ -44,7 +45,7 @@ export const accountMethodsService = {
       google: { linked: has("GOOGLE") ? true : null },
       diewishPassword: { usable: user.hasUsablePassword },
       // Metadata only; no new sign-in, recovery or linking permission is granted.
-      linkingEnabled: false,
+      linkingEnabled: env.ACCOUNT_SAFE_LINKING_ENABLED,
     };
   },
 };

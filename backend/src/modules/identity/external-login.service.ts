@@ -1,11 +1,14 @@
 import crypto from "node:crypto";
 
+import { env } from "../../config/env";
 import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/api-error";
 import { hashPassword } from "../../utils/password";
 import { authRepository } from "../auth/auth.repository";
 import { issueAuthSession, type AuthResult, type SessionContext } from "../auth/auth.service";
 import { firebaseAuthProvider } from "./firebase-auth.provider";
+import { safeGoogleLogin } from "./safe-google.service";
+import { ownershipRequired } from "./safe-linking.policy";
 
 function accountEmail(identity: {
   uid: string;
@@ -24,6 +27,24 @@ function accountEmail(identity: {
 export const externalLoginService = {
   async login(idToken: string, context: SessionContext): Promise<AuthResult> {
     const identity = await firebaseAuthProvider.verifyIdToken(idToken);
+    if (env.ACCOUNT_SAFE_LINKING_ENABLED) {
+      if (identity.signInProvider === "google.com") return safeGoogleLogin(identity, context);
+      if (!["phone", "apple.com"].includes(identity.signInProvider ?? "")) {
+        throw ApiError.forbidden("This sign-in provider is not enabled for Diewish.");
+      }
+      if (identity.signInProvider === "phone" && identity.phoneAuthenticationVerified !== true)
+        throw ownershipRequired();
+      if (identity.signInProvider === "phone" && identity.phoneNumber) {
+        const binding = await prisma.accountIdentity.findUnique({
+          where: { kind_identifier: { kind: "PHONE", identifier: identity.phoneNumber } },
+          include: { user: true },
+        });
+        // Linking a recovery phone must not accidentally enable SMS-only normal
+        // login or create a second account. #51 owns phone+password sign-in.
+        if (binding && binding.user.email !== accountEmail(identity)) throw ownershipRequired();
+      }
+    }
+
     const social = identity.providers.some(
       (provider) => provider === "google.com" || provider === "apple.com",
     );

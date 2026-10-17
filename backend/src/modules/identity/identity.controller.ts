@@ -31,7 +31,7 @@ function refreshCookieOptions(expires?: Date): CookieOptions {
   };
 }
 
-function writeRefreshCookie(res: Response, token: string, expiresAt: Date): void {
+export function writeIdentityRefreshCookie(res: Response, token: string, expiresAt: Date): void {
   res.cookie(env.REFRESH_COOKIE_NAME, token, refreshCookieOptions(expiresAt));
 }
 
@@ -78,7 +78,7 @@ export const identityController = {
   externalLogin: asyncHandler(async (req: Request, res: Response) => {
     const { idToken } = req.body as ExternalLoginInput;
     const result = await externalLoginService.login(idToken, context(req));
-    writeRefreshCookie(res, result.refreshToken, result.refreshExpiresAt);
+    writeIdentityRefreshCookie(res, result.refreshToken, result.refreshExpiresAt);
     sendSuccess(res, { user: result.user, tokens: result.tokens });
   }),
 
@@ -93,7 +93,7 @@ export const identityController = {
       req.body as GuestConversionInput,
       context(req),
     );
-    writeRefreshCookie(res, result.refreshToken, result.refreshExpiresAt);
+    writeIdentityRefreshCookie(res, result.refreshToken, result.refreshExpiresAt);
     sendSuccess(res, { user: result.user, tokens: result.tokens });
   }),
 
@@ -106,7 +106,7 @@ export const identityController = {
   reactivate: asyncHandler(async (req: Request, res: Response) => {
     const { email, password } = req.body as LoginInput;
     const result = await reactivationService.withPassword(email, password, context(req));
-    writeRefreshCookie(res, result.refreshToken, result.refreshExpiresAt);
+    writeIdentityRefreshCookie(res, result.refreshToken, result.refreshExpiresAt);
     sendSuccess(res, { user: result.user, tokens: result.tokens });
   }),
 
