@@ -19,7 +19,14 @@ import { Loading } from "@/presentation/components/feedback/loading";
 function ResetPasswordForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const token = searchParams.get("token");
+  const [token, setToken] = React.useState<string | null>(null);
+  const [ready, setReady] = React.useState(false);
+  React.useEffect(() => {
+    const fragment = new URLSearchParams(window.location.hash.slice(1));
+    setToken(fragment.get("token") ?? searchParams.get("token"));
+    window.history.replaceState(null, "", window.location.pathname);
+    setReady(true);
+  }, [searchParams]);
 
   const {
     register,
@@ -43,6 +50,8 @@ function ResetPasswordForm() {
     },
     [router, token],
   );
+
+  if (!ready) return <Loading />;
 
   if (!token) {
     return (

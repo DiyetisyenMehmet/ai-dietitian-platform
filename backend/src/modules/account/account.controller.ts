@@ -4,6 +4,7 @@ import type { AuditContext } from "../../lib/audit";
 import { ApiError } from "../../utils/api-error";
 import { sendSuccess } from "../../utils/api-response";
 import { asyncHandler } from "../../utils/async-handler";
+import { drainPasswordResetDeliveries } from "./password-reset-delivery";
 import { accountService } from "./account.service";
 import type {
   ChangePasswordInput,
@@ -74,13 +75,17 @@ export const accountController = {
   forgotPassword: asyncHandler(async (req: Request, res: Response) => {
     const { email } = req.body as ForgotPasswordInput;
     await accountService.forgotPassword(email, auditContext(req));
+    res.setHeader("Cache-Control", "no-store");
     // Always the same response, regardless of whether the account exists.
     sendSuccess(res, {
-      message: "If an account exists for that email, a password reset link has been sent.",
+      message: "İsteğiniz alındı. Uygun bir hesabınız varsa sıfırlama bağlantısı e-posta adresinize gönderilecektir.",
     });
+    // Durable pending rows survive process shutdown; startup/timer also drain them.
+    void drainPasswordResetDeliveries();
   }),
 
   resetPassword: asyncHandler(async (req: Request, res: Response) => {
+    res.setHeader("Cache-Control", "no-store");
     const { token, newPassword } = req.body as ResetPasswordInput;
     await accountService.resetPassword(token, newPassword, auditContext(req));
     sendSuccess(res, {

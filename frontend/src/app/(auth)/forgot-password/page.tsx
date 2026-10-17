@@ -31,7 +31,7 @@ export default function ForgotPasswordPage() {
     const result = await authService.forgotPassword(values);
     if (result.ok) {
       setSentTo(values.email);
-      toast.success("Sıfırlama bağlantısını e-postanıza gönderdik.");
+      toast.success(result.data.message);
       return;
     }
     toast.error(result.error);
@@ -66,8 +66,9 @@ export default function ForgotPasswordPage() {
             <MailCheck className="size-7 text-primary" aria-hidden="true" />
           </div>
           <p className="text-sm text-muted-foreground">
-            <span className="font-medium text-foreground">{sentTo}</span> adresine bir şifre
-            sıfırlama bağlantısı gönderdik. Gelen kutunuzu ve spam klasörünü kontrol edin.
+            <span className="font-medium text-foreground">{sentTo}</span> adresine kayıtlı uygun bir
+            hesabınız varsa sıfırlama bağlantısı gönderilecektir. Gelen kutunuzu ve spam klasörünü
+            kontrol edin.
           </p>
           <Button
             variant="outline"

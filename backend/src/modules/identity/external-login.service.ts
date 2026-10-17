@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import jwt, { type JwtPayload } from "jsonwebtoken";
 
 import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/api-error";
@@ -24,9 +25,20 @@ function accountEmail(identity: {
 export const externalLoginService = {
   async login(idToken: string, context: SessionContext): Promise<AuthResult> {
     const identity = await firebaseAuthProvider.verifyIdToken(idToken);
-    const social = identity.providers.some(
-      (provider) => provider === "google.com" || provider === "apple.com",
-    );
+    // accounts:lookup above has already verified this exact token with Firebase.
+    // Check the authentication used for THIS token, not other methods linked to the account.
+    // Otherwise an old Firebase password on a Google-linked account could bypass a local reset.
+    const claims = jwt.decode(idToken) as
+      | (JwtPayload & { firebase?: { sign_in_provider?: string } })
+      | null;
+    const provider = claims?.firebase?.sign_in_provider;
+    if (
+      claims?.sub !== identity.uid ||
+      !["google.com", "apple.com", "phone"].includes(provider ?? "")
+    ) {
+      throw ApiError.forbidden("This sign-in provider is not enabled for Diewish.");
+    }
+    const social = provider === "google.com" || provider === "apple.com";
     if (!identity.phoneNumber && !social) {
       throw ApiError.forbidden("This sign-in provider is not enabled for Diewish.");
     }

@@ -25,6 +25,7 @@ model User {
   id                  String           @id @default(uuid())
   email               String           @unique
   passwordHash        String
+  authVersion         Int              @default(0)
   fullName            String?
   role                UserRole         @default(USER)
   isActive            Boolean          @default(true)
@@ -41,6 +42,7 @@ model User {
   refreshTokens     RefreshToken[]
   profile           UserProfile?
   accountTokens     AccountToken[]
+  passwordResetDelivery PasswordResetDelivery?
   bloodTestUploads  BloodTestUpload[]
   bloodTestAnalyses BloodTestAnalysis[]
   nutritionPlans    NutritionPlan[]
@@ -148,6 +150,21 @@ model RefreshToken {
 
   @@index([userId])
   @@map("refresh_tokens")
+}
+
+// Only delivery metadata is queued; raw links/passwords are never persisted.
+model PasswordResetDelivery {
+  userId        String    @id
+  requestedAt   DateTime  @default(now())
+  attemptedAt   DateTime?
+  completedAt   DateTime?
+  attempts      Int       @default(0)
+  leaseId       String?
+  leaseUntil    DateTime?
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([completedAt, requestedAt])
+  @@map("password_reset_deliveries")
 }
 
 enum AccountTokenType {

@@ -32,7 +32,7 @@ export const forgotPasswordSchema = z.object({
 /** Complete a password reset with a valid token and a new password. */
 export const resetPasswordSchema = z.object({
   token: tokenSchema,
-  newPassword: passwordSchema,
+  newPassword: passwordSchema.refine((value) => Buffer.byteLength(value, "utf8") <= 72, "Şifre en fazla 72 UTF-8 bayt olabilir."),
 });
 
 /** Change the password of an authenticated user. */
