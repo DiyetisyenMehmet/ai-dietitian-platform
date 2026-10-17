@@ -1,0 +1,55 @@
+name: Unified account external Admin isolation
+on:
+  push:
+    branches: [security/unified-account-external-admin-guard-a1]
+  pull_request:
+    branches: [feature/app11-phone-password-registration-a3]
+    paths:
+      - backend/src/modules/identity/external-login.service.ts
+      - backend/src/integration/external-login-admin-isolation.integration.test.ts
+      - .github/workflows/unified-account-external-admin-security-fix.yml
+permissions:
+  contents: read
+jobs:
+  external-admin-isolation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: diewish
+          POSTGRES_PASSWORD: diewish
+          POSTGRES_DB: external_guard
+        ports: ['5432:5432']
+        options: --health-cmd "pg_isready -U diewish -d external_guard" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      NODE_ENV: test
+      DIEWISH_ENVIRONMENT: test
+      DATABASE_URL: postgresql://diewish:diewish@127.0.0.1:5432/external_guard?schema=public
+      JWT_ACCESS_SECRET: external-access-secret-012345678901234567890123456789
+      JWT_REFRESH_SECRET: external-refresh-secret-01234567890123456789012345678
+      LOG_LEVEL: silent
+      BCRYPT_ROUNDS: 10
+      RATE_LIMIT_MAX: 1000
+      AUTH_RATE_LIMIT_MAX: 1000
+      ACCOUNT_SAFE_LINKING_ENABLED: 'false'
+      PHONE_PASSWORD_AUTH_ENABLED: 'false'
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npx prisma validate && npx prisma generate && npx prisma migrate deploy
+      - name: Type-check affected backend
+        run: npm run type-check
+      - name: Lint only security change surface
+        run: npx eslint src/modules/identity/external-login.service.ts src/integration/external-login-admin-isolation.integration.test.ts
+      - name: Run only external-login Admin isolation regression
+        run: node --import tsx --test --test-concurrency=1 src/integration/external-login-admin-isolation.integration.test.ts
