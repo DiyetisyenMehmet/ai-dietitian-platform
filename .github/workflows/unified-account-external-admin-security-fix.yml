@@ -57,7 +57,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          recovery_sha="15aa8dc44785de3ce5dee975cc65e3111a5e53b4"
+          recovery_sha="8134583ce6ca06a427fd888391431995912909f5"
           base_sha="de3bbc689d8e5f8b6bdfa74e93f6ba6877fb79b5"
           git fetch --no-tags origin "$recovery_sha" "$base_sha"
           preview_script="${RUNNER_TEMP}/app11-security-preview.py"
