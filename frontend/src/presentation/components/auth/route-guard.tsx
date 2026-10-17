@@ -61,7 +61,9 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { status, user } = useAuth();
   const consentState = useConsentState();
-  const onIdentityAction = pathname === "/auth/action";
+  // A pending phone setup must survive restoration of its legacy account
+  // session without being redirected away from the initial-password form.
+  const onIdentityAction = pathname === "/auth/action" || pathname === "/phone-auth";
   const onAdmin = pathname === "/admin" || pathname.startsWith("/admin/");
 
   React.useEffect(() => {

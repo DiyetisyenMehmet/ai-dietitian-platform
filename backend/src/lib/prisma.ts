@@ -1,6 +1,6 @@
 import { PrismaClient } from "@prisma/client";
-
 import { isProduction } from "../config/env";
+
 import { logger } from "./logger";
 
 /**
@@ -17,7 +17,9 @@ const globalForPrisma = globalThis as unknown as {
 export const prisma =
   globalForPrisma.prisma ??
   new PrismaClient({
-    log: isProduction ? ["error", "warn"] : ["query", "error", "warn"],
+    // Raw ORM errors may include identity values and password hashes in their
+    // query arguments. Services log sanitized operational errors instead.
+    log: [],
   });
 
 if (!isProduction) {

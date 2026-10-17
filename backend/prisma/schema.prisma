@@ -130,6 +130,32 @@ model AccountIdentityOperation {
   @@map("account_identity_operations")
 }
 
+
+// Pending SMS ownership proof; not an account, credential or authorized session.
+model PhonePasswordChallenge {
+  id             String @id @default(uuid())
+  phoneNumber    String @db.VarChar(16)
+  secretHash     String @unique
+  proofEventHash String @unique
+  expectedUserId String?
+  securityStamp  String?
+  expiresAt      DateTime
+  consumedAt     DateTime?
+  createdAt      DateTime @default(now())
+
+  @@index([expiresAt])
+  @@map("phone_password_challenges")
+}
+
+// HMAC keys contain no raw phone numbers. Counts are shared across instances.
+model PhonePasswordBudget {
+  key             String @id
+  windowStartedAt DateTime
+  attempts        Int
+
+  @@map("phone_password_budgets")
+}
+
 enum Gender {
   MALE
   FEMALE

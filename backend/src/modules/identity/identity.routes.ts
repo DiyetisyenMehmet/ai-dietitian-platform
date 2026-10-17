@@ -1,4 +1,10 @@
 import { Router, type RequestHandler } from "express";
+import { phonePasswordController, phonePasswordMiddleware } from "./phone-password.controller";
+import {
+  phonePasswordStartSchema,
+  phonePasswordCompleteSchema,
+  phonePasswordLoginSchema,
+} from "./phone-password.schemas";
 
 import { authenticate, authenticateAny } from "../../middleware/authenticate";
 import { authRateLimiter } from "../../middleware/auth-rate-limit";
@@ -101,4 +107,40 @@ identityRouter.post(
   authRateLimiter,
   validate({ body: googleTransitionCompleteSchema }),
   accountLinkController.completeGoogleTransition,
+);
+
+// A3 has its own default-off release gate, and also requires accepted A2 routing.
+identityRouter.get(
+  "/phone-password/status",
+  phonePasswordMiddleware.headers,
+  authRateLimiter,
+  phonePasswordController.status,
+);
+identityRouter.post(
+  "/phone-password/start",
+  phonePasswordMiddleware.gate,
+  authRateLimiter,
+  phonePasswordMiddleware.optionalPrincipal,
+  validate({ body: phonePasswordStartSchema }),
+  phonePasswordController.start,
+);
+identityRouter.post(
+  "/phone-password/complete",
+  phonePasswordMiddleware.gate,
+  authRateLimiter,
+  validate({ body: phonePasswordCompleteSchema }),
+  phonePasswordController.complete,
+);
+identityRouter.post(
+  "/phone-password/cancel",
+  phonePasswordMiddleware.gate,
+  authRateLimiter,
+  phonePasswordController.cancel,
+);
+identityRouter.post(
+  "/phone-password/login",
+  phonePasswordMiddleware.gate,
+  authRateLimiter,
+  validate({ body: phonePasswordLoginSchema }),
+  phonePasswordController.login,
 );

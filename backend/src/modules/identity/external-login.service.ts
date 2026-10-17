@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { phonePasswordEnabled, phonePasswordService } from "./phone-password.service";
 
 import { env } from "../../config/env";
 import { prisma } from "../../lib/prisma";
@@ -27,6 +28,9 @@ function accountEmail(identity: {
 export const externalLoginService = {
   async login(idToken: string, context: SessionContext): Promise<AuthResult> {
     const identity = await firebaseAuthProvider.verifyIdToken(idToken);
+    if (phonePasswordEnabled() && identity.signInProvider === "phone") {
+      return phonePasswordService.legacySmsLogin(identity, context);
+    }
     if (env.ACCOUNT_SAFE_LINKING_ENABLED) {
       if (identity.signInProvider === "google.com") return safeGoogleLogin(identity, context);
       if (!["phone", "apple.com"].includes(identity.signInProvider ?? "")) {
@@ -51,6 +55,10 @@ export const externalLoginService = {
     if (!identity.phoneNumber && !social) {
       throw ApiError.forbidden("This sign-in provider is not enabled for Diewish.");
     }
+
+    // A2 routes Google by stable subject above. No remaining external provider
+    // may enter or create a phone account merely through a linked profile phone.
+    if (phonePasswordEnabled() && identity.phoneNumber) throw ownershipRequired();
 
     const email = accountEmail(identity);
     let user = await authRepository.findUserByEmail(email);

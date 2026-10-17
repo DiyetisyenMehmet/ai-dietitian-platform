@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import { PhonePasswordFlow } from "@/presentation/components/auth/phone-password-flow";
 import { toast } from "sonner";
 import type { CountryCode } from "libphonenumber-js";
 
@@ -21,7 +22,7 @@ interface PhoneConfirmation {
   clear(): void;
 }
 
-export default function PhoneAuthPage() {
+function LegacyPhoneAuthPage() {
   const router = useRouter();
   const [country, setCountry] = React.useState<CountryCode>("TR");
   const [phoneNumber, setPhoneNumber] = React.useState("");
@@ -153,4 +154,17 @@ export default function PhoneAuthPage() {
       )}
     </AuthLayout>
   );
+}
+
+export default function PhoneAuthPage() {
+  const [status, setStatus] = React.useState<Awaited<ReturnType<typeof identityClient.phoneSetupStatus>> | null>(null);
+  const [failed, setFailed] = React.useState(false);
+  React.useEffect(() => {
+    let live = true;
+    identityClient.phoneSetupStatus().then((value) => { if (live) setStatus(value); }).catch(() => { if (live) setFailed(true); });
+    return () => { live = false; };
+  }, []);
+  if (failed) return <AuthLayout title="Telefon ile devam et"><p role="alert">Giriş seçenekleri yüklenemedi. Lütfen bağlantınızı kontrol edip sayfayı yenileyin.</p></AuthLayout>;
+  if (!status) return <AuthLayout title="Telefon ile devam et"><p role="status">Giriş seçenekleri yükleniyor...</p></AuthLayout>;
+  return status.enabled ? <PhonePasswordFlow pending={status.pending} expiresAt={status.expiresAt} /> : <LegacyPhoneAuthPage />;
 }

@@ -18,6 +18,26 @@ function sanitizeSession(session: AuthSession): AuthSession {
 }
 
 export const identityClient = {
+  phoneSetupStatus(): Promise<{ enabled: boolean; pending: boolean; expiresAt?: string }> {
+    return apiRequest({ path: "/identity/phone-password/status", cache: "no-store", retryOnUnauthorized: false });
+  },
+  phoneSetupStart(phoneNumber: string, idToken: string, legacyAccessToken?: string): Promise<{ expiresAt: string }> {
+    return apiRequest({ path: "/identity/phone-password/start", method: "POST", retryOnUnauthorized: false,
+      headers: { "x-diewish-phone-setup": "1", ...(legacyAccessToken ? { Authorization: `Bearer ${legacyAccessToken}` } : {}) },
+      body: JSON.stringify({ phoneNumber, idToken }) });
+  },
+  async phoneSetupComplete(password: string, passwordConfirmation: string): Promise<AuthSession> {
+    return sanitizeSession(await apiRequest<AuthSession>({ path: "/identity/phone-password/complete", method: "POST", retryOnUnauthorized: false,
+      headers: { "x-diewish-phone-setup": "1" }, body: JSON.stringify({ password, passwordConfirmation }) }));
+  },
+  phoneSetupCancel(): Promise<{ cancelled: boolean }> {
+    return apiRequest({ path: "/identity/phone-password/cancel", method: "POST", retryOnUnauthorized: false,
+      headers: { "x-diewish-phone-setup": "1" }, body: "{}" });
+  },
+  async phonePasswordLogin(phoneNumber: string, password: string): Promise<AuthSession> {
+    return sanitizeSession(await apiRequest<AuthSession>({ path: "/identity/phone-password/login", method: "POST", retryOnUnauthorized: false,
+      headers: { "x-diewish-phone-setup": "1" }, body: JSON.stringify({ phoneNumber, password }) }));
+  },
   async external(idToken: string): Promise<AuthSession> {
     const session = await apiRequest<AuthSession>({
       path: "/identity/external",
