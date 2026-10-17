@@ -87,6 +87,33 @@ test("SEC unified-account password change invalidates sessions and enforces bcry
     assert.equal(next.user.id, user.id);
   });
 
+  await t.test("stale verified password state cannot overwrite a concurrent reset", async () => {
+    const user = await createUser(oldPassword);
+    const stale = await accountRepository.findUserById(user.id);
+    assert.ok(stale);
+    assert.ok(await verifyPassword(oldPassword, stale.passwordHash));
+
+    // Model a reset/change that wins the serialized user-row state first.
+    const resetPassword = "ResetWinsPass789!";
+    const resetHash = await hashPassword(resetPassword);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash: resetHash, authVersion: { increment: 1 } },
+    });
+
+    const attackerHash = await hashPassword(newPassword);
+    const changed = await accountRepository.changePassword(user.id, attackerHash, {
+      passwordHash: stale.passwordHash,
+      authVersion: stale.authVersion,
+    });
+    assert.equal(changed, false);
+
+    const saved = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+    assert.equal(saved.authVersion, stale.authVersion + 1);
+    assert.ok(await verifyPassword(resetPassword, saved.passwordHash));
+    assert.equal(await verifyPassword(newPassword, saved.passwordHash), false);
+  });
+
   await t.test("change rejects >72 UTF-8 bytes and bcrypt-truncated equivalents", async () => {
     const exact72 = "Aa1!" + "x".repeat(68);
     assert.equal(Buffer.byteLength(exact72, "utf8"), 72);
