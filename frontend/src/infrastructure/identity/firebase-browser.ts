@@ -1,6 +1,7 @@
 import { apiRequest } from "@/infrastructure/api/http-client";
 import { isApiConfigured } from "@/application/config/env";
 import { startPhoneDiagnostic, type PhoneAuthDiagnostic } from "./phone-auth-diagnostics";
+import { isAndroidGoogleHost, requestAndroidGoogleToken } from "./android-google-auth";
 
 const FIREBASE_CDN_VERSION = "12.19.0";
 
@@ -35,6 +36,7 @@ function clearRecaptcha(verifier: FirebaseRecaptchaLike): void {
 
 interface FirebaseAuthLike {
   languageCode: string | null;
+  signInWithCredential(credential: unknown): Promise<FirebaseUserCredentialLike>;
   signInWithPopup(provider: FirebaseProviderLike): Promise<FirebaseUserCredentialLike>;
   signInWithPhoneNumber(
     phoneNumber: string,
@@ -44,7 +46,10 @@ interface FirebaseAuthLike {
 
 interface FirebaseAuthFactory {
   (): FirebaseAuthLike;
-  GoogleAuthProvider: new () => FirebaseProviderLike;
+  GoogleAuthProvider: {
+    new (): FirebaseProviderLike;
+    credential(idToken: string): unknown;
+  };
   OAuthProvider: new (providerId: string) => FirebaseProviderLike;
   RecaptchaVerifier: new (
     container: string,
@@ -165,8 +170,19 @@ async function tokenFromCredential(credential: FirebaseUserCredentialLike): Prom
   return credential.user.getIdToken(true);
 }
 
-export async function signInWithGoogle(): Promise<string> {
+export async function signInWithGoogle(signal?: AbortSignal): Promise<string> {
   const sdk = await firebase();
+  if (isAndroidGoogleHost()) {
+    const firebaseConfig = await config();
+    if (!firebaseConfig) throw Object.assign(new Error("Identity configuration unavailable"), {
+      code: "auth/configuration-unavailable",
+    });
+    const googleToken = await requestAndroidGoogleToken(firebaseConfig.projectId, signal);
+    // The Google token is NOT a Diewish session. Firebase verifies it for the
+    // backend-owned project, then /identity/external verifies the Firebase token.
+    const credential = sdk.auth.GoogleAuthProvider.credential(googleToken);
+    return tokenFromCredential(await sdk.auth().signInWithCredential(credential));
+  }
   const provider = new sdk.auth.GoogleAuthProvider();
   return tokenFromCredential(await sdk.auth().signInWithPopup(provider));
 }

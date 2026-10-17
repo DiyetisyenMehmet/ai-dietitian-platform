@@ -49,7 +49,7 @@ test('Firebase failures have safe Turkish feedback and code-only diagnostics', (
   const logs = [];
   const { authErrorMessage } = load('auth-feedback.ts', { console: { warn: (...args) => logs.push(args) } });
   const fallback = authErrorMessage(new Error('upstream secret'));
-  for (const code of ['unauthorized-domain', 'popup-closed-by-user', 'popup-blocked', 'operation-not-allowed', 'invalid-api-key', 'invalid-credential', 'network-request-failed', 'invalid-verification-code', 'captcha-check-failed', 'code-expired', 'too-many-requests', 'quota-exceeded', 'error-code:-39']) {
+  for (const code of ['native-unavailable', 'native-cancelled', 'native-timeout', 'native-failed', 'unauthorized-domain', 'popup-closed-by-user', 'popup-blocked', 'operation-not-allowed', 'invalid-api-key', 'invalid-credential', 'network-request-failed', 'invalid-verification-code', 'captcha-check-failed', 'code-expired', 'too-many-requests', 'quota-exceeded', 'error-code:-39']) {
     const message = authErrorMessage({ code: `auth/${code}`, message: 'upstream secret' });
     assert.notEqual(message, fallback);
     assert.doesNotMatch(message, /upstream|Firebase|auth\//);
@@ -58,21 +58,30 @@ test('Firebase failures have safe Turkish feedback and code-only diagnostics', (
   assert.doesNotMatch(JSON.stringify(logs), /upstream secret/);
 });
 
-function harness(responses, { scriptFailure = false, phoneFailure = false, clearFailure = false } = {}) {
-  const state = { requests: 0, initialized: [], cleared: 0, phoneCalls: 0, scriptAttempts: 0, authLanguage: null, scriptSources: [] };
+function harness(responses, { scriptFailure = false, phoneFailure = false, clearFailure = false, native = false, nativeFailure = false, exchangeFailure = false } = {}) {
+  const state = { requests: 0, initialized: [], cleared: 0, phoneCalls: 0, scriptAttempts: 0, authLanguage: null, scriptSources: [], popupCalls: 0, nativeCalls: 0, credentialCalls: 0 };
   const scripts = new Map();
   const credential = { user: { getIdToken: async () => 'test-id-token' } };
   const auth = () => ({
     get languageCode() { return state.authLanguage; },
     set languageCode(value) { state.authLanguage = value; },
-    signInWithPopup: async () => credential,
+    signInWithPopup: async () => { state.popupCalls++; return credential; },
+    signInWithCredential: async value => {
+      state.credentialCalls++;
+      assert.equal(value.idToken, 'native-google-token');
+      assert.equal(value.providerId, 'google.com');
+      if (exchangeFailure) throw { code: 'auth/invalid-credential' };
+      return credential;
+    },
     signInWithPhoneNumber: async () => {
       state.phoneCalls++;
       if (phoneFailure) throw { code: 'auth/captcha-check-failed' };
       return { confirm: async () => credential };
     },
   });
-  auth.GoogleAuthProvider = class {};
+  auth.GoogleAuthProvider = class {
+    static credential(idToken) { return { providerId: 'google.com', idToken }; }
+  };
   auth.RecaptchaVerifier = class {
     clear() {
       state.cleared++;
@@ -91,6 +100,14 @@ function harness(responses, { scriptFailure = false, phoneFailure = false, clear
         const response = responses[Math.min(state.requests++, responses.length - 1)];
         if (response instanceof Error) throw response;
         return response;
+      },
+    } : name.includes('android-google-auth') ? {
+      isAndroidGoogleHost: () => native,
+      requestAndroidGoogleToken: async projectId => {
+        state.nativeCalls++;
+        assert.equal(projectId, 'runtime-project');
+        if (nativeFailure) throw { code: 'auth/native-cancelled' };
+        return 'native-google-token';
       },
     } : name.includes('phone-auth-diagnostics') ? load('phone-auth-diagnostics.ts', {
       console: { warn() {} },
@@ -208,4 +225,30 @@ test('phone diagnostics do not observe production traffic and redact unknown exc
   assert.equal(failure.code, 'unknown');
   assert.doesNotMatch(JSON.stringify(failure), /private-|905551112233/);
   d.stop();
+});
+
+
+test('Android Google identity is exchanged by Firebase before returning a Firebase token', async () => {
+  const h = harness([configured], { native: true });
+  assert.equal(await h.signInWithGoogle(), 'test-id-token');
+  assert.equal(h.state.nativeCalls, 1);
+  assert.equal(h.state.credentialCalls, 1);
+  assert.equal(h.state.popupCalls, 0);
+});
+
+test('Android cancellation and Firebase rejection never fall back to popup or return a session', async () => {
+  for (const options of [{ nativeFailure: true }, { exchangeFailure: true }]) {
+    const h = harness([configured], { native: true, ...options });
+    await assert.rejects(h.signInWithGoogle());
+    assert.equal(h.state.popupCalls, 0);
+    assert.equal(h.state.credentialCalls, options.nativeFailure ? 0 : 1);
+  }
+});
+
+test('Web Google retains the popup path without invoking Android or credential exchange', async () => {
+  const h = harness([configured]);
+  assert.equal(await h.signInWithGoogle(), 'test-id-token');
+  assert.equal(h.state.popupCalls, 1);
+  assert.equal(h.state.nativeCalls, 0);
+  assert.equal(h.state.credentialCalls, 0);
 });

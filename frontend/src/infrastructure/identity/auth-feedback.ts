@@ -1,4 +1,8 @@
 const messages: Record<string, string> = {
+  "auth/native-unavailable": "Google ile giriş için uygulamanızı güncelleyin. Sorun sürerse e-posta ile giriş yapabilirsiniz.",
+  "auth/native-cancelled": "Google ile giriş iptal edildi. Yeniden deneyebilirsiniz.",
+  "auth/native-timeout": "Google ile giriş zaman aşımına uğradı. Yeniden deneyin.",
+  "auth/native-failed": "Google hesabına ulaşılamadı. Google Play hizmetlerini ve bağlantınızı kontrol edip tekrar deneyin.",
   "auth/unauthorized-domain": "Bu adres için giriş henüz etkin değil. Lütfen destek ekibine bildirin.",
   "auth/popup-closed-by-user": "Google giriş penceresi kapatıldı. Yeniden deneyebilirsiniz.",
   "auth/popup-blocked": "Tarayıcınız giriş penceresini engelledi. Açılır pencerelere izin verip tekrar deneyin.",
