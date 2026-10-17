@@ -24,3 +24,9 @@ staging Mirmir A4 verification recovery
 task=MIRMIR-A4-DIRECT-INTEGRATION
 verified_application_sha=f8544b948396aacba7647371d358b3da51cad752
 purpose=pass existing successful Cloud Build IDs to strict serving-image verification; no IAM, application, feature-flag or guard-policy changes
+
+staging transparent Mirmir restoration
+task=MIRMIR-RESTORE-TRANSPARENT-STAGING-RELEASE
+verified_application_sha=de3bbc689d8e5f8b6bdfa74e93f6ba6877fb79b5
+approved_by_user=2026-10-17
+purpose=publish merged PR 41: original transparent poses and default blink; no application-code changes; no optional live AI acceptance or release APK requested
