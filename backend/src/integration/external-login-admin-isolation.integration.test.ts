@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import test from "node:test";
+import jwt from "jsonwebtoken";
 
 import { env } from "../config/env";
 import { prisma } from "../lib/prisma";
@@ -56,9 +57,13 @@ test("SEC external user login never mints or reactivates ADMIN sessions", async 
   }
 
   function google(email: string, subject: string): string {
-    const token = `google-${crypto.randomUUID()}`;
+    const uid = `firebase-${crypto.randomUUID()}`;
+    const token = jwt.sign(
+      { sub: uid, firebase: { sign_in_provider: "google.com" } },
+      "synthetic-external-admin-guard",
+    );
     identities.set(token, {
-      uid: `firebase-${crypto.randomUUID()}`,
+      uid,
       email,
       emailVerified: true,
       phoneNumber: null,
@@ -72,9 +77,13 @@ test("SEC external user login never mints or reactivates ADMIN sessions", async 
   }
 
   function phone(number: string): string {
-    const token = `phone-${crypto.randomUUID()}`;
+    const uid = `firebase-${crypto.randomUUID()}`;
+    const token = jwt.sign(
+      { sub: uid, firebase: { sign_in_provider: "phone" } },
+      "synthetic-external-admin-guard",
+    );
     identities.set(token, {
-      uid: `firebase-${crypto.randomUUID()}`,
+      uid,
       email: null,
       emailVerified: false,
       phoneNumber: number,
