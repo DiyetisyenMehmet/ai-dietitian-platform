@@ -54,6 +54,22 @@ async function snapshot(client) {
           [`app11-message-${index}`, `app11-chat-${index}`, "USER", "synthetic preserved message"],
         );
       }
+      // Compare inherited Prisma-vs-SQL drift before/after, rather than trying
+      // to remove existing intentionally SQL-managed tables from the project.
+      let baselineSchema = fs.readFileSync("prisma/schema.prisma", "utf8");
+      for (const pattern of [
+        /^.*hasUsablePassword\s+Boolean\?[^\n]*\n/m,
+        /^.*accountIdentities\s+AccountIdentity\[\][^\n]*\n/m,
+        /\nenum AccountIdentityKind \{[^}]*\}\n/,
+        /\nmodel AccountIdentity \{[^}]*\}\n/,
+      ]) {
+        assert.ok(pattern.test(baselineSchema));
+        baselineSchema = baselineSchema.replace(pattern, "");
+      }
+      fs.writeFileSync(
+        process.env.APP11_BASELINE_SCHEMA_PATH || "/tmp/app11-before-schema.prisma",
+        baselineSchema,
+      );
       fs.writeFileSync(snapshotFile, JSON.stringify(await snapshot(client)));
       console.log("Migration baseline captured: 3 synthetic legacy accounts and related records.");
     } else if (process.argv[2] === "verify") {

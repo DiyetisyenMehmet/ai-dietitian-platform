@@ -112,9 +112,24 @@ weight/chat/message records, snapshots all fields, applies the new migration,
 and proves byte-equivalent row data (except the new null column) and no inferred
 links. It then runs schema validation/generation, type/lint/build checks,
 foundation security tests, relevant auth/lifecycle/onboarding/Admin compatibility
-and a Prisma schema-drift check. Fixture script refuses non-local URLs and any
+and a comparison proving inherited Prisma/SQL schema drift is unchanged.
+Existing SQL-managed tables are not removed or rewritten to satisfy Prisma. Fixture script refuses non-local URLs and any
 database name other than `app11_test`, and requires an explicit disposable marker.
 
 Local PGlite results are supplementary only; they do not prove PostgreSQL 16
 parallel-connection behavior. The real PostgreSQL workflow result is authoritative
 for that check. No real phone/SMS/mailbox/Google device flow is claimed by phase 1.
+
+## Integration preview with #49
+
+A disposable local combined checkout (not a GitHub PR merge) was prepared from
+#49 head `e5291d66b8537bcc24f3dc3053869e9883b14bb6` plus these phase-1 changes.
+Four overlaps were resolved for verification: `package.json` preserves both test
+lists, `schema.prisma` preserves both additive models/fields, `auth.repository.ts`
+preserves authVersion-checked session issuance plus password provenance, and
+`account.repository.ts` preserves all reset locking/expiry/role/session/delivery
+protections with `hasUsablePassword: true` in the successful password update.
+Schema validation/generation, type checking and all 18 foundation checks passed
+on this temporary combination. The check used local PGlite, not staging and not
+a claim that the two open PRs have already been integrated. Integration must
+resolve those same overlaps after either PR changes the shared staging base.

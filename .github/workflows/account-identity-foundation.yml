@@ -65,7 +65,9 @@ jobs:
           mv "$migration" "$pending"
           trap 'if test -d "$pending"; then mv "$pending" "$migration"; fi' EXIT
           npx prisma migrate deploy
+          export APP11_BASELINE_SCHEMA_PATH="${RUNNER_TEMP}/app11-before-schema.prisma"
           node scripts/app11-migration-check.mjs seed
+          npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel "$APP11_BASELINE_SCHEMA_PATH" --script > "${RUNNER_TEMP}/app11-drift-before.sql"
           mv "$pending" "$migration"
           npx prisma migrate deploy
           node scripts/app11-migration-check.mjs verify
@@ -79,5 +81,9 @@ jobs:
           src/integration/auth-onboarding.integration.test.ts
           src/integration/identity-lifecycle.integration.test.ts
           src/integration/admin-password-setup.integration.test.ts
-      - name: Verify schema has no unplanned table or column drift
-        run: npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code
+      - name: Verify inherited SQL-managed schema drift is unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --script > "${RUNNER_TEMP}/app11-drift-after.sql"
+          cmp "${RUNNER_TEMP}/app11-drift-before.sql" "${RUNNER_TEMP}/app11-drift-after.sql"
