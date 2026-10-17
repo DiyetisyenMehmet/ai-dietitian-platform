@@ -5,6 +5,17 @@ on:
     branches:
       - feature/staging-preview
   workflow_dispatch:
+    inputs:
+      run_live_acceptance_tests:
+        description: "Run live acceptance QA (creates synthetic accounts and an AI nutrition plan)"
+        type: boolean
+        required: false
+        default: false
+      build_android_apk:
+        description: "Build a staging Android test APK (no distribution)"
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   actions: read
@@ -60,6 +71,10 @@ jobs:
     # below are both completed successfully.
     if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (contains(github.event.head_commit.message, '[deploy-staging]') || contains(github.event.head_commit.message, '[stage4-release]') || contains(github.event.head_commit.message, '[stage4-ai-share-release]') || contains(github.event.head_commit.message, '[admin-phase1-release]') || contains(github.event.head_commit.message, '[admin-users-a1]') || contains(github.event.head_commit.message, '[admin-users-a2]'))) }}
     name: Deploy isolated staging
+    outputs:
+      frontend_url: ${{ steps.runtime.outputs.frontend_url }}
+      canonical_frontend_url: ${{ steps.runtime.outputs.canonical_frontend_url }}
+      backend_url: ${{ steps.runtime.outputs.backend_url }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     environment: staging
@@ -552,6 +567,29 @@ jobs:
             fi
           done
 
+      - name: Export verified staging runtime
+        id: runtime
+        shell: bash
+        run: |
+          {
+            echo "frontend_url=${FRONTEND_URL}"
+            echo "canonical_frontend_url=${CANONICAL_FRONTEND_URL}"
+            echo "backend_url=${BACKEND_URL}"
+          } >> "$GITHUB_OUTPUT"
+
+  live-acceptance:
+    # Deliberately separate from deployment: these tests write synthetic data.
+    needs: deploy-staging
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_live_acceptance_tests && needs.deploy-staging.result == 'success' }}
+    name: Optional live acceptance QA
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: staging
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
       - name: Set up Node for Dashboard staging sanity
         uses: actions/setup-node@v4
         with:
@@ -578,6 +616,28 @@ jobs:
           path: frontend/test-results/
           if-no-files-found: warn
           retention-days: 7
+
+  staging-apk:
+    # Independent opt-in: a QA failure cannot suppress the APK result, or vice versa.
+    needs: deploy-staging
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_android_apk && needs.deploy-staging.result == 'success' }}
+    name: Optional staging Android test APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: staging
+    env:
+      FRONTEND_URL: ${{ needs.deploy-staging.outputs.frontend_url }}
+      CANONICAL_FRONTEND_URL: ${{ needs.deploy-staging.outputs.canonical_frontend_url }}
+      BACKEND_URL: ${{ needs.deploy-staging.outputs.backend_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOY_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
 
       - name: Resolve staging Android Firebase config
         shell: bash
@@ -720,27 +780,57 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  release-summary:
+    needs: [deploy-staging, live-acceptance, staging-apk]
+    if: ${{ always() && (github.event_name == 'workflow_dispatch' || needs.deploy-staging.result != 'skipped') }}
+    name: Report deployment and optional QA separately
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
       - name: Staging summary
         shell: bash
+        env:
+          DEPLOY_RESULT: ${{ needs.deploy-staging.result }}
+          LIVE_QA_RESULT: ${{ needs.live-acceptance.result }}
+          APK_RESULT: ${{ needs.staging-apk.result }}
+          FRONTEND_URL: ${{ needs.deploy-staging.outputs.frontend_url }}
+          CANONICAL_FRONTEND_URL: ${{ needs.deploy-staging.outputs.canonical_frontend_url }}
+          BACKEND_URL: ${{ needs.deploy-staging.outputs.backend_url }}
         run: |
+          set -euo pipefail
+          result_label() {
+            case "$1" in
+              success) echo 'PASS' ;;
+              failure) echo 'FAIL' ;;
+              cancelled) echo 'CANCELLED' ;;
+              *) echo 'NOT RUN' ;;
+            esac
+          }
           {
             echo "## Diewish staging preview"
             echo ""
             echo "- Commit: \`${GITHUB_SHA}\`"
-            echo "- Frontend status URL: ${FRONTEND_URL}"
-            echo "- Frontend canonical URL: ${CANONICAL_FRONTEND_URL}"
-            echo "- Frontend custom URL: ${CUSTOM_FRONTEND_URL}"
-            echo "- Admin staging URL: ${ADMIN_STAGING_URL} (custom-domain mapping/DNS required)"
-            echo "- Backend: ${BACKEND_URL}"
-            echo "- Browser API: same-origin ${FRONTEND_URL}/api"
-            echo "- Authentication: Google + phone enabled; anonymous disabled; Cloud Run and custom staging origins authorized"
-            echo "- Android FCM: ${DIEWISH_ANDROID_FCM_STATUS} (mandatory for staging APK)"
-            echo "- Web FCM config: messaging sender verified; browser permission/token validated at runtime"
-            echo "- SMS regions: ${DIEWISH_STAGING_SMS_REGIONS}"
-            echo "- Database: isolated Diewish Staging Neon project"
-            echo "- Migration: direct Neon endpoint via Cloud Build"
-            echo "- USDA: official low-limit DEMO_KEY (staging only)"
-            echo "- APK artifact: \`diewish-staging-apk-${GITHUB_RUN_NUMBER}\`"
+            echo "- Staging deployment and mandatory verification: $(result_label "$DEPLOY_RESULT")"
+            echo "- Live acceptance QA (synthetic accounts and AI plan): $(result_label "$LIVE_QA_RESULT")"
+            echo "- Android test APK: $(result_label "$APK_RESULT")"
+            if [[ "$DEPLOY_RESULT" == "success" ]]; then
+              echo "- Frontend status URL: ${FRONTEND_URL}"
+              echo "- Frontend canonical URL: ${CANONICAL_FRONTEND_URL}"
+              echo "- Frontend custom URL: ${CUSTOM_FRONTEND_URL}"
+              echo "- Admin staging URL: ${ADMIN_STAGING_URL} (custom-domain mapping/DNS required)"
+              echo "- Backend: ${BACKEND_URL}"
+              echo "- Browser API: same-origin ${FRONTEND_URL}/api"
+              echo "- Authentication: Google + phone enabled; anonymous disabled; Cloud Run and custom staging origins authorized"
+              echo "- Web FCM config: messaging sender verified; browser permission/token requires client QA"
+              echo "- SMS regions: ${DIEWISH_STAGING_SMS_REGIONS}"
+              echo "- Database: isolated Diewish Staging Neon project"
+              echo "- Migration: direct Neon endpoint via Cloud Build"
+              echo "- USDA: official low-limit DEMO_KEY (staging only)"
+            fi
+            if [[ "$APK_RESULT" == "success" ]]; then
+              echo "- Android FCM: verified (mandatory for this APK)"
+              echo "- APK artifact: \`diewish-staging-apk-${GITHUB_RUN_NUMBER}\` (not distributed)"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
 
@@ -752,7 +842,6 @@ jobs:
     timeout-minutes: 20
     environment: staging
     env:
-      NUTRITION_ONLY: ${{ contains(github.event.head_commit.message, '[nutrition-only]') }}
       RELEASE_SHA: 390e3567c37b4529d3b18da3ee040148d63750d9
       BACKEND_IMAGE: europe-west1-docker.pkg.dev/project-a2e260c1-839d-4f1d-b90/diewish-staging/backend:390e3567c37b4529d3b18da3ee040148d63750d9
       FRONTEND_IMAGE: europe-west1-docker.pkg.dev/project-a2e260c1-839d-4f1d-b90/diewish-staging/frontend:390e3567c37b4529d3b18da3ee040148d63750d9
@@ -771,25 +860,10 @@ jobs:
           --expected-sha "$RELEASE_SHA"
           --backend-build 3f314534-e18b-46e7-8919-0c5b5544108b
           --frontend-build 5a02ac4b-fd57-4add-b85b-91cdc740c3bb
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-      - name: Check health, session, Dashboard, Coach and legacy nutrition on published code
-        working-directory: frontend
-        env:
-          E2E_WEB_BASE_URL: https://staging.diewish.com
-          E2E_API_BASE_URL: https://staging.diewish.com/api
+      - name: Report live acceptance QA not requested
         run: |
-          npm ci
-          npx playwright install --with-deps chromium
-          if [[ "$NUTRITION_ONLY" == "true" ]]; then
-            npx playwright test e2e/staging-nutrition-disabled-sanity.spec.ts --workers=1 --reporter=line
-          else
-            npx playwright test e2e/dashboard-edit-sanity.spec.ts e2e/journey-compact.spec.ts e2e/staging-notification-sanity.spec.ts e2e/mascot-preferences.spec.ts e2e/staging-nutrition-disabled-sanity.spec.ts --workers=1 --reporter=line
-          fi
-      - name: Recheck disabled runtime after smoke tests
+          echo "Live acceptance QA: NOT RUN (select run_live_acceptance_tests in a manual staging release)." >> "$GITHUB_STEP_SUMMARY"
+      - name: Recheck disabled runtime after read-only verification
         run: >-
           python3 scripts/nutrition-staging-release-guard.py --phase post
           --expected-sha "$RELEASE_SHA"
