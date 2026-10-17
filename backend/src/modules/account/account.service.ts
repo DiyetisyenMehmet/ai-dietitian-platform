@@ -212,7 +212,13 @@ export const accountService = {
     }
 
     const passwordHash = await hashPassword(newPassword);
-    await accountRepository.changePassword(user.id, passwordHash);
+    const changed = await accountRepository.changePassword(user.id, passwordHash, {
+      passwordHash: user.passwordHash,
+      authVersion: user.authVersion,
+    });
+    if (!changed) {
+      throw ApiError.unauthorized("Session is no longer valid.");
+    }
     await recordAudit({ action: "PASSWORD_CHANGED", userId: user.id, context });
   },
 
