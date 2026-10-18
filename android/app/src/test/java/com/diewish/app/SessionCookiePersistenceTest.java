@@ -22,6 +22,8 @@ import androidx.webkit.ScriptHandler;
 import java.util.Set;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.IdentityHashMap;
+import java.util.Map;
 import android.webkit.ValueCallback;
 import org.robolectric.shadows.ShadowWebView;
 import org.robolectric.annotation.Config;
@@ -60,7 +62,14 @@ public final class SessionCookiePersistenceTest {
     @Implements(value = WebViewFeature.class, isInAndroidSdk = false)
     public static class DocumentStartFeature {
         static boolean supported;
-        @Implementation public static boolean isFeatureSupported(String feature) { return supported; }
+        static boolean messagesSupported;
+        @Implementation public static boolean isFeatureSupported(String feature) {
+            // Do not advertise every AndroidX feature: Robolectric has no real
+            // WebView message provider. Each supported API needs its own model.
+            if (WebViewFeature.DOCUMENT_START_SCRIPT.equals(feature)) return supported;
+            if (WebViewFeature.WEB_MESSAGE_LISTENER.equals(feature)) return messagesSupported;
+            return false;
+        }
     }
 
     @Implements(value = WebViewCompat.class, isInAndroidSdk = false)
@@ -68,12 +77,31 @@ public final class SessionCookiePersistenceTest {
         static int registrations;
         static String script;
         static Set<String> origins;
+        static int messageRegistrations;
+        static int messageRemovals;
+        static final Map<WebView, WebViewCompat.WebMessageListener> listeners = new IdentityHashMap<>();
         @Implementation public static ScriptHandler addDocumentStartJavaScript(WebView view, String source, Set<String> allowed) {
             assertNull(shadowOf(view).getLastLoadedUrl()); // registration precedes first load
             registrations++;
             script = source;
             origins = allowed;
             return null;
+        }
+        @Implementation public static void addWebMessageListener(WebView view, String name,
+            Set<String> allowed, WebViewCompat.WebMessageListener listener) {
+            assertTrue(DocumentStartFeature.messagesSupported);
+            assertNull(shadowOf(view).getLastLoadedUrl()); // Google bridge also precedes first load
+            assertEquals(DiewishGoogleAuthBridge.NAME, name);
+            assertEquals(java.util.Collections.singleton(BuildConfig.WEB_BASE_URL), allowed);
+            assertNotNull(listener);
+            assertNull(listeners.put(view, listener));
+            messageRegistrations++;
+        }
+        @Implementation public static void removeWebMessageListener(WebView view, String name) {
+            assertEquals(DiewishGoogleAuthBridge.NAME, name);
+            assertFalse(shadowOf(view).wasDestroyCalled()); // remove before WebView destruction
+            assertNotNull(listeners.remove(view));
+            messageRemovals++;
         }
     }
 
@@ -93,7 +121,11 @@ public final class SessionCookiePersistenceTest {
         DurableCookieManager.fail = false;
         DurableCookieManager.manager = new TrackingCookies();
         DocumentStartFeature.supported = true;
+        DocumentStartFeature.messagesSupported = true;
         DocumentStartScripts.registrations = 0;
+        DocumentStartScripts.messageRegistrations = 0;
+        DocumentStartScripts.messageRemovals = 0;
+        DocumentStartScripts.listeners.clear();
         ScriptEvaluations.scripts.clear();
     }
 
@@ -162,6 +194,8 @@ public final class SessionCookiePersistenceTest {
         assertEquals(1, DocumentStartScripts.registrations);
         assertEquals(java.util.Collections.singleton(BuildConfig.WEB_BASE_URL), DocumentStartScripts.origins);
         assertEquals(DiewishSessionCookieBridge.bootstrapScript(), DocumentStartScripts.script);
+        assertEquals(1, DocumentStartScripts.messageRegistrations);
+        assertTrue(DocumentStartScripts.listeners.containsKey(firstView));
         assertTrue(CookieManager.getInstance().acceptCookie());
         assertFalse(CookieManager.getInstance().acceptThirdPartyCookies(firstView));
         DurableCookieManager.memory = "synthetic-host-cookie";
@@ -169,22 +203,53 @@ public final class SessionCookiePersistenceTest {
         first.pause().stop().destroy();
         assertNull(shadowOf(firstView).getJavascriptInterface("DiewishSessionCookies"));
         assertTrue(shadowOf(firstView).wasDestroyCalled());
+        assertEquals(1, DocumentStartScripts.messageRemovals);
+        assertFalse(DocumentStartScripts.listeners.containsKey(firstView));
         ActivityController<MainActivity> next = Robolectric.buildActivity(MainActivity.class).setup();
         WebView nextView = ReflectionHelpers.getField(next.get(), "webView");
         assertNotSame(firstView, nextView);
         assertTrue(shadowOf(nextView).getJavascriptInterface("DiewishSessionCookies") instanceof DiewishSessionCookieBridge);
         assertEquals("synthetic-host-cookie", DurableCookieManager.disk);
+        assertEquals(2, DocumentStartScripts.messageRegistrations);
+        assertTrue(DocumentStartScripts.listeners.containsKey(nextView));
         next.pause().stop().destroy();
+        assertEquals(2, DocumentStartScripts.messageRemovals);
+        assertTrue(DocumentStartScripts.listeners.isEmpty());
     }
 
     @Test public void oldProviderKeepsSafePageFinishedFallbackAndNeverEnablesThirdPartyCookies() {
         DocumentStartFeature.supported = false;
+        DocumentStartFeature.messagesSupported = false;
         ActivityController<MainActivity> host = Robolectric.buildActivity(MainActivity.class).setup();
         WebView view = ReflectionHelpers.getField(host.get(), "webView");
         assertEquals(0, DocumentStartScripts.registrations);
+        assertEquals(0, DocumentStartScripts.messageRegistrations);
         shadowOf(view).getWebViewClient().onPageFinished(view, BuildConfig.WEB_BASE_URL + "/dashboard");
         assertTrue(ScriptEvaluations.scripts.stream().anyMatch(source -> source.startsWith(DiewishSessionCookieBridge.bootstrapScript())));
         assertFalse(CookieManager.getInstance().acceptThirdPartyCookies(view));
         host.pause().stop().destroy();
+        assertEquals(0, DocumentStartScripts.messageRemovals);
+    }
+
+    @Test public void messageAndDocumentStartSupportAreIndependentWithoutChangingCookiePolicy() {
+        for (boolean documentStart : new boolean[] {true, false}) {
+            DocumentStartFeature.supported = documentStart;
+            DocumentStartFeature.messagesSupported = !documentStart;
+            int scriptsBefore = DocumentStartScripts.registrations;
+            int messagesBefore = DocumentStartScripts.messageRegistrations;
+            int removalsBefore = DocumentStartScripts.messageRemovals;
+            ActivityController<MainActivity> host = Robolectric.buildActivity(MainActivity.class).setup();
+            WebView view = ReflectionHelpers.getField(host.get(), "webView");
+            assertEquals(scriptsBefore + (documentStart ? 1 : 0), DocumentStartScripts.registrations);
+            assertEquals(messagesBefore + (documentStart ? 0 : 1), DocumentStartScripts.messageRegistrations);
+            assertTrue(shadowOf(view).getJavascriptInterface("DiewishSessionCookies") instanceof DiewishSessionCookieBridge);
+            assertNull(shadowOf(view).getJavascriptInterface(DiewishGoogleAuthBridge.NAME)); // no unsafe fallback
+            assertTrue(CookieManager.getInstance().acceptCookie());
+            assertFalse(CookieManager.getInstance().acceptThirdPartyCookies(view));
+            assertEquals(BuildConfig.WEB_BASE_URL + "/dashboard", shadowOf(view).getLastLoadedUrl());
+            host.pause().stop().destroy();
+            assertEquals(removalsBefore + (documentStart ? 0 : 1), DocumentStartScripts.messageRemovals);
+            assertTrue(DocumentStartScripts.listeners.isEmpty());
+        }
     }
 }
