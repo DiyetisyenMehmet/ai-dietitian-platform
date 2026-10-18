@@ -38,6 +38,11 @@ window.__phoneFixture = { verifiers: [], clears: 0, sent: 0, confirms: 0, mode: 
 
 async function setup(page, mode = 'success') {
   await page.route('**/api/**', route => {
+    // #57 chooses the legacy screen only after this public status succeeds.
+    // Exercise the disabled-feature route explicitly; unavailable stays fail-closed.
+    if (new URL(route.request().url()).pathname === '/api/identity/phone-password/status') {
+      return route.fulfill({ json: { success: true, data: { enabled: false, pending: false } } });
+    }
     if (new URL(route.request().url()).pathname === '/api/identity/firebase-config') {
       return route.fulfill({ json: { success: true, data: { configured: true, config: {
         apiKey: 'synthetic-key', authDomain: 'synthetic.invalid', projectId: 'synthetic-project', appId: 'synthetic-app',

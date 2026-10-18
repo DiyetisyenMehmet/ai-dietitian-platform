@@ -34,8 +34,8 @@ The shared Firebase helper retains #50 native Google exchange and Web popup plus
 - Frontend: type-check and production build PASS; existing unrelated lint warnings remain.
 - Database-free merged-module boundary tests: 6 PASS (expected credential state, outer transaction failure propagation, email-reset provenance/version, stale access denial, actual-provider/Admin isolation, shared bcrypt byte bound).
 - Selected frontend boundaries: Google exchange/cancellation/Web popup 3 PASS; phone memory-only/signature/cancellation 9 PASS; notification cutoff/account switch/Android reconciliation 3 PASS. Total local targeted tests: 21 PASS.
-- Both separate browser configurations list their intended suites (6 legacy and 14 registration cases); selected runtime browser cases run in the scoped PR workflow. Local browser download was unavailable. See the PR checks for their final result.
-- No conflict markers or whitespace errors. All 11 PR heads and bridge ancestry verified.
+- Both separate browser configurations list their intended suites (6 legacy and 14 registration cases); selected runtime browser cases run in the scoped PR workflow. Local browser download was unavailable. The first CI attempt exposed the legacy fixture missing #57's public phone-password/status response; the fixture now explicitly returns enabled=false without changing application behavior. See the PR checks for the final result.
+- No conflict markers or source-code whitespace errors. Inherited Markdown hard-break spaces are retained. All 11 PR heads and bridge ancestry verified.
 - No broad 281-test rerun. The inherited password-recovery and identity-foundation jobs skip only this integration head, avoiding their automatic database migrations/broad reruns. A dedicated contents-read-only workflow runs only selected database-free boundaries and synthetic-browser fixtures. Other PRs retain their existing checks.
 - PostgreSQL race/rollback and migration execution are NOT re-proven on the combined tree. A disposable database migration test requires a separate manager permission; none was executed.
 
@@ -56,4 +56,3 @@ ACCOUNT_SAFE_LINKING_ENABLED, PHONE_PASSWORD_AUTH_ENABLED and PHONE_SMS_RECOVERY
 SMTP and scheduler operational access remain BLOCKED from the accepted previous report, without retrying failed access. Before rollout, an authorized operator must confirm SMTP VAR/YOK without reading secret values, validate scheduler/OIDC invocation and durable delivery drain, and approve one owned synthetic user/mailbox acceptance. No real email/SMS or account mutation occurred here.
 
 Manager approval is still required for merge, any disposable migration test and the single coordinated backend/Web staging deployment. Deploy/migration/flag activation/APK/production/Admin operations are outside this task. Draft status is intentional; operational acceptance remains blocked until the above gates are closed.
-

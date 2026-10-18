@@ -54,10 +54,13 @@ jobs:
       - name: Legacy phone route keeps cancellation cleanup
         run: npx playwright test --config playwright.phone-recaptcha.config.ts --grep 'pending SMS view exit' --reporter=line
       - name: Registration keeps argument-five cancellation separately
+        if: ${{ !cancelled() }}
         run: npx playwright test --config playwright.phone-password-recaptcha.config.ts --grep 'leaving during pending SMS' --reporter=line
       - name: Recovery composes proof completion and widget cleanup
+        if: ${{ !cancelled() }}
         run: npx playwright test --config playwright.sms-recovery.config.ts --grep 'new SMS then password|leaving during pending SMS' --reporter=line
       - name: Notifications preserve the existing Android bridge contract
+        if: ${{ !cancelled() }}
         run: npx playwright test --config playwright.notification-center.config.ts --grep 'existing Android bridge' --reporter=line
       - uses: actions/upload-artifact@v4
         if: failure()
