@@ -26,7 +26,7 @@ Already-sent provider SMS is not claimed to be network-cancelled.
 
 Targeted validation only:
 - Frontend type-check and ESLint of changed TypeScript files.
-- `npx playwright test --config playwright.phone-recaptcha.config.ts --reporter=line,html`
+- `npx playwright test --config playwright.phone-password-recaptcha.config.ts --reporter=line,html`
   runs seven NEW screen-lifecycle scenarios in desktop Chromium and emulated
   Android Chromium. It executes real React + the unchanged #63 helper; only the
   Firebase/network boundary is synthetic. Checks stable DOM, code retry,

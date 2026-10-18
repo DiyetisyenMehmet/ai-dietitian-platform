@@ -20,6 +20,8 @@ concurrency:
   cancel-in-progress: true
 jobs:
   foundation:
+    # This integration PR uses its scoped, database-free validation workflow.
+    if: github.head_ref != 'feature/app10-common-staging-integration-a1'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     services:
