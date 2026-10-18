@@ -45,6 +45,10 @@ const envSchema = z.object({
     .positive()
     .default(15 * 60 * 1000),
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
+  // Explicit security/release approval required before enabling new identity bindings.
+  ACCOUNT_SAFE_LINKING_ENABLED: booleanFromEnv.default(false),
+  PHONE_PASSWORD_AUTH_ENABLED: booleanFromEnv.default(false),
+  PHONE_SMS_RECOVERY_ENABLED: booleanFromEnv.default(false),
   COACH_SYNC_ENABLED: booleanFromEnv.default(false),
   // Explicit-request resumable nutrition pilot only; no speculative generation.
   NUTRITION_JOBS_ENABLED: booleanFromEnv.default(false),
@@ -63,6 +67,12 @@ const envSchema = z.object({
   REFRESH_COOKIE_NAME: z.string().min(1).max(100).default("diewish_refresh"),
   REFRESH_COOKIE_SAME_SITE: z.enum(["lax", "strict", "none"]).default("lax"),
   APP_WEB_URL: z.string().url().default("http://localhost:3000"),
+  SMTP_HOST: z.string().default(""),
+  SMTP_PORT: z.coerce.number().int().min(1).max(65535).default(587),
+  SMTP_SECURE: booleanFromEnv.default(false),
+  SMTP_USER: z.string().default(""),
+  SMTP_PASSWORD: z.string().default(""),
+  SMTP_FROM: z.string().default(""),
   EMAIL_VERIFICATION_TTL_HOURS: z.coerce.number().int().positive().default(24),
   PASSWORD_RESET_TTL_MINUTES: z.coerce.number().int().positive().default(60),
   ACCOUNT_DELETION_GRACE_DAYS: z.coerce.number().int().nonnegative().default(30),

@@ -1,5 +1,6 @@
 import type { Prisma, RefreshToken, User } from "@prisma/client";
 
+import { ApiError } from "../../utils/api-error";
 import { prisma } from "../../lib/prisma";
 
 export type RefreshRotationResult =
@@ -20,18 +21,14 @@ export const authRepository = {
     return prisma.user.findUnique({ where: { id } });
   },
 
-  createUser(data: {
-    email: string;
-    passwordHash: string;
-    fullName?: string;
-  }): Promise<User> {
+  createUser(data: { email: string; passwordHash: string; fullName?: string; hasUsablePassword?: boolean }): Promise<User> {
     return prisma.user.create({ data });
   },
 
-  updateLastLogin(userId: string): Promise<User> {
+  updateLastLogin(userId: string, passwordProven = false): Promise<User> {
     return prisma.user.update({
       where: { id: userId },
-      data: { lastLoginAt: new Date() },
+      data: { lastLoginAt: new Date(), ...(passwordProven ? { hasUsablePassword: true } : {}) },
     });
   },
 
@@ -42,8 +39,16 @@ export const authRepository = {
     expiresAt: Date;
     userAgent?: string | null;
     ipAddress?: string | null;
+    authVersion?: number;
   }): Promise<RefreshToken> {
-    return prisma.refreshToken.create({ data });
+    const { authVersion, ...record } = data;
+    return prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM users WHERE id = ${data.userId} FOR UPDATE`;
+      const user = await tx.user.findUnique({ where: { id: data.userId } });
+      if (!user?.isActive || (authVersion !== undefined && authVersion !== user.authVersion))
+        throw ApiError.unauthorized("Session is no longer valid.");
+      return tx.refreshToken.create({ data: record });
+    });
   },
 
   findRefreshTokenById(id: string): Promise<RefreshToken | null> {
@@ -71,6 +76,8 @@ export const authRepository = {
     };
   }): Promise<RefreshRotationResult> {
     return prisma.$transaction(async (tx) => {
+      // Same lock order as password reset: rotation cannot insert a surviving successor.
+      await tx.$queryRaw`SELECT id FROM users WHERE id = ${params.userId} FOR UPDATE`;
       const record = await tx.refreshToken.findUnique({ where: { id: params.tokenId } });
       if (
         !record ||

@@ -1,11 +1,16 @@
 import crypto from "node:crypto";
+import jwt, { type JwtPayload } from "jsonwebtoken";
+import { phonePasswordEnabled, phonePasswordService } from "./phone-password.service";
 
+import { env } from "../../config/env";
 import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/api-error";
 import { hashPassword } from "../../utils/password";
 import { authRepository } from "../auth/auth.repository";
 import { issueAuthSession, type AuthResult, type SessionContext } from "../auth/auth.service";
 import { firebaseAuthProvider } from "./firebase-auth.provider";
+import { safeGoogleLogin } from "./safe-google.service";
+import { ownershipRequired } from "./safe-linking.policy";
 
 function accountEmail(identity: {
   uid: string;
@@ -24,12 +29,49 @@ function accountEmail(identity: {
 export const externalLoginService = {
   async login(idToken: string, context: SessionContext): Promise<AuthResult> {
     const identity = await firebaseAuthProvider.verifyIdToken(idToken);
-    const social = identity.providers.some(
-      (provider) => provider === "google.com" || provider === "apple.com",
-    );
+    // accounts:lookup above has already verified this exact token with Firebase.
+    // Check the authentication used for THIS token, not other methods linked to the account.
+    // Otherwise an old Firebase password on a Google-linked account could bypass a local reset.
+    const claims = jwt.decode(idToken) as
+      | (JwtPayload & { firebase?: { sign_in_provider?: string } })
+      | null;
+    const provider = claims?.firebase?.sign_in_provider;
+    if (
+      claims?.sub !== identity.uid ||
+      !["google.com", "apple.com", "phone"].includes(provider ?? "")
+    ) {
+      throw ApiError.forbidden("This sign-in provider is not enabled for Diewish.");
+    }
+    const social = provider === "google.com" || provider === "apple.com";
+
+    if (phonePasswordEnabled() && identity.signInProvider === "phone") {
+      return phonePasswordService.legacySmsLogin(identity, context);
+    }
+    if (env.ACCOUNT_SAFE_LINKING_ENABLED) {
+      if (identity.signInProvider === "google.com") return safeGoogleLogin(identity, context);
+      if (!["phone", "apple.com"].includes(identity.signInProvider ?? "")) {
+        throw ApiError.forbidden("This sign-in provider is not enabled for Diewish.");
+      }
+      if (identity.signInProvider === "phone" && identity.phoneAuthenticationVerified !== true)
+        throw ownershipRequired();
+      if (identity.signInProvider === "phone" && identity.phoneNumber) {
+        const binding = await prisma.accountIdentity.findUnique({
+          where: { kind_identifier: { kind: "PHONE", identifier: identity.phoneNumber } },
+          include: { user: true },
+        });
+        // Linking a recovery phone must not accidentally enable SMS-only normal
+        // login or create a second account. #51 owns phone+password sign-in.
+        if (binding && binding.user.email !== accountEmail(identity)) throw ownershipRequired();
+      }
+    }
+
     if (!identity.phoneNumber && !social) {
       throw ApiError.forbidden("This sign-in provider is not enabled for Diewish.");
     }
+
+    // A2 routes Google by stable subject above. No remaining external provider
+    // may enter or create a phone account merely through a linked profile phone.
+    if (phonePasswordEnabled() && identity.phoneNumber) throw ownershipRequired();
 
     const email = accountEmail(identity);
     let user = await authRepository.findUserByEmail(email);
@@ -38,6 +80,7 @@ export const externalLoginService = {
       user = await authRepository.createUser({
         email,
         passwordHash: await hashPassword(generatedSecret),
+        hasUsablePassword: false,
         fullName: identity.displayName ?? undefined,
       });
       if (identity.emailVerified && identity.email === email) {
@@ -46,6 +89,13 @@ export const externalLoginService = {
           data: { emailVerifiedAt: new Date() },
         });
       }
+    }
+
+    // Normal Diewish identity routes must never mint or reactivate an
+    // Management Center principal. Admin authentication remains exclusively
+    // owned by /api/admin/auth and its existing RBAC controls.
+    if (user.role !== "USER") {
+      throw ApiError.forbidden("This account is not available.");
     }
 
     if (!user.isActive) {

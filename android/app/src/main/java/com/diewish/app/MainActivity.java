@@ -74,6 +74,7 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
     private static final String SESSION_COOKIE_BRIDGE = "DiewishSessionCookies";
 
     private WebView webView;
+    private DiewishGoogleAuthBridge googleAuthBridge;
     private FrameLayout rootView;
     private BillingClient billingClient;
     private boolean billingReady = false;
@@ -222,6 +223,8 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
                 Collections.singleton(BuildConfig.WEB_BASE_URL)
             );
         }
+        googleAuthBridge = new DiewishGoogleAuthBridge(this, webView);
+        googleAuthBridge.install();
         webView.setWebViewClient(new TrustedWebViewClient());
         webView.setWebChromeClient(new DiewishChromeClient());
     }
@@ -766,6 +769,7 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
         @Override
         public void onPageStarted(WebView view, String url, Bitmap favicon) {
             super.onPageStarted(view, url, favicon);
+            if (googleAuthBridge != null) googleAuthBridge.cancel();
             updateTrustedPageState(url);
         }
 
@@ -1058,6 +1062,7 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
     @Override
     protected void onDestroy() {
         persistSessionCookies();
+        if (googleAuthBridge != null) googleAuthBridge.close();
         if (billingClient != null) billingClient.endConnection();
 
         if (pendingWebCameraRequest != null) {

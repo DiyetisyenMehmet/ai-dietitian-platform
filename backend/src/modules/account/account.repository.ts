@@ -1,4 +1,4 @@
-import type { AccountToken, AccountTokenType, User } from "@prisma/client";
+import type { Prisma, AccountToken, AccountTokenType, User } from "@prisma/client";
 
 import { prisma } from "../../lib/prisma";
 
@@ -115,12 +115,13 @@ export const accountRepository = {
     tokenHash: string;
     expiresAt: Date;
   }): Promise<void> {
-    await prisma.$transaction([
-      prisma.accountToken.updateMany({
+    await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM users WHERE id = ${data.userId} FOR UPDATE`;
+      await tx.accountToken.updateMany({
         where: { userId: data.userId, type: data.type, usedAt: null },
         data: { usedAt: new Date() },
-      }),
-      prisma.accountToken.create({
+      });
+      await tx.accountToken.create({
         data: {
           id: data.id,
           userId: data.userId,
@@ -128,8 +129,21 @@ export const accountRepository = {
           tokenHash: data.tokenHash,
           expiresAt: data.expiresAt,
         },
-      }),
-    ]);
+      });
+    });
+  },
+
+  /** Cross-instance cooldown, including requests via both public route aliases. */
+  async enqueuePasswordReset(userId: string): Promise<void> {
+    await prisma.$executeRaw`
+      INSERT INTO "password_reset_deliveries" ("userId", "requestedAt")
+      VALUES (${userId}, CURRENT_TIMESTAMP)
+      ON CONFLICT ("userId") DO UPDATE SET
+        "requestedAt" = CURRENT_TIMESTAMP, "attemptedAt" = NULL,
+        "completedAt" = NULL, "attempts" = 0, "leaseId" = NULL, "leaseUntil" = NULL
+      WHERE "password_reset_deliveries"."requestedAt" < CURRENT_TIMESTAMP - INTERVAL '10 minutes'
+        AND ("password_reset_deliveries"."leaseUntil" IS NULL OR "password_reset_deliveries"."leaseUntil" < CURRENT_TIMESTAMP)
+    `;
   },
 
   /** Looks up a token by its hash and type (validity is checked in the service). */
@@ -163,22 +177,23 @@ export const accountRepository = {
    * used, nothing else runs and `false` is returned. Revoking sessions on reset
    * is a standard measure (a reset implies possible compromise).
    */
-  consumeTokenAndResetPassword(
-    tokenId: string,
-    userId: string,
-    passwordHash: string,
-  ): Promise<boolean> {
+  consumeTokenAndResetPassword(tokenId: string, userId: string, passwordHash: string): Promise<boolean> {
     return prisma.$transaction(async (tx) => {
+      // Serialize against issuance and concurrent completions. Recheck expiry AFTER hashing/lock.
+      await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`;
+      const user = await tx.user.findUnique({ where: { id: userId } });
+      if (!user?.isActive || user.role !== "USER" || user.deletionRequestedAt ||
+          user.email.endsWith(".diewish.invalid")) return false;
+      const now = new Date();
       const claimed = await tx.accountToken.updateMany({
-        where: { id: tokenId, usedAt: null },
-        data: { usedAt: new Date() },
+        where: { id: tokenId, userId, type: "PASSWORD_RESET", usedAt: null, expiresAt: { gt: now } },
+        data: { usedAt: now },
       });
-      if (claimed.count === 0) return false;
-      await tx.user.update({ where: { id: userId }, data: { passwordHash } });
-      await tx.refreshToken.updateMany({
-        where: { userId, revokedAt: null },
-        data: { revokedAt: new Date() },
-      });
+      if (claimed.count !== 1) return false;
+      await tx.user.update({ where: { id: userId }, data: { passwordHash, hasUsablePassword: true, authVersion: { increment: 1 } } });
+      await tx.accountToken.updateMany({ where: { userId, type: "PASSWORD_RESET", usedAt: null }, data: { usedAt: now } });
+      await tx.refreshToken.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: now } });
+      await tx.passwordResetDelivery.updateMany({ where: { userId }, data: { completedAt: now } });
       return true;
     });
   },
@@ -187,14 +202,43 @@ export const accountRepository = {
    * Updates the password hash and revokes all active refresh tokens so other
    * sessions are logged out after a deliberate password change.
    */
-  async changePassword(userId: string, passwordHash: string): Promise<void> {
-    await prisma.$transaction([
-      prisma.user.update({ where: { id: userId }, data: { passwordHash } }),
-      prisma.refreshToken.updateMany({
+  async changePassword(
+    userId: string,
+    passwordHash: string,
+    expected?: { passwordHash: string; authVersion: number },
+    transaction?: Prisma.TransactionClient,
+  ): Promise<boolean> {
+    const write = async (tx: Prisma.TransactionClient) => {
+      // Bind the write to the exact credential state that was reauthenticated
+      // by the service. A concurrent reset/change that wins this row lock first
+      // makes the stale request fail closed instead of overwriting a newer password.
+      await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`;
+      const current = await tx.user.findUnique({
+        where: { id: userId },
+        select: { passwordHash: true, authVersion: true },
+      });
+      if (!current) return false;
+      if (
+        expected &&
+        (current.passwordHash !== expected.passwordHash ||
+          current.authVersion !== expected.authVersion)
+      ) {
+        return false;
+      }
+
+      const now = new Date();
+      await tx.user.update({
+        where: { id: userId },
+        data: { passwordHash, hasUsablePassword: true, authVersion: { increment: 1 } },
+      });
+      await tx.refreshToken.updateMany({
         where: { userId, revokedAt: null },
-        data: { revokedAt: new Date() },
-      }),
-    ]);
+        data: { revokedAt: now },
+      });
+      return true;
+    };
+    // A4 consumes its SMS proof in the same transaction as this accepted write.
+    return transaction ? write(transaction) : prisma.$transaction(write);
   },
 
   /**

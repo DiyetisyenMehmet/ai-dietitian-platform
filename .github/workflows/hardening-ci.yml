@@ -22,6 +22,12 @@ on:
       - feature/workmode2-dashboard-journey-compact-text-a1
       - feature/workmode2-dashboard-and-coach-modal-polish-a1
   workflow_dispatch:
+    inputs:
+      build_android_apk:
+        description: "Explicitly package the debug APK after native security tests"
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -233,8 +239,10 @@ jobs:
       - name: Test Android notification and alarm guards
         run: gradle --no-daemon -p android :app:testDebugUnitTest -PDIEWISH_WEB_BASE_URL=https://staging.diewish.com
       - name: Build current-SHA debug APK
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_android_apk }}
         run: gradle --no-daemon -p android :app:assembleDebug -PDIEWISH_WEB_BASE_URL=https://staging.diewish.com
       - name: Verify compiled staging APK URL
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_android_apk }}
         shell: bash
         run: |
           set -euo pipefail
@@ -253,6 +261,7 @@ jobs:
           fi
           echo "VERIFIED_APK_WEB_BASE_URL=https://staging.diewish.com"
       - name: Stamp current-SHA APK
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_android_apk }}
         shell: bash
         run: |
           short_sha="${GITHUB_SHA::7}"
@@ -261,6 +270,7 @@ jobs:
           sha256sum "android/app/build/traceable-apk/Diewish-hardening-${short_sha}.apk" > "android/app/build/traceable-apk/Diewish-hardening-${short_sha}.sha256"
           cat "android/app/build/traceable-apk/Diewish-hardening-${short_sha}.sha256"
       - name: Upload current-SHA debug APK
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_android_apk }}
         uses: actions/upload-artifact@v4
         with:
           name: diewish-hardening-debug-apk-${{ github.run_number }}

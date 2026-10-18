@@ -25,6 +25,8 @@ model User {
   id                  String           @id @default(uuid())
   email               String           @unique
   passwordHash        String
+  hasUsablePassword   Boolean?
+  authVersion         Int              @default(0)
   fullName            String?
   role                UserRole         @default(USER)
   isActive            Boolean          @default(true)
@@ -38,9 +40,12 @@ model User {
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
 
+  accountIdentities AccountIdentity[]
+  identityOperations AccountIdentityOperation[]
   refreshTokens     RefreshToken[]
   profile           UserProfile?
   accountTokens     AccountToken[]
+  passwordResetDelivery PasswordResetDelivery?
   bloodTestUploads  BloodTestUpload[]
   bloodTestAnalyses BloodTestAnalysis[]
   nutritionPlans    NutritionPlan[]
@@ -76,6 +81,84 @@ model User {
   adminInvitationsSent     AdminInvitation[] @relation("AdminInvitationInviter")
 
   @@map("users")
+}
+
+enum AccountIdentityKind {
+  EMAIL
+  PHONE
+  GOOGLE
+}
+
+
+model AccountIdentity {
+  id         String              @id @default(uuid())
+  userId     String
+  user       User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind       AccountIdentityKind
+  identifier String              @db.VarChar(320)
+  verifiedAt DateTime
+  createdAt  DateTime            @default(now())
+
+  @@unique([kind, identifier])
+  @@unique([userId, kind])
+  @@map("account_identities")
+}
+
+
+enum AccountIdentityOperationPurpose {
+  LINK_METHOD
+  GOOGLE_TRANSITION
+}
+
+
+model AccountIdentityOperation {
+  id             String @id @default(uuid())
+  userId         String
+  user           User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  purpose        AccountIdentityOperationPurpose
+  kind           AccountIdentityKind
+  identifier     String @db.VarChar(320)
+  sessionHash    String
+  securityStamp  String
+  proofHash      String?
+  proofEventHash String? @unique
+  reauthenticatedAt DateTime
+  expiresAt      DateTime
+  consumedAt     DateTime?
+  failedAttempts Int @default(0)
+  createdAt      DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+  @@map("account_identity_operations")
+}
+
+
+model PhonePasswordChallenge {
+  purpose        String @default("INITIAL_PASSWORD")
+  verifiedAt     DateTime?
+  failedAttempts Int @default(0)
+  id             String @id @default(uuid())
+  phoneNumber    String @db.VarChar(16)
+  secretHash     String @unique
+  proofEventHash String? @unique
+  expectedUserId String?
+  securityStamp  String?
+  expiresAt      DateTime
+  consumedAt     DateTime?
+  createdAt      DateTime @default(now())
+
+  @@index([expiresAt])
+  @@map("phone_password_challenges")
+}
+
+
+model PhonePasswordBudget {
+  key             String @id
+  windowStartedAt DateTime
+  attempts        Int
+
+  @@map("phone_password_budgets")
 }
 
 enum Gender {
@@ -148,6 +231,21 @@ model RefreshToken {
 
   @@index([userId])
   @@map("refresh_tokens")
+}
+
+// Only delivery metadata is queued; raw links/passwords are never persisted.
+model PasswordResetDelivery {
+  userId        String    @id
+  requestedAt   DateTime  @default(now())
+  attemptedAt   DateTime?
+  completedAt   DateTime?
+  attempts      Int       @default(0)
+  leaseId       String?
+  leaseUntil    DateTime?
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([completedAt, requestedAt])
+  @@map("password_reset_deliveries")
 }
 
 enum AccountTokenType {

@@ -1,6 +1,7 @@
 import { apiRequest } from "@/infrastructure/api/http-client";
 import { isApiConfigured } from "@/application/config/env";
 import { startPhoneDiagnostic, type PhoneAuthDiagnostic } from "./phone-auth-diagnostics";
+import { isAndroidGoogleHost, requestAndroidGoogleToken } from "./android-google-auth";
 
 const FIREBASE_CDN_VERSION = "12.19.0";
 
@@ -34,7 +35,9 @@ function clearRecaptcha(verifier: FirebaseRecaptchaLike): void {
 }
 
 interface FirebaseAuthLike {
+  setPersistence(value: "none"): Promise<void>;
   languageCode: string | null;
+  signInWithCredential(credential: unknown): Promise<FirebaseUserCredentialLike>;
   signInWithPopup(provider: FirebaseProviderLike): Promise<FirebaseUserCredentialLike>;
   signInWithPhoneNumber(
     phoneNumber: string,
@@ -44,11 +47,14 @@ interface FirebaseAuthLike {
 
 interface FirebaseAuthFactory {
   (): FirebaseAuthLike;
-  GoogleAuthProvider: new () => FirebaseProviderLike;
+  GoogleAuthProvider: {
+    new (): FirebaseProviderLike;
+    credential(idToken: string): unknown;
+  };
   OAuthProvider: new (providerId: string) => FirebaseProviderLike;
   RecaptchaVerifier: new (
-    container: string,
-    parameters?: { size?: "invisible" | "normal"; callback?: () => void },
+    container: string | HTMLElement,
+    parameters?: { size?: "invisible" | "normal"; badge?: "inline"; callback?: () => void },
   ) => FirebaseRecaptchaLike;
 }
 
@@ -165,8 +171,19 @@ async function tokenFromCredential(credential: FirebaseUserCredentialLike): Prom
   return credential.user.getIdToken(true);
 }
 
-export async function signInWithGoogle(): Promise<string> {
+export async function signInWithGoogle(signal?: AbortSignal): Promise<string> {
   const sdk = await firebase();
+  if (isAndroidGoogleHost()) {
+    const firebaseConfig = await config();
+    if (!firebaseConfig) throw Object.assign(new Error("Identity configuration unavailable"), {
+      code: "auth/configuration-unavailable",
+    });
+    const googleToken = await requestAndroidGoogleToken(firebaseConfig.projectId, signal);
+    // The Google token is NOT a Diewish session. Firebase verifies it for the
+    // backend-owned project, then /identity/external verifies the Firebase token.
+    const credential = sdk.auth.GoogleAuthProvider.credential(googleToken);
+    return tokenFromCredential(await sdk.auth().signInWithCredential(credential));
+  }
   const provider = new sdk.auth.GoogleAuthProvider();
   return tokenFromCredential(await sdk.auth().signInWithPopup(provider));
 }
@@ -179,36 +196,76 @@ export async function signInWithApple(): Promise<string> {
   return tokenFromCredential(await sdk.auth().signInWithPopup(provider));
 }
 
+function phoneVerificationCancelled(): Error & { code: string } {
+  return Object.assign(new Error("Phone verification view closed"), {
+    code: "auth/phone-verification-cancelled",
+  });
+}
+
+/** Stop awaiting work when its view closes; Firebase owns any already-sent SMS request. */
+function whilePhoneViewActive<T>(work: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return work;
+  return new Promise((resolve, reject) => {
+    const abort = () => reject(phoneVerificationCancelled());
+    if (signal.aborted) abort();
+    else signal.addEventListener("abort", abort, { once: true });
+    work.then(resolve, reject).finally(() => signal.removeEventListener("abort", abort));
+  });
+}
+
 export async function startPhoneVerification(
   phoneNumber: string,
   containerId: string,
   onDiagnostic?: (value: PhoneAuthDiagnostic) => void,
+  memoryOnly = false,
+  signal?: AbortSignal,
 ): Promise<{ confirm(code: string): Promise<string>; clear(): void }> {
   const diagnostic = startPhoneDiagnostic(FIREBASE_CDN_VERSION, onDiagnostic);
   let verifier: FirebaseRecaptchaLike | undefined;
+  let widgetHost: HTMLElement | undefined;
+  let cleared = false;
+  const clear = () => {
+    signal?.removeEventListener("abort", clear);
+    if (cleared) return;
+    cleared = true;
+    if (verifier) clearRecaptcha(verifier);
+    // Firebase 12.19.0 clear() leaves invisible-widget children in place.
+    // Remove only this attempt's owned host, after SDK cleanup, never global frames.
+    widgetHost?.remove();
+  };
   try {
-    const sdk = await firebase();
+    if (signal?.aborted) throw phoneVerificationCancelled();
+    const sdk = await whilePhoneViewActive(firebase(), signal);
     const auth = sdk.auth();
+    // Preserve A3's fourth argument: proof credentials must not reach disk.
+    // Await before creating a widget or sending SMS; failure has no fallback.
+    if (memoryOnly) await whilePhoneViewActive(auth.setPersistence("none"), signal);
     auth.languageCode = "tr";
     diagnostic.stage("recaptcha-create");
-    const activeVerifier = new sdk.auth.RecaptchaVerifier(containerId, {
-      size: "invisible", callback: () => diagnostic.recaptchaCompleted(),
+    const container = document.getElementById(containerId);
+    if (!container?.isConnected) {
+      throw Object.assign(new Error("Phone verification view unavailable"), {
+        code: "auth/phone-verification-cancelled",
+      });
+    }
+    widgetHost = document.createElement("div");
+    container.appendChild(widgetHost);
+    verifier = new sdk.auth.RecaptchaVerifier(widgetHost, {
+      size: "invisible", badge: "inline", callback: () => diagnostic.recaptchaCompleted(),
     });
-    verifier = activeVerifier;
+    signal?.addEventListener("abort", clear, { once: true });
     diagnostic.stage("phone-request");
-    const confirmation = await auth.signInWithPhoneNumber(phoneNumber, verifier);
+    const confirmation = await whilePhoneViewActive(auth.signInWithPhoneNumber(phoneNumber, verifier), signal);
     diagnostic.stage("sms-accepted");
     return {
       async confirm(code: string) {
         return tokenFromCredential(await confirmation.confirm(code));
       },
-      clear() {
-        clearRecaptcha(activeVerifier);
-      },
+      clear,
     };
   } catch (error) {
     diagnostic.fail(error);
-    if (verifier) clearRecaptcha(verifier);
+    clear();
     throw error;
   } finally {
     diagnostic.stop();

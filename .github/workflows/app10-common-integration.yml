@@ -1,0 +1,69 @@
+name: APP10 common integration boundaries
+on:
+  pull_request:
+    branches: [feature/staging-preview]
+permissions:
+  contents: read
+concurrency:
+  group: app10-common-integration-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  boundaries:
+    if: github.head_ref == 'feature/app10-common-staging-integration-a1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+        working-directory: backend
+      - run: node --test tests/common-staging-integration.test.cjs
+        working-directory: backend
+      - run: npm ci --no-audit --no-fund
+        working-directory: frontend
+      - name: Only merged Google, phone signature and notification boundaries
+        working-directory: frontend
+        run: |
+          node --test --test-name-pattern='Android Google|Android cancellation|Web Google' tests/identity.test.cjs
+          node --test tests/phone-recaptcha-a3-compatibility.test.cjs
+          node --test --test-name-pattern='130 mixed|account switch|remote read' tests/notification-mark-all-read.test.cjs
+  browser-boundaries:
+    if: github.head_ref == 'feature/app10-common-staging-integration-a1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      # All four suites intercept the API and Firebase. No real mail, SMS,
+      # database migration, credentials, deployment or Android build is used.
+      - name: Legacy phone route keeps cancellation cleanup
+        run: npx playwright test --config playwright.phone-recaptcha.config.ts --grep 'pending SMS view exit' --reporter=line
+      - name: Registration keeps argument-five cancellation separately
+        if: ${{ !cancelled() }}
+        run: npx playwright test --config playwright.phone-password-recaptcha.config.ts --grep 'leaving during pending SMS' --reporter=line
+      - name: Recovery composes proof completion and widget cleanup
+        if: ${{ !cancelled() }}
+        run: npx playwright test --config playwright.sms-recovery.config.ts --grep 'new SMS then password|leaving during pending SMS' --reporter=line
+      - name: Notifications preserve the existing Android bridge contract
+        if: ${{ !cancelled() }}
+        run: npx playwright test --config playwright.notification-center.config.ts --grep 'existing Android bridge' --reporter=line
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: app10-common-browser-failure
+          path: frontend/test-results

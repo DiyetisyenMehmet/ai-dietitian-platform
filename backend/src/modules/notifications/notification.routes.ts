@@ -6,6 +6,8 @@ import { validate } from "../../middleware/validate";
 import { notificationController } from "./notification.controller";
 import {
   notificationIdParamsSchema,
+  notificationInboxQuerySchema,
+  markAllNotificationsReadSchema,
   registerNotificationDeviceSchema,
   unregisterNotificationDeviceSchema,
   updateNotificationPreferencesSchema,
@@ -14,7 +16,18 @@ import {
 /** Notifications router (mounted at /api/notifications). */
 export const notificationRouter = Router();
 
-notificationRouter.get("/", authenticate, notificationController.listInbox);
+notificationRouter.get(
+  "/",
+  authenticate,
+  validate({ query: notificationInboxQuerySchema }),
+  notificationController.listInbox,
+);
+notificationRouter.patch(
+  "/read-all",
+  authenticate,
+  validate({ body: markAllNotificationsReadSchema }),
+  notificationController.markAllRead,
+);
 notificationRouter.patch(
   "/:id/read",
   authenticate,
@@ -40,12 +53,7 @@ notificationRouter.post(
   validate({ body: registerNotificationDeviceSchema }),
   notificationController.registerDevice,
 );
-notificationRouter.post(
-  "/test",
-  authenticate,
-  requireConsent,
-  notificationController.testDelivery,
-);
+notificationRouter.post("/test", authenticate, requireConsent, notificationController.testDelivery);
 
 notificationRouter.post(
   "/devices/unregister",

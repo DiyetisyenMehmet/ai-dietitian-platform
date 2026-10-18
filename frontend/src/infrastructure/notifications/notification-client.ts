@@ -15,11 +15,29 @@ export interface NotificationCenterApiItem {
 }
 
 export const notificationClient = {
-  getCenter() {
-    return apiRequest<{ notifications: NotificationCenterApiItem[]; unreadCount: number }>({
-      path: NOTIFICATION_ENDPOINTS.center,
+  getCenter(nativeServerIds: string[] = []) {
+    const query = nativeServerIds.length
+      ? `?nativeServerIds=${encodeURIComponent(nativeServerIds.join(","))}`
+      : "";
+    return apiRequest<{
+      notifications: NotificationCenterApiItem[];
+      unreadCount: number;
+      readBefore?: string;
+    }>({
+      path: NOTIFICATION_ENDPOINTS.center + query,
       method: "GET",
       auth: true,
+    });
+  },
+
+  markAllRead(before: string) {
+    return apiRequest<{ updatedCount: number }>({
+      path: "/notifications/read-all",
+      method: "PATCH",
+      auth: true,
+      // Do not replay a mutation with a refreshed identity after an account switch.
+      retryOnUnauthorized: false,
+      body: JSON.stringify({ before }),
     });
   },
 

@@ -1,0 +1,72 @@
+name: Notification Center mark all read
+on:
+  push:
+    branches: [feature/app8-notification-center-mark-all-read-a1]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: notification-center-mark-all-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  targeted-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: diewish
+          POSTGRES_PASSWORD: diewish
+          POSTGRES_DB: diewish_test
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U diewish -d diewish_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      NODE_ENV: test
+      DIEWISH_ENVIRONMENT: test
+      DATABASE_URL: postgresql://diewish:diewish@localhost:5432/diewish_test?schema=public
+      JWT_ACCESS_SECRET: app8-integration-access-012345678901234567890
+      JWT_REFRESH_SECRET: app8-integration-refresh-01234567890123456789
+      LOG_LEVEL: silent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+      - name: Install backend dependencies and prepare isolated database
+        working-directory: backend
+        run: |
+          npm ci
+          npx prisma generate
+          npx prisma migrate deploy
+      - name: Validate backend types and notification code
+        working-directory: backend
+        run: |
+          npm run type-check
+          npx eslint src/modules/notifications/notification.{routes,controller,schemas,service}.ts src/integration/notification-mark-all-read.integration.test.ts --max-warnings 0
+          node --import tsx --test src/integration/notification-mark-all-read.integration.test.ts
+      - name: Install frontend and test account/native reconciliation
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run type-check
+          npx eslint src/infrastructure/notifications/notification-{center,client}.ts src/presentation/components/notifications/notification-center-view.tsx e2e/notification-mark-all-read.spec.ts playwright.notification-center.config.ts --max-warnings 0
+          node --test tests/notification-mark-all-read.test.cjs
+      - name: Test real Notification Center UI at mobile and desktop sizes
+        working-directory: frontend
+        env:
+          NODE_ENV: development
+        run: |
+          npx playwright install --with-deps chromium
+          npx playwright test --config playwright.notification-center.config.ts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: app8-notification-center-evidence
+          path: frontend/test-results/

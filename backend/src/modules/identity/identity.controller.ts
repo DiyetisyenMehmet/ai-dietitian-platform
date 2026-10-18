@@ -6,6 +6,7 @@ import { sendCreated, sendSuccess } from "../../utils/api-response";
 import { asyncHandler } from "../../utils/async-handler";
 import type { LoginInput } from "../auth/auth.schemas";
 import type { SessionContext } from "../auth/auth.service";
+import { accountMethodsService } from "./account-methods.service";
 import { externalLoginService } from "./external-login.service";
 import type { GuestConversionInput } from "./guest-conversion.schemas";
 import { guestConversionService } from "./guest-conversion.service";
@@ -30,7 +31,7 @@ function refreshCookieOptions(expires?: Date): CookieOptions {
   };
 }
 
-function writeRefreshCookie(res: Response, token: string, expiresAt: Date): void {
+export function writeIdentityRefreshCookie(res: Response, token: string, expiresAt: Date): void {
   res.cookie(env.REFRESH_COOKIE_NAME, token, refreshCookieOptions(expiresAt));
 }
 
@@ -44,6 +45,11 @@ function userId(req: Request): string {
 }
 
 export const identityController = {
+  accountMethods: asyncHandler(async (req: Request, res: Response) => {
+    res.setHeader("Cache-Control", "no-store");
+    sendSuccess(res, await accountMethodsService.getForUser(userId(req)));
+  }),
+
   firebaseConfig: asyncHandler(async (_req: Request, res: Response) => {
     const apiKey = env.FIREBASE_WEB_API_KEY.trim();
     const projectId = env.GOOGLE_CLOUD_PROJECT.trim();
@@ -72,7 +78,7 @@ export const identityController = {
   externalLogin: asyncHandler(async (req: Request, res: Response) => {
     const { idToken } = req.body as ExternalLoginInput;
     const result = await externalLoginService.login(idToken, context(req));
-    writeRefreshCookie(res, result.refreshToken, result.refreshExpiresAt);
+    writeIdentityRefreshCookie(res, result.refreshToken, result.refreshExpiresAt);
     sendSuccess(res, { user: result.user, tokens: result.tokens });
   }),
 
@@ -87,7 +93,7 @@ export const identityController = {
       req.body as GuestConversionInput,
       context(req),
     );
-    writeRefreshCookie(res, result.refreshToken, result.refreshExpiresAt);
+    writeIdentityRefreshCookie(res, result.refreshToken, result.refreshExpiresAt);
     sendSuccess(res, { user: result.user, tokens: result.tokens });
   }),
 
@@ -100,7 +106,7 @@ export const identityController = {
   reactivate: asyncHandler(async (req: Request, res: Response) => {
     const { email, password } = req.body as LoginInput;
     const result = await reactivationService.withPassword(email, password, context(req));
-    writeRefreshCookie(res, result.refreshToken, result.refreshExpiresAt);
+    writeIdentityRefreshCookie(res, result.refreshToken, result.refreshExpiresAt);
     sendSuccess(res, { user: result.user, tokens: result.tokens });
   }),
 

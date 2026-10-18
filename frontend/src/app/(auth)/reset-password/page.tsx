@@ -8,6 +8,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 
 import { resetPasswordSchema, type ResetPasswordInput } from "@/domain/auth/validation";
+import { authStore } from "@/application/auth/auth-store";
 import { authService } from "@/application/auth/auth-service";
 import { AuthLayout } from "@/presentation/components/layout/auth-layout";
 import { FormField } from "@/presentation/components/ui/form-field";
@@ -19,7 +20,17 @@ import { Loading } from "@/presentation/components/feedback/loading";
 function ResetPasswordForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const token = searchParams.get("token");
+  const [token, setToken] = React.useState<string | null>(null);
+  const [ready, setReady] = React.useState(false);
+  const captured = React.useRef(false);
+  React.useEffect(() => {
+    if (captured.current) return;
+    captured.current = true;
+    const fragment = new URLSearchParams(window.location.hash.slice(1));
+    setToken(fragment.get("token") ?? searchParams.get("token"));
+    window.history.replaceState(null, "", window.location.pathname);
+    setReady(true);
+  }, [searchParams]);
 
   const {
     register,
@@ -35,6 +46,7 @@ function ResetPasswordForm() {
       if (!token) return;
       const result = await authService.resetPassword(token, values);
       if (result.ok) {
+        authStore.clear();
         toast.success("Şifreniz güncellendi! Şimdi giriş yapabilirsiniz.");
         router.push("/login");
         return;
@@ -43,6 +55,8 @@ function ResetPasswordForm() {
     },
     [router, token],
   );
+
+  if (!ready) return <Loading />;
 
   if (!token) {
     return (

@@ -1,0 +1,95 @@
+name: Safe account linking A2 checks
+on:
+  push:
+    branches: [feature/app11-safe-account-linking-a2]
+  pull_request:
+    branches: [feature/app11-unified-account-identity-foundation-a1]
+permissions:
+  contents: read
+concurrency:
+  group: account-safe-linking-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  safe-linking:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: app11
+          POSTGRES_PASSWORD: app11
+          POSTGRES_DB: app11_a2_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U app11 -d app11_a2_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      NODE_ENV: test
+      DIEWISH_ENVIRONMENT: test
+      DATABASE_URL: postgresql://app11:app11@127.0.0.1:5432/app11_a2_test?schema=public
+      APP11_ALLOW_DISPOSABLE_DB: '1'
+      JWT_ACCESS_SECRET: synthetic-access-secret-00000000000000
+      JWT_REFRESH_SECRET: synthetic-refresh-secret-00000000000000
+      BCRYPT_ROUNDS: '10'
+      LOG_LEVEL: silent
+      AUTH_RATE_LIMIT_MAX: '1000'
+      RATE_LIMIT_MAX: '1000'
+      ACCOUNT_SAFE_LINKING_ENABLED: 'false'
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npx prisma validate && npx prisma generate
+      - name: Verify only the A2 additive migration on pre-existing account data
+        shell: bash
+        run: |
+          set -euo pipefail
+          pending="${RUNNER_TEMP}/app11-a2-migration"
+          migration="prisma/migrations/20261017140000_safe_account_linking"
+          export APP11_A2_BASELINE_SCHEMA="${RUNNER_TEMP}/app11-a2-before.prisma"
+          export APP11_A2_SNAPSHOT_FILE="${RUNNER_TEMP}/app11-a2-snapshot.json"
+          mv "$migration" "$pending"
+          trap 'if test -d "$pending"; then mv "$pending" "$migration"; fi' EXIT
+          npx prisma migrate deploy
+          node scripts/app11-a2-migration-check.mjs seed
+          npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel "$APP11_A2_BASELINE_SCHEMA" --script > "${RUNNER_TEMP}/app11-a2-drift-before.sql"
+          mv "$pending" "$migration"
+          npx prisma migrate deploy
+          node scripts/app11-a2-migration-check.mjs verify
+      - run: npm run type-check && npm run lint && npm run build
+      - name: New A2 provider, proof, replay, race and account-preservation tests only
+        run: >-
+          node --import tsx --test --test-concurrency=1
+          src/modules/identity/safe-linking-provider.test.ts
+          src/integration/account-safe-linking.integration.test.ts
+      - name: Verify inherited SQL-managed drift is unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --script > "${RUNNER_TEMP}/app11-a2-drift-after.sql"
+          cmp "${RUNNER_TEMP}/app11-a2-drift-before.sql" "${RUNNER_TEMP}/app11-a2-drift-after.sql"
+      - name: Prepare isolated A2 compatibility preview with pinned PR 49
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin e5291d66b8537bcc24f3dc3053869e9883b14bb6 de3bbc689d8e5f8b6bdfa74e93f6ba6877fb79b5
+          python3 scripts/app11-a2-pr49-preview.py --source "$GITHUB_WORKSPACE" --output "${RUNNER_TEMP}/app11-a2-pr49-preview"
+      - name: Verify only new A2 behavior against the existing PR 49 protections
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "${RUNNER_TEMP}/app11-a2-pr49-preview/backend"
+          npm ci
+          npx prisma validate
+          npx prisma generate
+          npx prisma migrate deploy
+          npm run type-check
+          node --import tsx --test --test-concurrency=1 src/modules/identity/safe-linking-provider.test.ts src/integration/account-safe-linking.integration.test.ts

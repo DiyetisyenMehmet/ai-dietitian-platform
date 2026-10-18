@@ -62,7 +62,6 @@ export const refreshRateLimiter = createAuthRateLimiter({
   skipSuccessfulRequests: true,
 });
 
-
 /**
  * Sensitive account-lifecycle actions (password reset/change, verification,
  * deletion) retain their own isolated abuse bucket. Keep the legacy export name
@@ -72,4 +71,16 @@ export const authRateLimiter = createAuthRateLimiter({
   max: env.AUTH_RATE_LIMIT_MAX,
   code: "AUTH_SENSITIVE_ACTION_RATE_LIMITED",
   message: "Too many sensitive account attempts. Please try again later.",
+});
+
+/** Shared with the legacy account aliases so switching paths cannot bypass limits. */
+export const passwordForgotRateLimiter = createAuthRateLimiter({
+  max: Math.min(env.AUTH_RATE_LIMIT_MAX, 5),
+  code: "PASSWORD_RECOVERY_RATE_LIMITED",
+  message: "Çok fazla sıfırlama isteği. Lütfen daha sonra tekrar deneyin.",
+});
+export const passwordResetRateLimiter = createAuthRateLimiter({
+  max: Math.min(env.AUTH_RATE_LIMIT_MAX, 10),
+  code: "PASSWORD_RESET_RATE_LIMITED",
+  message: "Çok fazla deneme. Lütfen daha sonra tekrar deneyin.",
 });

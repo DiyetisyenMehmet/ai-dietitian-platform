@@ -1,0 +1,91 @@
+name: Account identity foundation checks
+on:
+  push:
+    branches:
+      - feature/app11-unified-account-identity-foundation-a1
+  pull_request:
+    branches: [feature/staging-preview]
+    paths:
+      - backend/src/modules/identity/**
+      - backend/src/modules/auth/**
+      - backend/src/modules/account/account.repository.ts
+      - backend/src/integration/account-identity-foundation.integration.test.ts
+      - backend/prisma/**
+      - backend/scripts/app11-migration-check.mjs
+      - .github/workflows/account-identity-foundation.yml
+permissions:
+  contents: read
+concurrency:
+  group: account-identity-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  foundation:
+    # This integration PR uses its scoped, database-free validation workflow.
+    if: github.head_ref != 'feature/app10-common-staging-integration-a1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: app11
+          POSTGRES_PASSWORD: app11
+          POSTGRES_DB: app11_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U app11 -d app11_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      NODE_ENV: test
+      DIEWISH_ENVIRONMENT: test
+      DATABASE_URL: postgresql://app11:app11@127.0.0.1:5432/app11_test?schema=public
+      APP11_ALLOW_DISPOSABLE_DB: '1'
+      JWT_ACCESS_SECRET: synthetic-access-secret-00000000000000
+      JWT_REFRESH_SECRET: synthetic-refresh-secret-00000000000000
+      BCRYPT_ROUNDS: '10'
+      LOG_LEVEL: silent
+      AUTH_RATE_LIMIT_MAX: '1000'
+      RATE_LIMIT_MAX: '1000'
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npx prisma validate && npx prisma generate
+      - name: Prove additive migration preserves legacy IDs and related records
+        shell: bash
+        run: |
+          set -euo pipefail
+          pending="${RUNNER_TEMP}/app11-foundation-migration"
+          migration="prisma/migrations/20261017123000_account_identity_foundation"
+          mv "$migration" "$pending"
+          trap 'if test -d "$pending"; then mv "$pending" "$migration"; fi' EXIT
+          npx prisma migrate deploy
+          export APP11_BASELINE_SCHEMA_PATH="${RUNNER_TEMP}/app11-before-schema.prisma"
+          node scripts/app11-migration-check.mjs seed
+          npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel "$APP11_BASELINE_SCHEMA_PATH" --script > "${RUNNER_TEMP}/app11-drift-before.sql"
+          mv "$pending" "$migration"
+          npx prisma migrate deploy
+          node scripts/app11-migration-check.mjs verify
+          npx prisma migrate status
+      - run: npm run type-check && npm run lint && npm run build
+      - name: Targeted security, identity, onboarding and Admin compatibility
+        run: >-
+          node --import tsx --test --test-concurrency=1
+          src/integration/account-identity-foundation.integration.test.ts
+          src/integration/auth-security.integration.test.ts
+          src/integration/auth-onboarding.integration.test.ts
+          src/integration/identity-lifecycle.integration.test.ts
+          src/integration/admin-password-setup.integration.test.ts
+      - name: Verify inherited SQL-managed schema drift is unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --script > "${RUNNER_TEMP}/app11-drift-after.sql"
+          cmp "${RUNNER_TEMP}/app11-drift-before.sql" "${RUNNER_TEMP}/app11-drift-after.sql"

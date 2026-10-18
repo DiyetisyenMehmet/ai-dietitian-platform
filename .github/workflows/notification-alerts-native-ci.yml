@@ -16,6 +16,13 @@ on:
       - "backend/prisma/migrations/*notification*/**"
       - "backend/prisma/migrations/*water_reminder*/**"
       - "frontend/**"
+  workflow_dispatch:
+    inputs:
+      build_android_apk:
+        description: "Explicitly package the staging debug APK after native tests"
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -45,8 +52,11 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.6.0"
-      - name: Test mappings and build the staging debug application
-        run: gradle --no-daemon -p android :app:testDebugUnitTest :app:assembleDebug -PDIEWISH_WEB_BASE_URL=https://staging.diewish.com
+      - name: Test native notification mappings
+        run: gradle --no-daemon -p android :app:testDebugUnitTest -PDIEWISH_WEB_BASE_URL=https://staging.diewish.com
+      - name: Build the staging debug application when explicitly requested
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_android_apk }}
+        run: gradle --no-daemon -p android :app:assembleDebug -PDIEWISH_WEB_BASE_URL=https://staging.diewish.com
       - name: Retain native test results
         if: always()
         uses: actions/upload-artifact@v4
