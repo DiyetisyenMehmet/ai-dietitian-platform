@@ -115,7 +115,10 @@ async function claimNotification(
     const notification = locked[0];
     if (!notification) return null;
 
-    await tx.$executeRaw`
+    // The joined state above can come from a snapshot taken before another
+    // claimant committed. Locking n alone does not refresh that joined row.
+    // Recheck current ownership/backoff atomically on the state write.
+    const claimed = await tx.$executeRaw`
       INSERT INTO "notification_delivery_state"
         ("notificationId", "claimId", "claimedUntil", "updatedAt")
       VALUES
@@ -124,7 +127,13 @@ async function claimNotification(
         "claimId" = EXCLUDED."claimId",
         "claimedUntil" = EXCLUDED."claimedUntil",
         "updatedAt" = CURRENT_TIMESTAMP
+      WHERE "notification_delivery_state"."failedAt" IS NULL
+        AND ("notification_delivery_state"."nextAttemptAt" IS NULL
+          OR "notification_delivery_state"."nextAttemptAt" <= ${now})
+        AND ("notification_delivery_state"."claimedUntil" IS NULL
+          OR "notification_delivery_state"."claimedUntil" < ${now})
     `;
+    if (claimed !== 1) return null;
 
     const stateRows = await tx.$queryRaw<DeliveryStateRow[]>`
       SELECT "attempts", "nextAttemptAt", "failedAt", "lastError", "deliveredDeviceKeys"
