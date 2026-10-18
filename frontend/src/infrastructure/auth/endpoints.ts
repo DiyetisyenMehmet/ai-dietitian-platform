@@ -8,8 +8,7 @@ export const AUTH_ENDPOINTS = {
   refresh: "/auth/refresh-token",
   logout: "/auth/logout",
   me: "/auth/me",
-  // Account-lifecycle flows (password reset / email verification) are delivered
-  // in a later sprint; paths are kept so existing placeholder screens compile.
+  // Password recovery uses aliases of the existing account-lifecycle implementation.
   forgotPassword: "/auth/forgot-password",
   resetPassword: "/auth/reset-password",
   verifyEmail: "/auth/verify-email",

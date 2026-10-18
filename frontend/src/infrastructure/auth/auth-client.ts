@@ -69,7 +69,7 @@ export const authClient = {
     return apiRequest<{ message: string }>({
       path: AUTH_ENDPOINTS.resetPassword,
       method: "POST",
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ token: payload.token, newPassword: payload.password }),
     });
   },
 

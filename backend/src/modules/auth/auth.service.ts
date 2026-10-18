@@ -6,12 +6,7 @@ import { env } from "../../config/env";
 import { logger } from "../../lib/logger";
 import { ApiError } from "../../utils/api-error";
 import { hashPassword, verifyPassword } from "../../utils/password";
-import {
-  hashToken,
-  signAccessToken,
-  signRefreshToken,
-  verifyRefreshToken,
-} from "../../utils/jwt";
+import { hashToken, signAccessToken, signRefreshToken, verifyRefreshToken } from "../../utils/jwt";
 import { authRepository } from "./auth.repository";
 import type { LoginInput, RegisterInput } from "./auth.schemas";
 
@@ -89,6 +84,7 @@ function prepareRefreshToken(userId: string, context: SessionContext): PreparedR
 async function issueRefreshToken(
   userId: string,
   context: SessionContext,
+  authVersion: number,
 ): Promise<PreparedRefreshToken> {
   const prepared = prepareRefreshToken(userId, context);
   await authRepository.createRefreshToken({
@@ -98,13 +94,19 @@ async function issueRefreshToken(
     expiresAt: prepared.expiresAt,
     userAgent: prepared.userAgent,
     ipAddress: prepared.ipAddress,
+    authVersion,
   });
   return prepared;
 }
 
 export async function issueAuthSession(user: User, context: SessionContext): Promise<AuthResult> {
-  const accessToken = signAccessToken({ userId: user.id, email: user.email, role: user.role });
-  const refresh = await issueRefreshToken(user.id, context);
+  const accessToken = signAccessToken({
+    userId: user.id,
+    email: user.email,
+    role: user.role,
+    authVersion: user.authVersion,
+  });
+  const refresh = await issueRefreshToken(user.id, context, user.authVersion);
   return {
     user: toPublicUser(user),
     tokens: {
@@ -130,7 +132,8 @@ function isLikelyConcurrentReplay(
   const ipAddress = context.ipAddress ?? null;
   const userAgentCompatible =
     record.userAgent === userAgent || record.userAgent === null || userAgent === null;
-  const ipCompatible = record.ipAddress === ipAddress || record.ipAddress === null || ipAddress === null;
+  const ipCompatible =
+    record.ipAddress === ipAddress || record.ipAddress === null || ipAddress === null;
   return userAgentCompatible && ipCompatible;
 }
 
@@ -228,7 +231,12 @@ export const authService = {
     }
 
     const user = rotation.user;
-    const accessToken = signAccessToken({ userId: user.id, email: user.email, role: user.role });
+    const accessToken = signAccessToken({
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+      authVersion: user.authVersion,
+    });
     return {
       user: toPublicUser(user),
       tokens: {

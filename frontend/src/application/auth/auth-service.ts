@@ -37,6 +37,7 @@ function nativeNotificationBridge(): NativeNotificationLifecycleBridge | undefin
 
 function toFriendlyError(error: unknown): string {
   if (error instanceof ApiError) {
+    if (error.code === "EMAIL_DELIVERY_UNAVAILABLE") return "E-posta ile kurtarma şu anda kullanılamıyor. Lütfen daha sonra tekrar deneyin.";
     if (error.status === 0) return error.message;
     if (error.status === 401) return "E-posta veya şifre hatalı.";
     if (error.status === 409) return "Bu e-posta adresi zaten kayıtlı.";

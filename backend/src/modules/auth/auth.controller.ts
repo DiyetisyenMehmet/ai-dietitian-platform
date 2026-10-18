@@ -30,7 +30,7 @@ function writeRefreshCookie(res: Response, token: string, expiresAt: Date): void
   res.cookie(env.REFRESH_COOKIE_NAME, token, refreshCookieOptions(expiresAt));
 }
 
-function clearRefreshCookie(res: Response): void {
+export function clearRefreshCookie(res: Response): void {
   res.clearCookie(env.REFRESH_COOKIE_NAME, refreshCookieOptions());
 }
 

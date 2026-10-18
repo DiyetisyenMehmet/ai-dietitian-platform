@@ -25,8 +25,8 @@ model User {
   id                  String           @id @default(uuid())
   email               String           @unique
   passwordHash        String
-  // null = legacy provenance unknown; a random external secret is not a usable password.
   hasUsablePassword   Boolean?
+  authVersion         Int              @default(0)
   fullName            String?
   role                UserRole         @default(USER)
   isActive            Boolean          @default(true)
@@ -40,11 +40,12 @@ model User {
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
 
-  identityOperations AccountIdentityOperation[]
   accountIdentities AccountIdentity[]
+  identityOperations AccountIdentityOperation[]
   refreshTokens     RefreshToken[]
   profile           UserProfile?
   accountTokens     AccountToken[]
+  passwordResetDelivery PasswordResetDelivery?
   bloodTestUploads  BloodTestUpload[]
   bloodTestAnalyses BloodTestAnalysis[]
   nutritionPlans    NutritionPlan[]
@@ -82,12 +83,12 @@ model User {
   @@map("users")
 }
 
-// Verified identifiers only. This registry does not itself authorize sign-in or recovery.
 enum AccountIdentityKind {
   EMAIL
   PHONE
   GOOGLE
 }
+
 
 model AccountIdentity {
   id         String              @id @default(uuid())
@@ -103,10 +104,12 @@ model AccountIdentity {
   @@map("account_identities")
 }
 
+
 enum AccountIdentityOperationPurpose {
   LINK_METHOD
   GOOGLE_TRANSITION
 }
+
 
 model AccountIdentityOperation {
   id             String @id @default(uuid())
@@ -131,7 +134,6 @@ model AccountIdentityOperation {
 }
 
 
-// Pending SMS ownership proof; not an account, credential or authorized session.
 model PhonePasswordChallenge {
   id             String @id @default(uuid())
   phoneNumber    String @db.VarChar(16)
@@ -147,7 +149,7 @@ model PhonePasswordChallenge {
   @@map("phone_password_challenges")
 }
 
-// HMAC keys contain no raw phone numbers. Counts are shared across instances.
+
 model PhonePasswordBudget {
   key             String @id
   windowStartedAt DateTime
@@ -226,6 +228,21 @@ model RefreshToken {
 
   @@index([userId])
   @@map("refresh_tokens")
+}
+
+// Only delivery metadata is queued; raw links/passwords are never persisted.
+model PasswordResetDelivery {
+  userId        String    @id
+  requestedAt   DateTime  @default(now())
+  attemptedAt   DateTime?
+  completedAt   DateTime?
+  attempts      Int       @default(0)
+  leaseId       String?
+  leaseUntil    DateTime?
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([completedAt, requestedAt])
+  @@map("password_reset_deliveries")
 }
 
 enum AccountTokenType {

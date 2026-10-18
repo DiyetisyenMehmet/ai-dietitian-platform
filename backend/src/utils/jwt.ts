@@ -20,6 +20,7 @@ export interface AccessTokenClaims extends JwtPayload {
   email: string;
   role: UserRole;
   type: "access";
+  authVersion?: number;
 }
 
 export interface RefreshTokenClaims extends JwtPayload {
@@ -33,6 +34,7 @@ export function signAccessToken(params: {
   userId: string;
   email: string;
   role: UserRole;
+  authVersion?: number;
 }): string {
   const options: SignOptions = {
     expiresIn: env.JWT_ACCESS_TTL as SignOptions["expiresIn"],
@@ -40,7 +42,12 @@ export function signAccessToken(params: {
     subject: params.userId,
   };
   return jwt.sign(
-    { email: params.email, role: params.role, type: "access" },
+    {
+      email: params.email,
+      role: params.role,
+      type: "access",
+      authVersion: params.authVersion ?? 0,
+    },
     env.JWT_ACCESS_SECRET,
     options,
   );

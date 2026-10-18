@@ -51,7 +51,10 @@ export const forgotPasswordSchema = z.object({
 
 export const resetPasswordSchema = z
   .object({
-    password: strongPassword,
+    password: strongPassword.refine(
+      (value) => new TextEncoder().encode(value).length <= 72,
+      "Şifre en fazla 72 UTF-8 bayt olabilir.",
+    ),
     confirmPassword: z.string().min(1, "Şifre tekrarı gereklidir."),
   })
   .refine((data) => data.password === data.confirmPassword, {
