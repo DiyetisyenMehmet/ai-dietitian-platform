@@ -39,7 +39,10 @@ export const resetPasswordSchema = z.object({
 export const changePasswordSchema = z
   .object({
     currentPassword: z.string().min(1, "Current password is required").max(128),
-    newPassword: passwordSchema,
+    newPassword: passwordSchema.refine(
+      (value) => Buffer.byteLength(value, "utf8") <= 72,
+      "Şifre en fazla 72 UTF-8 bayt olabilir.",
+    ),
   })
   .refine((data) => data.currentPassword !== data.newPassword, {
     message: "New password must be different from the current password",

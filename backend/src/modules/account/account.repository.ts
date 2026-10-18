@@ -202,14 +202,40 @@ export const accountRepository = {
    * Updates the password hash and revokes all active refresh tokens so other
    * sessions are logged out after a deliberate password change.
    */
-  async changePassword(userId: string, passwordHash: string): Promise<void> {
-    await prisma.$transaction([
-      prisma.user.update({ where: { id: userId }, data: { passwordHash } }),
-      prisma.refreshToken.updateMany({
+  async changePassword(
+    userId: string,
+    passwordHash: string,
+    expected?: { passwordHash: string; authVersion: number },
+  ): Promise<boolean> {
+    return prisma.$transaction(async (tx) => {
+      // Bind the write to the exact credential state that was reauthenticated
+      // by the service. A concurrent reset/change that wins this row lock first
+      // makes the stale request fail closed instead of overwriting a newer password.
+      await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`;
+      const current = await tx.user.findUnique({
+        where: { id: userId },
+        select: { passwordHash: true, authVersion: true },
+      });
+      if (!current) return false;
+      if (
+        expected &&
+        (current.passwordHash !== expected.passwordHash ||
+          current.authVersion !== expected.authVersion)
+      ) {
+        return false;
+      }
+
+      const now = new Date();
+      await tx.user.update({
+        where: { id: userId },
+        data: { passwordHash, authVersion: { increment: 1 } },
+      });
+      await tx.refreshToken.updateMany({
         where: { userId, revokedAt: null },
-        data: { revokedAt: new Date() },
-      }),
-    ]);
+        data: { revokedAt: now },
+      });
+      return true;
+    });
   },
 
   /**
