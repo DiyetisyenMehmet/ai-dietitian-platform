@@ -63,7 +63,7 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
   const consentState = useConsentState();
   // Recovery links must remain mounted while session hydration changes state.
   // They must also be usable from an already signed-in browser.
-  const onIdentityAction = pathname === "/auth/action" || pathname === "/reset-password" || pathname === "/forgot-password" || pathname === "/phone-auth";
+  const onIdentityAction = pathname === "/auth/action" || pathname === "/reset-password" || pathname === "/forgot-password" || pathname === "/phone-auth" || pathname === "/phone-password-recovery";
   const onAdmin = pathname === "/admin" || pathname.startsWith("/admin/");
 
   React.useEffect(() => {

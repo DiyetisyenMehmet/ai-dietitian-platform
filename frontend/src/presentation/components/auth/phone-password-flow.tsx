@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { SmsRecoveryEntry } from "./sms-recovery-entry";
 import { useRouter } from "next/navigation";
 import type { CountryCode } from "libphonenumber-js";
 import { authStore } from "@/application/auth/auth-store";
@@ -386,6 +387,7 @@ export function PhonePasswordFlow({
           </Button>
         )}
       </div>
+      <SmsRecoveryEntry />
     </AuthLayout>
   );
 }
