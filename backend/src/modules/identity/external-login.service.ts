@@ -42,6 +42,8 @@ export const externalLoginService = {
     ) {
       throw ApiError.forbidden("This sign-in provider is not enabled for Diewish.");
     }
+    const social = provider === "google.com" || provider === "apple.com";
+
     if (phonePasswordEnabled() && identity.signInProvider === "phone") {
       return phonePasswordService.legacySmsLogin(identity, context);
     }
@@ -63,7 +65,6 @@ export const externalLoginService = {
       }
     }
 
-    const social = provider === "google.com" || provider === "apple.com";
     if (!identity.phoneNumber && !social) {
       throw ApiError.forbidden("This sign-in provider is not enabled for Diewish.");
     }

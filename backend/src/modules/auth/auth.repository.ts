@@ -21,12 +21,7 @@ export const authRepository = {
     return prisma.user.findUnique({ where: { id } });
   },
 
-  createUser(data: {
-    email: string;
-    passwordHash: string;
-    hasUsablePassword?: boolean;
-    fullName?: string;
-  }): Promise<User> {
+  createUser(data: { email: string; passwordHash: string; fullName?: string; hasUsablePassword?: boolean }): Promise<User> {
     return prisma.user.create({ data });
   },
 
