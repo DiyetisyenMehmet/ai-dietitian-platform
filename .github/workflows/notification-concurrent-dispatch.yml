@@ -1,0 +1,65 @@
+name: Notification concurrent dispatch checks
+on:
+  push:
+    branches: [feature/app8-notification-concurrent-dispatch-ci-a1]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: app8-dispatch-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  postgres-dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: diewish
+          POSTGRES_PASSWORD: diewish
+          POSTGRES_DB: diewish_test
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U diewish -d diewish_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      NODE_ENV: test
+      DIEWISH_ENVIRONMENT: test
+      DATABASE_URL: postgresql://diewish:diewish@localhost:5432/diewish_test?schema=public
+      JWT_ACCESS_SECRET: app8-dispatch-test-access-01234567890123456789
+      JWT_REFRESH_SECRET: app8-dispatch-test-refresh-0123456789012345678
+      LOG_LEVEL: silent
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Prepare isolated test database
+        run: |
+          npm ci --no-audit --no-fund
+          npx prisma generate
+          npx prisma migrate deploy
+      - name: Type and targeted lint checks
+        run: |
+          npm run type-check
+          npx eslint src/modules/notifications/notification.service.ts src/integration/notification-concurrent-dispatch.integration.test.ts --max-warnings 0
+      - name: Deterministic same-notification race and lease transition evidence
+        run: |
+          set -o pipefail
+          node --import tsx --test --test-concurrency=1 src/integration/notification-concurrent-dispatch.integration.test.ts | tee /tmp/app8-dispatch-evidence.log
+      - name: Original focused dispatch expectations remain strict
+        run: >-
+          node --import tsx --test --test-concurrency=1
+          --test-name-pattern='concurrent dispatchers claim|retryable delivery stops|disabled notification preference suppresses'
+          src/integration/notification-preferences.integration.test.ts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: app8-dispatch-evidence
+          path: /tmp/app8-dispatch-evidence.log
