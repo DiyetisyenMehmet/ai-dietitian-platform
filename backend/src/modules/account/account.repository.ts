@@ -1,4 +1,4 @@
-import type { AccountToken, AccountTokenType, User } from "@prisma/client";
+import type { Prisma, AccountToken, AccountTokenType, User } from "@prisma/client";
 
 import { prisma } from "../../lib/prisma";
 
@@ -206,8 +206,9 @@ export const accountRepository = {
     userId: string,
     passwordHash: string,
     expected?: { passwordHash: string; authVersion: number },
+    transaction?: Prisma.TransactionClient,
   ): Promise<boolean> {
-    return prisma.$transaction(async (tx) => {
+    const write = async (tx: Prisma.TransactionClient) => {
       // Bind the write to the exact credential state that was reauthenticated
       // by the service. A concurrent reset/change that wins this row lock first
       // makes the stale request fail closed instead of overwriting a newer password.
@@ -235,7 +236,9 @@ export const accountRepository = {
         data: { revokedAt: now },
       });
       return true;
-    });
+    };
+    // A4 consumes its SMS proof in the same transaction as this accepted write.
+    return transaction ? write(transaction) : prisma.$transaction(write);
   },
 
   /**

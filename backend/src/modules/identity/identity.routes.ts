@@ -1,3 +1,9 @@
+import { smsRecoveryController, smsRecoveryGate } from "./sms-recovery.controller";
+import {
+  smsRecoveryBeginSchema,
+  smsRecoveryVerifySchema,
+  smsRecoveryCompleteSchema,
+} from "./sms-recovery.schemas";
 import { Router, type RequestHandler } from "express";
 import { phonePasswordController, phonePasswordMiddleware } from "./phone-password.controller";
 import {
@@ -143,4 +149,38 @@ identityRouter.post(
   authRateLimiter,
   validate({ body: phonePasswordLoginSchema }),
   phonePasswordController.login,
+);
+
+identityRouter.get(
+  "/sms-recovery/status",
+  phonePasswordMiddleware.headers,
+  authRateLimiter,
+  smsRecoveryController.status,
+);
+identityRouter.post(
+  "/sms-recovery/begin",
+  smsRecoveryGate,
+  authRateLimiter,
+  validate({ body: smsRecoveryBeginSchema }),
+  smsRecoveryController.begin,
+);
+identityRouter.post(
+  "/sms-recovery/verify",
+  smsRecoveryGate,
+  authRateLimiter,
+  validate({ body: smsRecoveryVerifySchema }),
+  smsRecoveryController.verify,
+);
+identityRouter.post(
+  "/sms-recovery/complete",
+  smsRecoveryGate,
+  authRateLimiter,
+  validate({ body: smsRecoveryCompleteSchema }),
+  smsRecoveryController.complete,
+);
+identityRouter.post(
+  "/sms-recovery/cancel",
+  smsRecoveryGate,
+  authRateLimiter,
+  smsRecoveryController.cancel,
 );
