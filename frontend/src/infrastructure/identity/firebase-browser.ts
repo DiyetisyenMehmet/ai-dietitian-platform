@@ -47,8 +47,8 @@ interface FirebaseAuthFactory {
   GoogleAuthProvider: new () => FirebaseProviderLike;
   OAuthProvider: new (providerId: string) => FirebaseProviderLike;
   RecaptchaVerifier: new (
-    container: string,
-    parameters?: { size?: "invisible" | "normal"; callback?: () => void },
+    container: string | HTMLElement,
+    parameters?: { size?: "invisible" | "normal"; badge?: "inline"; callback?: () => void },
   ) => FirebaseRecaptchaLike;
 }
 
@@ -179,36 +179,72 @@ export async function signInWithApple(): Promise<string> {
   return tokenFromCredential(await sdk.auth().signInWithPopup(provider));
 }
 
+function phoneVerificationCancelled(): Error & { code: string } {
+  return Object.assign(new Error("Phone verification view closed"), {
+    code: "auth/phone-verification-cancelled",
+  });
+}
+
+/** Stop awaiting work when its view closes; Firebase owns any already-sent SMS request. */
+function whilePhoneViewActive<T>(work: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return work;
+  return new Promise((resolve, reject) => {
+    const abort = () => reject(phoneVerificationCancelled());
+    if (signal.aborted) abort();
+    else signal.addEventListener("abort", abort, { once: true });
+    work.then(resolve, reject).finally(() => signal.removeEventListener("abort", abort));
+  });
+}
+
 export async function startPhoneVerification(
   phoneNumber: string,
   containerId: string,
   onDiagnostic?: (value: PhoneAuthDiagnostic) => void,
+  signal?: AbortSignal,
 ): Promise<{ confirm(code: string): Promise<string>; clear(): void }> {
   const diagnostic = startPhoneDiagnostic(FIREBASE_CDN_VERSION, onDiagnostic);
   let verifier: FirebaseRecaptchaLike | undefined;
+  let widgetHost: HTMLElement | undefined;
+  let cleared = false;
+  const clear = () => {
+    signal?.removeEventListener("abort", clear);
+    if (cleared) return;
+    cleared = true;
+    if (verifier) clearRecaptcha(verifier);
+    // Firebase 12.19.0 clear() leaves invisible-widget children in place.
+    // Remove only this attempt's owned host, after SDK cleanup, never global frames.
+    widgetHost?.remove();
+  };
   try {
-    const sdk = await firebase();
+    if (signal?.aborted) throw phoneVerificationCancelled();
+    const sdk = await whilePhoneViewActive(firebase(), signal);
     const auth = sdk.auth();
     auth.languageCode = "tr";
     diagnostic.stage("recaptcha-create");
-    const activeVerifier = new sdk.auth.RecaptchaVerifier(containerId, {
-      size: "invisible", callback: () => diagnostic.recaptchaCompleted(),
+    const container = document.getElementById(containerId);
+    if (!container?.isConnected) {
+      throw Object.assign(new Error("Phone verification view unavailable"), {
+        code: "auth/phone-verification-cancelled",
+      });
+    }
+    widgetHost = document.createElement("div");
+    container.appendChild(widgetHost);
+    verifier = new sdk.auth.RecaptchaVerifier(widgetHost, {
+      size: "invisible", badge: "inline", callback: () => diagnostic.recaptchaCompleted(),
     });
-    verifier = activeVerifier;
+    signal?.addEventListener("abort", clear, { once: true });
     diagnostic.stage("phone-request");
-    const confirmation = await auth.signInWithPhoneNumber(phoneNumber, verifier);
+    const confirmation = await whilePhoneViewActive(auth.signInWithPhoneNumber(phoneNumber, verifier), signal);
     diagnostic.stage("sms-accepted");
     return {
       async confirm(code: string) {
         return tokenFromCredential(await confirmation.confirm(code));
       },
-      clear() {
-        clearRecaptcha(activeVerifier);
-      },
+      clear,
     };
   } catch (error) {
     diagnostic.fail(error);
-    if (verifier) clearRecaptcha(verifier);
+    clear();
     throw error;
   } finally {
     diagnostic.stop();

@@ -29,8 +29,10 @@ export default function PhoneAuthPage() {
   const [confirmation, setConfirmation] = React.useState<PhoneConfirmation | null>(null);
   const [busy, setBusy] = React.useState(false);
   const inFlight = React.useRef(false);
+  const request = React.useRef<AbortController | null>(null);
   const [feedback, setFeedback] = React.useState("");
 
+  React.useEffect(() => () => request.current?.abort(), []);
   React.useEffect(() => () => confirmation?.clear(), [confirmation]);
 
   const requestCode = async (event: React.FormEvent) => {
@@ -44,13 +46,18 @@ export default function PhoneAuthPage() {
     inFlight.current = true;
     setBusy(true);
     setFeedback("Güvenlik doğrulaması yapılıyor, SMS kodu isteniyor...");
+    request.current?.abort();
+    const attempt = new AbortController();
+    request.current = attempt;
     try {
-      const next = await startPhoneVerification(normalized, "diewish-phone-request");
+      const next = await startPhoneVerification(normalized, "diewish-phone-recaptcha", undefined, attempt.signal);
+      if (attempt.signal.aborted) { next.clear(); return; }
       setPhoneNumber(normalized);
       setConfirmation(next);
       setFeedback("Doğrulama kodu gönderildi. SMS ile gelen altı haneli kodu girin.");
       toast.success("Doğrulama kodu gönderildi.");
     } catch (error) {
+      if (request.current?.signal.aborted) return;
       setFeedback(authErrorMessage(error));
     } finally {
       inFlight.current = false;
@@ -70,12 +77,15 @@ export default function PhoneAuthPage() {
     setFeedback("Kod doğrulanıyor...");
     try {
       const firebaseToken = await confirmation.confirm(code.trim());
+      if (request.current?.signal.aborted) return;
       const session = await identityClient.external(firebaseToken);
+      if (request.current?.signal.aborted) return;
       authStore.setSession(session);
       confirmation.clear();
       setConfirmation(null);
       router.replace(session.user.onboardingCompleted ? "/dashboard" : "/consent");
     } catch (error) {
+      if (request.current?.signal.aborted) return;
       setFeedback(authErrorMessage(error));
     } finally {
       inFlight.current = false;
@@ -151,6 +161,8 @@ export default function PhoneAuthPage() {
           </Button>
         </form>
       )}
+      {/* Keep Google's complete badge visible in the SMS flow, owned by this route. */}
+      <div id="diewish-phone-recaptcha" className="mt-4 flex justify-center" />
     </AuthLayout>
   );
 }
