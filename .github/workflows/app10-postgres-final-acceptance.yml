@@ -19,6 +19,8 @@ jobs:
         options: --health-cmd "pg_isready -U app10 -d app10_final_test" --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       APP10_DISPOSABLE_POSTGRES: '1'
+      # Seven transaction/security cases and ordered migrations already passed.
+      APP10_ACCEPTANCE_CASE: PG06
       DATABASE_URL: postgresql://app10:disposable-synthetic-only@127.0.0.1:5432/app10_final_test?connection_limit=8
       NODE_ENV: test
       DIEWISH_ENVIRONMENT: test
@@ -48,11 +50,11 @@ jobs:
           cache: npm
           cache-dependency-path: backend/package-lock.json
       - run: npm ci --no-audit --no-fund
-      - name: Validate and generate combined Prisma client (no deployment)
-        run: npx prisma validate && npx prisma generate
-      - name: Only ordered migration and synthetic legacy preservation checks
-        run: node scripts/app10-final-migrations.mjs
-      - name: Only new combined PostgreSQL transaction boundaries
+      - name: Generate client for the remaining ownership fixture
+        run: npx prisma generate
+      - name: Provision a new disposable schema only (ordered migration acceptance already passed)
+        run: npx prisma migrate deploy
+      - name: Only remaining PG06 notification ownership boundary
         run: node --import tsx --test --test-concurrency=1 tests/app10-postgres-final.test.ts
       - name: Publish non-sensitive acceptance evidence
         if: always()

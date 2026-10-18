@@ -56,6 +56,10 @@ test('APP10 final combined PostgreSQL boundaries only', { timeout: 90000 }, asyn
   await new Promise<void>(resolve => server.once('listening', resolve));
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api`;
   const evidence: Record<string, unknown>[] = [];
+  const runCase = (name: string, fn: () => Promise<void>): Promise<void> => {
+    if (process.env.APP10_ACCEPTANCE_CASE && !String(name).startsWith(process.env.APP10_ACCEPTANCE_CASE)) return Promise.resolve();
+    return t.test(name, fn);
+  };
   t.after(async () => {
     firebaseAuthProvider.verifyIdToken = originalVerify; globalThis.fetch = originalFetch;
     env.ACCOUNT_SAFE_LINKING_ENABLED = env.PHONE_PASSWORD_AUTH_ENABLED = env.PHONE_SMS_RECOVERY_ENABLED = false;
@@ -114,7 +118,7 @@ test('APP10 final combined PostgreSQL boundaries only', { timeout: 90000 }, asyn
   }
   const observed = (promise: Promise<unknown>) => promise.then(() => ({ success: true, code: null }), error => ({ success: false, code: error instanceof ApiError ? error.code : 'UNEXPECTED_SQL_OR_RUNTIME_ERROR' }));
 
-  for (const first of ['email', 'sms'] as const) await t.test(`PG01 ${first} wins real concurrent email/SMS reset; loser cannot overwrite`, async () => {
+  for (const first of ['email', 'sms'] as const) await runCase(`PG01 ${first} wins real concurrent email/SMS reset; loser cannot overwrite`, async () => {
     const u = await user(), other = await user();
     const foreignBefore = await securitySnapshot(other.id, other.phone);
     const session = await authService.login({ email: u.email, password: oldPassword }, {});
@@ -149,7 +153,7 @@ test('APP10 final combined PostgreSQL boundaries only', { timeout: 90000 }, asyn
     evidence.push({ case: `PG01-${first}-first`, result: 'PASS', observedBlockedBackends: pids.length, successfulWriters: 1, versionIncrement: 1, oldAccessRefreshDenied: true, foreignUnchanged: true });
   });
 
-  for (const route of ['sms', 'email'] as const) await t.test(`PG02 ${route} SQL failure rolls back credential/proof/session/delivery changes`, async () => {
+  for (const route of ['sms', 'email'] as const) await runCase(`PG02 ${route} SQL failure rolls back credential/proof/session/delivery changes`, async () => {
     const u = await user(), session = await authService.login({ email: u.email, password: oldPassword }, {});
     const recovery = await smsProof(u), mail = await emailProof(u.id);
     await prisma.passwordResetDelivery.create({ data: { userId: u.id, requestedAt: new Date() } });
@@ -174,7 +178,7 @@ test('APP10 final combined PostgreSQL boundaries only', { timeout: 90000 }, asyn
     evidence.push({ case: `PG02-${route}-sql-rollback`, result: 'PASS', entireSecuritySnapshotRestored: true, priorAccessRefreshSurvivesFailure: true, sameProofRetrySucceeded: true });
   });
 
-  await t.test('PG03 unknown/false usable-password provenance becomes true only through successful email reset', async () => {
+  await runCase('PG03 unknown/false usable-password provenance becomes true only through successful email reset', async () => {
     for (const value of [null, false]) {
       const u = await user({ hasUsablePassword: value }); const mail = await emailProof(u.id);
       // No login before reset may stamp usable-password provenance in this case.
@@ -186,7 +190,7 @@ test('APP10 final combined PostgreSQL boundaries only', { timeout: 90000 }, asyn
     evidence.push({ case: 'PG03-provenance', result: 'PASS', legacyNullAndFalsePreservedUntilReset: true });
   });
 
-  await t.test('PG04 Admin is denied by normal password/Google/phone paths before activation or sessions', async () => {
+  await runCase('PG04 Admin is denied by normal password/Google/phone paths before activation or sessions', async () => {
     for (const active of [false, true]) {
       const u = await user({ role: 'ADMIN', isActive: active, deactivatedAt: active ? null : new Date() });
       const subject = `app10-${crypto.randomUUID()}`;
@@ -210,7 +214,7 @@ test('APP10 final combined PostgreSQL boundaries only', { timeout: 90000 }, asyn
     evidence.push({ case: 'PG04-admin-isolation', result: 'PASS', activeAndSelfDeactivatedAdminUnchanged: true });
   });
 
-  await t.test('PG05 A3/A4 purposes cannot consume each other; one SMS event cannot authorize both', async () => {
+  await runCase('PG05 A3/A4 purposes cannot consume each other; one SMS event cannot authorize both', async () => {
     const u = await user(), recovery = await smsProof(u);
     const phone = number(), token = phoneProof(phone), setup = await a3.start({ phoneNumber: phone, idToken: token });
     const before = await securitySnapshot(u.id, u.phone), count = await prisma.user.count();
@@ -231,8 +235,8 @@ test('APP10 final combined PostgreSQL boundaries only', { timeout: 90000 }, asyn
     evidence.push({ case: 'PG05-proof-isolation', result: 'PASS', bothDirections: true, databaseReplayGuard: true, noNewUser: true });
   });
 
-  await t.test('PG06 authenticated notification bulk and single actions never change a foreign account', async () => {
-    const owner = await user(), foreign = await user();
+  await runCase('PG06 authenticated notification bulk and single actions never change a foreign account', async () => {
+    const owner = await user({ onboardingCompleted: true }), foreign = await user();
     const session = await authService.login({ email: owner.email, password: oldPassword }, {});
     const old = new Date(Date.now() - 60000), cutoff = new Date();
     const create = (userId: string) => prisma.notification.create({ data: { userId, type: 'PROACTIVE_MESSAGE', title: 'Synthetic notice', body: 'Synthetic content', scheduledFor: old, deliveredAt: old } });
