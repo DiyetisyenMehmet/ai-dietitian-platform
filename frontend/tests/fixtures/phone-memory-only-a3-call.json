@@ -1,0 +1,6 @@
+{
+  "pr": 57,
+  "head": "1b5be3aaa6e2864ee24a5bf24e12ddce2b8abcef",
+  "source": "frontend/src/presentation/components/auth/phone-password-flow.tsx",
+  "call": "startPhoneVerification(\n          normalized,\n          \"diewish-phone-password-request\",\n          undefined,\n          true,\n        )"
+}

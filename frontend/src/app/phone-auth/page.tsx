@@ -50,7 +50,7 @@ export default function PhoneAuthPage() {
     const attempt = new AbortController();
     request.current = attempt;
     try {
-      const next = await startPhoneVerification(normalized, "diewish-phone-recaptcha", undefined, attempt.signal);
+      const next = await startPhoneVerification(normalized, "diewish-phone-recaptcha", undefined, false, attempt.signal);
       if (attempt.signal.aborted) { next.clear(); return; }
       setPhoneNumber(normalized);
       setConfirmation(next);

@@ -84,7 +84,7 @@ test('invisible protection and complete inline branding are owned by the phone r
 
 test('leaving while SMS is pending clears immediately and rejects late completion', async () => {
   const sms = deferred(), h = harness({ sms }), controller = new AbortController();
-  const pending = h.startPhoneVerification('+905551112233', 'slot', undefined, controller.signal);
+  const pending = h.startPhoneVerification('+905551112233', 'slot', undefined, false, controller.signal);
   await untilStarted(h);
   controller.abort();
   await assert.rejects(pending, { code: 'auth/phone-verification-cancelled' });
@@ -99,7 +99,7 @@ test('leaving while SMS is pending clears immediately and rejects late completio
 
 test('leaving after SMS acceptance releases the verifier before a React effect can own the result', async () => {
   const h = harness(), controller = new AbortController();
-  const result = await h.startPhoneVerification('+905551112233', 'slot', undefined, controller.signal);
+  const result = await h.startPhoneVerification('+905551112233', 'slot', undefined, false, controller.signal);
   controller.abort(); result.clear();
   assert.equal(h.state.clears, 1);
   assert.equal(h.slot.children.length, 0);
@@ -107,7 +107,7 @@ test('leaving after SMS acceptance releases the verifier before a React effect c
 
 test('leaving during configuration loading never constructs a late verifier or sends SMS', async () => {
   const configuration = deferred(), h = harness({ configuration }), controller = new AbortController();
-  const pending = h.startPhoneVerification('+905551112233', 'slot', undefined, controller.signal);
+  const pending = h.startPhoneVerification('+905551112233', 'slot', undefined, false, controller.signal);
   controller.abort();
   await assert.rejects(pending, { code: 'auth/phone-verification-cancelled' });
   configuration.resolve({ configured: true, config: { apiKey: 'key', authDomain: 'domain', projectId: 'project', appId: 'app' } });
@@ -120,7 +120,7 @@ test('leaving during configuration loading never constructs a late verifier or s
 test('aborted or detached phone views never send an SMS', async () => {
   const h = harness(), controller = new AbortController();
   controller.abort();
-  await assert.rejects(h.startPhoneVerification('+905551112233', 'slot', undefined, controller.signal));
+  await assert.rejects(h.startPhoneVerification('+905551112233', 'slot', undefined, false, controller.signal));
   assert.equal(h.state.sent, 0);
   const detached = harness({ missingContainer: true });
   await assert.rejects(detached.startPhoneVerification('+905551112233', 'slot'));

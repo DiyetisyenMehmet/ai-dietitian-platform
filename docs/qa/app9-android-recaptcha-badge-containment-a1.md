@@ -65,7 +65,66 @@ Eski sürüm karşılaştırması için aynı testin `pending SMS` senaryosu, st
 2. Başarılı SMS, yanlış kod, numara değiştirme, başarısız istek ve istek sürerken geri/ana sayfaya çıkış kontrol edilmeli. Uygulama ana ekranına gelindiğinde rozet alt menünün üzerinde kalmamalı.
 3. Aynı adımlar normal Web'de de uygulanmalı. Gerçek Android ile Web karşılaştırması bu aşamada tamamlanmalı.
 4. İlk açılışta zaten kalmış eski bir üçüncü taraf DOM öğesi için genel tarama/silme yapılmaz. Yeni sahiplik ancak yeni sayfa oturumu ve güncel akışla devreye girer; kabul güncel ön yüzü yükleyen ortak APK ile yapılmalı.
-5. Telefon kayıt/kurtarma çalışmaları aynı yardımcıyı veya sayfayı değiştirirse, yeni alan ve çıkış temizliği entegrasyonda korunmalı. Mevcut üç parametreli yardımcı çağrısı uyumludur; dördüncü çıkış sinyali isteğe bağlıdır.
+5. Telefon kayıt/kurtarma çalışmaları aynı yardımcıyı veya sayfayı değiştirirse, yeni alan ve çıkış temizliği entegrasyonda korunmalı. Aşağıdaki A2 düzeltmesiyle dördüncü parametre `memoryOnly=false`, beşinci isteğe bağlı parametre çıkış sinyalidir. Önceki PR #63 sürümünde çıkış sinyalinin dördüncü parametre olması PR #57 ile uyumsuzdu.
+
+## APP9-RECAPTCHA-A3-COMPATIBILITY-CLOSE-A2
+
+Sonuç: **PASS — ortak yardımcı parametre ve geçici bellek uyumu.** Tamamlanma: **%95**; Çalışan 11'in ekran entegrasyonu ve ortak APK fiziksel kabulü kendi aşamalarında bekliyor.
+
+### İncelenen kaynaklar
+
+- Güncel staging HEAD/TREE yukarıdakiyle aynı: `12c15074c71c6bc3c84fc7a32b02eaa71f4f32c7` / `b48efe9fbcf229858dfd959a2c6de3304937ee66`.
+- PR #57 HEAD: `1b5be3aaa6e2864ee24a5bf24e12ddce2b8abcef`; TREE: `83cc8543a28933a351d98f1c4c2c25e2e775bcf6`. Gerçek `PhonePasswordFlow` çağrısında dördüncü argüman `true`; yardımcıda SMS öncesi `await auth.setPersistence("none")` var.
+- PR #63 düzeltme öncesi HEAD: `275a6994dbab0757434ba725251e29e31e514f74`; TREE: `17676bc82835a97ec98e06d49fef3d9adcb1c0f7`. Aynı argüman `AbortSignal` olarak kullanılmıştı. Bu, önceki entegrasyon incelemesinde kaçırılan somut çakışmadır.
+- Uzak dal listesi, açık PR'lar ve yayımlanmış Çalışan 11 dalları kontrol edildi. Ayrı yayımlanmış FAZ 4 dalı/PR'ı bulunamadı; yayımlanmamış çalışma kopyasına erişim yok. FAZ 4 uygulaması incelenmiş veya uyumlu kabul edilmiş değildir. PR #57 ve diğer çalışan dalları değiştirilmedi.
+
+### Korunan ortak sözleşme
+
+| Parametre | Anlamı |
+|---|---|
+| 1 `phoneNumber` | Telefon numarası |
+| 2 `containerId` | Ekrana ait, adımlar boyunca bağlı kalan reCAPTCHA alanı |
+| 3 `onDiagnostic?` | Mevcut tanı geri çağrısı |
+| 4 `memoryOnly = false` | PR #57'nin geçici bellek koruması |
+| 5 `signal?: AbortSignal` | İsteğe bağlı sayfadan çıkış/iptal sinyali |
+
+`memoryOnly=true` iken `setPersistence("none")` tamamlanmadan widget oluşturulmaz ve SMS istenmez. Bu çağrı reddedilir veya SDK'da bulunmazsa hata yukarı iletilir; kalıcı depolamaya geri dönüş veya SMS'e devam yoktur. Ayar beklenirken iptalden sonra geç gelen sonuç SMS başlatmaz. Bu, PR #57'nin mevcut korumasının korunmasıdır; yeni kimlik güvenliği politikası eklenmedi.
+
+Mevcut iki/üç argümanlı çağrılar ve açık `false` kalıcılık ayarını değiştirmez. Eski telefon sayfasındaki çıkış sinyali beşinci argümana taşındı. `badge: "inline"`, denemeye ait alt alan, SDK temizliğinden sonra yalnız sahip olunan alanın kaldırılması ve bekleyen SMS sırasında çıkış temizliği korunur. Google giriş işlevleri değiştirilmedi.
+
+### Yalnız bu uyumsuzluk için doğrulama
+
+Komut (depo kökünden):
+
+```bash
+node --test frontend/tests/phone-recaptcha-a3-compatibility.test.cjs
+```
+
+**PASS — 9 yeni hedefli test:** PR #57'nin sabitlenmiş HEAD'inden alınan gerçek dört argümanlı çağrı için TypeScript tür uyumu; yanlış argüman konumlarının tür hatası vermesi; geçici bellek → widget → SMS sırası; bekleyen ayar; reddedilen/eksik ayarda güvenli duruş; eski çağrıların korunması; geçici bellek ayarı ve SMS beklemeleri sırasında beşinci sinyalle iptal; üçüncü tanı geri çağrısının korunması. A3 çağrısının kaynağı ve HEAD'i `frontend/tests/fixtures/phone-memory-only-a3-call.json` içinde kayıtlıdır.
+
+Test hizmet sınırı sentetiktir; gerçek SMS, hesap veya oturum kullanılmadı. Değişen iki TypeScript kaynak dosyasının ESLint denetimi de PASS. Önceden kabul edilen **18 test + 6 tarayıcı senaryosu yeniden çalıştırılmadı**; yukarıdaki A1 sonuçları önceki çalışmanın kanıtıdır. Eski yaşam döngüsü test dosyasındaki dört sinyal çağrısı yalnız yeni beşinci konuma uyarlandı; bu testler yeniden başlatılmadı.
+
+### Çalışan 11 için zorunlu entegrasyon notu
+
+PR #57'nin mevcut `PhonePasswordFlow` bileşeni reCAPTCHA alanı olarak numara adımının gönderme butonunu (`diewish-phone-password-request`) kullanıyor. Bu buton kod adımına geçildiğinde kaldırılıyor. PR #63 ile kullanılacak ekranda **numara ve kod adımlarının ikisinde de bağlı kalan ayrı bir reCAPTCHA alanı** gerekir. Bu alan koşullu adım formlarının dışında, ekranın kendi öğesi olmalı; Google rozeti görünür ve eksiksiz kalmalı.
+
+Örnek entegrasyon sözleşmesi (Çalışan 11'in dalına uygulanmadı):
+
+```tsx
+// Ekranın tüm SMS adımlarında bağlı kalan alan:
+<div id="diewish-phone-password-recaptcha" />
+
+// PR #57'nin true dördüncü argümanı korunur; sinyal beşincidedir:
+startPhoneVerification(
+  normalized,
+  "diewish-phone-password-recaptcha",
+  undefined,
+  true,
+  attempt.signal,
+);
+```
+
+Ekrandan ayrılma, numara değiştirme ve yeni denemeden önce önceki `AbortController` iptal edilmeli; alınmış sonuç da mevcut `clear()` yolu ile bırakılmalı. Yalnız geç dönen sonucun temizlenmesi, sonuç beklenirken anında temizlik sağlamaz. FAZ 4 aynı yardımcıyı kullanıyorsa kendi kalıcı alanını ve beşinci sinyali bu sözleşmeye göre bağlamalı; mevcut güvenlik parametresi korunmalı. Bu görev yardımcı parametre çakışmasını kapatır; tüm PR #57/FAZ 4 ekran entegrasyonunun veya fiziksel Android davranışının tamamlandığını ileri sürmez.
 
 ## Resmi kaynaklar
 
