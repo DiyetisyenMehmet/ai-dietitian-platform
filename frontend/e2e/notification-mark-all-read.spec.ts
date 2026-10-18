@@ -138,6 +138,10 @@ for (const width of [390, 412, 430, 1440]) {
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
     ).toBeTruthy();
+    await page.screenshot({
+      path: test.info().outputPath(`notification-center-${width}.png`),
+      fullPage: true,
+    });
     let release!: () => void;
     api.gate = new Promise<void>((resolve) => {
       release = resolve;
@@ -193,7 +197,9 @@ for (const committed of [false, true])
     api.loseResponse = committed;
     await page.goto(base + "/notifications");
     await page.getByRole("button", { name: "Tümünü okundu işaretle", exact: true }).click();
-    await expect(page.getByRole("alert")).toContainText("doğrulanamadı");
+    await expect(
+      page.getByRole("region", { name: "Bildirimler", exact: true }).getByRole("alert"),
+    ).toContainText("doğrulanamadı");
     if (!committed)
       await expect(page.getByText("2 okunmamış bildirim", { exact: true })).toBeVisible();
     else await expect(page.getByRole("button", { name: "Tümünü okundu işaretle" })).toHaveCount(0);
