@@ -3,10 +3,12 @@ on:
   push:
     branches:
       - feature/mirmir-final-animation-decision-a1
+      - feature/mirmir-final-size-blink-ci-a1
       - feature/staging-preview
       - feature/app7-mascot-nutrition-joint-integration-a1
     paths:
       - frontend/src/presentation/components/mascot/**
+      - frontend/src/presentation/components/dashboard/dashboard-ai-banner.tsx
       - frontend/src/presentation/components/profile/mascot-preferences-view.tsx
       - frontend/src/domain/account/mascot-preferences.ts
       - frontend/public/images/mascots/mirmir/**

@@ -64,7 +64,7 @@ export function DashboardAiBanner({ editing = false, saving = false, onHide }: {
           className="pointer-events-none absolute left-[3.1%] top-1/2 origin-center -translate-y-1/2 scale-[0.8] sm:scale-100"
           aria-hidden="true"
         >
-          <SelectedMascot className="size-14"><DiewishMascot gradientId="dashboard-ai" /></SelectedMascot>
+          <SelectedMascot className="size-16"><DiewishMascot gradientId="dashboard-ai" /></SelectedMascot>
         </span>
 
         <div

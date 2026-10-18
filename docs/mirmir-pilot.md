@@ -141,8 +141,9 @@ kenarlarında kalıntı/tüy kaybı nedeniyle görsel kaliteyi geçmedi. Video
 animasyonundan vazgeçildi; temizleme ve yeni animasyon üretimi sürdürülmez.
 
 Tek mevcut `MirmirMascot` bileşeni korunur. Bileşen yalnız mevcut şeffaf
-`still-a4.png` (açık göz) ve `eyes-closed.webp` karelerini, önceki 5,6 saniyelik
-iki kareli göz kırpma zamanlamasıyla gösterir. Yeni görsel veya hareket
+`still-a4.png` (açık göz) ve `eyes-closed.webp` karelerini, 3 saniyelik
+iki kareli göz kırpma döngüsüyle gösterir; gözün kapalı kaldığı yaklaşık
+140 milisaniye korunur. Yeni görsel veya hareket
 üretilmedi; kuyruk/nefes deformasyonu geri getirilmedi. Video elemanı, medya
 oynatıcısı ve video kaynağına uygulama başvurusu yoktur. MP4 geçmiş dosyası
 silinmez/değiştirilmez, çalışma sırasında istenmez.
@@ -170,3 +171,21 @@ video isteği oluşmamasını, eski true/false kayıtların etkisizliğini, kald
 anahtarı, maskot seçimini, statik geri dönüşü ve görünürlük durdurmalarını
 sınar. Masaüstü/Android Chrome emülasyonu gerçek Android WebView cihaz testi
 yerine geçmez.
+
+
+## Final boyut ve CI düzeltmesi — MIRMIR-FINAL-SIZE-BLINK-CI-A1
+
+Güncel staging tabanı: `03f4acd162219a65c6a965ff77bec143eff4a1a0`.
+PR #56 zamanlaması bu tabana taşındı. Ana sayfa Koç bannerındaki yalnız
+Mırmır 56 yerine 64 CSS pikselidir; mevcut mobil %80 ölçekle görünür kutu
+44,8 yerine 51,2 pikseldir (yaklaşık %14,3 artış). Klasik maskot, özgün
+görseller ve diğer maskot kullanım alanlarının boyutları değiştirilmedi.
+
+Önceki Hardening CI kaydı `39165948072`, `117788798351` işinde konum
+karşılaştırması yalnız 0,193 piksel dikey farkla başarısızdı; boyut ve yatay
+konum aynıydı, taşmama kontrolü geçmişti. Dashboard üst öğesinin 300 ms
+`translateY(4px)` giriş hareketi bitmeden mutlak ekran konumu karşılaştırılıyordu.
+Test artık yazı tiplerini ve sonlu üst öğe hareketlerini bekler, banner içi
+konumları alt piksel hassasiyetiyle karşılaştırır. Taşmama, metinle çakışmama,
+açık/kapalı kare hizası, 390/412/430/1280 px ve açık/koyu tema kontrolleri
+korunur. Fiziksel Android testi yerine Android Chrome emülasyonu kullanılır.
