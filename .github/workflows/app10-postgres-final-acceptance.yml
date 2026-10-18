@@ -1,0 +1,64 @@
+name: APP10 isolated PostgreSQL final acceptance
+on:
+  push:
+    branches: [qa/app10-postgres-final-acceptance-a1]
+permissions:
+  contents: read
+jobs:
+  postgres-final:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: app10
+          POSTGRES_PASSWORD: disposable-synthetic-only
+          POSTGRES_DB: app10_final_test
+        ports: ['5432:5432']
+        options: --health-cmd 'pg_isready -U app10 -d app10_final_test' --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      APP10_DISPOSABLE_POSTGRES: '1'
+      DATABASE_URL: postgresql://app10:disposable-synthetic-only@127.0.0.1:5432/app10_final_test?connection_limit=8
+      NODE_ENV: test
+      DIEWISH_ENVIRONMENT: test
+      LOG_LEVEL: silent
+      JWT_ACCESS_SECRET: synthetic-app10-access-00000000000000000000000000
+      JWT_REFRESH_SECRET: synthetic-app10-refresh-0000000000000000000000000
+      BCRYPT_ROUNDS: '10'
+      RATE_LIMIT_MAX: '1000'
+      AUTH_RATE_LIMIT_MAX: '1000'
+      ACCOUNT_SAFE_LINKING_ENABLED: 'false'
+      PHONE_PASSWORD_AUTH_ENABLED: 'false'
+      PHONE_SMS_RECOVERY_ENABLED: 'false'
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prove exact accepted source, only this validation harness added
+        working-directory: .
+        run: |
+          git fetch --no-tags origin ea150dda608c9910f7e80c69cfa2a2dec8c6dc36
+          test "$(git rev-parse ea150dda608c9910f7e80c69cfa2a2dec8c6dc36^{tree})" = cd2d5d645ec478d4995115c7f36c5b5262bc521d
+          git diff --exit-code ea150dda608c9910f7e80c69cfa2a2dec8c6dc36 -- backend/src backend/prisma backend/package.json backend/package-lock.json frontend android
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - name: Validate and generate combined Prisma client (no deployment)
+        run: npx prisma validate && npx prisma generate
+      - name: Only ordered migration and synthetic legacy preservation checks
+        run: node scripts/app10-final-migrations.mjs
+      - name: Only new combined PostgreSQL transaction boundaries
+        run: node --import tsx --test --test-concurrency=1 tests/app10-postgres-final.test.ts
+      - name: Publish non-sensitive acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app10-postgres-final-acceptance
+          path: |
+            ${{ runner.temp }}/app10-migration-evidence.json
+            ${{ runner.temp }}/app10-postgres-evidence.json
