@@ -1,22 +1,21 @@
 name: Staging Notification Test APK
-# APK rebuild trigger: dashboard rollback validation
+# APK packaging requires an explicit manual request.
 
 on:
-  push:
-    branches:
-      - feature/staging-preview
-    paths:
-      - ".github/workflows/staging-notification-test-apk.yml"
-      - "android/**"
-      - "frontend/src/presentation/components/profile/notifications-view.tsx"
-      - "frontend/src/presentation/providers/push-device-sync.tsx"
   workflow_dispatch:
+    inputs:
+      build_android_apk:
+        description: "Explicitly build the staging notification test APK"
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
 
 jobs:
   apk:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_android_apk }}
     name: Build staging notification test APK
     runs-on: ubuntu-latest
     timeout-minutes: 25
