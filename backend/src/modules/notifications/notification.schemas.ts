@@ -73,6 +73,21 @@ export const notificationIdParamsSchema = z.object({
   id: z.string().uuid(),
 });
 
+export const notificationInboxQuerySchema = z.object({
+  nativeServerIds: z
+    .string()
+    .max(3699)
+    .optional()
+    .transform((value) => (value ? value.split(",") : []))
+    .pipe(z.array(z.string().uuid()).max(100)),
+});
+
+export const markAllNotificationsReadSchema = z
+  .object({
+    before: z.string().datetime(),
+  })
+  .strict();
+
 export type UpdateNotificationPreferencesInput = z.infer<
   typeof updateNotificationPreferencesSchema
 >;
