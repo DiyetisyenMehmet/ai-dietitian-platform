@@ -427,6 +427,19 @@ test("A4 SMS password recovery: only new behavior on accepted security foundatio
     },
   );
   await t.test(
+    "a password change while SMS is pending invalidates the intent before verification",
+    async () => {
+      const u = await user(),
+        op = await begin(u.number);
+      await accountRepository.changePassword(u.id, await hashPassword(otherPass), {
+        passwordHash: u.passwordHash,
+        authVersion: u.authVersion,
+      });
+      await assert.rejects(recovery.verify(op.secret, { idToken: sms(u.number) }), rejected());
+      assert.ok(await verifyPassword(otherPass, (await saved(u.id)).passwordHash));
+    },
+  );
+  await t.test(
     "PR49 email reset wins first: pending SMS cannot overwrite its newer password",
     async () => {
       const u = await user(undefined, { email: `a4.${crypto.randomUUID()}@example.com` }),

@@ -39,8 +39,9 @@ prerequisites, security acceptance, separately authorized real SMS/device QA.
 The new endpoints do not enable a method or return a health-data session.
 
 1. `/identity/sms-recovery/begin` creates a five-minute, browser-bound intent for
-   the requested E.164 phone. Its generic response does not query/reveal user
-   existence. Per-IP and durable HMAC-keyed per-phone limits apply (5 starts/10m).
+   the requested E.164 phone. Its generic response does not reveal user
+   existence. Eligible credential/identity state is bound internally before SMS
+   delivery, so a concurrent reset/change invalidates even an unverified intent. Per-IP and durable HMAC-keyed per-phone limits apply (5 starts/10m).
 2. Existing Firebase SMS verifies a NEW actual phone authentication. The provider
    token must be online-verified, fresh, match the exact requested number, and not
    predate the intent. A linked phone in a Google token is insufficient.

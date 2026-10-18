@@ -143,6 +143,17 @@ export const smsRecoveryService = {
       const secret = generateOpaqueToken(),
         expiresAt = new Date(Date.now() + LINK_TTL_MS);
       await prisma.$transaction(async (tx) => {
+        // Bind security state before SMS is requested. A password/reset/method
+        // change during SMS delivery must not be adopted as a new proof baseline.
+        let owner: Awaited<ReturnType<typeof ownerFor>> | null = null;
+        try {
+          const candidate = await ownerFor(tx, input.phoneNumber);
+          await lockOwnerAndPhone(tx, candidate.id, input.phoneNumber);
+          owner = await ownerFor(tx, input.phoneNumber);
+          if (owner.id !== candidate.id) owner = null;
+        } catch (error) {
+          if (!(error instanceof ApiError)) throw error;
+        }
         if (isSecret(oldSecret))
           await tx.phonePasswordChallenge.updateMany({
             where: { secretHash: hashToken(oldSecret), purpose: PURPOSE, consumedAt: null },
@@ -154,6 +165,8 @@ export const smsRecoveryService = {
             phoneNumber: input.phoneNumber,
             secretHash: hashToken(secret),
             proofEventHash: null,
+            expectedUserId: owner?.id ?? null,
+            securityStamp: owner ? securityStamp(owner, owner.accountIdentities) : null,
             expiresAt,
           },
         });
@@ -183,10 +196,13 @@ export const smsRecoveryService = {
           await lockOwnerAndPhone(tx, candidate.id, op.phoneNumber);
           const current = await tx.phonePasswordChallenge.findUnique({ where: { id: op.id } });
           assertPending(current);
-          if (current.verifiedAt) throw invalid();
+          if (current.verifiedAt || !current.expectedUserId || !current.securityStamp)
+            throw invalid();
           const owner = await ownerFor(tx, op.phoneNumber);
           if (
             owner.id !== candidate.id ||
+            owner.id !== current.expectedUserId ||
+            securityStamp(owner, owner.accountIdentities) !== current.securityStamp ||
             !owner.accountIdentities.some(
               (i) =>
                 i.kind === "PHONE" &&
