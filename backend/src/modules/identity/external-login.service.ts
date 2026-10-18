@@ -50,6 +50,7 @@ export const externalLoginService = {
       user = await authRepository.createUser({
         email,
         passwordHash: await hashPassword(generatedSecret),
+        hasUsablePassword: false,
         fullName: identity.displayName ?? undefined,
       });
       if (identity.emailVerified && identity.email === email) {

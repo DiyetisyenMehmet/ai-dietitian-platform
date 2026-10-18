@@ -154,6 +154,7 @@ export const authService = {
       user = await authRepository.createUser({
         email: input.email,
         passwordHash,
+        hasUsablePassword: true,
         fullName: input.fullName,
       });
     } catch (error) {
@@ -184,7 +185,7 @@ export const authService = {
     if (user.role === UserRole.ADMIN) throw invalid;
     if (!user.isActive) throw ApiError.forbidden("This account has been deactivated.");
 
-    await authRepository.updateLastLogin(user.id);
+    await authRepository.updateLastLogin(user.id, true);
     logger.info({ userId: user.id }, "User logged in");
     return issueAuthSession(user, context);
   },

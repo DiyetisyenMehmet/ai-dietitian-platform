@@ -190,7 +190,7 @@ export const accountRepository = {
         data: { usedAt: now },
       });
       if (claimed.count !== 1) return false;
-      await tx.user.update({ where: { id: userId }, data: { passwordHash, authVersion: { increment: 1 } } });
+      await tx.user.update({ where: { id: userId }, data: { passwordHash, hasUsablePassword: true, authVersion: { increment: 1 } } });
       await tx.accountToken.updateMany({ where: { userId, type: "PASSWORD_RESET", usedAt: null }, data: { usedAt: now } });
       await tx.refreshToken.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: now } });
       await tx.passwordResetDelivery.updateMany({ where: { userId }, data: { completedAt: now } });
@@ -228,7 +228,7 @@ export const accountRepository = {
       const now = new Date();
       await tx.user.update({
         where: { id: userId },
-        data: { passwordHash, authVersion: { increment: 1 } },
+        data: { passwordHash, hasUsablePassword: true, authVersion: { increment: 1 } },
       });
       await tx.refreshToken.updateMany({
         where: { userId, revokedAt: null },

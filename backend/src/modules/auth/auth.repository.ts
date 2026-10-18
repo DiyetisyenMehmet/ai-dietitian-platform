@@ -21,14 +21,19 @@ export const authRepository = {
     return prisma.user.findUnique({ where: { id } });
   },
 
-  createUser(data: { email: string; passwordHash: string; fullName?: string }): Promise<User> {
+  createUser(data: {
+    email: string;
+    passwordHash: string;
+    hasUsablePassword?: boolean;
+    fullName?: string;
+  }): Promise<User> {
     return prisma.user.create({ data });
   },
 
-  updateLastLogin(userId: string): Promise<User> {
+  updateLastLogin(userId: string, passwordProven = false): Promise<User> {
     return prisma.user.update({
       where: { id: userId },
-      data: { lastLoginAt: new Date() },
+      data: { lastLoginAt: new Date(), ...(passwordProven ? { hasUsablePassword: true } : {}) },
     });
   },
 
