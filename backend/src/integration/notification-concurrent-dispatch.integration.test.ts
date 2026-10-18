@@ -20,22 +20,30 @@ if (process.env.NODE_ENV !== "test" || process.env.DIEWISH_ENVIRONMENT !== "test
 const worker = new AsyncLocalStorage<string>();
 let gateFunction: string | null = null;
 prisma.$use(async (params, next) => {
+  // Prisma's tagged raw-query middleware receives [strings, ...values], not
+  // the engine's later {query, parameters} representation.
+  const strings: unknown = params.args?.[0];
   if (
-    worker.getStore() === "stale" &&
     gateFunction &&
     params.action === "queryRaw" &&
-    typeof params.args?.query === "string" &&
-    params.args.query.includes("FOR UPDATE OF n SKIP LOCKED")
+    Array.isArray(strings) &&
+    strings.every((part) => typeof part === "string") &&
+    strings.join("").includes("FOR UPDATE OF n SKIP LOCKED")
   ) {
-    // The SQL statement takes its MVCC snapshot, then waits before locking n.
-    // All original predicates/parameters and transaction behavior stay intact.
-    params.args.query = params.args.query.replace(
-      'WHERE n."id" =',
-      `WHERE public."${gateFunction}"() AND n."id" =`,
-    );
+    const name = gateFunction;
+    gateFunction = null;
+    // Consume only the first claimant. PostgreSQL takes its MVCC snapshot and
+    // then waits in this predicate before locking n; bound values stay intact.
+    params.args = [
+      strings.map((part: string) =>
+        part.replace('WHERE n."id" =', `WHERE public."${name}"() AND n."id" =`),
+      ),
+      ...params.args.slice(1),
+    ];
   }
   return next(params);
 });
+
 function latch() {
   let resolve!: () => void;
   const promise = new Promise<void>((done) => {
