@@ -90,6 +90,13 @@ export const externalLoginService = {
       }
     }
 
+    // Normal Diewish identity routes must never mint or reactivate an
+    // Management Center principal. Admin authentication remains exclusively
+    // owned by /api/admin/auth and its existing RBAC controls.
+    if (user.role !== "USER") {
+      throw ApiError.forbidden("This account is not available.");
+    }
+
     if (!user.isActive) {
       if (!user.deactivatedAt) {
         throw ApiError.forbidden("This account is not available.");
