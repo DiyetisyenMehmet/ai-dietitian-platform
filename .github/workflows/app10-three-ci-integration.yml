@@ -1,0 +1,89 @@
+name: APP10 three CI fixes integration
+on:
+  pull_request:
+    branches: [feature/staging-preview]
+permissions:
+  contents: read
+concurrency:
+  group: app10-three-ci-integration-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  postgres-boundary:
+    if: github.head_ref == 'feature/app10-three-ci-fixes-integration-a1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: diewish
+          POSTGRES_PASSWORD: disposable-only
+          POSTGRES_DB: diewish_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U diewish -d diewish_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      NODE_ENV: test
+      DIEWISH_ENVIRONMENT: test
+      DATABASE_URL: postgresql://diewish:disposable-only@127.0.0.1:5432/diewish_test?schema=public
+      JWT_ACCESS_SECRET: synthetic-integration-access-0000000000000000000
+      JWT_REFRESH_SECRET: synthetic-integration-refresh-000000000000000000
+      LOG_LEVEL: silent
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Prepare disposable schema only; no live database credentials
+        run: |
+          npm ci --no-audit --no-fund
+          npx prisma generate
+          npx prisma migrate deploy
+      - name: Only accepted claim-race boundaries on the merged source
+        run: node --import tsx --test --test-concurrency=1 src/integration/notification-concurrent-dispatch.integration.test.ts
+      - name: Only original lease, bounded retry and disabled preference contracts
+        run: >-
+          node --import tsx --test --test-concurrency=1
+          --test-name-pattern='concurrent dispatchers claim|retryable delivery stops|disabled notification preference suppresses'
+          src/integration/notification-preferences.integration.test.ts
+  android-boundary:
+    if: github.head_ref == 'feature/app10-three-ci-fixes-integration-a1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.6.0'
+      - name: Only session/WebView compatibility and Google origin safety; no APK task
+        run: >-
+          gradle --no-daemon -p android :app:testDebugUnitTest
+          --tests 'com.diewish.app.SessionCookiePersistenceTest'
+          --tests 'com.diewish.app.GoogleAuthBridgeTest'
+          -PDIEWISH_WEB_BASE_URL=https://staging.diewish.com
+      - name: Prove no application APK produced
+        run: |
+          if find android/app/build -name '*.apk' -print -quit | grep -q .; then
+            echo 'Unexpected APK output' >&2
+            exit 1
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: app10-three-ci-android-tests
+          path: android/app/build/test-results/testDebugUnitTest/
+          if-no-files-found: ignore
