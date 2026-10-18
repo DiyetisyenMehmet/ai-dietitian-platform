@@ -37,7 +37,8 @@ conflicts = set(git("diff", "--name-only", "--diff-filter=U", cwd=output).stdout
 known = {"backend/package.json", "backend/prisma/schema.prisma",
          "backend/src/modules/auth/auth.repository.ts",
          "backend/src/modules/account/account.repository.ts",
-         "backend/src/modules/identity/external-login.service.ts"}
+         "backend/src/modules/identity/external-login.service.ts",
+         "frontend/src/presentation/components/auth/route-guard.tsx", "frontend/next.config.ts"}
 if applied.returncode not in (0, 1) or conflicts - known:
     raise SystemExit("Unexpected preview conflict; inspect without changing either branch.")
 
@@ -60,7 +61,7 @@ schema = schema.replace("  passwordHash        String\n", "  passwordHash       
 schema = schema.replace("  refreshTokens     RefreshToken[]", "  accountIdentities AccountIdentity[]\n  identityOperations AccountIdentityOperation[]\n  refreshTokens     RefreshToken[]", 1)
 ours = (source / schema_path).read_text()
 blocks = []
-for name in ("AccountIdentityKind", "AccountIdentity", "AccountIdentityOperationPurpose", "AccountIdentityOperation"):
+for name in ("AccountIdentityKind", "AccountIdentity", "AccountIdentityOperationPurpose", "AccountIdentityOperation", "PhonePasswordChallenge", "PhonePasswordBudget"):
     match = re.search(r"\n(?:enum|model) " + name + r" \{[^}]*\}\n", ours)
     assert match, name
     blocks.append(match.group())
@@ -94,6 +95,21 @@ anchor = "    const identity = await firebaseAuthProvider.verifyIdToken(idToken)
 text = text.replace(anchor, anchor + "\n" + guard, 1)
 text, count = re.subn(r'    const social = identity.providers.some\([\s\S]*?\n    \);\n', "", text, count=1)
 assert count == 1
+write(path, text)
+
+# Explicit A3 overlap: retain ALL #49 recovery routes/headers and add only the
+# pending phone page exception. Unknown source shapes fail rather than overwrite.
+path = "frontend/src/presentation/components/auth/route-guard.tsx"
+text = recovery(path)
+anchor = 'pathname === "/forgot-password";'
+assert anchor in text
+text = text.replace(anchor, 'pathname === "/forgot-password" || pathname === "/phone-auth";', 1)
+write(path, text)
+path = "frontend/next.config.ts"
+text = recovery(path)
+anchor = '      {\n        source: "/auth/action",'
+assert anchor in text
+text = text.replace(anchor, '      {\n        source: "/phone-auth",\n        headers: [{ key: "Referrer-Policy", value: "no-referrer" }, { key: "Cache-Control", value: "no-store" }],\n      },\n' + anchor, 1)
 write(path, text)
 
 for path in known:
