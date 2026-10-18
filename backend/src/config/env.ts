@@ -45,6 +45,8 @@ const envSchema = z.object({
     .positive()
     .default(15 * 60 * 1000),
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
+  // Explicit security/release approval required before enabling new identity bindings.
+  ACCOUNT_SAFE_LINKING_ENABLED: booleanFromEnv.default(false),
   COACH_SYNC_ENABLED: booleanFromEnv.default(false),
   // Explicit-request resumable nutrition pilot only; no speculative generation.
   NUTRITION_JOBS_ENABLED: booleanFromEnv.default(false),

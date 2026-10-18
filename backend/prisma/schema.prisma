@@ -41,6 +41,7 @@ model User {
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
 
+  identityOperations AccountIdentityOperation[]
   accountIdentities AccountIdentity[]
   refreshTokens     RefreshToken[]
   profile           UserProfile?
@@ -102,6 +103,33 @@ model AccountIdentity {
   @@unique([kind, identifier])
   @@unique([userId, kind])
   @@map("account_identities")
+}
+
+enum AccountIdentityOperationPurpose {
+  LINK_METHOD
+  GOOGLE_TRANSITION
+}
+
+model AccountIdentityOperation {
+  id             String @id @default(uuid())
+  userId         String
+  user           User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  purpose        AccountIdentityOperationPurpose
+  kind           AccountIdentityKind
+  identifier     String @db.VarChar(320)
+  sessionHash    String
+  securityStamp  String
+  proofHash      String?
+  proofEventHash String? @unique
+  reauthenticatedAt DateTime
+  expiresAt      DateTime
+  consumedAt     DateTime?
+  failedAttempts Int @default(0)
+  createdAt      DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+  @@map("account_identity_operations")
 }
 
 enum Gender {
