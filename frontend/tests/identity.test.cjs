@@ -61,6 +61,7 @@ test('Firebase failures have safe Turkish feedback and code-only diagnostics', (
 function harness(responses, { scriptFailure = false, phoneFailure = false, clearFailure = false, native = false, nativeFailure = false, exchangeFailure = false } = {}) {
   const state = { requests: 0, initialized: [], cleared: 0, phoneCalls: 0, scriptAttempts: 0, authLanguage: null, scriptSources: [], popupCalls: 0, nativeCalls: 0, credentialCalls: 0 };
   const scripts = new Map();
+  const recaptchaContainer = { isConnected: true, appendChild(node) { node.parent = this; } };
   const credential = { user: { getIdToken: async () => 'test-id-token' } };
   const auth = () => ({
     get languageCode() { return state.authLanguage; },
@@ -114,7 +115,7 @@ function harness(responses, { scriptFailure = false, phoneFailure = false, clear
     }) : { isApiConfigured: () => true },
     window: { firebase: sdk },
     document: {
-      getElementById: id => scripts.get(id),
+      getElementById: id => id === 'recaptcha' ? recaptchaContainer : scripts.get(id),
       createElement: () => ({ dataset: {}, remove() { scripts.delete(this.id); } }),
       head: { appendChild: script => {
         scripts.set(script.id, script);
