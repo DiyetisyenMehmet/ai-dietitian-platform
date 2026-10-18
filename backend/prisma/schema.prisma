@@ -135,10 +135,13 @@ model AccountIdentityOperation {
 
 
 model PhonePasswordChallenge {
+  purpose        String @default("INITIAL_PASSWORD")
+  verifiedAt     DateTime?
+  failedAttempts Int @default(0)
   id             String @id @default(uuid())
   phoneNumber    String @db.VarChar(16)
   secretHash     String @unique
-  proofEventHash String @unique
+  proofEventHash String? @unique
   expectedUserId String?
   securityStamp  String?
   expiresAt      DateTime

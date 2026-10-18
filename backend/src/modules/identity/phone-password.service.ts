@@ -162,7 +162,11 @@ export const phonePasswordService = {
         requireSms(identity, number); // recheck expiry after waiting on locks
         if (validSecret(oldSecret))
           await tx.phonePasswordChallenge.updateMany({
-            where: { secretHash: hashToken(oldSecret), consumedAt: null },
+            where: {
+              secretHash: hashToken(oldSecret),
+              purpose: "INITIAL_PASSWORD",
+              consumedAt: null,
+            },
             data: { consumedAt: new Date() },
           });
         await tx.phonePasswordChallenge.create({
@@ -185,7 +189,7 @@ export const phonePasswordService = {
     return sanitized(async () => {
       if (!validSecret(secret)) return { enabled: true, pending: false };
       const op = await prisma.phonePasswordChallenge.findUnique({
-        where: { secretHash: hashToken(secret) },
+        where: { secretHash: hashToken(secret), purpose: "INITIAL_PASSWORD" },
       });
       if (!op || op.consumedAt || op.expiresAt.getTime() <= Date.now())
         return { enabled: true, pending: false };
@@ -198,7 +202,7 @@ export const phonePasswordService = {
     return sanitized(async () => {
       if (validSecret(secret))
         await prisma.phonePasswordChallenge.updateMany({
-          where: { secretHash: hashToken(secret), consumedAt: null },
+          where: { secretHash: hashToken(secret), purpose: "INITIAL_PASSWORD", consumedAt: null },
           data: { consumedAt: new Date() },
         });
     });
@@ -214,7 +218,7 @@ export const phonePasswordService = {
     return sanitized(async () => {
       if (!validSecret(secret)) throw invalid();
       const op = await prisma.phonePasswordChallenge.findUnique({
-        where: { secretHash: hashToken(secret) },
+        where: { secretHash: hashToken(secret), purpose: "INITIAL_PASSWORD" },
       });
       if (!op || op.consumedAt || op.expiresAt.getTime() <= Date.now()) throw invalid();
       const passwordHash = await hashPassword(input.password);

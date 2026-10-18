@@ -55,6 +55,10 @@ const nextConfig: NextConfig = {
         headers: securityHeaders,
       },
       {
+        source: "/phone-password-recovery",
+        headers: [{ key: "Referrer-Policy", value: "no-referrer" }, { key: "Cache-Control", value: "no-store" }],
+      },
+      {
         source: "/phone-auth",
         headers: [{ key: "Referrer-Policy", value: "no-referrer" }, { key: "Cache-Control", value: "no-store" }],
       },
