@@ -5,7 +5,7 @@ import { AccountTokenType, type AccountToken } from "@prisma/client";
 import { env } from "../../config/env";
 import { recordAudit, type AuditContext } from "../../lib/audit";
 import { logger } from "../../lib/logger";
-import { mailer } from "../../lib/mailer";
+import { assertEmailDeliveryConfigured, mailer } from "../../lib/mailer";
 import { getStorageProviderByName } from "../../lib/storage";
 import { ApiError } from "../../utils/api-error";
 import { generateOpaqueToken, hashToken } from "../../utils/jwt";
@@ -19,7 +19,7 @@ const MS_PER_DAY = 24 * MS_PER_HOUR;
 
 /** Generic, non-leaking error for any invalid/expired/used single-use token. */
 function invalidTokenError(): ApiError {
-  return new ApiError(400, "This link is invalid or has expired.", { code: "TOKEN_INVALID" });
+  return new ApiError(400, "Bu bağlantı geçersiz veya süresi dolmuş. Lütfen yeni bağlantı isteyin.", { code: "TOKEN_INVALID" });
 }
 
 /**
@@ -150,24 +150,13 @@ export const accountService = {
    * whether the email exists, to avoid account-enumeration. A token is only
    * issued/sent for an existing, active account.
    */
-  async forgotPassword(
-    email: string,
-    context: AuditContext,
-    resetPath = "/reset-password",
-  ): Promise<void> {
+  async forgotPassword(email: string, _context: AuditContext): Promise<void> {
+    // Check globally, before lookup: missing delivery config must not reveal account existence.
+    assertEmailDeliveryConfigured();
     const user = await accountRepository.findUserByEmail(email);
-    if (!user || !user.isActive) {
-      logger.info({ email }, "Password reset requested for unknown/inactive account (no-op)");
-      return;
-    }
-
-    const rawToken = await issueToken(
-      user.id,
-      AccountTokenType.PASSWORD_RESET,
-      env.PASSWORD_RESET_TTL_MINUTES * MS_PER_MINUTE,
-    );
-    await mailer.sendPasswordReset(user.email, rawToken, resetPath);
-    await recordAudit({ action: "PASSWORD_RESET_REQUESTED", userId: user.id, context });
+    if (!user || !user.isActive || user.role !== "USER" ||
+        user.deletionRequestedAt || user.email.endsWith(".diewish.invalid")) return;
+    await accountRepository.enqueuePasswordReset(user.id);
   },
 
   /** Completes a password reset with a valid token; revokes all sessions. */
@@ -178,6 +167,12 @@ export const accountService = {
     );
     assertTokenUsable(token);
 
+    const user = await accountRepository.findUserById(token.userId);
+    if (!user?.isActive || user.role !== "USER" || user.deletionRequestedAt ||
+        user.email.endsWith(".diewish.invalid")) throw invalidTokenError();
+    if (await verifyPassword(newPassword, user.passwordHash)) {
+      throw ApiError.unprocessable("Yeni şifre mevcut şifreden farklı olmalıdır.");
+    }
     const passwordHash = await hashPassword(newPassword);
     const consumed = await accountRepository.consumeTokenAndResetPassword(
       token.id,

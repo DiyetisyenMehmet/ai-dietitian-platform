@@ -3,12 +3,20 @@ import crypto from "node:crypto";
 import type { User } from "@prisma/client";
 
 import { env } from "../../config/env";
-import { prisma } from "../../lib/prisma";
+import { authRepository } from "../auth/auth.repository";
 import { hashToken, signAccessToken, signRefreshToken, verifyRefreshToken } from "../../utils/jwt";
-import type { IdentityRequestContext, IdentitySessionResult, PublicIdentityUser } from "./identity.types";
+import type {
+  IdentityRequestContext,
+  IdentitySessionResult,
+  PublicIdentityUser,
+} from "./identity.types";
 
 function isSyntheticEmail(email: string): boolean {
-  return email.endsWith("@phone.diewish.invalid") || email.endsWith("@guest.diewish.invalid") || email.endsWith("@social.diewish.invalid");
+  return (
+    email.endsWith("@phone.diewish.invalid") ||
+    email.endsWith("@guest.diewish.invalid") ||
+    email.endsWith("@social.diewish.invalid")
+  );
 }
 
 function toPublicUser(
@@ -35,7 +43,12 @@ export async function issueIdentitySession(
   context: IdentityRequestContext,
   extra: { isGuest?: boolean; phoneNumber?: string | null; emailVerified?: boolean } = {},
 ): Promise<IdentitySessionResult> {
-  const accessToken = signAccessToken({ userId: user.id, email: user.email, role: user.role });
+  const accessToken = signAccessToken({
+    userId: user.id,
+    email: user.email,
+    role: user.role,
+    authVersion: user.authVersion,
+  });
   const result: IdentitySessionResult = {
     user: toPublicUser(user, extra),
     tokens: { accessToken, tokenType: "Bearer", expiresIn: env.JWT_ACCESS_TTL },
@@ -49,15 +62,14 @@ export async function issueIdentitySession(
   if (!claims.exp) throw new Error("Refresh token expiry was not generated");
   const expiresAt = new Date(claims.exp * 1000);
 
-  await prisma.refreshToken.create({
-    data: {
-      id: tokenId,
-      userId: user.id,
-      tokenHash: hashToken(raw),
-      expiresAt,
-      userAgent: context.userAgent ?? null,
-      ipAddress: context.ipAddress ?? null,
-    },
+  await authRepository.createRefreshToken({
+    id: tokenId,
+    userId: user.id,
+    tokenHash: hashToken(raw),
+    expiresAt,
+    userAgent: context.userAgent ?? null,
+    ipAddress: context.ipAddress ?? null,
+    authVersion: user.authVersion,
   });
 
   result.refreshToken = raw;

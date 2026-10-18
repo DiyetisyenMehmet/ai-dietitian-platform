@@ -1,7 +1,7 @@
 import { Router } from "express";
 
 import { authenticate } from "../../middleware/authenticate";
-import { authRateLimiter } from "../../middleware/auth-rate-limit";
+import { authRateLimiter, passwordForgotRateLimiter, passwordResetRateLimiter } from "../../middleware/auth-rate-limit";
 import { validate } from "../../middleware/validate";
 import { accountController } from "./account.controller";
 import {
@@ -108,7 +108,7 @@ accountRouter.post(
  */
 accountRouter.post(
   "/password/forgot",
-  authRateLimiter,
+  passwordForgotRateLimiter,
   validate({ body: forgotPasswordSchema }),
   accountController.forgotPassword,
 );
@@ -136,7 +136,7 @@ accountRouter.post(
  */
 accountRouter.post(
   "/password/reset",
-  authRateLimiter,
+  passwordResetRateLimiter,
   validate({ body: resetPasswordSchema }),
   accountController.resetPassword,
 );

@@ -22,7 +22,10 @@ function makeAuthenticationMiddleware(allowGuest: boolean): RequestHandler {
     try {
       const claims = verifyAccessToken(token);
       const user = await authRepository.findUserById(claims.sub);
-      if (!user?.isActive) {
+      if (
+        !user?.isActive ||
+        (user.role !== "ADMIN" && (claims.authVersion ?? 0) !== user.authVersion)
+      ) {
         next(ApiError.unauthorized("Session is no longer valid."));
         return;
       }

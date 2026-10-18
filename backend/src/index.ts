@@ -1,3 +1,7 @@
+import {
+  startPasswordResetDelivery,
+  stopPasswordResetDelivery,
+} from "./modules/account/password-reset-delivery";
 import type { Server } from "node:http";
 
 import { createApp } from "./app";
@@ -35,6 +39,7 @@ async function bootstrap(): Promise<void> {
 
   registerShutdownHandlers(server);
   startNutritionWorker();
+  startPasswordResetDelivery();
 }
 
 /** Gracefully drains connections and closes resources on termination. */
@@ -43,6 +48,7 @@ function registerShutdownHandlers(server: Server): void {
     logger.info({ signal }, "Shutting down gracefully...");
     stopCoachScheduler();
     stopNutritionWorker();
+    stopPasswordResetDelivery();
     server.close(() => {
       void disconnectPrisma().finally(() => {
         logger.info("Shutdown complete.");
