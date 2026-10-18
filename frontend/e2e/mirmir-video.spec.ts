@@ -73,11 +73,24 @@ for (const legacyValue of [true, false]) {
     expect(
       await images.evaluateAll((nodes) => nodes.map((n) => (n as HTMLImageElement).naturalWidth)),
     ).toEqual([512, 512]);
-    // Observe the original 5.6 second CSS cycle, including the brief closed pose.
+    // Observe the requested 3 second cycle, keeping the ~140 ms closed pose.
+    const timing = await m.evaluate((n) =>
+      n.getAnimations({ subtree: true }).map((a) => {
+        const effect = a.effect as KeyframeEffect;
+        const duration = Number(effect.getComputedTiming().duration);
+        const closedAt = Number(effect.getKeyframes()[1].computedOffset);
+        return { duration, closedMs: duration * (1 - closedAt) };
+      }),
+    );
+    expect(timing).toHaveLength(2);
+    for (const t of timing) {
+      expect(t.duration).toBe(3000);
+      expect(t.closedMs).toBeCloseTo(140, 1);
+    }
     const poses = () =>
       images.evaluateAll((nodes) => nodes.map((n) => getComputedStyle(n).visibility));
     await expect.poll(poses).toEqual(["visible", "hidden"]);
-    await expect.poll(poses, { timeout: 7000, intervals: [25] }).toEqual(["hidden", "visible"]);
+    await expect.poll(poses, { timeout: 4000, intervals: [25] }).toEqual(["hidden", "visible"]);
     await expect.poll(poses, { timeout: 1500, intervals: [25] }).toEqual(["visible", "hidden"]);
     await page.goto("/ai");
     await expect(page.locator('header [data-mascot="mirmir"]')).toHaveAttribute(
@@ -183,33 +196,75 @@ test("failed closed-eye asset keeps the existing transparent PNG still", async (
   await expect(m.locator("video")).toHaveCount(0);
 });
 
-test("both poses stay inside the banner in light/dark at 390, 412, 430 pixels", async ({
+test("both poses stay inside the banner without text overlap in mobile/desktop light/dark", async ({
   page,
 }, info) => {
   await setup(page);
   await page.goto("/dashboard");
   const m = mascot(page),
     banner = page.locator("[data-dashboard-coach-banner]");
-  for (const width of [390, 412, 430]) {
+  for (const width of [390, 412, 430, 1280]) {
     await page.setViewportSize({ width, height: 844 });
     await banner.scrollIntoViewIfNeeded();
     await expect(m).toHaveAttribute("data-blinking", "true");
-    const bounds = await m.boundingBox();
+    // The dashboard enters with a 300 ms translateY animation. Wait for finite
+    // ancestor motion/fonts, then compare banner-relative coordinates: scrolling
+    // or the parent's entry motion is not movement of the mascot inside its card.
+    await m.evaluate(async (n) => {
+      await document.fonts.ready;
+      const pending: Promise<Animation>[] = [];
+      for (let parent = n.parentElement; parent; parent = parent.parentElement) {
+        for (const animation of parent.getAnimations()) {
+          if (Number.isFinite(animation.effect?.getComputedTiming().endTime))
+            pending.push(animation.finished);
+        }
+      }
+      await Promise.all(pending);
+    });
+    const geometry = () =>
+      m.evaluate((n) => {
+        const banner = n.closest("[data-dashboard-coach-banner]")!;
+        const b = banner.getBoundingClientRect(),
+          r = n.getBoundingClientRect();
+        const text = banner
+          .querySelector("[data-dashboard-decorative-text]")!
+          .getBoundingClientRect();
+        return {
+          x: r.left - b.left,
+          y: r.top - b.top,
+          width: r.width,
+          height: r.height,
+          inside: r.left >= b.left && r.right <= b.right && r.top >= b.top && r.bottom <= b.bottom,
+          noOverflow: document.documentElement.scrollWidth <= innerWidth,
+          noTextOverlap: r.right <= text.left,
+          alignedPoses: [...n.querySelectorAll("img")].every((image) => {
+            const i = image.getBoundingClientRect();
+            return (
+              Math.abs(i.left - r.left) < 0.1 &&
+              Math.abs(i.top - r.top) < 0.1 &&
+              Math.abs(i.width - r.width) < 0.1 &&
+              Math.abs(i.height - r.height) < 0.1
+            );
+          }),
+        };
+      });
+    const bounds = await geometry();
+    expect(bounds.width).toBeCloseTo(width < 640 ? 51.2 : 64, 1);
+    expect(bounds.height).toBeCloseTo(bounds.width, 1);
     for (const theme of ["light", "dark"]) {
       await page.evaluate((t) => {
         document.documentElement.classList.remove("light", "dark");
         document.documentElement.classList.add(t);
       }, theme);
-      const boxes = await m.evaluate((n) => {
-        const b = n.closest("[data-dashboard-coach-banner]")!.getBoundingClientRect(),
-          r = n.getBoundingClientRect();
-        return {
-          inside: r.left >= b.left && r.right <= b.right && r.top >= b.top && r.bottom <= b.bottom,
-          noOverflow: document.documentElement.scrollWidth <= innerWidth,
-        };
+      const boxes = await geometry();
+      expect(boxes).toMatchObject({
+        inside: true,
+        noOverflow: true,
+        noTextOverlap: true,
+        alignedPoses: true,
       });
-      expect(boxes).toEqual({ inside: true, noOverflow: true });
-      expect(await m.boundingBox()).toEqual(bounds);
+      for (const key of ["x", "y", "width", "height"] as const)
+        expect(boxes[key]).toBeCloseTo(bounds[key], 1);
       await banner.screenshot({ path: info.outputPath(`final-banner-${width}-${theme}.png`) });
     }
   }
