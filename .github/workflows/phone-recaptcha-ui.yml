@@ -1,0 +1,36 @@
+name: A3 phone reCAPTCHA UI compatibility
+on:
+  pull_request:
+    branches: [feature/app11-phone-sms-recovery-a4]
+permissions:
+  contents: read
+concurrency:
+  group: phone-recaptcha-ui-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  phone-recaptcha-ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run type-check
+      - run: npx eslint src/presentation/components/auth/phone-password-flow.tsx e2e/phone-password-recaptcha.spec.ts playwright.phone-recaptcha.config.ts
+      - run: npx playwright install --with-deps chromium
+      - name: Only new A3 screen lifecycle scenarios; unchanged PR63 helper, synthetic Firebase
+        run: npx playwright test --config playwright.phone-recaptcha.config.ts --reporter=line,html
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: a3-phone-recaptcha-ui-evidence
+          path: |
+            frontend/playwright-report
+            frontend/test-results

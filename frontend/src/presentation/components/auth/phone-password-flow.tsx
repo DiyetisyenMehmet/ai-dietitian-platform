@@ -44,13 +44,20 @@ export function PhonePasswordFlow({
   );
   const flight = React.useRef(false);
   const live = React.useRef(true);
+  const phoneAbort = React.useRef<AbortController | null>(null);
+  const clearPhoneVerification = React.useCallback(() => {
+    phoneAbort.current?.abort();
+    phoneAbort.current = null;
+    confirmation.current?.clear();
+    confirmation.current = null;
+  }, []);
   React.useEffect(() => {
     live.current = true;
     return () => {
       live.current = false;
-      confirmation.current?.clear();
+      clearPhoneVerification();
     };
-  }, []);
+  }, [clearPhoneVerification]);
   React.useEffect(() => {
     if (!expiresAt || step !== "password") return;
     const tick = () => {
@@ -70,6 +77,7 @@ export function PhonePasswordFlow({
   }, [expiresAt, step]);
   const finish = (session: AuthSession) => {
     if (!live.current) return;
+    clearPhoneVerification();
     setPassword("");
     setRepeat("");
     setCode("");
@@ -86,6 +94,7 @@ export function PhonePasswordFlow({
     } catch (error) {
       if (!live.current) return;
       if (error instanceof ApiError && error.code === "PHONE_PASSWORD_REQUIRED") {
+        clearPhoneVerification();
         setMode("login");
         setStep("number");
         setPassword("");
@@ -94,6 +103,7 @@ export function PhonePasswordFlow({
           "Bu hesap için şifre oluşturulmuş. Telefon numaranız ve Diewish şifrenizle giriş yapın.",
         );
       } else if (error instanceof ApiError && error.code === "PHONE_SETUP_INVALID") {
+        clearPhoneVerification();
         setStep("number");
         setMode("register");
         setPassword("");
@@ -128,14 +138,17 @@ export function PhonePasswordFlow({
         setPassword("");
         finish(await identityClient.phonePasswordLogin(normalized, supplied));
       } else {
-        confirmation.current?.clear();
+        clearPhoneVerification();
+        const controller = new AbortController();
+        phoneAbort.current = controller;
         const next = await startPhoneVerification(
           normalized,
-          "diewish-phone-password-request",
+          "diewish-phone-password-recaptcha",
           undefined,
           true,
+          controller.signal,
         );
-        if (!live.current) {
+        if (!live.current || controller.signal.aborted) {
           next.clear();
           return;
         }
@@ -155,8 +168,10 @@ export function PhonePasswordFlow({
         return;
       }
       const typedCode = code;
+      const signal = phoneAbort.current?.signal;
       setCode("");
       const idToken = await confirmation.current.confirm(typedCode);
+      if (!live.current || signal?.aborted) return;
       if (mode === "legacy") {
         finish(await identityClient.external(idToken));
         return;
@@ -176,8 +191,8 @@ export function PhonePasswordFlow({
           oldSession.tokens.accessToken,
         );
       }
-      confirmation.current.clear();
-      confirmation.current = null;
+      if (!live.current || signal?.aborted) return;
+      clearPhoneVerification();
       setPassword("");
       setRepeat("");
       setExpiresAt(result.expiresAt);
@@ -214,8 +229,7 @@ export function PhonePasswordFlow({
   const changeMode = (next: Mode) =>
     void run(async () => {
       if (step === "password") await identityClient.phoneSetupCancel();
-      confirmation.current?.clear();
-      confirmation.current = null;
+      clearPhoneVerification();
       setMode(next);
       setStep("number");
       setCode("");
@@ -252,6 +266,7 @@ export function PhonePasswordFlow({
               value={country}
               disabled={busy}
               onChange={(value) => {
+                clearPhoneVerification();
                 setCountry(value);
                 setNumber("");
               }}
@@ -264,7 +279,10 @@ export function PhonePasswordFlow({
               autoComplete="tel"
               value={number}
               disabled={busy}
-              onChange={(event) => setNumber(formatPhoneInput(event.target.value, country))}
+              onChange={(event) => {
+                clearPhoneVerification();
+                setNumber(formatPhoneInput(event.target.value, country));
+              }}
             />
           </FormField>
           {mode === "login" && (
@@ -354,6 +372,11 @@ export function PhonePasswordFlow({
             Şifremi kaydet ve devam et
           </Button>
         </form>
+      )}
+      {mode !== "login" && step !== "password" && (
+        // Keep the same independent host mounted while number/code forms switch.
+        // PR #63 owns each widget child and removes only that child's DOM.
+        <div id="diewish-phone-password-recaptcha" className="mt-4 min-h-[60px]" />
       )}
       <div className="mt-4 flex flex-col gap-2">
         {mode !== "login" || step !== "number" ? (
