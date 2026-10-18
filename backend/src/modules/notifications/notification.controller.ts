@@ -27,15 +27,24 @@ function requireUserId(req: Request): string {
 /** Controller for the notifications surface. */
 export const notificationController = {
   listInbox: asyncHandler(async (req: Request, res: Response) => {
-    const result = await notificationService.listInbox(requireUserId(req));
+    const result = await notificationService.listInbox(
+      requireUserId(req),
+      new Date(),
+      req.query.nativeServerIds as unknown as string[],
+    );
+    sendSuccess(res, result);
+  }),
+
+  markAllRead: asyncHandler(async (req: Request, res: Response) => {
+    const result = await notificationService.markAllRead(
+      requireUserId(req),
+      new Date(req.body.before),
+    );
     sendSuccess(res, result);
   }),
 
   markRead: asyncHandler(async (req: Request, res: Response) => {
-    const notification = await notificationService.markRead(
-      requireUserId(req),
-      req.params.id,
-    );
+    const notification = await notificationService.markRead(requireUserId(req), req.params.id);
     if (!notification) {
       throw ApiError.notFound("Notification not found.");
     }

@@ -6,6 +6,7 @@ import type { Notification, NotificationPreference, NotificationType } from "@pr
 
 import { logger } from "../../lib/logger";
 import { prisma } from "../../lib/prisma";
+import { ApiError } from "../../utils/api-error";
 import { getNotificationProvider, type NotificationDeliveryResult } from "./notification.provider";
 import type { UpdateNotificationPreferencesInput } from "./notification.schemas";
 import { normalizedCategoryAlerts } from "./notification-alerts";
@@ -339,34 +340,53 @@ export const notificationService = {
     });
   },
 
-  async listInbox(userId: string, now: Date = new Date()) {
+  async listInbox(userId: string, now: Date = new Date(), nativeServerIds: string[] = []) {
     const where = {
       userId,
       scheduledFor: { lte: now },
       deliveredAt: { not: null },
     } as const;
 
-    const [notifications, unreadCount] = await prisma.$transaction([
+    const select = {
+      id: true,
+      type: true,
+      title: true,
+      body: true,
+      scheduledFor: true,
+      deliveredAt: true,
+      readAt: true,
+    } as const;
+    const [notifications, unreadCount, nativeMatches] = await prisma.$transaction([
       prisma.notification.findMany({
         where,
         orderBy: [{ scheduledFor: "desc" }, { createdAt: "desc" }],
         take: 100,
-        select: {
-          id: true,
-          type: true,
-          title: true,
-          body: true,
-          scheduledFor: true,
-          deliveredAt: true,
-          readAt: true,
-        },
+        select,
       }),
       prisma.notification.count({
         where: { ...where, readAt: null },
       }),
+      prisma.notification.findMany({
+        where: { ...where, id: { in: nativeServerIds } },
+        select,
+      }),
     ]);
 
-    return { notifications, unreadCount };
+    const byId = new Map([...notifications, ...nativeMatches].map((item) => [item.id, item]));
+    return { notifications: [...byId.values()], unreadCount, readBefore: now.toISOString() };
+  },
+
+  async markAllRead(userId: string, before: Date, now: Date = new Date()) {
+    if (!Number.isFinite(before.getTime()) || before > now) {
+      throw ApiError.badRequest("Invalid notification read boundary.");
+    }
+    // Strict boundary: even a delivery in the same millisecond as the snapshot
+    // remains unread. No pagination limit and no notification content mutation.
+    const result = await prisma.notification.updateMany({
+      where: { userId, readAt: null, scheduledFor: { lt: before }, deliveredAt: { lt: before } },
+      data: { readAt: now },
+    });
+    return { updatedCount: result.count };
   },
 
   async markRead(userId: string, notificationId: string, now: Date = new Date()) {
