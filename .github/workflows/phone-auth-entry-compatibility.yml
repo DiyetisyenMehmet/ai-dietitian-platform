@@ -1,0 +1,58 @@
+name: Phone auth entry CI compatibility
+on:
+  pull_request:
+    branches: [feature/staging-preview]
+    paths:
+      - frontend/e2e/auth-entry-points.spec.js
+      - .github/workflows/phone-auth-entry-compatibility.yml
+permissions:
+  contents: read
+concurrency:
+  group: phone-auth-entry-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  phone-auth-entry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      NEXT_PUBLIC_API_BASE_URL: /api
+      NEXT_TELEMETRY_DISABLED: '1'
+      E2E_WEB_BASE_URL: http://127.0.0.1:3000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npx eslint e2e/auth-entry-points.spec.js
+      - run: npx playwright install --with-deps chromium
+      - name: Same frontend-only production build as notification browser CI
+        run: npm run build
+      - name: Only phone auth entry scenarios with the unchanged notification browser config
+        run: |
+          set -euo pipefail
+          npm start -- -H 127.0.0.1 -p 3000 > /tmp/phone-auth-entry-frontend.log 2>&1 &
+          frontend_pid=$!
+          trap 'kill "$frontend_pid" || true' EXIT
+          for attempt in {1..45}; do
+            if curl --fail --silent http://127.0.0.1:3000/login > /dev/null; then break; fi
+            if [[ "$attempt" == "45" ]]; then
+              cat /tmp/phone-auth-entry-frontend.log
+              exit 1
+            fi
+            sleep 1
+          done
+          npx playwright test --config=playwright.notification.config.ts e2e/auth-entry-points.spec.js --reporter=line,html --trace=retain-on-failure
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phone-auth-entry-browser-evidence
+          path: |
+            frontend/test-results
+            frontend/playwright-report
+          if-no-files-found: ignore
