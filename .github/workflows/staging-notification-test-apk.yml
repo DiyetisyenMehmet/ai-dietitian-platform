@@ -1,7 +1,10 @@
 name: Staging Notification Test APK
-# APK packaging requires an explicit manual request.
+# APK packaging requires a manual request or an explicit staging commit marker.
 
 on:
+  push:
+    branches:
+      - feature/staging-preview
   workflow_dispatch:
     inputs:
       build_android_apk:
@@ -15,7 +18,10 @@ permissions:
 
 jobs:
   apk:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_android_apk }}
+    if: >-
+      ${{ (github.event_name == 'workflow_dispatch' && inputs.build_android_apk)
+          || (github.event_name == 'push' && github.ref == 'refs/heads/feature/staging-preview'
+              && contains(github.event.head_commit.message, '[apk-build]')) }}
     name: Build staging notification test APK
     runs-on: ubuntu-latest
     timeout-minutes: 25
