@@ -22,20 +22,11 @@
 }
 
 .name {
-  color: #08235d;
-  font-size: 1.75rem;
-  font-weight: 800;
-  line-height: 1;
-  letter-spacing: -0.04em;
-}
-
-@supports (background-clip: text) or (-webkit-background-clip: text) {
-  .name {
-    background-image: linear-gradient(to bottom, #08cddb 0%, #061747 100%);
-    background-clip: text;
-    -webkit-background-clip: text;
-    color: transparent;
-  }
+  display: block;
+  width: 160px;
+  height: 32px;
+  object-fit: contain;
+  object-position: left center;
 }
 
 .tagline {
@@ -43,15 +34,4 @@
   font-size: 0.75rem;
   font-weight: 400;
   line-height: 1.4;
-}
-
-:global(.dark) .name {
-  -webkit-text-stroke: 0.25px #8acbdf;
-}
-
-@media (forced-colors: active) {
-  .name {
-    background-image: none;
-    color: LinkText;
-  }
 }

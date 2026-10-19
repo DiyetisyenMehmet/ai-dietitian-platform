@@ -1,14 +1,11 @@
 import * as React from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Nunito } from "next/font/google";
 
 import { APP_CONFIG } from "@/shared/constants/app";
 import { AuthAlternatives } from "@/presentation/components/auth/auth-alternatives";
 import { ThemeToggle } from "@/presentation/components/layout/theme-toggle";
 import styles from "./auth-layout.module.css";
-
-const brandFont = Nunito({ subsets: ["latin", "latin-ext"], weight: "800", display: "swap" });
 
 interface AuthLayoutProps {
   /** Heading shown above the form (e.g. "Giriş Yap"). */
@@ -41,7 +38,15 @@ export function AuthLayout({ title, subtitle, footer, children }: AuthLayoutProp
             className={styles.symbol}
           />
           <span className={styles.wordmark}>
-            <span className={`${styles.name} ${brandFont.className}`}>{APP_CONFIG.name}</span>
+            <Image
+              src="/brands/diewish-wordmark-approved.png"
+              alt={APP_CONFIG.name}
+              width={1004}
+              height={214}
+              priority
+              unoptimized
+              className={styles.name}
+            />
             <span className={styles.tagline}>Sağlığın için, her zaman yanında.</span>
           </span>
         </Link>
