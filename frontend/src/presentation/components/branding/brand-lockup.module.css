@@ -24,9 +24,8 @@
 .name {
   display: block;
   width: 160px;
-  height: 32px;
-  object-fit: contain;
-  object-position: left center;
+  max-width: 100%;
+  height: auto;
 }
 
 .tagline {
@@ -34,4 +33,19 @@
   font-size: 0.75rem;
   font-weight: 400;
   line-height: 1.4;
+}
+
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .symbol {
+    width: 36px;
+    height: 36px;
+  }
+
+  .name {
+    width: 136px;
+  }
+
+  .tagline {
+    font-size: 0.625rem;
+  }
 }

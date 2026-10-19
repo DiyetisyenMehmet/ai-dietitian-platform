@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Keep the approved artwork within Android 12's 192dp safe area inside
+     the 288dp splash canvas. The launcher resource remains unchanged. -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:inset="48dp">
+    <bitmap
+        android:src="@drawable/diewish_splash_approved"
+        android:gravity="fill"
+        android:filter="true" />
+</inset>
