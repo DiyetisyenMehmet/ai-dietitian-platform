@@ -25,7 +25,7 @@ export function BrandSplash() {
         height={214}
         priority
         unoptimized
-        className="h-auto w-44 max-w-full dark:rounded-md dark:bg-white dark:px-1.5 dark:py-0.5"
+        className="h-auto w-44 max-w-full dark:drop-shadow-[0_0_2px_rgba(255,255,255,0.55)]"
       />
       <p className="text-sm text-muted-foreground">Sağlığın için, her zaman yanında.</p>
       <span className="sr-only">Yükleniyor…</span>

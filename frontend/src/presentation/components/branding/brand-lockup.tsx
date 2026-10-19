@@ -24,7 +24,7 @@ export function BrandLockup() {
           height={214}
           priority
           unoptimized
-          className={`${styles.name} dark:rounded-md dark:bg-white dark:px-1.5 dark:py-0.5`}
+          className={`${styles.name} dark:drop-shadow-[0_0_2px_rgba(255,255,255,0.55)]`}
         />
         <span className={styles.tagline}>Sağlığın için, her zaman yanında.</span>
       </span>
