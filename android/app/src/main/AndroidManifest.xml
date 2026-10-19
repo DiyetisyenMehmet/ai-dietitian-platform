@@ -13,9 +13,9 @@
         android:name=".DiewishApplication"
         android:allowBackup="false"
         android:enableOnBackInvokedCallback="true"
-        android:icon="@drawable/ic_launcher"
+        android:icon="@mipmap/ic_launcher"
         android:label="Diewish"
-        android:roundIcon="@drawable/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
         android:supportsRtl="true"
         android:theme="@style/Theme.Diewish"
         android:usesCleartextTraffic="false">
