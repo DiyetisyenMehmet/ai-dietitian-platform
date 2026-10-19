@@ -3,13 +3,14 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Leaf, Menu, X } from "lucide-react";
+import { Menu, X } from "lucide-react";
 
 import { APP_CONFIG } from "@/shared/constants/app";
 import { MARKETING_NAV } from "@/shared/constants/site";
 import { useAuth } from "@/application/auth/auth-store";
 import { Button } from "@/presentation/components/ui/button";
 import { ThemeToggle } from "@/presentation/components/layout/theme-toggle";
+import { BrandLockup } from "@/presentation/components/branding/brand-lockup";
 import { cn } from "@/shared/lib/utils";
 
 /**
@@ -30,16 +31,13 @@ export function SiteHeader() {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/70 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container flex h-16 items-center justify-between gap-4">
+      <div className="container flex min-h-16 items-center justify-between gap-4 py-2">
         <Link
           href="/"
           className="flex min-w-0 items-center gap-2 font-bold tracking-tight"
           aria-label={`${APP_CONFIG.name} ana sayfa`}
         >
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-            <Leaf className="size-5 text-primary" aria-hidden="true" />
-          </span>
-          <span className="truncate text-lg">{APP_CONFIG.name}</span>
+          <BrandLockup />
         </Link>
 
         <nav className="hidden items-center gap-1 lg:flex" aria-label="Ana gezinme">

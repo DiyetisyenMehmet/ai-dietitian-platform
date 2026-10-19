@@ -3,6 +3,7 @@
 import * as React from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
+import { BrandSplash } from "@/presentation/components/branding/brand-splash";
 
 import { authStore, useAuth } from "@/application/auth/auth-store";
 import { consentStore, useConsentState } from "@/application/legal/consent-store";
@@ -146,7 +147,7 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
   if (onIdentityAction || onMarketing) return <>{children}</>;
 
   if (status === "loading" || consentLoading || redirectTo) {
-    return <Splash />;
+    return onAdmin ? <Splash /> : <BrandSplash />;
   }
 
   return <>{children}</>;
