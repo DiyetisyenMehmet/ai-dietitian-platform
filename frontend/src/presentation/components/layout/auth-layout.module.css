@@ -31,13 +31,7 @@
 
 @supports (background-clip: text) or (-webkit-background-clip: text) {
   .name {
-    background-image: linear-gradient(
-      to bottom,
-      #08cddb 0%,
-      #009fd0 50%,
-      #08235d 60%,
-      #061747 100%
-    );
+    background-image: linear-gradient(to bottom, #08cddb 0%, #061747 100%);
     background-clip: text;
     -webkit-background-clip: text;
     color: transparent;
