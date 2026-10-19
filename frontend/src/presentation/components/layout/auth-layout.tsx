@@ -1,10 +1,11 @@
 import * as React from "react";
 import Link from "next/link";
-import { Leaf } from "lucide-react";
+import Image from "next/image";
 
 import { APP_CONFIG } from "@/shared/constants/app";
 import { AuthAlternatives } from "@/presentation/components/auth/auth-alternatives";
 import { ThemeToggle } from "@/presentation/components/layout/theme-toggle";
+import styles from "./auth-layout.module.css";
 
 interface AuthLayoutProps {
   /** Heading shown above the form (e.g. "Giriş Yap"). */
@@ -25,12 +26,29 @@ interface AuthLayoutProps {
 export function AuthLayout({ title, subtitle, footer, children }: AuthLayoutProps) {
   return (
     <div className="flex min-h-dvh flex-col bg-background">
-      <header className="flex items-center justify-between px-4 py-4">
-        <Link href="/" className="flex items-center gap-2 font-semibold">
-          <span className="flex size-8 items-center justify-center rounded-xl bg-primary/10">
-            <Leaf className="size-4 text-primary" aria-hidden="true" />
+      <header className="flex items-center justify-between gap-3 px-4 py-4">
+        <Link href="/" className={styles.brand}>
+          <Image
+            src="/brands/diewish-id-approved.webp"
+            alt=""
+            width={44}
+            height={44}
+            priority
+            unoptimized
+            className={styles.symbol}
+          />
+          <span className={styles.wordmark}>
+            <Image
+              src="/brands/diewish-wordmark-approved.png"
+              alt={APP_CONFIG.name}
+              width={1004}
+              height={214}
+              priority
+              unoptimized
+              className={styles.name}
+            />
+            <span className={styles.tagline}>Sağlığın için, her zaman yanında.</span>
           </span>
-          {APP_CONFIG.name}
         </Link>
         <ThemeToggle />
       </header>
