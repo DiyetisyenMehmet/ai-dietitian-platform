@@ -1,7 +1,7 @@
 name: Staging automation pause
 on:
   push:
-    branches: [feature/app8-staging-automation-pause-a1, feature/staging-preview]
+    branches: [feature/app8-staging-automation-pause-a1, feature/app8-staging-automation-live-release-a1, feature/staging-preview]
   pull_request:
     branches: [feature/staging-preview]
     paths:
@@ -98,10 +98,41 @@ jobs:
       WIF_PROVIDER: projects/730419163638/locations/global/workloadIdentityPools/github-actions/providers/diewish-staging
       DEPLOY_SERVICE_ACCOUNT: diewish-staging-deployer@project-a2e260c1-839d-4f1d-b90.iam.gserviceaccount.com
       BACKEND_SERVICE: diewish-backend-staging
+      # One-off reviewed backport; never roll back a newer serving application.
+      PAUSE_SOURCE_SHA: d7ced3598a41db3bd1fb76320e0149e25b3ac0ed
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Require successful exact-source backport checks
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          runs="$(curl --fail --silent --show-error -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${PAUSE_SOURCE_SHA}&per_page=100")"
+          jq -e '[.workflow_runs[] | select(.name == "Staging live pause backport checks")] | sort_by(.created_at) | last | .status == "completed" and .conclusion == "success"' >/dev/null <<<"$runs"
+      - name: Wait for mandatory exact-staging-SHA release gates
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in {1..180}; do
+            runs="$(curl --fail --silent --show-error -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${GITHUB_SHA}&per_page=100")"
+            ready=1
+            for name in "Hardening CI" "Staging Config CI" "Notification preferences platform checks"; do
+              result="$(jq -r --arg name "$name" '[.workflow_runs[] | select(.name == $name)] | sort_by(.run_attempt,.updated_at) | last | if .status == "completed" then .conclusion else "pending" end' <<<"$runs")"
+              case "$result" in
+                success) ;;
+                pending) ready=0 ;;
+                *) echo "Required staging gate failed: $name => $result"; exit 1 ;;
+              esac
+            done
+            if [[ "$ready" == 1 ]]; then exit 0; fi
+            sleep 5
+          done
+          exit 1
       - uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ env.WIF_PROVIDER }}
@@ -115,9 +146,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          image="${REGION}-docker.pkg.dev/${PROJECT_ID}/diewish-staging/backend:${GITHUB_SHA}"
+          image="${REGION}-docker.pkg.dev/${PROJECT_ID}/diewish-staging/backend:${PAUSE_SOURCE_SHA}"
           echo "PAUSE_BACKEND_IMAGE=$image" >> "$GITHUB_ENV"
-          build="$(gcloud builds submit --no-source --project "$PROJECT_ID" --config .github/cloudbuild/backend-staging-automation-pause.yaml --substitutions "_IMAGE=$image,_GIT_SHA=$GITHUB_SHA" --async --format='value(id)' --quiet)"
+          build="$(gcloud builds submit --no-source --project "$PROJECT_ID" --config .github/cloudbuild/backend-staging-automation-pause.yaml --substitutions "_IMAGE=$image,_GIT_SHA=$PAUSE_SOURCE_SHA" --async --format='value(id)' --quiet)"
           test -n "$build"
           echo "PAUSE_BACKEND_BUILD=$build" >> "$GITHUB_ENV"
           for attempt in {1..180}; do
@@ -136,6 +167,6 @@ jobs:
           python3 scripts/staging-automation-pause.py --phase pre
           # Preserve all other workers' runtime variables, secrets and scaling.
           # No frontend deployment, schema migration, IAM change or APK build.
-          gcloud run services update "$BACKEND_SERVICE" --project "$PROJECT_ID" --region "$REGION" --image "$PAUSE_BACKEND_IMAGE" --command npm --args start --update-env-vars "DIEWISH_APPLICATION_SHA=${GITHUB_SHA},STAGING_AUTOMATION_ENABLED=false" --quiet
+          gcloud run services update "$BACKEND_SERVICE" --project "$PROJECT_ID" --region "$REGION" --image "$PAUSE_BACKEND_IMAGE" --command npm --args start --update-env-vars "DIEWISH_APPLICATION_SHA=${PAUSE_SOURCE_SHA},STAGING_AUTOMATION_ENABLED=false" --quiet
       - name: Verify recovery route and pause the actual staging scheduler
         run: python3 scripts/staging-automation-pause.py --phase pause
