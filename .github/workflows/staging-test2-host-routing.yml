@@ -61,7 +61,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           # Replace only with the reviewed immutable preflight source; never PR HEAD.
-          ref: PIN_READONLY_SOURCE
+          ref: d20dcf2a8cd441ea5be95365b51ed90ff03ae294
           persist-credentials: false
       - uses: google-github-actions/auth@v2
         with:
