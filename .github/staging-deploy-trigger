@@ -1,32 +1,4 @@
-staging notification preferences integration
-task=WORKMODE-NOTIFICATION-PREFERENCES-A1-INTEGRATE
-verified_source_sha=3fb8093849994626f19a85e5a09193cdd1741370
-approved_notification_sha=c140c7570d9a2ee18d7bb47e9d7145672cbef564
-purpose=canonical water persistence, paced sanity and staging-only rate budget; exact-SHA gates
-
-staging Coach P2 security integration
-task=APP6-COACH-P2-SECURITY-INTEGRATE-A1
-verified_source_sha=ea3e2223c60e256eb730ad0365e50f77317da0a2
-merged_security_sha=7ebc2f89712ae8618d6220ae1ea0ec9d851caea2
-purpose=run every required exact-SHA staging gate; live sync remains disabled; no database roles, grants or secrets changed
-
-staging release recovery
-task=STAGING-RELEASE-RECOVERY-A1
-verified_source_sha=5b0e24e1a3ab35f21d6ec787edceac86c66c99ac
-purpose=trigger exact-SHA staging gates and deploy without application code changes
-
-staging release recovery
-task=STAGING-RELEASE-RECOVERY-A1
-verified_source_sha=2c26a745dd8692e92adfc509a7c5824f6662ce1d
-purpose=release current verified staging tree after exact-SHA gates passed
-
-staging Mirmir A4 verification recovery
-task=MIRMIR-A4-DIRECT-INTEGRATION
-verified_application_sha=f8544b948396aacba7647371d358b3da51cad752
-purpose=pass existing successful Cloud Build IDs to strict serving-image verification; no IAM, application, feature-flag or guard-policy changes
-
-staging transparent Mirmir restoration
-task=MIRMIR-RESTORE-TRANSPARENT-STAGING-RELEASE
-verified_application_sha=de3bbc689d8e5f8b6bdfa74e93f6ba6877fb79b5
-approved_by_user=2026-10-17
-purpose=publish merged PR 41: original transparent poses and default blink; no application-code changes; no optional live AI acceptance or release APK requested
+APP-STAGING-AUTOMATION-PAUSE-A1
+Authorized staging-only pause release after PR #79 and PR #80.
+Pinned serving-schema backport: d7ced3598a41db3bd1fb76320e0149e25b3ac0ed
+No frontend release, migration, APK or production action.
