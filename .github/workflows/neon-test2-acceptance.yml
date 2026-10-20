@@ -89,7 +89,7 @@ jobs:
       # Always run the already inspected source, never arbitrary PR/merge code.
       - uses: actions/checkout@v4
         with:
-          ref: c91845a1801367393ab6d58fa9eec8b3f35aff9d
+          ref: 2a3083f6c71c148a56ceabed5432a367de5029cc
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
