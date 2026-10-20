@@ -1,13 +1,14 @@
 # Neon Test 2 isolated acceptance — issue #88
 
-## Status: BLOCKED, not a completed database setup
+## Status: BLOCKED — dedicated GitHub Test 2 credential missing
 
 Source staging commit: `6729a834809698fabf5ab341b9f5d2c608e2094e`.
 Source tree: `b0d832d28e8b84955757d6dc51be2be6b588d871`.
 
 The existing repository contains **50 Prisma models and 50 migrations**.
 No schema, migration, application authentication logic or serving environment
-configuration is changed by this PR.
+configuration is changed. A dedicated, owner-requested Test 2 CI workflow is
+added; existing deployment/security workflows remain unchanged.
 
 The authenticated Neon connector confirmed this exact target:
 
@@ -33,6 +34,66 @@ connector success does **not** prove backend connectivity.
 **Applied migrations: 0. Created application tables: 0.** Registration, login,
 session refresh and preference persistence against Test 2 are **NOT RUN** and
 must not be marked PASS. No synthetic account has been created.
+
+## GitHub runner network path: PASS
+
+The repository owner's manual `test2-network-check` label on PR #89 triggered
+the isolated workflow without any database secret:
+
+https://github.com/DiyetisyenMehmet/ai-dietitian-platform/actions/runs/39494879167
+
+Job `118877221120` confirmed **DNS, TCP/5432 and certificate-verified PostgreSQL
+TLS PASS** on GitHub's `ubuntu-latest` runner. Database authentication was
+deliberately **NOT ATTEMPTED**; the database acceptance job was **SKIPPED** and
+is not a PASS. The target compute remained idle after the network probe.
+
+GitHub Settings was inspected read-only: there are no repository secrets and
+no dedicated Test 2 environment secret. Existing staging QA credentials were
+not used or read. **The remaining blocker is NEON_TEST2_DATABASE_URL.**
+
+The repository's default branch is `main`, whose only workflow is
+`main-hardening-ci.yml` without `workflow_dispatch`. GitHub's documented manual
+dispatch registration therefore cannot launch a new branch-only workflow.
+The safe, demonstrated entry point instead uses an owner-applied PR label:
+
+- `test2-network-check`: network only, no secrets, no application checkout.
+- `test2-acceptance`: network must succeed, then install/generate the existing
+  application and run migration/backend acceptance with the dedicated secret.
+
+No `push`, schedule, PR synchronization or `pull_request_target` can start this
+workflow. It accepts only the repository owner and PR #89 from the exact same
+repository/work branch targeting staging. Acceptance checks out immutable,
+already inspected source **05b4b5e25957c204c346c1cd548dc9a9bf490ce6**, never an
+arbitrary PR merge/head. Permissions are `contents: read`; only the dedicated
+Test 2 secret is referenced, at the credential-writing step after dependency
+installation. No Cloud Run, Google identity, staging secrets or artifacts are
+used. The encrypted credential is written to a private ephemeral runner file
+and removed in an `always()` cleanup step. Public-repository standard runners
+are reused; no paid server/service is provisioned.
+
+### One required secure panel operation
+
+In repository **Settings → Secrets and variables → Actions → New repository
+secret**, save the **direct/unpooled Test 2 database connection** under
+`NEON_TEST2_DATABASE_URL`. Use only the exact Test 2 database/owner/host above,
+with TLS enabled. Do not send the URI or password in chat, a PR, a comment or a
+workflow input. Existing staging/production secrets must not be substituted.
+
+After this single credential operation, the worker can manually request
+`test2-acceptance` on this existing PR, monitor the real migration/backend run,
+verify the synthetic rows independently through the Neon connector, and
+suspend only the Test 2 compute afterward. No merge or deployment is required.
+
+Neon's official HTTP/serverless query path was also assessed. It does not
+remove the direct connection required by this repository's Prisma migration
+CLI. Replaying SQL while manufacturing `_prisma_migrations` records would not
+prove the approved chain ran; that workaround is not used.
+
+References:
+
+- https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow
+- https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows
+- https://neon.com/docs/guides/prisma
 
 ## Prepared execution path
 
@@ -97,7 +158,10 @@ successful end-to-end result.
 
 - Exact-target negative cases and isolated environment: **2 tests PASS**.
 - Script syntax, targeted ESLint and formatting: **PASS**.
-- Native Prisma migration command: **BLOCKED / P1001**.
+- Native local Prisma migration command: **BLOCKED / P1001**.
+- Actual GitHub Test 2 DNS/TCP/certificate-verified TLS probe: **PASS**.
+- CI YAML, owner/PR/manual-event boundaries, secret-free network job,
+  immutable acceptance checkout and scoped-secret/cleanup checks: **PASS**.
 - Test 2 schema installation and actual backend acceptance: **BLOCKED / NOT RUN**.
 - Source migration files and Prisma schema: unchanged.
 
@@ -114,7 +178,7 @@ it is not a persistent Web/Android test environment. Connecting the existing
 public Web/Android app still requires a separately approved runtime/release
 decision and is **not completed** by this PR.
 
-Remaining requirement for this task: a secure execution environment with
-direct Test 2 PostgreSQL access, then successful migration and actual backend
-acceptance. Do not solve this by changing the serving staging DATABASE_URL,
+Remaining requirement for this task: the dedicated Test 2 secret in GitHub,
+then successful migration and actual backend acceptance on the verified
+runner. Do not solve this by changing the serving staging DATABASE_URL,
 publishing secrets, enabling paid infrastructure or opening restricted features.
