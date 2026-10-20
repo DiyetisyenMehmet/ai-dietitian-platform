@@ -47,14 +47,18 @@ class PauseTests(unittest.TestCase):
     def command(self, *args):
         self.calls.append(args)
         if args[:2] == ("git", "ls-remote"):
-            return SHA + "\trefs/heads/feature/staging-preview"
+            source = os.environ.get("PAUSE_SOURCE_SHA", SHA) if args[-1] == pause.LIVE_BRANCH else SHA
+            return source + "\t" + args[-1]
         if args[:3] == ("gcloud", "run", "services"):
             return json.dumps(self.service)
         if args[:3] == ("gcloud", "run", "revisions"):
             return json.dumps(self.revision)
         if args[:3] == ("gcloud", "builds", "describe"):
-            return json.dumps({"status": "SUCCESS", "substitutions": {"_GIT_SHA": SHA},
-                               "results": {"images": [{"name": IMAGE, "digest": "sha256:123"}]}})
+            source = os.environ.get("PAUSE_SOURCE_SHA", SHA)
+            return json.dumps({"status": "SUCCESS", "substitutions": {"_GIT_SHA": source},
+                               "results": {"images": [{"name": IMAGE.replace(SHA, source), "digest": "sha256:123"}]}})
+        if args[:3] == ("gcloud", "logging", "read"):
+            return "[]"
         if args[:4] == ("gcloud", "scheduler", "jobs", "pause"):
             self.job["state"] = "PAUSED"
             return ""
@@ -65,8 +69,9 @@ class PauseTests(unittest.TestCase):
         raise AssertionError("Unexpected control-plane operation")
 
     def http(self, request, **_kwargs):
-        code = 404 if request.full_url.endswith("/tick") else 401
-        raise pause.urllib.error.HTTPError(request.full_url, code, "synthetic", None, None)
+        url = request if isinstance(request, str) else request.full_url
+        code = 503 if url.endswith("/health/ready") else (404 if url.endswith("/tick") else (422 if url.endswith("/forgot") else 401))
+        raise pause.urllib.error.HTTPError(url, code, "synthetic", None, None)
 
     def run_phase(self, phase):
         with patch.object(sys, "argv", ["pause", "--phase", phase]):
@@ -115,6 +120,33 @@ class PauseTests(unittest.TestCase):
         self.run_phase("pre")
         self.assertTrue(any(call[:2] == ("git", "diff") for call in self.calls))
         self.assertFalse(self.mutations())
+
+    def test_live_backport_requires_unchanged_account_and_schema_trees(self):
+        source = "b" * 40
+        for row in self.revision["spec"]["containers"][0]["env"]:
+            if row["name"] == "DIEWISH_APPLICATION_SHA":
+                row["value"] = pause.LIVE_BASE
+        with patch.dict(os.environ, {"PAUSE_SOURCE_SHA": source}):
+            self.run_phase("pre")
+        self.assertTrue(any(call[:2] == ("git", "diff") and "backend/src/modules/account" in call for call in self.calls))
+        self.assertFalse(self.mutations())
+
+    def test_live_backport_refuses_to_overwrite_newer_serving_features(self):
+        with patch.dict(os.environ, {"PAUSE_SOURCE_SHA": "b" * 40}):
+            with self.assertRaisesRegex(RuntimeError, "serving-source-changed-backport-would-overwrite"):
+                self.run_phase("pre")
+        self.assertFalse(self.mutations())
+
+    def test_live_backport_pause_preserves_legacy_request_recovery_without_assuming_smtp(self):
+        source = "b" * 40
+        rows = self.revision["spec"]["containers"][0]["env"]
+        for row in rows:
+            if row["name"] == "DIEWISH_APPLICATION_SHA":
+                row["value"] = source
+        self.revision["spec"]["containers"][0]["env"] = [row for row in rows if not row["name"].startswith("SMTP_")]
+        with patch.dict(os.environ, {"PAUSE_SOURCE_SHA": source}):
+            self.run_phase("pause")
+        self.assertEqual(self.job["state"], "PAUSED")
 
     def test_deploy_cannot_resume_or_force_run(self):
         workflow = (ROOT / ".github/workflows/staging-preview.yml").read_text()

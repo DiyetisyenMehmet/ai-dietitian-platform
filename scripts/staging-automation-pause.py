@@ -11,6 +11,10 @@ REGION = "europe-west1"
 SERVICE = "diewish-backend-staging"
 JOB = "diewish-notification-dispatch-staging"
 RUNTIME = f"diewish-staging-runtime@{PROJECT}.iam.gserviceaccount.com"
+LIVE_BASE = "12c15074c71c6bc3c84fc7a32b02eaa71f4f32c7"
+LIVE_BRANCH = "refs/heads/release/app8-staging-automation-pause-live-a1"
+PROTECTED = ("backend/prisma", "backend/src/modules/account", "backend/src/modules/auth",
+             "backend/src/modules/identity", "backend/src/lib/mailer.ts", "frontend", "android")
 
 
 def command(*args):
@@ -51,9 +55,13 @@ def main():
     if (os.environ.get("PROJECT_ID") != PROJECT or
             os.environ.get("GITHUB_REF") != "refs/heads/feature/staging-preview"):
         raise RuntimeError("non-staging-context")
-    expected = os.environ["GITHUB_SHA"]
+    repository_sha = os.environ["GITHUB_SHA"]
+    expected = os.environ.get("PAUSE_SOURCE_SHA", repository_sha)
+    legacy = expected != repository_sha
+    if len(expected) != 40 or any(c not in "0123456789abcdef" for c in expected):
+        raise RuntimeError("invalid-source-sha")
     head = command("git", "ls-remote", "origin", "refs/heads/feature/staging-preview").split()[0]
-    if head != expected:
+    if head != repository_sha:
         raise RuntimeError("staging-head-moved")
     service = read("services", SERVICE)
     url = service["status"]["url"]
@@ -75,7 +83,19 @@ def main():
            revision=revision_name, applicationSha=value("DIEWISH_APPLICATION_SHA"))
     if options.phase == "read":
         return
+    if legacy:
+        source_head = command("git", "ls-remote", "origin", LIVE_BRANCH).split()[0]
+        if source_head != expected:
+            raise RuntimeError("approved-backport-source-moved")
+        command("git", "fetch", "origin", expected)
+        command("git", "fetch", "origin", LIVE_BASE)
+        command("git", "diff", "--exit-code", LIVE_BASE, expected, "--", *PROTECTED)
+        report(sourceSha=expected, liveBase=LIVE_BASE,
+               preserved="schema-account-auth-identity-mailer-frontend-android",
+               recovery="unchanged-request-path-no-shared-timer")
     if options.phase == "pre":
+        if legacy and value("DIEWISH_APPLICATION_SHA") not in (LIVE_BASE, expected):
+            raise RuntimeError("serving-source-changed-backport-would-overwrite")
         prior = value("DIEWISH_APPLICATION_SHA")
         if not prior or len(prior) != 40 or any(c not in "0123456789abcdef" for c in prior):
             raise RuntimeError("serving-source-unverified")
@@ -90,13 +110,11 @@ def main():
             value("SCHEDULER_SERVICE_ACCOUNT_EMAIL") != RUNTIME):
         raise RuntimeError("pause-or-request-recovery-runtime-unverified")
     # Configuration existence only; never read secret payloads or SMTP recipients.
-    for name in ("SMTP_HOST", "SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM"):
+    for name in (() if legacy else ("SMTP_HOST", "SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM")):
         entry = variables.get(name, {})
         if not entry.get("value") and not entry.get("valueFrom"):
             raise RuntimeError("recovery-email-config-missing")
-    image = container.get("image", "")
-    if not image.endswith(":" + expected):
-        raise RuntimeError("serving-source-image-mismatch")
+    image = f"{REGION}-docker.pkg.dev/{PROJECT}/diewish-staging/backend:{expected}"
     build_id = os.environ.get("PAUSE_BACKEND_BUILD") or os.environ.get("BACKEND_BUILD_ID")
     if not build_id:
         raise RuntimeError("exact-source-build-evidence-missing")
@@ -107,9 +125,10 @@ def main():
             len(images) != 1 or not images[0].get("digest", "").startswith("sha256:") or
             not revision.get("status", {}).get("imageDigest", "").endswith("@" + images[0]["digest"])):
         raise RuntimeError("serving-digest-unverified")
-    for endpoint, status in (("/api/internal/scheduler/tick", 404),
-                             ("/api/internal/scheduler/password-reset", 401)):
-        request = urllib.request.Request(url + endpoint, method="POST")
+    recovery_check = ("/api/account/password/forgot", 422) if legacy else ("/api/internal/scheduler/password-reset", 401)
+    for endpoint, status in (("/api/internal/scheduler/tick", 404), recovery_check):
+        request = urllib.request.Request(url + endpoint, data=b"{}",
+                                         headers={"Content-Type": "application/json"}, method="POST")
         try:
             with urllib.request.urlopen(request, timeout=30) as response:
                 actual = response.status
@@ -128,7 +147,22 @@ def main():
         raise RuntimeError("scheduler-pause-unverified")
     report(phase="pause", job=JOB, state="PAUSED", revision=revision_name,
            applicationSha=expected, inProcessAutomation="disabled", tickHttp=404,
-           recoveryRouteUnauthenticatedHttp=401, result="PASS")
+           recoveryRouteHttp=recovery_check[1], repositorySha=repository_sha, result="PASS")
+    # One explicit acceptance check only, never a recurring health/DB poll.
+    try:
+        with urllib.request.urlopen(url + "/api/health/ready", timeout=30) as response:
+            report(check="live-database", http=response.status, result="PASS")
+    except urllib.error.HTTPError as error:
+        report(check="live-database", http=error.code, result="BLOCKED")
+        if error.code == 503:
+            try:
+                logs = command("gcloud", "logging", "read",
+                               'resource.type="cloud_run_revision" AND resource.labels.service_name="diewish-backend-staging" AND severity>=ERROR',
+                               "--project", PROJECT, "--freshness=15m", "--limit=5", "--format=json")
+                report(check="database-error-classification", quotaError="quota" in logs.lower(),
+                       note="No log payloads, credentials or user data emitted")
+            except RuntimeError:
+                report(check="database-error-classification", result="BLOCKED", reason="logs-unavailable")
 
 
 if __name__ == "__main__":

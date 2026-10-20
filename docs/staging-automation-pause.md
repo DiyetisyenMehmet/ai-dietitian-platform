@@ -41,3 +41,11 @@ Foreground user sessions may still load their inbox, preferences, Coach stream o
 ## Evidence
 
 Local: four database-free automation/handoff checks; eight offline control-plane guard checks; TypeScript and touched-file lint. PostgreSQL/HTTP recovery, inbox/read/preference and manual Coach evidence is recorded in the PR/Actions runs. Actual Cloud Scheduler state is established only by the cloud guard readback, never by this source document alone.
+
+## Actual runtime discovery and scoped live release
+
+The first cloud preflight (run 39405333734, 2026-10-20 10:06 UTC) found the actual job **ENABLED** and backend revision `diewish-backend-staging-00478-2fq` serving `12c15074c71c6bc3c84fc7a32b02eaa71f4f32c7`. Current staging contains five later migrations; the guard correctly BLOCKED the full source release before build/deploy/pause. The live readiness endpoint returned HTTP 503 before any mutation.
+
+The actually serving source does **not** contain the later password-reset outbox/polling module; its recovery is already request-based. Its mailer is a legacy log transport without real SMTP delivery in production mode. This pre-existing delivery gap and unavailable database are not reported as working account recovery. The pause backport preserves account/auth/identity/mailer, Prisma, frontend and Android trees byte-for-byte against that serving SHA; it only adds pause guards and focused tests. The later queued-recovery separation remains integrated in PR #79 for the next complete staging release.
+
+The one-off release pins `d7ced3598a41db3bd1fb76320e0149e25b3ac0ed` on `release/app8-staging-automation-pause-live-a1`, requires its exact-source CI success, proves unchanged protected trees and matching serving schema, and refuses to overwrite any newer serving application. Repository staging HEAD and deployed backport application SHA are deliberately reported separately. No pending unrelated feature or migration is published by this narrow pause release.
