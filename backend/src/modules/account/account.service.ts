@@ -150,13 +150,14 @@ export const accountService = {
    * whether the email exists, to avoid account-enumeration. A token is only
    * issued/sent for an existing, active account.
    */
-  async forgotPassword(email: string, _context: AuditContext): Promise<void> {
+  async forgotPassword(email: string, _context: AuditContext): Promise<string | null> {
     // Check globally, before lookup: missing delivery config must not reveal account existence.
     assertEmailDeliveryConfigured();
     const user = await accountRepository.findUserByEmail(email);
     if (!user || !user.isActive || user.role !== "USER" ||
-        user.deletionRequestedAt || user.email.endsWith(".diewish.invalid")) return;
+        user.deletionRequestedAt || user.email.endsWith(".diewish.invalid")) return null;
     await accountRepository.enqueuePasswordReset(user.id);
+    return user.id;
   },
 
   /** Completes a password reset with a valid token; revokes all sessions. */

@@ -50,6 +50,9 @@ const envSchema = z.object({
   PHONE_PASSWORD_AUTH_ENABLED: booleanFromEnv.default(false),
   PHONE_SMS_RECOVERY_ENABLED: booleanFromEnv.default(false),
   COACH_SYNC_ENABLED: booleanFromEnv.default(false),
+  // Staging automation is paused by default. Re-enabling requires a reviewed
+  // release and an explicit Cloud Scheduler resume; manual Coach APIs are separate.
+  STAGING_AUTOMATION_ENABLED: booleanFromEnv.default(false),
   // Explicit-request resumable nutrition pilot only; no speculative generation.
   NUTRITION_JOBS_ENABLED: booleanFromEnv.default(false),
   NUTRITION_RIGHTS_EFFECTIVE_AT: z.string().datetime().optional(),

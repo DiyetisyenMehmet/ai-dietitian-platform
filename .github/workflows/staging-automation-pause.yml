@@ -1,0 +1,141 @@
+name: Staging automation pause
+on:
+  push:
+    branches: [feature/app8-staging-automation-pause-a1, feature/staging-preview]
+  pull_request:
+    branches: [feature/staging-preview]
+    paths:
+      - backend/src/scheduler/**
+      - backend/src/modules/account/password-reset-*.ts
+      - scripts/staging-automation-pause*
+      - .github/workflows/staging-automation-pause.yml
+permissions:
+  contents: read
+concurrency:
+  group: automation-pause-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  targeted:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: diewish
+          POSTGRES_PASSWORD: diewish
+          POSTGRES_DB: diewish_test
+        ports: ['5432:5432']
+        options: --health-cmd "pg_isready -U diewish -d diewish_test" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      NODE_ENV: test
+      DIEWISH_ENVIRONMENT: test
+      DATABASE_URL: postgresql://diewish:diewish@127.0.0.1:5432/diewish_test?schema=public
+      JWT_ACCESS_SECRET: integration-access-secret-012345678901234567890123456789
+      JWT_REFRESH_SECRET: integration-refresh-secret-01234567890123456789012345678
+      LOG_LEVEL: silent
+      BCRYPT_ROUNDS: 10
+      RATE_LIMIT_MAX: 1000
+      AUTH_RATE_LIMIT_MAX: 1000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+        working-directory: backend
+      - run: npx prisma generate && npx prisma migrate deploy
+        working-directory: backend
+      - run: npm run type-check
+        working-directory: backend
+      - name: Paused automation and request-based recovery
+        run: node --import tsx --test --test-concurrency=1 src/scheduler/staging-automation-pause.test.ts src/integration/staging-automation-pause.integration.test.ts src/integration/password-recovery.integration.test.ts
+        working-directory: backend
+      - name: Manual Coach under paused staging with synthetic AI provider
+        run: DIEWISH_ENVIRONMENT=staging node --import tsx --test src/integration/ai-chat.integration.test.ts
+        working-directory: backend
+      - name: Staging pause control-plane guard tests
+        run: python3 scripts/staging-automation-pause.test.py
+  inspect:
+    needs: targeted
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feature/staging-preview' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: staging
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      PROJECT_ID: project-a2e260c1-839d-4f1d-b90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/730419163638/locations/global/workloadIdentityPools/github-actions/providers/diewish-staging
+          service_account: diewish-staging-deployer@project-a2e260c1-839d-4f1d-b90.iam.gserviceaccount.com
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+      - run: python3 scripts/staging-automation-pause.py --phase read
+  release:
+    needs: targeted
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feature/staging-preview' && contains(github.event.head_commit.message, '[automation-pause]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    environment: staging
+    concurrency:
+      group: diewish-staging-preview
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    env:
+      PROJECT_ID: project-a2e260c1-839d-4f1d-b90
+      REGION: europe-west1
+      WIF_PROVIDER: projects/730419163638/locations/global/workloadIdentityPools/github-actions/providers/diewish-staging
+      DEPLOY_SERVICE_ACCOUNT: diewish-staging-deployer@project-a2e260c1-839d-4f1d-b90.iam.gserviceaccount.com
+      BACKEND_SERVICE: diewish-backend-staging
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOY_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+      - name: Read actual scheduler and verify schema identical to serving source
+        run: python3 scripts/staging-automation-pause.py --phase pre
+      - name: Build exact-source backend without database access
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="${REGION}-docker.pkg.dev/${PROJECT_ID}/diewish-staging/backend:${GITHUB_SHA}"
+          echo "PAUSE_BACKEND_IMAGE=$image" >> "$GITHUB_ENV"
+          build="$(gcloud builds submit --no-source --project "$PROJECT_ID" --config .github/cloudbuild/backend-staging-automation-pause.yaml --substitutions "_IMAGE=$image,_GIT_SHA=$GITHUB_SHA" --async --format='value(id)' --quiet)"
+          test -n "$build"
+          echo "PAUSE_BACKEND_BUILD=$build" >> "$GITHUB_ENV"
+          for attempt in {1..180}; do
+            state="$(gcloud builds describe "$build" --project "$PROJECT_ID" --region global --format='value(status)')"
+            case "$state" in
+              SUCCESS) exit 0 ;;
+              FAILURE|INTERNAL_ERROR|TIMEOUT|CANCELLED|EXPIRED) echo "Pause build failed: $state"; exit 1 ;;
+            esac
+            sleep 5
+          done
+          exit 1
+      - name: Recheck source and deploy backend pause only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/staging-automation-pause.py --phase pre
+          # Preserve all other workers' runtime variables, secrets and scaling.
+          # No frontend deployment, schema migration, IAM change or APK build.
+          gcloud run services update "$BACKEND_SERVICE" --project "$PROJECT_ID" --region "$REGION" --image "$PAUSE_BACKEND_IMAGE" --command npm --args start --update-env-vars "DIEWISH_APPLICATION_SHA=${GITHUB_SHA},STAGING_AUTOMATION_ENABLED=false" --quiet
+      - name: Verify recovery route and pause the actual staging scheduler
+        run: python3 scripts/staging-automation-pause.py --phase pause

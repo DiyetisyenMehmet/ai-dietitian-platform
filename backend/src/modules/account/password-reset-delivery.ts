@@ -5,6 +5,7 @@ import { logger } from "../../lib/logger";
 import { assertEmailDeliveryConfigured, mailer } from "../../lib/mailer";
 import { prisma } from "../../lib/prisma";
 import { generateOpaqueToken, hashToken } from "../../utils/jwt";
+import { stagingAutomationPaused } from "../../scheduler/automation-policy";
 
 let running = false;
 let timer: NodeJS.Timeout | undefined;
@@ -13,14 +14,18 @@ let timer: NodeJS.Timeout | undefined;
  * Requests acknowledge acceptance before SMTP, so recipient failures/timing cannot enumerate users.
  * A DB lease makes multiple backend instances safe; failed delivery has bounded retries.
  */
-export async function drainPasswordResetDeliveries(): Promise<void> {
-  if (running) return;
-  running = true;
+export async function drainPasswordResetDeliveries(requestUserId?: string): Promise<void> {
+  // Paused staging never drains the whole queue in the background. Request
+  // workers use the existing DB lease, including across different instances.
+  if (stagingAutomationPaused() && !requestUserId) return;
+  if (!requestUserId && running) return;
+  if (!requestUserId) running = true;
   try {
     assertEmailDeliveryConfigured();
     const now = new Date();
     const pending = await prisma.passwordResetDelivery.findMany({
       where: {
+        ...(requestUserId ? { userId: requestUserId } : {}),
         completedAt: null,
         attempts: { lt: 3 },
         requestedAt: { gt: new Date(now.getTime() - 60 * 60_000) },
@@ -32,7 +37,7 @@ export async function drainPasswordResetDeliveries(): Promise<void> {
         ],
       },
       orderBy: { requestedAt: "asc" },
-      take: 2,
+      take: requestUserId ? 1 : 2,
     });
     for (const job of pending) {
       const leaseId = crypto.randomUUID();
@@ -41,6 +46,7 @@ export async function drainPasswordResetDeliveries(): Promise<void> {
           userId: job.userId,
           requestedAt: job.requestedAt,
           completedAt: null,
+          ...(requestUserId ? { attempts: job.attempts, attemptedAt: job.attemptedAt } : {}),
           OR: [{ leaseUntil: null }, { leaseUntil: { lt: now } }],
         },
         data: {
@@ -116,11 +122,12 @@ export async function drainPasswordResetDeliveries(): Promise<void> {
       "Password recovery dispatch unavailable",
     );
   } finally {
-    running = false;
+    if (!requestUserId) running = false;
   }
 }
 
 export function startPasswordResetDelivery(): void {
+  if (stagingAutomationPaused()) return;
   if (isTest || timer || !env.SMTP_HOST) return;
   void drainPasswordResetDeliveries();
   timer = setInterval(() => {

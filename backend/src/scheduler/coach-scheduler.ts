@@ -2,6 +2,7 @@ import { logger } from "../lib/logger";
 import { prisma } from "../lib/prisma";
 import { coachJobs } from "../modules/ai-coach/coach-jobs";
 import { toTurkeyTime } from "../modules/ai-coach/metrics";
+import { stagingAutomationPaused } from "./automation-policy";
 
 /**
  * Lightweight in-process scheduler for the AI Health Coach (Sprint 19).
@@ -62,6 +63,7 @@ async function runOncePerDay(
 
 /** Evaluates all slots for the current instant. Exported for testing. */
 export async function tick(now: Date = new Date()): Promise<void> {
+  if (stagingAutomationPaused()) return;
   const turkeyNow = toTurkeyTime(now);
   const hour = turkeyNow.getUTCHours();
   const dayOfWeek = turkeyNow.getUTCDay(); // 0 = Sunday
@@ -90,6 +92,7 @@ export async function tick(now: Date = new Date()): Promise<void> {
 
 /** Starts the scheduler. Idempotent; a no-op if already started. */
 export function startCoachScheduler(): void {
+  if (stagingAutomationPaused()) return;
   if (timer) return;
   running = true;
   logger.info({ tickIntervalMs: TICK_INTERVAL_MS }, "AI Health Coach scheduler started");
