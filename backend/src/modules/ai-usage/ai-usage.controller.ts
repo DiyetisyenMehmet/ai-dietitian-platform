@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import type { AiUsageFeature } from "@prisma/client";
+import type { LegacyAiUsageFeature } from "./types";
 
 import { ApiError } from "../../utils/api-error";
 import { sendSuccess } from "../../utils/api-response";
@@ -16,7 +16,7 @@ function requireUserId(req: Request): string {
 }
 
 /** All AI features exposed in the usage summary. */
-const ALL_FEATURES: AiUsageFeature[] = [
+const ALL_FEATURES: LegacyAiUsageFeature[] = [
   "DIETITIAN_CHAT",
   "BLOOD_TEST_ANALYSIS",
   "NUTRITION_PLAN",

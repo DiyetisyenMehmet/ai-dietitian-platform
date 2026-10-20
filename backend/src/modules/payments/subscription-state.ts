@@ -1,5 +1,6 @@
 import type {
   AdminSupportEntitlement,
+  Prisma,
   Subscription,
   SubscriptionTier,
 } from "@prisma/client";
@@ -49,16 +50,17 @@ function higherTier(
  */
 export async function readEffectiveSubscriptionState(
   userId: string,
+  db: Prisma.TransactionClient = prisma,
 ): Promise<EffectiveSubscriptionReadState | null> {
-  const user = await prisma.user.findUnique({
+  const user = await db.user.findUnique({
     where: { id: userId },
     select: { subscriptionTier: true },
   });
   if (!user) return null;
 
   const [play, supportEntitlement] = await Promise.all([
-    googlePlayEntitlementsRepository.findBestActiveForUser(userId),
-    findActiveSupportEntitlementForUser(userId),
+    googlePlayEntitlementsRepository.findBestActiveForUser(userId, db),
+    findActiveSupportEntitlementForUser(userId, db),
   ]);
 
   let providerTier: SubscriptionTier = "FREE";
@@ -72,9 +74,10 @@ export async function readEffectiveSubscriptionState(
     subscription = await paymentsRepository.findEntitlingSubscription(
       userId,
       user.subscriptionTier,
+      db,
     );
     if (!subscription) {
-      subscription = await paymentsRepository.findEntitlingSubscription(userId);
+      subscription = await paymentsRepository.findEntitlingSubscription(userId, undefined, db);
     }
     if (subscription) {
       providerTier = subscription.tier;
