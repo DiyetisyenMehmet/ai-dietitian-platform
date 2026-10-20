@@ -1,0 +1,82 @@
+name: Test 2 Staging Control-Plane Read Only
+on:
+  push:
+    branches: [feature/staging-preview]
+    paths: [.github/workflows/staging-test2-controlplane-readonly.yml]
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: staging-test2-controlplane-readonly
+  cancel-in-progress: false
+jobs:
+  inspect:
+    if: ${{ github.repository == 'DiyetisyenMehmet/ai-dietitian-platform' && github.ref == 'refs/heads/feature/staging-preview' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    environment: staging
+    steps:
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/730419163638/locations/global/workloadIdentityPools/github-actions/providers/diewish-staging
+          service_account: diewish-staging-deployer@project-a2e260c1-839d-4f1d-b90.iam.gserviceaccount.com
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: project-a2e260c1-839d-4f1d-b90
+      - name: Read metadata only, no secret values or cloud changes
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, subprocess
+          PROJECT='project-a2e260c1-839d-4f1d-b90'
+          REGION='europe-west1'
+          def gcloud(*args):
+              result=subprocess.run(['gcloud',*args,'--project',PROJECT,'--format=json'],
+                                    capture_output=True,text=True,timeout=45,check=False)
+              if result.returncode:
+                  return None
+              try:
+                  return json.loads(result.stdout)
+              except (ValueError,TypeError):
+                  return None
+          def revision_data(name):
+              obj=gcloud('run','revisions','describe',name,'--region',REGION)
+              if not obj: return {'revision':name,'state':'METADATA_UNAVAILABLE'}
+              spec=obj.get('spec',{})
+              container=(spec.get('containers') or [{}])[0]
+              secret_refs={}
+              flags={}
+              for item in container.get('env',[]):
+                  key=item.get('name','')
+                  ref=item.get('valueFrom',{}).get('secretKeyRef')
+                  if key in ('DATABASE_URL','DIRECT_DATABASE_URL','JWT_ACCESS_SECRET','JWT_REFRESH_SECRET'):
+                      secret_refs[key]=({'name':ref.get('name'),'version':ref.get('key')} if ref else 'NOT_SECRET_REFERENCE')
+                  if key in ('DIEWISH_ENVIRONMENT','DIEWISH_APPLICATION_SHA','STAGING_AUTOMATION_ENABLED','SCHEDULER_TRIGGER_ENABLED','COACH_SYNC_ENABLED','NUTRITION_JOBS_ENABLED','DIEWISH_STAGING_HOST_ROUTING_ENABLED'):
+                      flags[key]=item.get('value','SECRET_REFERENCE_OR_ABSENT')
+              return {'revision':name,'image':container.get('image'),'imageDigest':obj.get('status',{}).get('imageDigest'),
+                      'serviceAccount':spec.get('serviceAccountName'),'secretReferences':secret_refs,
+                      'flags':flags,'containerConcurrency':spec.get('containerConcurrency'),
+                      'resources':container.get('resources'), 'timeoutSeconds':spec.get('timeoutSeconds')}
+          out={'mode':'READ_ONLY','project':PROJECT,'region':REGION,'decision':'NO_GO_PENDING_REVIEW'}
+          for name,label in [('diewish-backend-staging','backend'),('diewish-frontend-staging','frontend')]:
+              item=gcloud('run','services','describe',name,'--region',REGION)
+              if not item:
+                  out[label]={'error':'CLOUD_RUN_METADATA_UNAVAILABLE'}
+                  continue
+              state=item.get('status',{})
+              traffic=state.get('traffic',[])
+              revisions=sorted(set([x.get('revisionName') for x in traffic if x.get('revisionName')]+
+                                   [state.get('latestReadyRevisionName')] if state.get('latestReadyRevisionName') else
+                                   [x.get('revisionName') for x in traffic if x.get('revisionName')]))
+              out[label]={'service':name,'url':state.get('url'),
+                          'latestReadyRevision':state.get('latestReadyRevisionName'),
+                          'traffic':[{k:x.get(k) for k in ('revisionName','percent','tag','url') if k in x} for x in traffic],
+                          'revisions':[revision_data(x) for x in revisions]}
+          new=gcloud('secrets','describe','diewish-staging-test2-database-url')
+          out['dedicatedTest2SecretExists']=bool(new)
+          jobs=gcloud('scheduler','jobs','list','--location',REGION)
+          out['schedulerStates']=([{'name':j.get('name','').rsplit('/',1)[-1],'state':j.get('state')} for j in jobs
+                                   if j.get('name','').rsplit('/',1)[-1].startswith('diewish')] if isinstance(jobs,list)
+                                  else 'UNAVAILABLE')
+          print(json.dumps(out,indent=2,sort_keys=True))
+          PY
