@@ -206,7 +206,13 @@ try {
     token,
     body: { mascotId: "mirmir", animationEnabled: false },
   });
-  const refreshed = await api("/api/auth/refresh", 200, { method: "POST", cookie: login.cookie });
+  pass("synthetic preference write");
+  const refreshed = await api("/api/auth/refresh-token", 200, {
+    method: "POST",
+    cookie: login.cookie,
+  });
+  requireCheck(refreshed.cookie, "Rotated refresh cookie missing.");
+  pass("cookie-authenticated session refresh");
   const prefs = (
     await api("/api/account/mascot", 200, { token: refreshed.data.tokens.accessToken })
   ).data.preferences;
@@ -229,6 +235,7 @@ try {
   );
   pass("preference write/read after refresh and independent Test 2 database readback");
   await api("/api/auth/logout", 200, { method: "POST", cookie: refreshed.cookie });
+  await api("/api/auth/refresh-token", 401, { method: "POST", cookie: refreshed.cookie });
   pass("logout; no health data, external service, Admin or background job used");
   console.log(
     JSON.stringify({
