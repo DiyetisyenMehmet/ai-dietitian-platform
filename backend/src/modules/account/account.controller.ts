@@ -5,6 +5,8 @@ import { ApiError } from "../../utils/api-error";
 import { sendSuccess } from "../../utils/api-response";
 import { asyncHandler } from "../../utils/async-handler";
 import { drainPasswordResetDeliveries } from "./password-reset-delivery";
+import { stagingAutomationPaused } from "../../scheduler/automation-policy";
+import { assertRequestDeliveryConfigured, requestPasswordResetDelivery } from "./password-reset-request-delivery";
 import { clearRefreshCookie } from "../auth/auth.controller";
 import { accountService } from "./account.service";
 import type {
@@ -75,14 +77,17 @@ export const accountController = {
 
   forgotPassword: asyncHandler(async (req: Request, res: Response) => {
     const { email } = req.body as ForgotPasswordInput;
-    await accountService.forgotPassword(email, auditContext(req));
+    const requestDelivery = stagingAutomationPaused();
+    if (requestDelivery) assertRequestDeliveryConfigured();
+    const deliveryUserId = await accountService.forgotPassword(email, auditContext(req));
+    if (requestDelivery) await requestPasswordResetDelivery(deliveryUserId);
     res.setHeader("Cache-Control", "no-store");
     // Always the same response, regardless of whether the account exists.
     sendSuccess(res, {
       message: "İsteğiniz alındı. Uygun bir hesabınız varsa sıfırlama bağlantısı e-posta adresinize gönderilecektir.",
     });
     // Durable pending rows survive process shutdown; startup/timer also drain them.
-    void drainPasswordResetDeliveries();
+    if (!requestDelivery) void drainPasswordResetDeliveries();
   }),
 
   resetPassword: asyncHandler(async (req: Request, res: Response) => {

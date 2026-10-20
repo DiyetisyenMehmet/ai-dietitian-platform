@@ -1,0 +1,19 @@
+# Schema-free emergency pause release: no DB credentials, migration or data access.
+steps:
+  - name: gcr.io/cloud-builders/git
+    entrypoint: sh
+    args:
+      - -c
+      - |
+        set -eu
+        git init /workspace/repo
+        cd /workspace/repo
+        git remote add origin https://github.com/DiyetisyenMehmet/ai-dietitian-platform.git
+        git fetch --depth=1 origin "${_GIT_SHA}"
+        git checkout --detach FETCH_HEAD
+        test "$(git rev-parse HEAD)" = "${_GIT_SHA}"
+  - name: gcr.io/cloud-builders/docker
+    args: [build, --file=/workspace/repo/backend/Dockerfile, '--tag=${_IMAGE}', /workspace/repo/backend]
+images: ['${_IMAGE}']
+options:
+  logging: LEGACY
