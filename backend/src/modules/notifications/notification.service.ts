@@ -6,6 +6,7 @@ import type { Notification, NotificationPreference, NotificationType } from "@pr
 
 import { logger } from "../../lib/logger";
 import { prisma } from "../../lib/prisma";
+import { stagingAutomationPaused } from "../../scheduler/automation-policy";
 import { getNotificationProvider, type NotificationDeliveryResult } from "./notification.provider";
 import type { UpdateNotificationPreferencesInput } from "./notification.schemas";
 import { normalizedCategoryAlerts } from "./notification-alerts";
@@ -419,6 +420,7 @@ export const notificationService = {
    * bounded exponential-style backoff; terminal/config-disabled states stop.
    */
   async dispatchDue(now: Date = new Date()): Promise<number> {
+    if (stagingAutomationPaused()) return 0;
     const candidates = await prisma.$queryRaw<Array<{ id: string }>>`
       SELECT n."id"
       FROM "notifications" n

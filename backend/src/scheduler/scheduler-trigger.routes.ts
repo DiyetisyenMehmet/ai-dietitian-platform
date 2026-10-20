@@ -1,4 +1,6 @@
 import { Router } from "express";
+import { stagingAutomationPaused } from "./automation-policy";
+import { ApiError } from "../utils/api-error";
 
 import { requireSchedulerIdentity } from "../middleware/require-scheduler-identity";
 import { sendSuccess } from "../utils/api-response";
@@ -28,6 +30,9 @@ schedulerTriggerRouter.post(
  */
 schedulerTriggerRouter.post(
   "/tick",
+  (_req, _res, next) => stagingAutomationPaused()
+    ? next(new ApiError(404, "Staging automation is paused.", { code: "STAGING_AUTOMATION_PAUSED" }))
+    : next(),
   requireSchedulerIdentity,
   asyncHandler(async (_req, res) => {
     await tick();

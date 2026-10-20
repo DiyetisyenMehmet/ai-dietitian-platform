@@ -1,0 +1,42 @@
+name: Staging live pause backport checks
+on:
+  push:
+    branches: [release/app8-staging-automation-pause-live-a1]
+permissions:
+  contents: read
+jobs:
+  targeted:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env: {POSTGRES_USER: diewish, POSTGRES_PASSWORD: diewish, POSTGRES_DB: diewish_test}
+        ports: ['5432:5432']
+        options: --health-cmd "pg_isready -U diewish -d diewish_test" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      NODE_ENV: test
+      DIEWISH_ENVIRONMENT: staging
+      DATABASE_URL: postgresql://diewish:diewish@127.0.0.1:5432/diewish_test?schema=public
+      JWT_ACCESS_SECRET: integration-access-secret-012345678901234567890123456789
+      JWT_REFRESH_SECRET: integration-refresh-secret-01234567890123456789012345678
+      LOG_LEVEL: silent
+      BCRYPT_ROUNDS: 10
+      RATE_LIMIT_MAX: 1000
+      AUTH_RATE_LIMIT_MAX: 1000
+    defaults:
+      run: {working-directory: backend}
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - name: Prove live schema, account recovery, frontend and Android unchanged
+        run: git diff --exit-code 12c15074c71c6bc3c84fc7a32b02eaa71f4f32c7 HEAD -- prisma src/modules/account src/modules/auth src/modules/identity src/lib/mailer.ts ../frontend ../android
+      - uses: actions/setup-node@v4
+        with: {node-version: 20, cache: npm, cache-dependency-path: backend/package-lock.json}
+      - run: npm ci
+      - run: npx prisma generate && npx prisma migrate deploy
+      - run: npm run type-check && npm run build
+      - name: Only new pause guards, preserved request recovery and manual Coach
+        run: node --import tsx --test --test-concurrency=1 src/scheduler/staging-live-pause.test.ts src/integration/staging-live-pause.integration.test.ts src/integration/ai-chat.integration.test.ts
+      - name: Existing inbox and preferences under paused staging
+        run: node --import tsx --test --test-name-pattern 'notification preferences are opt-in|notification center lists only' src/integration/notification-preferences.integration.test.ts

@@ -5,6 +5,7 @@ import { env, isTest } from "./config/env";
 import { logger } from "./lib/logger";
 import { checkDatabaseConnection, disconnectPrisma } from "./lib/prisma";
 import { startCoachScheduler, stopCoachScheduler } from "./scheduler/coach-scheduler";
+import { stagingAutomationPaused } from "./scheduler/automation-policy";
 import {
   startNutritionWorker,
   stopNutritionWorker,
@@ -15,8 +16,8 @@ async function bootstrap(): Promise<void> {
 
   // Warn (do not crash) if the database is unreachable at startup; the
   // readiness probe reflects the live state and the app can still boot.
-  const dbReady = await checkDatabaseConnection();
-  if (!dbReady) {
+  // Do not wake Neon at container startup while staging automation is paused.
+  if (!stagingAutomationPaused() && !(await checkDatabaseConnection())) {
     logger.warn("Starting without a verified database connection.");
   }
 

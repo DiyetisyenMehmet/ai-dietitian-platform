@@ -46,6 +46,7 @@ const envSchema = z.object({
     .default(15 * 60 * 1000),
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
   COACH_SYNC_ENABLED: booleanFromEnv.default(false),
+  STAGING_AUTOMATION_ENABLED: booleanFromEnv.default(false),
   // Explicit-request resumable nutrition pilot only; no speculative generation.
   NUTRITION_JOBS_ENABLED: booleanFromEnv.default(false),
   NUTRITION_RIGHTS_EFFECTIVE_AT: z.string().datetime().optional(),

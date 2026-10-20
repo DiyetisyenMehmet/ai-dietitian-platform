@@ -10,6 +10,7 @@ import { monthlyReviewService } from "./monthly-review.service";
 import { proactiveAiService } from "./proactive-ai.service";
 import { weeklyReviewService } from "./weekly-review.service";
 import { isUserPremium } from "./premium";
+import { stagingAutomationPaused } from "../../scheduler/automation-policy";
 
 /**
  * Batch jobs orchestrating the AI Health Coach across all users. These are the
@@ -27,6 +28,7 @@ import { isUserPremium } from "./premium";
 async function forEachUser(
   handler: (user: { id: string }) => Promise<void>,
 ): Promise<{ processed: number; failed: number; skippedNoConsent: number }> {
+  if (stagingAutomationPaused()) return { processed: 0, failed: 0, skippedNoConsent: 0 };
   const pageSize = 200;
   let cursor: string | undefined;
   let processed = 0;
