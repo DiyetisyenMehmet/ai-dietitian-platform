@@ -1,0 +1,178 @@
+{
+  "task": "APP-STAGING-AUTOMATION-PAUSE-A1",
+  "issue": 77,
+  "prs": [
+    79,
+    80
+  ],
+  "repositoryHead": "6729a834809698fabf5ab341b9f5d2c608e2094e",
+  "repositoryTree": "b0d832d28e8b84955757d6dc51be2be6b588d871",
+  "releaseSourceHead": "d7ced3598a41db3bd1fb76320e0149e25b3ac0ed",
+  "releaseSourceTree": "7ac866992d661fb533b4e85e9a7615c5b0b7536d",
+  "priorApplicationHead": "12c15074c71c6bc3c84fc7a32b02eaa71f4f32c7",
+  "priorRevision": "diewish-backend-staging-00478-2fq",
+  "priorSchedulerState": "ENABLED",
+  "targetedChecks": {
+    "current": 29,
+    "backport": 7,
+    "currentRun": 39406894114,
+    "backportRun": 39406127287
+  },
+  "initialCloudGuardRun": 39405333734,
+  "scope": "staging-only",
+  "project": "project-a2e260c1-839d-4f1d-b90",
+  "region": "europe-west1",
+  "job": "diewish-notification-dispatch-staging",
+  "initialReadinessHttp": 503,
+  "preserved": [
+    "Prisma schema/migrations",
+    "account/auth/identity/mailer",
+    "frontend",
+    "Android",
+    "notification records and preferences"
+  ],
+  "nativeReminders": [
+    "water",
+    "activity",
+    "sleep",
+    "nutrition meal"
+  ],
+  "nativeDeviceInventory": "not accessible; installed alarms were not cancelled",
+  "existingRecoveryLimitation": "Serving baseline has a log-only mailer with no actual production SMTP transport; not introduced or repaired by the pause backport.",
+  "reactivation": "Separate approval/QA, stale queue review, reviewed deploy configuration opt-in, deliberate scheduler resume.",
+  "status": {
+    "automation": "PASS",
+    "liveAcceptance": "BLOCKED",
+    "completionPercent": 95
+  },
+  "cloudBuildId": "5a9573c0-5155-447a-902b-78b4203db268",
+  "cloudProofs": [
+    {
+      "timestamp": "2026-10-20T10:32:28.4607936Z",
+      "applicationSha": "12c15074c71c6bc3c84fc7a32b02eaa71f4f32c7",
+      "job": "diewish-notification-dispatch-staging",
+      "phase": "pre",
+      "revision": "diewish-backend-staging-00478-2fq",
+      "schedule": "*/5 * * * *",
+      "stateBefore": "ENABLED",
+      "target": "https://diewish-backend-staging-2qqqfr7wzq-ew.a.run.app/api/internal/scheduler/tick"
+    },
+    {
+      "timestamp": "2026-10-20T10:32:29.2283734Z",
+      "liveBase": "12c15074c71c6bc3c84fc7a32b02eaa71f4f32c7",
+      "preserved": "schema-account-auth-identity-mailer-frontend-android",
+      "recovery": "unchanged-request-path-no-shared-timer",
+      "sourceSha": "d7ced3598a41db3bd1fb76320e0149e25b3ac0ed"
+    },
+    {
+      "timestamp": "2026-10-20T10:32:29.4725812Z",
+      "phase": "pre",
+      "result": "PASS",
+      "schema": "identical-to-serving-source"
+    },
+    {
+      "timestamp": "2026-10-20T10:34:40.0283485Z",
+      "applicationSha": "12c15074c71c6bc3c84fc7a32b02eaa71f4f32c7",
+      "job": "diewish-notification-dispatch-staging",
+      "phase": "pre",
+      "revision": "diewish-backend-staging-00478-2fq",
+      "schedule": "*/5 * * * *",
+      "stateBefore": "ENABLED",
+      "target": "https://diewish-backend-staging-2qqqfr7wzq-ew.a.run.app/api/internal/scheduler/tick"
+    },
+    {
+      "timestamp": "2026-10-20T10:34:40.8175661Z",
+      "liveBase": "12c15074c71c6bc3c84fc7a32b02eaa71f4f32c7",
+      "preserved": "schema-account-auth-identity-mailer-frontend-android",
+      "recovery": "unchanged-request-path-no-shared-timer",
+      "sourceSha": "d7ced3598a41db3bd1fb76320e0149e25b3ac0ed"
+    },
+    {
+      "timestamp": "2026-10-20T10:34:41.0466196Z",
+      "phase": "pre",
+      "result": "PASS",
+      "schema": "identical-to-serving-source"
+    },
+    {
+      "timestamp": "2026-10-20T10:35:06.2564110Z",
+      "applicationSha": "d7ced3598a41db3bd1fb76320e0149e25b3ac0ed",
+      "job": "diewish-notification-dispatch-staging",
+      "phase": "pause",
+      "revision": "diewish-backend-staging-00479-w44",
+      "schedule": "*/5 * * * *",
+      "stateBefore": "ENABLED",
+      "target": "https://diewish-backend-staging-2qqqfr7wzq-ew.a.run.app/api/internal/scheduler/tick"
+    },
+    {
+      "timestamp": "2026-10-20T10:35:07.0646609Z",
+      "liveBase": "12c15074c71c6bc3c84fc7a32b02eaa71f4f32c7",
+      "preserved": "schema-account-auth-identity-mailer-frontend-android",
+      "recovery": "unchanged-request-path-no-shared-timer",
+      "sourceSha": "d7ced3598a41db3bd1fb76320e0149e25b3ac0ed"
+    },
+    {
+      "timestamp": "2026-10-20T10:35:10.2522295Z",
+      "applicationSha": "d7ced3598a41db3bd1fb76320e0149e25b3ac0ed",
+      "inProcessAutomation": "disabled",
+      "job": "diewish-notification-dispatch-staging",
+      "phase": "pause",
+      "recoveryRouteHttp": 422,
+      "repositorySha": "6729a834809698fabf5ab341b9f5d2c608e2094e",
+      "result": "PASS",
+      "revision": "diewish-backend-staging-00479-w44",
+      "state": "PAUSED",
+      "tickHttp": 404
+    },
+    {
+      "timestamp": "2026-10-20T10:35:11.0715837Z",
+      "check": "live-database",
+      "http": 503,
+      "result": "BLOCKED"
+    },
+    {
+      "timestamp": "2026-10-20T10:35:11.7240165Z",
+      "check": "database-error-classification",
+      "reason": "logs-unavailable",
+      "result": "BLOCKED"
+    }
+  ],
+  "finalCloudRunRevision": "diewish-backend-staging-00479-w44",
+  "schedulerState": "PAUSED",
+  "cloudRunTrafficPercent": 100,
+  "inProcessAutomation": "disabled",
+  "tickHttp": 404,
+  "recoveryRouteValidationHttp": 422,
+  "liveReadinessHttp": 503,
+  "quotaCause": "not independently confirmed: staging logging read unavailable",
+  "releaseRun": 39406894114,
+  "releaseJob": 118575664082,
+  "requiredGates": [
+    {
+      "name": "Hardening CI",
+      "run": 39406894599,
+      "result": "PASS"
+    },
+    {
+      "name": "Staging Config CI",
+      "run": 39406894195,
+      "result": "PASS"
+    },
+    {
+      "name": "Notification preferences platform checks",
+      "run": 39406894141,
+      "result": "PASS"
+    }
+  ],
+  "finalReadOnlyRecheck": {
+    "timestamp": "2026-10-20T10:38:59.6318975Z",
+    "applicationSha": "d7ced3598a41db3bd1fb76320e0149e25b3ac0ed",
+    "job": "diewish-notification-dispatch-staging",
+    "phase": "read",
+    "revision": "diewish-backend-staging-00479-w44",
+    "schedule": "*/5 * * * *",
+    "stateBefore": "PAUSED",
+    "target": "https://diewish-backend-staging-2qqqfr7wzq-ew.a.run.app/api/internal/scheduler/tick",
+    "jobId": 118583012643,
+    "mode": "read-only; no test/build/deploy repeated"
+  }
+}
