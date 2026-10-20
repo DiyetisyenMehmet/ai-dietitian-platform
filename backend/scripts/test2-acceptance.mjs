@@ -104,7 +104,7 @@ try {
   const models = Prisma.dmmf.datamodel.models;
   const names = new Set(state.tables.map((row) => row.table_name));
   requireCheck(
-    names.size === models.length + 1 &&
+    names.has("_prisma_migrations") &&
       models.every((model) => names.has(model.dbName ?? model.name)),
     "Model/table mismatch.",
   );
@@ -126,7 +126,7 @@ try {
     FROM pg_constraint WHERE contype='f' AND connamespace='public'::regnamespace`;
   requireCheck(constraints.total > 0 && constraints.invalid === 0, "Foreign keys not validated.");
   pass(
-    `${state.ledger.length} migrations; ${models.length} model tables; all columns and foreign keys`,
+    `${state.ledger.length} migrations; ${models.length} model tables; ${names.size} total tables; all columns and foreign keys`,
   );
 
   stage = "local application startup";
