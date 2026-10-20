@@ -524,7 +524,15 @@ test(
             email: "quota-http@example.invalid",
             role: "USER",
           });
-          const response = await fetch(`http://127.0.0.1:${address.port}/api/ai-usage`, {
+          const endpoint = `http://127.0.0.1:${address.port}/api/ai-usage`;
+          const blocked = await fetch(endpoint, {
+            headers: { authorization: `Bearer ${token}` },
+          });
+          assert.equal(blocked.status, 403);
+          const rejection = (await blocked.json()) as { error: { code: string } };
+          assert.equal(rejection.error.code, "ONBOARDING_REQUIRED");
+          await prisma.user.update({ where: { id: user }, data: { onboardingCompleted: true } });
+          const response = await fetch(endpoint, {
             headers: { authorization: `Bearer ${token}` },
           });
           assert.equal(response.status, 200);
