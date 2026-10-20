@@ -196,76 +196,130 @@ test("failed closed-eye asset keeps the existing transparent PNG still", async (
   await expect(m.locator("video")).toHaveCount(0);
 });
 
-test("both poses stay inside the banner without text overlap in mobile/desktop light/dark", async ({
-  page,
-}, info) => {
-  await setup(page);
-  await page.goto("/dashboard");
-  const m = mascot(page),
-    banner = page.locator("[data-dashboard-coach-banner]");
-  for (const width of [390, 412, 430, 1280]) {
-    await page.setViewportSize({ width, height: 844 });
-    await banner.scrollIntoViewIfNeeded();
-    await expect(m).toHaveAttribute("data-blinking", "true");
-    // The dashboard enters with a 300 ms translateY animation. Wait for finite
-    // ancestor motion/fonts, then compare banner-relative coordinates: scrolling
-    // or the parent's entry motion is not movement of the mascot inside its card.
-    await m.evaluate(async (n) => {
-      await document.fonts.ready;
-      const pending: Promise<Animation>[] = [];
-      for (let parent = n.parentElement; parent; parent = parent.parentElement) {
-        for (const animation of parent.getAnimations()) {
-          if (Number.isFinite(animation.effect?.getComputedTiming().endTime))
-            pending.push(animation.finished);
+for (const character of ["mirmir", "dost"] as const) {
+  test(`${character} poses stay inside the banner without text overlap in mobile/desktop light/dark`, async ({
+    page,
+  }, info) => {
+    await setup(page, character);
+    await page.goto("/dashboard");
+    const m = page.locator(`[data-dashboard-coach-banner] [data-mascot="${character}"]`),
+      banner = page.locator("[data-dashboard-coach-banner]");
+    for (const width of [390, 412, 430, 1280]) {
+      await page.setViewportSize({ width, height: 844 });
+      await banner.scrollIntoViewIfNeeded();
+      await expect(m).toHaveAttribute("data-blinking", String(character === "mirmir"));
+      // The dashboard enters with a 300 ms translateY animation. Wait for finite
+      // ancestor motion/fonts, then compare banner-relative coordinates: scrolling
+      // or the parent's entry motion is not movement of the mascot inside its card.
+      await m.evaluate(async (n) => {
+        await document.fonts.ready;
+        const pending: Promise<Animation>[] = [];
+        for (let parent = n.parentElement; parent; parent = parent.parentElement) {
+          for (const animation of parent.getAnimations()) {
+            if (Number.isFinite(animation.effect?.getComputedTiming().endTime))
+              pending.push(animation.finished);
+          }
         }
+        await Promise.all(pending);
+      });
+      const geometry = () =>
+        m.evaluate((n) => {
+          const banner = n.closest("[data-dashboard-coach-banner]")!;
+          const b = banner.getBoundingClientRect(),
+            r = n.getBoundingClientRect();
+          const text = banner
+            .querySelector("[data-dashboard-decorative-text]")!
+            .getBoundingClientRect();
+          return {
+            x: r.left - b.left,
+            y: r.top - b.top,
+            width: r.width,
+            height: r.height,
+            inside:
+              r.left >= b.left && r.right <= b.right && r.top >= b.top && r.bottom <= b.bottom,
+            noOverflow: document.documentElement.scrollWidth <= innerWidth,
+            noTextOverlap: r.right <= text.left,
+            alignedPoses: [...n.querySelectorAll("img")].every((image) => {
+              const i = image.getBoundingClientRect();
+              return (
+                Math.abs(i.left - r.left) < 0.1 &&
+                Math.abs(i.top - r.top) < 0.1 &&
+                Math.abs(i.width - r.width) < 0.1 &&
+                Math.abs(i.height - r.height) < 0.1
+              );
+            }),
+          };
+        });
+      const bounds = await geometry();
+      expect(bounds.width).toBeCloseTo(width < 640 ? 51.2 : 64, 1);
+      expect(bounds.height).toBeCloseTo(bounds.width, 1);
+      for (const theme of ["light", "dark"]) {
+        await page.evaluate((t) => {
+          document.documentElement.classList.remove("light", "dark");
+          document.documentElement.classList.add(t);
+        }, theme);
+        const boxes = await geometry();
+        expect(boxes).toMatchObject({
+          inside: true,
+          noOverflow: true,
+          noTextOverlap: true,
+          alignedPoses: true,
+        });
+        for (const key of ["x", "y", "width", "height"] as const)
+          expect(boxes[key]).toBeCloseTo(bounds[key], 1);
+        await banner.screenshot({
+          path: info.outputPath(`${character}-final-banner-${width}-${theme}.png`),
+        });
       }
-      await Promise.all(pending);
-    });
-    const geometry = () =>
-      m.evaluate((n) => {
-        const banner = n.closest("[data-dashboard-coach-banner]")!;
-        const b = banner.getBoundingClientRect(),
-          r = n.getBoundingClientRect();
-        const text = banner
-          .querySelector("[data-dashboard-decorative-text]")!
-          .getBoundingClientRect();
-        return {
-          x: r.left - b.left,
-          y: r.top - b.top,
-          width: r.width,
-          height: r.height,
-          inside: r.left >= b.left && r.right <= b.right && r.top >= b.top && r.bottom <= b.bottom,
-          noOverflow: document.documentElement.scrollWidth <= innerWidth,
-          noTextOverlap: r.right <= text.left,
-          alignedPoses: [...n.querySelectorAll("img")].every((image) => {
-            const i = image.getBoundingClientRect();
-            return (
-              Math.abs(i.left - r.left) < 0.1 &&
-              Math.abs(i.top - r.top) < 0.1 &&
-              Math.abs(i.width - r.width) < 0.1 &&
-              Math.abs(i.height - r.height) < 0.1
-            );
-          }),
-        };
-      });
-    const bounds = await geometry();
-    expect(bounds.width).toBeCloseTo(width < 640 ? 51.2 : 64, 1);
-    expect(bounds.height).toBeCloseTo(bounds.width, 1);
-    for (const theme of ["light", "dark"]) {
-      await page.evaluate((t) => {
-        document.documentElement.classList.remove("light", "dark");
-        document.documentElement.classList.add(t);
-      }, theme);
-      const boxes = await geometry();
-      expect(boxes).toMatchObject({
-        inside: true,
-        noOverflow: true,
-        noTextOverlap: true,
-        alignedPoses: true,
-      });
-      for (const key of ["x", "y", "width", "height"] as const)
-        expect(boxes[key]).toBeCloseTo(bounds[key], 1);
-      await banner.screenshot({ path: info.outputPath(`final-banner-${width}-${theme}.png`) });
     }
-  }
-});
+  });
+}
+
+for (const legacyValue of [true, false]) {
+  test(`Dost selection uses only its original static pose (${legacyValue})`, async ({ page }) => {
+    const writes = await setup(page, "classic", legacyValue);
+    const videos: string[] = [];
+    page.on("request", (r) => {
+      if (r.url().includes(VIDEO)) videos.push(r.url());
+    });
+    await page.goto("/profile/mascot");
+    await expect(page.getByRole("radio")).toHaveCount(3);
+    await expect(page.getByRole("switch")).toHaveCount(0);
+    await expect(page.getByRole("checkbox")).toHaveCount(0);
+    await page.getByRole("radio", { name: "Dost", exact: true }).click();
+    await expect(page.getByText("Maskot tercihin kaydedildi.", { exact: true })).toBeVisible();
+    await page.reload();
+    await expect(page.getByRole("radio", { name: "Dost", exact: true })).toBeChecked();
+    await page.goto("/dashboard");
+    const d = page.locator('[data-dashboard-coach-banner] [data-mascot="dost"]');
+    await d.scrollIntoViewIfNeeded();
+    const still = async () => {
+      await expect(d).toHaveAttribute("data-blinking", "false");
+      await expect(d.locator("img")).toHaveCount(1);
+      await expect(d.locator("img")).toHaveJSProperty("naturalWidth", 512);
+      await expect(d.locator("img")).toHaveAttribute("src", "/images/mascots/dost/still.webp");
+      expect(await d.evaluate((n) => n.getAnimations({ subtree: true }).length)).toBe(0);
+      await expect(d.locator("video, svg, animate")).toHaveCount(0);
+    };
+    await still();
+    for (const reducedMotion of ["reduce", "no-preference"] as const) {
+      await page.emulateMedia({ reducedMotion });
+      await still();
+    }
+    for (const active of [false, true]) {
+      await page.evaluate(
+        (active) =>
+          window.dispatchEvent(new CustomEvent("diewish:app-visibility", { detail: { active } })),
+        active,
+      );
+      await still();
+    }
+    await page.goto("/ai");
+    await expect(page.locator('header [data-mascot="dost"]')).toBeVisible();
+    await expect(page.locator('header [data-mascot="mirmir"]')).toHaveCount(0);
+    await expect(page.locator('[data-mascot="dost"]')).toHaveCount(2);
+    await expect(page.getByLabel("Mesaj", { exact: true })).toBeVisible();
+    expect(writes.map((w) => w.body)).toEqual([{ mascotId: "dost" }]);
+    expect(videos).toEqual([]);
+  });
+}

@@ -1,4 +1,4 @@
-export type MascotId = "classic" | "mirmir";
+export type MascotId = "classic" | "mirmir" | "dost";
 export interface MascotPreferences {
   mascotId: MascotId;
   /** Legacy stored value retained for account/API compatibility; not a UI or playback option. */
@@ -12,7 +12,8 @@ export function normalizeMascotPreferences(
   input: Partial<MascotPreferences> | null | undefined,
 ): MascotPreferences {
   return {
-    mascotId: input?.mascotId === "mirmir" ? "mirmir" : "classic",
+    mascotId:
+      input?.mascotId === "mirmir" || input?.mascotId === "dost" ? input.mascotId : "classic",
     animationEnabled: input?.animationEnabled !== false,
   };
 }

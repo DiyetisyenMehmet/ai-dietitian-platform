@@ -148,6 +148,19 @@ function fixture() {
 }
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
+test("Dost is a bounded identity; classic remains default and invalid ids fall back", () => {
+  const domain = moduleFrom("domain/account/mascot-preferences.ts");
+  assert.deepEqual(
+    plain(domain.normalizeMascotPreferences({ mascotId: "dost", animationEnabled: false })),
+    {
+      mascotId: "dost",
+      animationEnabled: false,
+    },
+  );
+  assert.equal(domain.normalizeMascotPreferences({ mascotId: "unknown" }).mascotId, "classic");
+  assert.equal(domain.DEFAULT_MASCOT_PREFERENCES.mascotId, "classic");
+});
+
 test("classic defaults, confirmed-only saves and partial preference writes", async () => {
   const f = fixture();
   assert.equal(f.requests.length, 1);

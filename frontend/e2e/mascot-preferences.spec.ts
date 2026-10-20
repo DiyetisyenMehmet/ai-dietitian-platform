@@ -153,3 +153,53 @@ test("Mirmir default blink preserves layout and selection across two sessions, w
     await otherContext.close();
   }
 });
+
+test("Dost persists across account sessions and a failed save retains the confirmed choice", async ({
+  page,
+  request,
+  browser,
+}, info) => {
+  test.setTimeout(180_000);
+  const account = await createDashboardSession(page, request);
+  const otherContext = await browser.newContext({ viewport: { width: 412, height: 915 } });
+  try {
+    await page.goto(base + "/profile/mascot");
+    await expect(page.getByRole("radio", { name: "Diewish Klasik", exact: true })).toBeChecked();
+    await page.getByRole("radio", { name: "Dost", exact: true }).click();
+    await expect(page.getByText("Maskot tercihin kaydedildi.", { exact: true })).toBeVisible();
+    await page.reload();
+    await expect(page.getByRole("radio", { name: "Dost", exact: true })).toBeChecked();
+    await page.goto(base + "/dashboard");
+    const d = page.locator('[data-dashboard-coach-banner] [data-mascot="dost"]');
+    await d.scrollIntoViewIfNeeded();
+    await expect(d).toHaveAttribute("data-blinking", "false");
+    await expect(d.locator("img")).toHaveJSProperty("naturalWidth", 512);
+    await d.screenshot({ path: info.outputPath("dost-saved-pose.png") });
+    const other = await otherContext.newPage();
+    await loginDashboardSession(other, account.email, account.password);
+    await other.goto(base + "/profile/mascot");
+    await expect(other.getByRole("radio", { name: "Dost", exact: true })).toBeChecked();
+    await page.goto(base + "/profile/mascot");
+    await page.route("**/api/account/mascot", async (route) => {
+      if (route.request().method() !== "PATCH") return route.continue();
+      return route.fulfill({
+        status: 503,
+        json: { success: false, error: { code: "TEST_FAILURE", message: "Test failure" } },
+      });
+    });
+    await page.getByRole("radio", { name: "Mırmır", exact: true }).click();
+    await expect(
+      page.getByRole("alert").filter({ hasText: "Maskot tercihin doğrulanamadı" }),
+    ).toBeVisible();
+    await expect(page.getByRole("radio", { name: "Dost", exact: true })).toBeChecked();
+    await page.unroute("**/api/account/mascot");
+    await page.getByRole("button", { name: "Tekrar yükle" }).click();
+    await expect(page.getByRole("radio", { name: "Dost", exact: true })).toBeChecked();
+    await other.getByRole("radio", { name: "Diewish Klasik", exact: true }).click();
+    await expect(other.getByText("Maskot tercihin kaydedildi.", { exact: true })).toBeVisible();
+    await page.reload();
+    await expect(page.getByRole("radio", { name: "Diewish Klasik", exact: true })).toBeChecked();
+  } finally {
+    await otherContext.close();
+  }
+});

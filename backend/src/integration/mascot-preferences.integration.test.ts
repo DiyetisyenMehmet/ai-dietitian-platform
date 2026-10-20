@@ -8,7 +8,7 @@ import { accountService } from "../modules/account/account.service";
 import { mascotPreferencesSchema } from "../modules/account/account.schemas";
 
 test("pilot payload accepts only bounded visual preferences", () => {
-  for (const input of [{ mascotId: "mirmir" }, { animationEnabled: false }])
+  for (const input of [{ mascotId: "mirmir" }, { mascotId: "dost" }, { animationEnabled: false }])
     assert.equal(mascotPreferencesSchema.safeParse(input).success, true);
   for (const input of [
     {},
@@ -79,11 +79,26 @@ test("two sessions share account preferences; different owners and layout remain
     mascotId: "classic",
     animationEnabled: true,
   });
+  // The new mascot persists through a separate session without changing owner A.
+  assert.equal((await call(tokens[1], { mascotId: "dost" })).status, 200);
+  const secondOwnerSession = signAccessToken({
+    userId: users[1].id,
+    email: users[1].email,
+    role: users[1].role,
+  });
+  assert.deepEqual((await call(secondOwnerSession)).body.data.preferences, {
+    mascotId: "dost",
+    animationEnabled: true,
+  });
   assert.equal((await call(tokens[0], { animationEnabled: false })).status, 200);
   await accountService.updateDashboardCardPreferences(users[0].id, { order: ["food"], hidden: [] });
   assert.deepEqual((await call(secondSession)).body.data.preferences, {
     mascotId: "mirmir",
     animationEnabled: false,
+  });
+  assert.deepEqual((await call(secondOwnerSession)).body.data.preferences, {
+    mascotId: "dost",
+    animationEnabled: true,
   });
   assert.deepEqual(
     (await accountService.getDashboardCardPreferences(users[0].id)).quickActionOrder,

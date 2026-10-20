@@ -1,0 +1,180 @@
+{
+  "archive": "MASKOTLAR.zip",
+  "archiveSha256": "6bf16b6c2f402594807299a8eff8ad59c84dd3ccce2565aeeb3bc6e557f4882c",
+  "pngCount": 18,
+  "note": "Inventory only: source archive and all 18 original images remain unchanged; filename order is not character order.",
+  "mirmirFiles": [
+    "file_000000005a3881f4b83e3ffb65ea21b5.png",
+    "file_0000000078b0821084da22629ac2ddf4.png"
+  ],
+  "selectedCharacter": {
+    "id": "dost",
+    "source": "file_000000006fd08246914408e28b7c792b.png",
+    "closedPose": null,
+    "orderBasis": "Approved original collection order from 2026-10-13: Mirmir -> Dost -> Nox. Dost identified there as the dog with a green scarf."
+  },
+  "sources": [
+    {
+      "file": "diewish-mascot-10-nox.png",
+      "sha256": "4e89bf2cdae9b79886ae647ca2e9e8529426f22d392a83923f7e0f85c7410fa5",
+      "size": [
+        1024,
+        1024
+      ],
+      "bytes": 649047
+    },
+    {
+      "file": "diewish-mascot-10-tombis (1).png",
+      "sha256": "261fd0a9a3bed79fc1404505af614c71add6b698778be1bb55e4a97043d86ac4",
+      "size": [
+        1024,
+        1024
+      ],
+      "bytes": 706279
+    },
+    {
+      "file": "file_00000000031481f49d1222c9e98507df.png",
+      "sha256": "3bf4095955f45091c9f96e5004834dd163efd46ef28a5424ed348e50f3bed14d",
+      "size": [
+        1254,
+        1254
+      ],
+      "bytes": 954274
+    },
+    {
+      "file": "file_00000000148c81f49b2b5dfbb8f5f1a8.png",
+      "sha256": "e2d569354271be3b21e0037bd83d72d40d2b6d33775a094f9689233ee460d317",
+      "size": [
+        1254,
+        1254
+      ],
+      "bytes": 675849
+    },
+    {
+      "file": "file_0000000022e0821092db0d8392fd8a18.png",
+      "sha256": "87736d9ff96aad58c74bbfe109694a4c7b922904169ac56b31b5fd4e120d9b5c",
+      "size": [
+        1254,
+        1254
+      ],
+      "bytes": 942492
+    },
+    {
+      "file": "file_000000004d8c81f49fef462ab45e3594.png",
+      "sha256": "caf4603b2093448f94e35e0ccc9739e401cc4a181e1d05e79a3dfdecbcdf0624",
+      "size": [
+        1254,
+        1254
+      ],
+      "bytes": 1328032
+    },
+    {
+      "file": "file_000000005a3881f4b83e3ffb65ea21b5.png",
+      "sha256": "0b6ee9fe071c4748078f97893673b98a7e66cb072e677497fa8a4f4943ddf9fe",
+      "size": [
+        1254,
+        1254
+      ],
+      "bytes": 1447845
+    },
+    {
+      "file": "file_000000006fd08246914408e28b7c792b.png",
+      "sha256": "94fd65f8b9158455d631833bd75f707c267cc3c8d811368d95692e481312bd8c",
+      "size": [
+        1254,
+        1254
+      ],
+      "bytes": 1562725
+    },
+    {
+      "file": "file_0000000077c08246b5b48ad6a43e9372.png",
+      "sha256": "238adaa0bf054cc5384dc8204a278aa795d3707d0d9af6a8e2d200fbb874cf14",
+      "size": [
+        1254,
+        1254
+      ],
+      "bytes": 1569597
+    },
+    {
+      "file": "file_0000000078b0821084da22629ac2ddf4.png",
+      "sha256": "d963a9ba63c5d7629ea6fa9df23ffef7036fa41f85ce921d0a306927cf8ba99a",
+      "size": [
+        1254,
+        1254
+      ],
+      "bytes": 1543359
+    },
+    {
+      "file": "file_00000000890c82109efb2f3269725fab.png",
+      "sha256": "badd7889b581d92ce69046e18b37eb987128e8411c23c35cb9d6006c25ee5cf3",
+      "size": [
+        1254,
+        1254
+      ],
+      "bytes": 1009115
+    },
+    {
+      "file": "file_0000000090f48211b2e11b5ba20fb481.png",
+      "sha256": "8b1695fa2cae9db34dd3db6adcce9c3faecdddaecd677b605dfd04ca6945ad9f",
+      "size": [
+        1254,
+        1254
+      ],
+      "bytes": 1271925
+    },
+    {
+      "file": "file_00000000a47481f4b11a330c824d2eab.png",
+      "sha256": "80c0c40bfa42405c181ca58b46fbbc25bee7d9aa00e31a6dae4c1c03a35a0194",
+      "size": [
+        1254,
+        1254
+      ],
+      "bytes": 1106687
+    },
+    {
+      "file": "file_00000000a6708210ae66430aed635189.png",
+      "sha256": "9b58bde69972197d4f336ca57ebd4a5e5563757c6a93fd41467c32acd6a30a31",
+      "size": [
+        1254,
+        1254
+      ],
+      "bytes": 1061557
+    },
+    {
+      "file": "file_00000000b60081f483c62d9dfcbf325b.png",
+      "sha256": "bdc0706490eb01ff693b435b3b89f0205f615391ff862dc1919ffc15d8bc2ede",
+      "size": [
+        1774,
+        887
+      ],
+      "bytes": 1327035
+    },
+    {
+      "file": "file_00000000cb1881f48b06d1e32b225795.png",
+      "sha256": "f8ba3e47e3dc1eb4aac49a9f349940291e1356d69748c2a854a37e37e2796c4f",
+      "size": [
+        1254,
+        1254
+      ],
+      "bytes": 1131621
+    },
+    {
+      "file": "file_00000000d9048210972dec14aca4624d.png",
+      "sha256": "b8428d247b079af81dd0df9f4b1ce51afa28e0627cd98326795c35d8a4ce6be0",
+      "size": [
+        1254,
+        1254
+      ],
+      "bytes": 1287458
+    },
+    {
+      "file": "file_00000000ec088210bff54814dec732ca.png",
+      "sha256": "4fcb1cb7dcce7d304b6d2f97f50f390a2665d995fe92c6cce5302f174ca336b1",
+      "size": [
+        1254,
+        1254
+      ],
+      "bytes": 1108841
+    }
+  ]
+}

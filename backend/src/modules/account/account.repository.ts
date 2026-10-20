@@ -21,7 +21,7 @@ export const accountRepository = {
     });
   },
 
-  upsertMascotPreferences(userId: string, input: { mascotId?: "classic" | "mirmir"; animationEnabled?: boolean }) {
+  upsertMascotPreferences(userId: string, input: { mascotId?: "classic" | "mirmir" | "dost"; animationEnabled?: boolean }) {
     const data = {
       ...(input.mascotId !== undefined ? { mascotId: input.mascotId } : {}),
       ...(input.animationEnabled !== undefined ? { mascotAnimation: input.animationEnabled } : {}),
