@@ -50,6 +50,9 @@ const envSchema = z.object({
   PHONE_PASSWORD_AUTH_ENABLED: booleanFromEnv.default(false),
   PHONE_SMS_RECOVERY_ENABLED: booleanFromEnv.default(false),
   COACH_SYNC_ENABLED: booleanFromEnv.default(false),
+  // Phase 2A foundation only: additionally hard-gated to the isolated test runtime.
+  SCAN_QUOTA_FOUNDATION_ENABLED: booleanFromEnv.default(false),
+  SCAN_QUOTA_HASH_SECRET: z.string().default(""),
   // Staging automation is paused by default. Re-enabling requires a reviewed
   // release and an explicit Cloud Scheduler resume; manual Coach APIs are separate.
   STAGING_AUTOMATION_ENABLED: booleanFromEnv.default(false),

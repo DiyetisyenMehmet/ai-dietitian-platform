@@ -46,8 +46,9 @@ export const paymentsRepository = {
   findEntitlingSubscription(
     userId: string,
     tier?: SubscriptionTier,
+    db: Prisma.TransactionClient = prisma,
   ): Promise<Subscription | null> {
-    return prisma.subscription.findFirst({
+    return db.subscription.findFirst({
       where: {
         userId,
         ...(tier ? { tier } : {}),

@@ -10,6 +10,7 @@
  */
 
 import type { AiUsageFeature, SubscriptionTier } from "@prisma/client";
+import type { LegacyAiUsageFeature } from "./types";
 
 /** Per-window limits for a single feature. `null` means "no limit". */
 export interface FeatureQuota {
@@ -18,7 +19,7 @@ export interface FeatureQuota {
 }
 
 /** The full quota matrix: tier → feature → window limits. */
-export type QuotaMatrix = Record<SubscriptionTier, Record<AiUsageFeature, FeatureQuota>>;
+export type QuotaMatrix = Record<SubscriptionTier, Record<LegacyAiUsageFeature, FeatureQuota>>;
 
 /**
  * The quota matrix. FREE is deliberately conservative for unmonetized accounts;

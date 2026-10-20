@@ -1,4 +1,4 @@
-import type { AiUsageEvent, AiUsageFeature, SubscriptionTier } from "@prisma/client";
+import type { AiUsageEvent, SubscriptionTier } from "@prisma/client";
 import { env } from "../../config/env";
 
 import { ApiError } from "../../utils/api-error";
@@ -13,7 +13,7 @@ import {
   QUOTA_MATRIX,
   type FeatureQuota,
 } from "./constants";
-import type { FeatureQuotaStatus, RecordUsageInput, TrialUsage, WindowUsage } from "./types";
+import type { FeatureQuotaStatus, LegacyAiUsageFeature, RecordUsageInput, TrialUsage, WindowUsage } from "./types";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -50,7 +50,7 @@ function buildWindow(used: number, limit: number | null, resetsAt: Date): Window
 async function resolveFeatureQuota(
   userId: string,
   tier: SubscriptionTier,
-  feature: AiUsageFeature,
+  feature: LegacyAiUsageFeature,
   now: Date,
 ): Promise<FeatureQuota> {
   const base = QUOTA_MATRIX[tier][feature];
@@ -88,7 +88,7 @@ export const aiUsageService = {
    */
   async getStatus(
     userId: string,
-    feature: AiUsageFeature,
+    feature: LegacyAiUsageFeature,
     tier?: SubscriptionTier,
   ): Promise<FeatureQuotaStatus> {
     if (
@@ -167,7 +167,7 @@ export const aiUsageService = {
    */
   async assertWithinQuota(
     userId: string,
-    feature: AiUsageFeature,
+    feature: LegacyAiUsageFeature,
     tier?: SubscriptionTier,
   ): Promise<FeatureQuotaStatus> {
     const status = await this.getStatus(userId, feature, tier);

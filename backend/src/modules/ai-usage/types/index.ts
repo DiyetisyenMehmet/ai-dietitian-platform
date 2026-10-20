@@ -4,6 +4,9 @@
 
 import type { AiUsageFeature, SubscriptionTier } from "@prisma/client";
 
+/** Existing HTTP quota contract; scan foundation is not exposed by these routes. */
+export type LegacyAiUsageFeature = Exclude<AiUsageFeature, "PHOTO_SCAN" | "BARCODE_SCAN">;
+
 /** Usage counted against a single rolling window plus its limit. */
 export interface WindowUsage {
   /** Calls already consumed in the window. */
@@ -33,7 +36,7 @@ export interface TrialUsage {
 
 /** A feature's full quota status for the current day and month. */
 export interface FeatureQuotaStatus {
-  feature: AiUsageFeature;
+  feature: LegacyAiUsageFeature;
   tier: SubscriptionTier;
   day: WindowUsage;
   month: WindowUsage;
@@ -49,7 +52,7 @@ export interface FeatureQuotaStatus {
 /** Metadata describing the AI call to record after a successful invocation. */
 export interface RecordUsageInput {
   userId: string;
-  feature: AiUsageFeature;
+  feature: LegacyAiUsageFeature;
   provider: string;
   model: string;
   /** Optional best-effort token estimate for cost observability. */

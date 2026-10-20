@@ -103,8 +103,11 @@ export const googlePlayEntitlementsRepository = {
     return rows[0] ?? null;
   },
 
-  async findBestActiveForUser(userId: string): Promise<GooglePlayEntitlementRow | null> {
-    const rows = await prisma.$queryRaw<GooglePlayEntitlementRow[]>(Prisma.sql`
+  async findBestActiveForUser(
+    userId: string,
+    db: Prisma.TransactionClient = prisma,
+  ): Promise<GooglePlayEntitlementRow | null> {
+    const rows = await db.$queryRaw<GooglePlayEntitlementRow[]>(Prisma.sql`
       SELECT ${SELECT_COLUMNS}
       FROM "google_play_entitlements"
       WHERE "userId" = ${userId}
