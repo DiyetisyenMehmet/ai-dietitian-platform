@@ -7,6 +7,28 @@ import styles from "./mirmir-mascot.module.css";
 
 /** Existing transparent poses only. Video and synthetic body motion are retired. */
 export function MirmirMascot({ className }: { className?: string }) {
+  return (
+    <BlinkingMascot
+      identity="mirmir"
+      openSrc="/images/mascots/mirmir/still-a4.png"
+      closedSrc="/images/mascots/mirmir/eyes-closed.webp"
+      className={className}
+    />
+  );
+}
+
+/** The existing two-frame engine; uses only original matching poses. */
+export function BlinkingMascot({
+  identity,
+  openSrc,
+  closedSrc,
+  className,
+}: {
+  identity: string;
+  openSrc: string;
+  closedSrc: string;
+  className?: string;
+}) {
   const element = React.useRef<HTMLSpanElement>(null);
   const [visible, setVisible] = React.useState(false);
   const [inViewport, setInViewport] = React.useState(false);
@@ -50,11 +72,11 @@ export function MirmirMascot({ className }: { className?: string }) {
       ref={element}
       className={cn(styles.mascot, "size-14", className)}
       aria-hidden="true"
-      data-mascot="mirmir"
+      data-mascot={identity}
       data-blinking={blinking}
     >
       <Image
-        src="/images/mascots/mirmir/still-a4.png"
+        src={openSrc}
         alt=""
         width={512}
         height={512}
@@ -65,7 +87,7 @@ export function MirmirMascot({ className }: { className?: string }) {
         className={cn(styles.frame, styles.open)}
       />
       <Image
-        src="/images/mascots/mirmir/eyes-closed.webp"
+        src={closedSrc}
         alt=""
         width={512}
         height={512}

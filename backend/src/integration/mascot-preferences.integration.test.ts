@@ -5,7 +5,7 @@ import { createApp } from "../app";
 import { prisma } from "../lib/prisma";
 import { signAccessToken } from "../utils/jwt";
 import { accountService } from "../modules/account/account.service";
-import { mascotPreferencesSchema } from "../modules/account/account.schemas";
+import { mascotPreferencesSchema, MASCOT_IDS } from "../modules/account/account.schemas";
 
 test("pilot payload accepts only bounded visual preferences", () => {
   for (const input of [{ mascotId: "mirmir" }, { mascotId: "dost" }, { animationEnabled: false }])
@@ -79,6 +79,18 @@ test("two sessions share account preferences; different owners and layout remain
     mascotId: "classic",
     animationEnabled: true,
   });
+  // Every collection identity must pass the real database CHECK, API and readback.
+  for (const identity of MASCOT_IDS) {
+    assert.equal((await call(tokens[1], { mascotId: identity })).status, 200);
+    assert.deepEqual((await call(tokens[1])).body.data.preferences, {
+      mascotId: identity,
+      animationEnabled: true,
+    });
+    assert.deepEqual((await call(secondSession)).body.data.preferences, {
+      mascotId: "mirmir",
+      animationEnabled: true,
+    });
+  }
   // The new mascot persists through a separate session without changing owner A.
   assert.equal((await call(tokens[1], { mascotId: "dost" })).status, 200);
   const secondOwnerSession = signAccessToken({

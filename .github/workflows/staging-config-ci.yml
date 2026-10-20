@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/staging-preview
+      - feature/mascot-full-collection-a1
       - feature/app7-staging-release-optional-qa-a1
       - feature/mirmir-a4-direct-integration
       - feature/app7-coach-p2-safe-completion-a1

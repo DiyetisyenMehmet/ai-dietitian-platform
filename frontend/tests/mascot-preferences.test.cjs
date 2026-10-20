@@ -148,6 +148,20 @@ function fixture() {
 }
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
+test("every original collection identity normalizes without changing legacy preferences", () => {
+  const domain = moduleFrom("domain/account/mascot-preferences.ts");
+  assert.equal(domain.MASCOT_OPTIONS.length, 16);
+  for (const { id } of domain.MASCOT_OPTIONS) {
+    assert.deepEqual(
+      plain(domain.normalizeMascotPreferences({ mascotId: id, animationEnabled: false })),
+      {
+        mascotId: id,
+        animationEnabled: false,
+      },
+    );
+  }
+});
+
 test("Dost is a bounded identity; classic remains default and invalid ids fall back", () => {
   const domain = moduleFrom("domain/account/mascot-preferences.ts");
   assert.deepEqual(

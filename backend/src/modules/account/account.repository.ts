@@ -1,6 +1,7 @@
 import type { Prisma, AccountToken, AccountTokenType, User } from "@prisma/client";
 
 import { prisma } from "../../lib/prisma";
+import type { MascotPreferencesInput } from "./account.schemas";
 
 export interface AccountStorageRef {
   storageProvider: string;
@@ -21,7 +22,7 @@ export const accountRepository = {
     });
   },
 
-  upsertMascotPreferences(userId: string, input: { mascotId?: "classic" | "mirmir" | "dost"; animationEnabled?: boolean }) {
+  upsertMascotPreferences(userId: string, input: MascotPreferencesInput) {
     const data = {
       ...(input.mascotId !== undefined ? { mascotId: input.mascotId } : {}),
       ...(input.animationEnabled !== undefined ? { mascotAnimation: input.animationEnabled } : {}),

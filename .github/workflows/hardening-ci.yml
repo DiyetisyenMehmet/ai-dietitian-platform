@@ -9,6 +9,7 @@ on:
       - feature/mirmir-a4-direct-integration
       - feature/mirmir-final-animation-decision-a1
       - feature/mascot-dost-next-character-a1
+      - feature/mascot-full-collection-a1
       - feature/mascot-mirmir-pilot-a1
       - feature/mascot-mirmir-motion-a2
       - feature/admin2-staff-password-b2-close-a1

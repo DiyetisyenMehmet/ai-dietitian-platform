@@ -1,0 +1,313 @@
+{
+  "archiveSha256": "6bf16b6c2f402594807299a8eff8ad59c84dd3ccce2565aeeb3bc6e557f4882c",
+  "sourcePngCount": 18,
+  "originalCharacterCount": 15,
+  "legacyClassicRetained": true,
+  "descriptiveLabels": [
+    "yesil-damla",
+    "minik-bulut"
+  ],
+  "missingFromArchive": [
+    "Pofi dinosaur reference",
+    "Mini Dino reference"
+  ],
+  "sourceImagesChanged": false,
+  "characters": [
+    {
+      "id": "diewish-robot",
+      "label": "Diewish Robot",
+      "sourceFiles": [
+        "file_00000000a6708210ae66430aed635189.png"
+      ],
+      "sourceSha256": [
+        "9b58bde69972197d4f336ca57ebd4a5e5563757c6a93fd41467c32acd6a30a31"
+      ],
+      "frames": [
+        {
+          "path": "frontend/public/images/mascots/diewish-robot/still.webp",
+          "bytes": 131360,
+          "sha256": "e438f202b255aecf5588a83785d5841c01f4ef98e6b2fefcbd54500e4f31199e",
+          "transparentPixels": 143642
+        }
+      ],
+      "animation": "static original pose"
+    },
+    {
+      "id": "minis",
+      "label": "Miniş",
+      "sourceFiles": [
+        "file_00000000890c82109efb2f3269725fab.png"
+      ],
+      "sourceSha256": [
+        "badd7889b581d92ce69046e18b37eb987128e8411c23c35cb9d6006c25ee5cf3"
+      ],
+      "frames": [
+        {
+          "path": "frontend/public/images/mascots/minis/still.webp",
+          "bytes": 125252,
+          "sha256": "120c63469d98301d9cedb71990c29ee6be3a6232409e9eb06998b416c721106f",
+          "transparentPixels": 155607
+        }
+      ],
+      "animation": "static original pose"
+    },
+    {
+      "id": "bilge",
+      "label": "Bilge",
+      "sourceFiles": [
+        "file_0000000077c08246b5b48ad6a43e9372.png"
+      ],
+      "sourceSha256": [
+        "238adaa0bf054cc5384dc8204a278aa795d3707d0d9af6a8e2d200fbb874cf14"
+      ],
+      "frames": [
+        {
+          "path": "frontend/public/images/mascots/bilge/still.webp",
+          "bytes": 192128,
+          "sha256": "3ab5461734b4f84245dea3e355951b2869977e0f92aab921f0059e6e2bbcd356",
+          "transparentPixels": 112665
+        }
+      ],
+      "animation": "static original pose"
+    },
+    {
+      "id": "enerjik",
+      "label": "Enerjik",
+      "sourceFiles": [
+        "file_0000000090f48211b2e11b5ba20fb481.png"
+      ],
+      "sourceSha256": [
+        "8b1695fa2cae9db34dd3db6adcce9c3faecdddaecd677b605dfd04ca6945ad9f"
+      ],
+      "frames": [
+        {
+          "path": "frontend/public/images/mascots/enerjik/still.webp",
+          "bytes": 163778,
+          "sha256": "772c3f7752a64de613cfe5310d6f91a7f249a12c95fb4f4fb310e498ff2d355f",
+          "transparentPixels": 149261
+        }
+      ],
+      "animation": "static original pose"
+    },
+    {
+      "id": "lina",
+      "label": "Lina",
+      "sourceFiles": [
+        "file_00000000d9048210972dec14aca4624d.png",
+        "file_000000004d8c81f49fef462ab45e3594.png"
+      ],
+      "sourceSha256": [
+        "b8428d247b079af81dd0df9f4b1ce51afa28e0627cd98326795c35d8a4ce6be0",
+        "caf4603b2093448f94e35e0ccc9739e401cc4a181e1d05e79a3dfdecbcdf0624"
+      ],
+      "frames": [
+        {
+          "path": "frontend/public/images/mascots/lina/still.webp",
+          "bytes": 161486,
+          "sha256": "6ee78cba0f3fc7a318822b7e98ca27644161ae43569d2b3606d6875175e6c092",
+          "transparentPixels": 121229
+        },
+        {
+          "path": "frontend/public/images/mascots/lina/eyes-closed.webp",
+          "bytes": 163180,
+          "sha256": "fa01640f1ee329cc20a625d20792700bf8d7dd3dfae514ec16b84aa13ef0f5ce",
+          "transparentPixels": 120791
+        }
+      ],
+      "animation": "original blink pair"
+    },
+    {
+      "id": "bulut",
+      "label": "Bulut",
+      "sourceFiles": [
+        "file_00000000031481f49d1222c9e98507df.png",
+        "file_0000000022e0821092db0d8392fd8a18.png"
+      ],
+      "sourceSha256": [
+        "3bf4095955f45091c9f96e5004834dd163efd46ef28a5424ed348e50f3bed14d",
+        "87736d9ff96aad58c74bbfe109694a4c7b922904169ac56b31b5fd4e120d9b5c"
+      ],
+      "frames": [
+        {
+          "path": "frontend/public/images/mascots/bulut/still.webp",
+          "bytes": 108336,
+          "sha256": "a0d037a234e23397e249a9bb85187f2383b1ecc4897bffb91fe6bfcbda2e87c4",
+          "transparentPixels": 148429
+        },
+        {
+          "path": "frontend/public/images/mascots/bulut/eyes-closed.webp",
+          "bytes": 104794,
+          "sha256": "908ec52ca52e3d60a2adb1c8a9b190f10b3ffa0e89a538593892bfa5bf2b7274",
+          "transparentPixels": 150876
+        }
+      ],
+      "animation": "original blink pair"
+    },
+    {
+      "id": "yesil-damla",
+      "label": "Yeşil Damla",
+      "sourceFiles": [
+        "file_00000000ec088210bff54814dec732ca.png"
+      ],
+      "sourceSha256": [
+        "4fcb1cb7dcce7d304b6d2f97f50f390a2665d995fe92c6cce5302f174ca336b1"
+      ],
+      "frames": [
+        {
+          "path": "frontend/public/images/mascots/yesil-damla/still.webp",
+          "bytes": 122538,
+          "sha256": "7975be605f17348bdb2c3371bc4321e2c4fa11f5aed3e162a8fc52d6c281b9e2",
+          "transparentPixels": 118860
+        }
+      ],
+      "animation": "static original pose"
+    },
+    {
+      "id": "minik-bulut",
+      "label": "Minik Bulut",
+      "sourceFiles": [
+        "file_00000000b60081f483c62d9dfcbf325b.png"
+      ],
+      "sourceSha256": [
+        "bdc0706490eb01ff693b435b3b89f0205f615391ff862dc1919ffc15d8bc2ede"
+      ],
+      "frames": [
+        {
+          "path": "frontend/public/images/mascots/minik-bulut/still.webp",
+          "bytes": 153080,
+          "sha256": "876412340ce44702095655a7955fbe7c93fdb2eac969d130623d4dffc2d0138b",
+          "transparentPixels": 107189
+        },
+        {
+          "path": "frontend/public/images/mascots/minik-bulut/eyes-closed.webp",
+          "bytes": 142136,
+          "sha256": "ffa88bb6b3cd8f7380359e1c167b9c840797b489cc139acce042ec01bd80ef50",
+          "transparentPixels": 114187
+        }
+      ],
+      "animation": "static original pose",
+      "note": "Both original sheet poses retained; second pose changes gestures, so no forced blink."
+    },
+    {
+      "id": "mirmir",
+      "label": "Mırmır",
+      "sourceFiles": [
+        "file_000000005a3881f4b83e3ffb65ea21b5.png",
+        "file_0000000078b0821084da22629ac2ddf4.png"
+      ],
+      "sourceSha256": [
+        "0b6ee9fe071c4748078f97893673b98a7e66cb072e677497fa8a4f4943ddf9fe",
+        "d963a9ba63c5d7629ea6fa9df23ffef7036fa41f85ce921d0a306927cf8ba99a"
+      ],
+      "frames": [],
+      "retainedExistingAssets": true
+    },
+    {
+      "id": "dost",
+      "label": "Dost",
+      "sourceFiles": [
+        "file_000000006fd08246914408e28b7c792b.png"
+      ],
+      "sourceSha256": [
+        "94fd65f8b9158455d631833bd75f707c267cc3c8d811368d95692e481312bd8c"
+      ],
+      "frames": [],
+      "retainedExistingAssets": true
+    },
+    {
+      "id": "nox",
+      "label": "Nox",
+      "sourceFiles": [
+        "diewish-mascot-10-nox.png"
+      ],
+      "sourceSha256": [
+        "4e89bf2cdae9b79886ae647ca2e9e8529426f22d392a83923f7e0f85c7410fa5"
+      ],
+      "frames": [
+        {
+          "path": "frontend/public/images/mascots/nox/still.webp",
+          "bytes": 123660,
+          "sha256": "0c4d73df6af4edfb1f41d22e5a646e727964e8667b7be176942fb76f347ed00f",
+          "transparentPixels": 166468
+        }
+      ],
+      "animation": "static original pose"
+    },
+    {
+      "id": "fit",
+      "label": "Fit",
+      "sourceFiles": [
+        "file_00000000148c81f49b2b5dfbb8f5f1a8.png"
+      ],
+      "sourceSha256": [
+        "e2d569354271be3b21e0037bd83d72d40d2b6d33775a094f9689233ee460d317"
+      ],
+      "frames": [
+        {
+          "path": "frontend/public/images/mascots/fit/still.webp",
+          "bytes": 91036,
+          "sha256": "2a92c4587b5bfaba9f8ed493d8e65c3e3898d78dd7f22a57e44250a855943ce7",
+          "transparentPixels": 202271
+        }
+      ],
+      "animation": "static original pose"
+    },
+    {
+      "id": "guclu",
+      "label": "Güçlü",
+      "sourceFiles": [
+        "file_00000000a47481f4b11a330c824d2eab.png"
+      ],
+      "sourceSha256": [
+        "80c0c40bfa42405c181ca58b46fbbc25bee7d9aa00e31a6dae4c1c03a35a0194"
+      ],
+      "frames": [
+        {
+          "path": "frontend/public/images/mascots/guclu/still.webp",
+          "bytes": 134262,
+          "sha256": "9830e176707a467cb1400da00123626ca19a2c5aeab8faed44c6a7308cc52d6f",
+          "transparentPixels": 155871
+        }
+      ],
+      "animation": "static original pose"
+    },
+    {
+      "id": "tombis",
+      "label": "Tombiş",
+      "sourceFiles": [
+        "diewish-mascot-10-tombis (1).png"
+      ],
+      "sourceSha256": [
+        "261fd0a9a3bed79fc1404505af614c71add6b698778be1bb55e4a97043d86ac4"
+      ],
+      "frames": [
+        {
+          "path": "frontend/public/images/mascots/tombis/still.webp",
+          "bytes": 140064,
+          "sha256": "e1919837245dc867f6f59d0b2fbb5ba6c258d413774df7bfa0bd0f5799731bc9",
+          "transparentPixels": 142672
+        }
+      ],
+      "animation": "static original pose"
+    },
+    {
+      "id": "mini-robot",
+      "label": "Mini Robot",
+      "sourceFiles": [
+        "file_00000000cb1881f48b06d1e32b225795.png"
+      ],
+      "sourceSha256": [
+        "f8ba3e47e3dc1eb4aac49a9f349940291e1356d69748c2a854a37e37e2796c4f"
+      ],
+      "frames": [
+        {
+          "path": "frontend/public/images/mascots/mini-robot/still.webp",
+          "bytes": 156076,
+          "sha256": "e93e588b3edd619426bf9363cb10ce0d1ee288fbdbca1cc43b586a225c5e803b",
+          "transparentPixels": 135481
+        }
+      ],
+      "animation": "static original pose"
+    }
+  ]
+}

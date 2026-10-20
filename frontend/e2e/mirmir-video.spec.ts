@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { MASCOT_OPTIONS } from "../src/domain/account/mascot-preferences";
 
 const VIDEO = "/images/mascots/mirmir/approved-a4.mp4";
 const mascot = (page: Page) => page.locator('[data-dashboard-coach-banner] [data-mascot="mirmir"]');
@@ -196,7 +197,7 @@ test("failed closed-eye asset keeps the existing transparent PNG still", async (
   await expect(m.locator("video")).toHaveCount(0);
 });
 
-for (const character of ["mirmir", "dost"] as const) {
+for (const { id: character } of MASCOT_OPTIONS.filter((option) => option.id !== "classic")) {
   test(`${character} poses stay inside the banner without text overlap in mobile/desktop light/dark`, async ({
     page,
   }, info) => {
@@ -207,7 +208,10 @@ for (const character of ["mirmir", "dost"] as const) {
     for (const width of [390, 412, 430, 1280]) {
       await page.setViewportSize({ width, height: 844 });
       await banner.scrollIntoViewIfNeeded();
-      await expect(m).toHaveAttribute("data-blinking", String(character === "mirmir"));
+      await expect(m).toHaveAttribute(
+        "data-blinking",
+        String(["mirmir", "lina", "bulut"].includes(character)),
+      );
       // The dashboard enters with a 300 ms translateY animation. Wait for finite
       // ancestor motion/fonts, then compare banner-relative coordinates: scrolling
       // or the parent's entry motion is not movement of the mascot inside its card.
@@ -283,7 +287,7 @@ for (const legacyValue of [true, false]) {
       if (r.url().includes(VIDEO)) videos.push(r.url());
     });
     await page.goto("/profile/mascot");
-    await expect(page.getByRole("radio")).toHaveCount(3);
+    await expect(page.getByRole("radio")).toHaveCount(MASCOT_OPTIONS.length);
     await expect(page.getByRole("switch")).toHaveCount(0);
     await expect(page.getByRole("checkbox")).toHaveCount(0);
     await page.getByRole("radio", { name: "Dost", exact: true }).click();
@@ -323,3 +327,43 @@ for (const legacyValue of [true, false]) {
     expect(videos).toEqual([]);
   });
 }
+
+test("all collection choices save only identity and remain usable in mobile light/dark", async ({
+  page,
+}, info) => {
+  test.setTimeout(120_000);
+  const writes = await setup(page, "classic", false);
+  await page.goto("/profile/mascot");
+  for (const width of [390, 412, 430, 1280]) {
+    await page.setViewportSize({ width, height: 844 });
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate((theme) => {
+        document.documentElement.classList.remove("light", "dark");
+        document.documentElement.classList.add(theme);
+      }, theme);
+      await expect(page.getByRole("radio")).toHaveCount(MASCOT_OPTIONS.length);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+      );
+      await page.getByRole("radio").first().scrollIntoViewIfNeeded();
+      await page.screenshot({ path: info.outputPath(`collection-choice-${width}-${theme}.png`) });
+    }
+  }
+  const selected = MASCOT_OPTIONS.filter((option) => option.id !== "classic");
+  for (const { id, name } of selected) {
+    await page.getByRole("radio", { name, exact: true }).click();
+    await expect(page.getByRole("radio", { name, exact: true })).toBeChecked();
+    await page.reload();
+    await expect(page.getByRole("radio", { name, exact: true })).toBeChecked();
+    await page.goto("/dashboard");
+    const mascot = page.locator(`[data-dashboard-coach-banner] [data-mascot="${id}"]`);
+    await mascot.scrollIntoViewIfNeeded();
+    await expect(mascot.locator("img").first()).toHaveJSProperty("naturalWidth", 512);
+    await page.goto("/ai");
+    await expect(page.locator(`header [data-mascot="${id}"]`)).toBeVisible();
+    await page.goto("/profile/mascot");
+  }
+  expect(writes.map((write) => write.body)).toEqual(selected.map(({ id }) => ({ mascotId: id })));
+  await expect(page.getByRole("checkbox")).toHaveCount(0);
+  await expect(page.getByRole("switch")).toHaveCount(0);
+});
