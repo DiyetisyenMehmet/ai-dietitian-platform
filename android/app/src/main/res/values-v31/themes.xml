@@ -2,13 +2,14 @@
 <resources>
     <style name="Theme.Diewish" parent="android:style/Theme.Material.Light.NoActionBar">
         <item name="android:fontFamily">sans</item>
+        <item name="android:windowBackground">@drawable/diewish_launch_background</item>
         <item name="android:windowActionModeOverlay">true</item>
         <item name="android:colorAccent">@color/diewish_primary</item>
         <item name="android:navigationBarColor">@color/diewish_background</item>
         <item name="android:statusBarColor">@color/diewish_background</item>
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:windowLightNavigationBar">true</item>
-        <!-- Use the original approved raster, not the small launcher thumbnail. -->
+        <!-- Same rounded approved artwork as the first WebView loading cover. -->
         <item name="android:windowSplashScreenBackground">@color/diewish_background</item>
         <item name="android:windowSplashScreenAnimatedIcon">@drawable/diewish_splash_icon</item>
     </style>

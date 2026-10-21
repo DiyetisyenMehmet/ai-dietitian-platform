@@ -53,7 +53,7 @@ jobs:
         run: npx playwright test --config=playwright.auth-brand-header.config.ts --reporter=line
       - name: Verify artwork, traffic routing and auth behavior source are unchanged
         working-directory: .
-        run: git diff --exit-code d70832dfcce9ff4173a8f8dc470e5bde0f137d9f HEAD -- frontend/public/brands backend android frontend/next.config.ts frontend/src/app frontend/src/infrastructure frontend/src/application frontend/src/presentation/components/auth
+        run: git diff --exit-code "${{ github.event.pull_request.base.sha }}" HEAD -- frontend/public/brands backend frontend/next.config.ts frontend/src/app frontend/src/infrastructure frontend/src/application frontend/src/presentation/components/auth
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -10,6 +10,7 @@ import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Build;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.PermissionRequest;
@@ -17,10 +18,12 @@ import android.webkit.SslErrorHandler;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceError;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
+import android.view.View;
 
 import androidx.core.graphics.Insets;
 import androidx.activity.ComponentActivity;
@@ -76,6 +79,7 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
     private WebView webView;
     private DiewishGoogleAuthBridge googleAuthBridge;
     private FrameLayout rootView;
+    private View launchCover;
     private BillingClient billingClient;
     private boolean billingReady = false;
     private ValueCallback<Uri[]> filePathCallback;
@@ -92,6 +96,12 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            // Hand off to the identical in-window artwork without a second
+            // system icon animation or an artificial minimum splash duration.
+            getSplashScreen().setOnExitAnimationListener(splash -> splash.remove());
+        }
 
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
 
@@ -123,6 +133,13 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
                 FrameLayout.LayoutParams.MATCH_PARENT
             )
         );
+
+        launchCover = new View(this);
+        launchCover.setBackgroundResource(R.drawable.diewish_launch_background);
+        launchCover.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        rootView.addView(launchCover, new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT
+        ));
 
         ViewCompat.setOnApplyWindowInsetsListener(rootView, (view, windowInsets) -> {
             int handledInsets = WindowInsetsCompat.Type.systemBars()
@@ -249,6 +266,12 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
             .setAppearanceLightStatusBars(!dark);
         WindowCompat.getInsetsController(getWindow(), webView)
             .setAppearanceLightNavigationBars(!dark);
+    }
+
+    private void dismissLaunchCover() {
+        if (launchCover == null) return;
+        rootView.removeView(launchCover);
+        launchCover = null;
     }
 
     public final class SystemUiBridge {
@@ -780,11 +803,26 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
             android.net.http.SslError error
         ) {
             handler.cancel();
+            dismissLaunchCover();
+        }
+
+        @Override
+        public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+            super.onReceivedError(view, request, error);
+            // Do not obscure WebView's existing main-frame connection error.
+            if (request.isForMainFrame()) dismissLaunchCover();
         }
 
         @Override
         public void onPageFinished(WebView view, String url) {
             super.onPageFinished(view, url);
+            if (launchCover != null) {
+                // Page-finished alone does not guarantee a painted DOM. Wait
+                // for its visual state, never a timer or an auth/session result.
+                view.postVisualStateCallback(0, new WebView.VisualStateCallback() {
+                    @Override public void onComplete(long requestId) { dismissLaunchCover(); }
+                });
+            }
             updateTrustedPageState(url);
             if (isTrustedPage()) {
                 view.evaluateJavascript(

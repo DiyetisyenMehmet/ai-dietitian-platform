@@ -148,11 +148,11 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
       await expect(splash).toBeVisible();
       await expect(splash).toHaveAttribute("role", "status");
       await expect(splash.locator("svg, .animate-spin")).toHaveCount(0);
-      const icon = splash.locator('img[src="/brands/diewish-id-original.jpg"]');
+      const icon = splash.locator('img[src="/brands/diewish-id-approved.webp"]');
       await expect
         .poll(() => icon.evaluate((element) => (element as HTMLImageElement).naturalWidth))
-        .toBe(1536);
-      expect(await icon.evaluate((element) => element.getBoundingClientRect().width)).toBe(144);
+        .toBe(192);
+      expect(await icon.evaluate((element) => element.getBoundingClientRect().width)).toBe(44);
       expect(await icon.evaluate((element) => getComputedStyle(element).animationName)).toBe(
         "none",
       );

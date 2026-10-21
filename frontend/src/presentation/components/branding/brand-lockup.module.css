@@ -49,6 +49,27 @@
   grid-row: 1;
 }
 
+.auth[data-artwork-state="loading"] {
+  visibility: hidden;
+}
+
+.auth [data-brand-fallback] {
+  display: none;
+}
+
+.auth[data-artwork-state="fallback"] img {
+  visibility: hidden;
+}
+
+.auth[data-artwork-state="fallback"] [data-brand-fallback] {
+  display: block;
+  grid-column: 2;
+  grid-row: 1;
+  align-self: center;
+  font-size: 24px;
+  font-weight: 700;
+}
+
 .auth .wordmark {
   display: contents;
 }

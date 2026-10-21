@@ -2,4 +2,5 @@
 <resources>
     <color name="diewish_primary">#1DAE82</color>
     <color name="diewish_background">#FFFFFF</color>
+    <color name="diewish_launch_background">#FFFFFF</color>
 </resources>
