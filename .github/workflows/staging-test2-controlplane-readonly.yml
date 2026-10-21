@@ -74,6 +74,20 @@ jobs:
                           'revisions':[revision_data(x) for x in revisions]}
           new=gcloud('secrets','describe','diewish-staging-test2-database-url')
           out['dedicatedTest2SecretExists']=bool(new)
+          if new:
+              versions=gcloud('secrets','versions','list','--secret','diewish-staging-test2-database-url')
+              out['test2SecretVersions']=({'status':'METADATA_OK','versions':[
+                  {'version':v.get('name','').rsplit('/',1)[-1],'state':v.get('state')}
+                  for v in versions]} if isinstance(versions,list) else {'status':'METADATA_UNAVAILABLE'})
+              policy=gcloud('secrets','get-iam-policy','diewish-staging-test2-database-url')
+              runtime='serviceAccount:diewish-staging-runtime@'+PROJECT+'.iam.gserviceaccount.com'
+              if isinstance(policy,dict):
+                  direct=any(x.get('role')=='roles/secretmanager.secretAccessor' and
+                             runtime in x.get('members',[]) and not x.get('condition')
+                             for x in policy.get('bindings',[]))
+                  out['test2SecretRuntimeAccessor']={'directBinding':direct,'inheritedBinding':'NOT_CHECKED'}
+              else:
+                  out['test2SecretRuntimeAccessor']={'status':'IAM_METADATA_UNAVAILABLE'}
           jobs=gcloud('scheduler','jobs','list','--location',REGION)
           out['schedulerStates']=([{'name':j.get('name','').rsplit('/',1)[-1],'state':j.get('state')} for j in jobs
                                    if j.get('name','').rsplit('/',1)[-1].startswith('diewish')] if isinstance(jobs,list)
