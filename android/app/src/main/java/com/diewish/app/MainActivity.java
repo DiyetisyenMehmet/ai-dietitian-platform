@@ -8,6 +8,8 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.LayerDrawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Build;
@@ -260,6 +262,12 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
     private void applySystemBarTheme(boolean dark) {
         int background = dark ? Color.rgb(15, 20, 18) : Color.WHITE;
         if (rootView != null) rootView.setBackgroundColor(background);
+        if (launchCover != null && launchCover.getBackground() instanceof LayerDrawable) {
+            // The app's saved theme can differ from the device's launch theme.
+            // Recolor only the surface; retain the same approved icon throughout.
+            LayerDrawable layers = (LayerDrawable) launchCover.getBackground().mutate();
+            layers.setDrawableByLayerId(R.id.diewish_launch_surface, new ColorDrawable(background));
+        }
         getWindow().setStatusBarColor(Color.TRANSPARENT);
         getWindow().setNavigationBarColor(Color.TRANSPARENT);
         // The root paints the inset regions on edge-to-edge Android versions.

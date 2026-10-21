@@ -15,7 +15,9 @@ replaced by a compact login header.
   `python scripts/branding/generate_launch_icon.py` (development-only Pillow).
 - Legacy starting windows and the in-window loading cover share the Android 12+
   splash artwork, size and light/dark surface. No timer, extra native animation,
-  new Activity, credential or auth condition is introduced.
+  new Activity, credential or auth condition is introduced. The existing web
+  theme callback recolors only the cover's surface, preserving its icon when a
+  saved app theme differs from the device theme.
 - A presentation-only ready signal on the existing origin-checked system-UI
   bridge removes the native cover after WebView's visual state callback. A short-
   lived DOM observer keeps that single composition over the existing RouteGuard
@@ -45,7 +47,7 @@ corners, first-frame dismissal, main-frame error recovery and dark surface.
 The existing session-cookie host checks are relevant because MainActivity's
 startup callback changed. No real account, SMS, health record or backend is used.
 
-The API 33 emulator harness runs the real MainActivity with the actual locally
+The API 33 Pixel 7 emulator harness runs the real MainActivity with the actual locally
 built frontend, in separate fresh light/dark app processes. The recording is a
 controlled visual test with a held guest reply, not a launch-time benchmark.
 Test-only WebView interception serves that

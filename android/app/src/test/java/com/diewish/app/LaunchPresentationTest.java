@@ -147,6 +147,21 @@ public final class LaunchPresentationTest {
         assertNotNull(resources.getDrawable(R.drawable.diewish_launch_background, null));
     }
 
+    @Test @Config(qualifiers = "night") public void savedLightAppThemeRecolorsTheCoverWithoutRemovingItsArtwork() {
+        var host = Robolectric.buildActivity(MainActivity.class).setup();
+        try {
+            MainActivity activity = host.get();
+            activity.new SystemUiBridge().setDarkTheme(false);
+            shadowOf(android.os.Looper.getMainLooper()).idle();
+            View cover = ReflectionHelpers.getField(activity, "launchCover");
+            var layers = (android.graphics.drawable.LayerDrawable) cover.getBackground();
+            var surface = (android.graphics.drawable.ColorDrawable) layers.findDrawableByLayerId(R.id.diewish_launch_surface);
+            assertEquals(Color.WHITE, surface.getColor());
+            assertEquals(2, layers.getNumberOfLayers());
+            assertTrue(layers.getDrawable(1) instanceof android.graphics.drawable.InsetDrawable);
+        } finally { host.pause().stop().destroy(); }
+    }
+
     @Test @Config(qualifiers = "night") public void darkLaunchUsesTheExistingDarkSurface() {
         var resources = org.robolectric.RuntimeEnvironment.getApplication().getResources();
         assertEquals(Color.rgb(15, 20, 18), resources.getColor(R.color.diewish_launch_background, null));
