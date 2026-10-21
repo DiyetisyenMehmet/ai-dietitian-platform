@@ -1,0 +1,79 @@
+name: Staging Test 2 host routing checks
+on:
+  pull_request:
+    branches: [feature/staging-preview]
+    types: [opened, synchronize, reopened, labeled]
+    paths:
+      - frontend/src/middleware.ts
+      - frontend/src/infrastructure/api/staging-host-routing.ts
+      - frontend/tests/staging-host-routing*
+      - scripts/staging-test2-routing-preflight*
+      - .github/workflows/staging-test2-host-routing.yml
+      - docs/staging-test2-host-routing.md
+permissions:
+  contents: read
+concurrency:
+  group: test2-host-routing-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+jobs:
+  targeted:
+    if: ${{ github.event.action != 'labeled' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+      NEXT_PUBLIC_API_BASE_URL: /api
+      NEXT_PUBLIC_SITE_URL: https://staging.diewish.com
+      # Deliberately unusable fallback proves enabled middleware handles all API requests.
+      DIEWISH_API_PROXY_TARGET: https://invalid-legacy-fallback.invalid
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+        working-directory: frontend
+      - run: python3 scripts/staging-test2-routing-preflight.test.py
+      - run: node --test tests/staging-host-routing.test.cjs
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend
+      - run: node --test tests/staging-host-routing.transport.cjs
+        working-directory: frontend
+  readonly-preflight:
+    # Explicit owner opt-in only; no automatic OIDC on ordinary/untrusted PR runs.
+    if: >-
+      ${{ github.event.action == 'labeled' && github.event.label.name == 'test2-routing-readonly' &&
+          github.actor == 'DiyetisyenMehmet' && github.repository == 'DiyetisyenMehmet/ai-dietitian-platform' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          github.event.pull_request.head.ref == 'feature/app10-test2-host-routing-a1' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: staging
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Replace only with the reviewed immutable preflight source; never PR HEAD.
+          ref: d20dcf2a8cd441ea5be95365b51ed90ff03ae294
+          persist-credentials: false
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/730419163638/locations/global/workloadIdentityPools/github-actions/providers/diewish-staging
+          service_account: diewish-staging-deployer@project-a2e260c1-839d-4f1d-b90.iam.gserviceaccount.com
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: project-a2e260c1-839d-4f1d-b90
+      - name: Read selected metadata only; never access secrets or change infrastructure
+        run: python3 scripts/staging-test2-routing-preflight.py > "$RUNNER_TEMP/test2-routing-preflight.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: test2-routing-readonly-preflight
+          path: ${{ runner.temp }}/test2-routing-preflight.json
+          retention-days: 7
