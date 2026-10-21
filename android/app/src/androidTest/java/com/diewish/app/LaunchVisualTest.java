@@ -28,6 +28,7 @@ public final class LaunchVisualTest {
     private SSLSocketFactory fixtureTls;
     private WebView web;
     private MainActivity activity;
+    private final List<String> trace = Collections.synchronizedList(new ArrayList<>());
 
     @Test public void lightLaunch() throws Exception { run("light"); }
     @Test public void darkLaunch() throws Exception { run("dark"); }
@@ -75,16 +76,30 @@ public final class LaunchVisualTest {
                             return new WebResourceResponse(mime == null ? "application/octet-stream" : mime.split(";")[0], "UTF-8", code, code < 400 ? "OK" : "Unauthorized", headers, new ByteArrayInputStream(bytes));
                         } catch (Exception error) { throw new AssertionError("Local fixture failed", error); }
                     }
-                    @Override public void onPageStarted(WebView v, String url, Bitmap icon) { original.onPageStarted(v, url, icon); }
-                    @Override public void onPageFinished(WebView v, String url) { original.onPageFinished(v, url); }
-                    @Override public void onReceivedError(WebView v, WebResourceRequest r, android.webkit.WebResourceError e) { original.onReceivedError(v, r, e); }
-                    @Override public void onReceivedSslError(WebView v, android.webkit.SslErrorHandler h, android.net.http.SslError e) { original.onReceivedSslError(v, h, e); }
+                    private boolean preFixture(String url) {
+                        // The deliberately blocked request created before our
+                        // interceptor was installed is canceled by the test.
+                        return (BuildConfig.WEB_BASE_URL + "/dashboard").equals(url);
+                    }
+                    @Override public void onPageStarted(WebView v, String url, Bitmap icon) {
+                        trace.add("started " + Uri.parse(url).getPath() + " preFixture=" + preFixture(url));
+                        if (!preFixture(url)) original.onPageStarted(v, url, icon);
+                    }
+                    @Override public void onPageFinished(WebView v, String url) {
+                        trace.add("finished " + Uri.parse(url).getPath() + " preFixture=" + preFixture(url));
+                        if (!preFixture(url)) original.onPageFinished(v, url);
+                    }
+                    @Override public void onReceivedError(WebView v, WebResourceRequest r, android.webkit.WebResourceError e) {
+                        trace.add("error main=" + r.isForMainFrame() + " code=" + e.getErrorCode() + " preFixture=" + preFixture(r.getUrl().toString()));
+                        if (!preFixture(r.getUrl().toString())) original.onReceivedError(v, r, e);
+                    }
+                    @Override public void onReceivedSslError(WebView v, android.webkit.SslErrorHandler h, android.net.http.SslError e) { trace.add("ssl error=" + e.getPrimaryError()); original.onReceivedSslError(v, h, e); }
                     @Override public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest r) { return original.shouldOverrideUrlLoading(v, r); }
                 });
             });
             assertNotNull(field("launchCover").get(activity));
             screenshot(theme + "-native-cover");
-            scenario.onActivity(host -> web.loadUrl(BuildConfig.WEB_BASE_URL + "/dashboard"));
+            scenario.onActivity(host -> web.loadUrl(BuildConfig.WEB_BASE_URL + "/dashboard?launchVisualFixture=1"));
             await("document.querySelector('[data-artwork-state=ready]') !== null");
             await("document.querySelector('[data-testid=diewish-brand-splash]') !== null");
             assertNotNull("Keep one native composition while guest routing is unresolved", field("launchCover").get(activity));
@@ -100,6 +115,16 @@ public final class LaunchVisualTest {
             await("document.getAnimations().every(a => a.playState === 'finished')");
             assertEquals("true", evaluate("innerWidth >= 390 && innerWidth <= 430"));
             screenshot(theme + "-login");
+        } finally { saveTrace(theme); }
+    }
+
+    private void saveTrace(String theme) throws Exception {
+        File folder = new File(InstrumentationRegistry.getInstrumentation().getTargetContext().getExternalFilesDir(null), "launch-evidence");
+        folder.mkdirs();
+        try (FileOutputStream out = new FileOutputStream(new File(folder, theme + "-fixture-lifecycle.txt"))) {
+            String events;
+            synchronized (trace) { events = String.join("\n", trace); }
+            out.write(events.getBytes(java.nio.charset.StandardCharsets.UTF_8));
         }
     }
 

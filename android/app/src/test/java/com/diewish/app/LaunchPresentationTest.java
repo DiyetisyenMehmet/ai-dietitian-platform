@@ -75,6 +75,17 @@ public final class LaunchPresentationTest {
         } finally { host.pause().stop().destroy(); }
     }
 
+    @Test public void initialBlankFinishCannotRemoveTheNativeComposition() {
+        var host = Robolectric.buildActivity(MainActivity.class).setup();
+        try {
+            MainActivity activity = host.get();
+            WebView view = ReflectionHelpers.getField(activity, "webView");
+            shadowOf(view).getWebViewClient().onPageFinished(view, "about:blank");
+            assertNull(VisualWebView.pending);
+            assertNotNull(ReflectionHelpers.getField(activity, "launchCover"));
+        } finally { host.pause().stop().destroy(); }
+    }
+
     @Test public void pageFinishedDoesNotRevealAnUndecodedModernHeader() {
         var host = Robolectric.buildActivity(MainActivity.class).setup();
         try {

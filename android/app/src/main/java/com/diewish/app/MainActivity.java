@@ -270,7 +270,9 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
     }
 
     private static final String LAUNCH_DOM_READY =
-        "!document.querySelector('[data-testid=diewish-brand-splash]')"
+        "location.origin===" + JSONObject.quote(BuildConfig.WEB_BASE_URL)
+            + "&&document.readyState!=='loading'&&document.body&&document.body.childElementCount>0"
+            + "&&!document.querySelector('[data-testid=diewish-brand-splash]')"
             + "&& !document.querySelector('[data-artwork-state=loading]')";
 
     private void requestLaunchCoverDismissal() {
@@ -862,7 +864,7 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
             updateTrustedPageState(url);
             if (launchCover != null) {
                 if (isTrustedPage()) watchLaunchPresentation(view);
-                else dismissLaunchCover();
+                // Initial about:blank/stale finishes are not an app frame.
             }
             if (isTrustedPage()) {
                 view.evaluateJavascript(

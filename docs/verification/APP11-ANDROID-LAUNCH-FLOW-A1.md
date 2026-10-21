@@ -51,7 +51,10 @@ controlled visual test with a held guest reply, not a launch-time benchmark.
 Test-only WebView interception serves that
 frontend from a local TLS fixture with a pinned job certificate and normal
 hostname verification; all account API replies are synthetic guests. A sink proxy
-prevents the initial pre-interception navigation from reaching staging. Native
+prevents the initial pre-interception navigation from reaching staging; only
+that deliberately canceled pre-fixture request's callbacks are excluded from
+the test. All real fixture navigation/error callbacks still go through the
+original client, including SSL rejection. Native
 SSL rejection and trusted-origin checks are unchanged. Ephemeral test packages
 are installed only in the fresh emulator, never uploaded or distributed.
 
