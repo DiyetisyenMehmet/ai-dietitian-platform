@@ -163,6 +163,18 @@ public final class LaunchPresentationTest {
         assertEquals("Decorative icon insets must not shrink WebView content", new Rect(), padding);
     }
 
+    @Test public void destroyingActivityReleasesAnyRetainedSystemSplash() {
+        var host = Robolectric.buildActivity(MainActivity.class).setup();
+        MainActivity activity = host.get();
+        var released = new java.util.concurrent.atomic.AtomicBoolean();
+        ReflectionHelpers.setField(activity, "systemLaunchSplash", new View(activity));
+        ReflectionHelpers.setField(activity, "removeSystemLaunchSplash", (Runnable) () -> released.set(true));
+        host.pause().stop().destroy();
+        assertTrue(released.get());
+        assertNull(ReflectionHelpers.getField(activity, "systemLaunchSplash"));
+        assertNull(ReflectionHelpers.getField(activity, "removeSystemLaunchSplash"));
+    }
+
     @Test @Config(qualifiers = "night") public void savedLightAppThemeRecolorsTheCoverWithoutRemovingItsArtwork() {
         var host = Robolectric.buildActivity(MainActivity.class).setup();
         try {

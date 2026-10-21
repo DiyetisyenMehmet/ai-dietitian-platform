@@ -13,11 +13,15 @@ replaced by a compact login header.
 - Native splash uses a deterministic rounded alpha mask of the approved source
   JPEG. The original source and launcher artwork are untouched. Reproduction:
   `python scripts/branding/generate_launch_icon.py` (development-only Pillow).
-- Legacy starting windows and the in-window loading cover share the Android 12+
-  splash artwork, size and light/dark surface. No timer, extra native animation,
+- Android 12+ retains the actual system splash until the final web frame, avoiding
+  a second icon at the platform's different scale. Legacy starting windows and
+  the in-window fallback use the same approved artwork and light/dark surface.
+  No timer, extra native animation,
   new Activity, credential or auth condition is introduced. The existing web
   theme callback recolors only the cover's surface, preserving its icon when a
   saved app theme differs from the device theme.
+  The retained system splash follows that same surface callback and is released
+  on the ready frame, main-frame failure or Activity destruction.
   Android 13+ explicitly prefers the branded system icon even for non-launcher
   starts, rather than allowing the platform's empty-splash default.
 - Explicit zero padding on the decorative window drawable prevents its inset

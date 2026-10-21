@@ -103,6 +103,7 @@ public final class LaunchVisualTest {
             await("document.querySelector('[data-artwork-state=ready]') !== null");
             await("document.querySelector('[data-testid=diewish-brand-splash]') !== null");
             assertNotNull("Keep one native composition while guest routing is unresolved", field("launchCover").get(activity));
+            assertNotNull("Keep the actual system splash; do not replace its icon at another scale", field("systemLaunchSplash").get(activity));
             String loading = evaluate(bounds());
             screenshot(theme + "-waiting");
             readFixture("/__release");
@@ -110,6 +111,7 @@ public final class LaunchVisualTest {
             long deadline = System.currentTimeMillis() + 10000;
             while (field("launchCover").get(activity) != null && System.currentTimeMillis() < deadline) Thread.sleep(50);
             assertNull("Native cover must release on the final application frame", field("launchCover").get(activity));
+            assertNull("System splash must release with the final application frame", field("systemLaunchSplash").get(activity));
             assertEquals("Lockup must stay in the same position through guest routing", loading, evaluate(bounds()));
             await("document.body.innerText.includes('Google ile devam et') && document.body.innerText.includes('Telefon numarası ile devam et')");
             await("document.getAnimations().every(a => a.playState === 'finished')");

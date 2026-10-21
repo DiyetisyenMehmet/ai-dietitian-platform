@@ -82,6 +82,8 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
     private DiewishGoogleAuthBridge googleAuthBridge;
     private FrameLayout rootView;
     private View launchCover;
+    private View systemLaunchSplash;
+    private Runnable removeSystemLaunchSplash;
     private BillingClient billingClient;
     private boolean billingReady = false;
     private ValueCallback<Uri[]> filePathCallback;
@@ -100,9 +102,16 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
         super.onCreate(savedInstanceState);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            // Hand off to the identical in-window artwork without a second
-            // system icon animation or an artificial minimum splash duration.
-            getSplashScreen().setOnExitAnimationListener(splash -> splash.remove());
+            // Keep the actual system composition until the final web frame;
+            // replacing it with another icon can change the platform's scale.
+            getSplashScreen().setOnExitAnimationListener(splash -> {
+                if (launchCover == null || isDestroyed()) { splash.remove(); return; }
+                systemLaunchSplash = splash;
+                removeSystemLaunchSplash = splash::remove;
+                if (rootView.getBackground() instanceof ColorDrawable) {
+                    splash.setBackgroundColor(((ColorDrawable) rootView.getBackground()).getColor());
+                }
+            });
         }
 
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
@@ -262,6 +271,7 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
     private void applySystemBarTheme(boolean dark) {
         int background = dark ? Color.rgb(15, 20, 18) : Color.WHITE;
         if (rootView != null) rootView.setBackgroundColor(background);
+        if (systemLaunchSplash != null) systemLaunchSplash.setBackgroundColor(background);
         if (launchCover != null && launchCover.getBackground() instanceof LayerDrawable) {
             // The app's saved theme can differ from the device's launch theme.
             // Recolor only the surface; retain the same approved icon throughout.
@@ -314,9 +324,17 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
     }
 
     private void dismissLaunchCover() {
-        if (launchCover == null) return;
-        rootView.removeView(launchCover);
-        launchCover = null;
+        if (launchCover != null) {
+            rootView.removeView(launchCover);
+            launchCover = null;
+        }
+        dismissSystemLaunchSplash();
+    }
+
+    private void dismissSystemLaunchSplash() {
+        if (removeSystemLaunchSplash != null) removeSystemLaunchSplash.run();
+        removeSystemLaunchSplash = null;
+        systemLaunchSplash = null;
     }
 
     public final class SystemUiBridge {
@@ -1149,6 +1167,7 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
 
     @Override
     protected void onDestroy() {
+        dismissSystemLaunchSplash();
         persistSessionCookies();
         if (googleAuthBridge != null) googleAuthBridge.close();
         if (billingClient != null) billingClient.endConnection();
