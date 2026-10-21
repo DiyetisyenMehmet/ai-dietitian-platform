@@ -1,0 +1,114 @@
+name: Diewish October Cloud Usage Read Only
+on:
+  push:
+    branches: [feature/staging-preview]
+    paths: [.github/workflows/diewish-october-cloud-usage-readonly.yml]
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: diewish-october-cloud-usage-readonly
+  cancel-in-progress: false
+jobs:
+  usage:
+    if: ${{ github.repository == 'DiyetisyenMehmet/ai-dietitian-platform' && github.ref == 'refs/heads/feature/staging-preview' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    environment: staging
+    steps:
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/730419163638/locations/global/workloadIdentityPools/github-actions/providers/diewish-staging
+          service_account: diewish-staging-deployer@project-a2e260c1-839d-4f1d-b90.iam.gserviceaccount.com
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: project-a2e260c1-839d-4f1d-b90
+      - name: Query October usage and allowance inputs (metadata read only)
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import base64,collections,datetime,json,subprocess,sys,urllib.parse,urllib.request,urllib.error
+          P="project-a2e260c1-839d-4f1d-b90"
+          START="2026-10-01T00:00:00Z"
+          NOW=datetime.datetime.now(datetime.timezone.utc)
+          END=(NOW-datetime.timedelta(minutes=5)).isoformat(timespec="seconds").replace("+00:00","Z")
+          out={"project":P,"startUTC":START,"endUTC":END,"mode":"READ_ONLY","monitoring":{},"cloudBuild":{},"secrets":{},"billing":{}}
+          def cmd(*args,timeout=40):
+              try:
+                  p=subprocess.run(["gcloud",*args,"--project",P,"--format=json"],capture_output=True,text=True,timeout=timeout)
+                  if p.returncode:return None,"ACCESS_OR_COMMAND_ERROR"
+                  return json.loads(p.stdout or "null"),None
+              except (ValueError,subprocess.TimeoutExpired,FileNotFoundError):
+                  return None,"READ_OR_PARSE_ERROR"
+          def ts(s):
+              if not s:return None
+              try:return datetime.datetime.fromisoformat(s.replace("Z","+00:00"))
+              except ValueError:return None
+          def metric(api_token,short,metric):
+              params=[("filter",f'metric.type="run.googleapis.com/{metric}" AND resource.type="cloud_run_revision"'),
+                  ("interval.startTime",START),("interval.endTime",END),("aggregation.alignmentPeriod","3600s"),
+                  ("aggregation.perSeriesAligner","ALIGN_SUM"),("aggregation.crossSeriesReducer","REDUCE_SUM"),
+                  ("aggregation.groupByFields","resource.labels.service_name"),("pageSize","1000"),("view","FULL")]
+              entries=collections.defaultdict(float);page=None;page_count=0
+              try:
+                  while True:
+                      query=params+([("pageToken",page)] if page else [])
+                      url="https://monitoring.googleapis.com/v3/projects/"+P+"/timeSeries?"+urllib.parse.urlencode(query)
+                      rq=urllib.request.Request(url,headers={"Authorization":"Bearer "+api_token,"Accept":"application/json"})
+                      with urllib.request.urlopen(rq,timeout=25) as f:obj=json.load(f)
+                      page_count+=1
+                      for item in obj.get("timeSeries",[]):
+                          name=item.get("resource",{}).get("labels",{}).get("service_name","UNKNOWN")
+                          for p in item.get("points",[]):
+                              val=p.get("value",{})
+                              raw=val.get("doubleValue",val.get("int64Value",0))
+                              entries[name]+=float(raw)
+                      page=obj.get("nextPageToken")
+                      if not page or page_count>=30:break
+                  return {"status":"OK","values":{k:round(v,3) for k,v in sorted(entries.items())},"total":round(sum(entries.values()),3),"truncated":bool(page)}
+              except urllib.error.HTTPError as e:return {"status":"BLOCKED","http":e.code}
+              except (urllib.error.URLError,TimeoutError,ValueError) as e:return {"status":"BLOCKED","reason":type(e).__name__}
+          token=subprocess.run(["gcloud","auth","print-access-token"],capture_output=True,text=True,timeout=20)
+          if token.returncode:
+              out["monitoring"]={"status":"BLOCKED","reason":"CLOUD_TOKEN_UNAVAILABLE"}
+          else:
+              for short,name in [("requests","request_count"),("billableInstanceSeconds","container/billable_instance_time"),
+                  ("vCpuAllocationSeconds","container/cpu/allocation_time"),("memoryGiBSeconds","container/memory/allocation_time"),
+                  ("sentBytes","container/network/sent_bytes_count")]:
+                  out["monitoring"][short]=metric(token.stdout.strip(),short,name)
+          builds,berr=cmd("builds","list","--region=global","--limit=1000","--filter=createTime>=2026-10-01T00:00:00Z",timeout=90)
+          if isinstance(builds,list):
+              relevant=[b for b in builds if (ts(b.get("createTime")) or NOW).isoformat()>=START.replace("Z","+00:00")]
+              by_machine=collections.defaultdict(lambda:{"count":0,"executedMinutes":0.0,"status":collections.Counter()})
+              for b in relevant:
+                  name=b.get("options",{}).get("machineType") or "UNSPECIFIED_DEFAULT"
+                  v=by_machine[name];v["count"]+=1;v["status"][b.get("status","UNKNOWN")]+=1
+                  start=ts(b.get("startTime"));end=ts(b.get("finishTime")) or NOW
+                  if start and end>=start:v["executedMinutes"]+=max(0,(end-start).total_seconds())/60
+              out["cloudBuild"]={"status":"OK","builds":len(relevant),"possiblyTruncated":len(builds)==1000,
+                 "byMachine":{k:{"count":v["count"],"executedMinutes":round(v["executedMinutes"],2),
+                                       "status":dict(v["status"])} for k,v in sorted(by_machine.items())}}
+          else:out["cloudBuild"]={"status":"BLOCKED","reason":berr}
+          secrets,serr=cmd("secrets","list","--limit=200",timeout=60)
+          if isinstance(secrets,list):
+              enabled=disabled=destroyed=0;unreadable=0
+              for item in secrets:
+                  name=item.get("name","").rsplit("/",1)[-1]
+                  if not name:continue
+                  versions,err=cmd("secrets","versions","list","--secret",name,"--limit=100",timeout=40)
+                  if isinstance(versions,list):
+                      for v in versions:
+                          state=v.get("state","")
+                          enabled+=state=="ENABLED";disabled+=state=="DISABLED";destroyed+=state=="DESTROYED"
+                  else:unreadable+=1
+              out["secrets"]={"status":"OK","secrets":len(secrets),"activeVersionsCurrent":enabled+disabled,
+                              "enabledVersions":enabled,"disabledVersions":disabled,"destroyedVersions":destroyed,
+                              "unreadableSecretVersionLists":unreadable,"possiblyTruncated":len(secrets)==200}
+          else:out["secrets"]={"status":"BLOCKED","reason":serr}
+          info,ierr=cmd("billing","projects","describe",P,timeout=35)
+          out["billing"]=({"status":"LINKED_ACCOUNT_INFO_ONLY","billingEnabled":bool(info.get("billingEnabled",False)),
+                           "costForOctober":"NOT_AVAILABLE_FROM_THIS_API"} if isinstance(info,dict) else
+                          {"status":"BLOCKED","reason":ierr,"costForOctober":"NOT_AVAILABLE"})
+          print(json.dumps(out,ensure_ascii=False,sort_keys=True,indent=2))
+          
+          PY
