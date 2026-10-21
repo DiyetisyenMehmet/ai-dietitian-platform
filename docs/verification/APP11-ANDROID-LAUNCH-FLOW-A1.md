@@ -18,6 +18,9 @@ replaced by a compact login header.
   new Activity, credential or auth condition is introduced. The existing web
   theme callback recolors only the cover's surface, preserving its icon when a
   saved app theme differs from the device theme.
+- Explicit zero padding on the decorative window drawable prevents its inset
+  icon from shrinking DecorView/WebView content. The API 33 phone recording
+  checks the actual 390–430 CSS-pixel viewport without relaxing that assertion.
 - A presentation-only ready signal on the existing origin-checked system-UI
   bridge removes the native cover after WebView's visual state callback. A short-
   lived DOM observer keeps that single composition over the existing RouteGuard

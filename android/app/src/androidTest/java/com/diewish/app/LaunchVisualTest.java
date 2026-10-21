@@ -114,9 +114,9 @@ public final class LaunchVisualTest {
             await("document.body.innerText.includes('Google ile devam et') && document.body.innerText.includes('Telefon numarası ile devam et')");
             await("document.getAnimations().every(a => a.playState === 'finished')");
             trace.add("viewport=" + evaluate("({width:innerWidth,height:innerHeight,dpr:devicePixelRatio,screenWidth:screen.width,overflow:document.documentElement.scrollWidth>innerWidth})"));
+            screenshot(theme + "-login");
             assertEquals("true", evaluate("innerWidth >= 390 && innerWidth <= 430"));
             assertEquals("true", evaluate("document.documentElement.scrollWidth <= innerWidth"));
-            screenshot(theme + "-login");
         } finally { saveTrace(theme); }
     }
 

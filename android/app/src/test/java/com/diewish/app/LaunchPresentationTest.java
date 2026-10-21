@@ -7,6 +7,7 @@ import android.app.Application;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
+import android.graphics.Rect;
 import android.net.Uri;
 import android.view.View;
 import android.webkit.WebResourceRequest;
@@ -145,6 +146,14 @@ public final class LaunchPresentationTest {
         assertEquals(0, Color.alpha(bitmap.getPixel(bitmap.getWidth() - 1, bitmap.getHeight() - 1)));
         assertEquals(255, Color.alpha(bitmap.getPixel(bitmap.getWidth() / 2, bitmap.getHeight() / 2)));
         assertNotNull(resources.getDrawable(R.drawable.diewish_launch_background, null));
+    }
+
+    @Test public void windowArtworkCannotInsetTheApplicationViewport() {
+        var resources = org.robolectric.RuntimeEnvironment.getApplication().getResources();
+        var background = resources.getDrawable(R.drawable.diewish_launch_background, null);
+        Rect padding = new Rect();
+        background.getPadding(padding);
+        assertEquals("Decorative icon insets must not shrink WebView content", new Rect(), padding);
     }
 
     @Test @Config(qualifiers = "night") public void savedLightAppThemeRecolorsTheCoverWithoutRemovingItsArtwork() {

@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+<!-- Decorative icon insets must not become DecorView/content padding. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android"
+    android:paddingLeft="0dp" android:paddingTop="0dp"
+    android:paddingRight="0dp" android:paddingBottom="0dp">
     <item android:id="@+id/diewish_launch_surface" android:drawable="@color/diewish_launch_background" />
     <item android:width="288dp" android:height="288dp" android:gravity="center"
         android:drawable="@drawable/diewish_splash_icon" />
