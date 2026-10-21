@@ -72,8 +72,19 @@ jobs:
                           'latestReadyRevision':state.get('latestReadyRevisionName'),
                           'traffic':[{k:x.get(k) for k in ('revisionName','percent','tag','url') if k in x} for x in traffic],
                           'revisions':[revision_data(x) for x in revisions]}
-          new=gcloud('secrets','describe','diewish-staging-test2-database-url')
-          out['dedicatedTest2SecretExists']=bool(new)
+          def secret_metadata_status(*args):
+              p=subprocess.run(['gcloud',*args,'--project',PROJECT,'--format=json'],
+                               capture_output=True,text=True,timeout=45,check=False)
+              if p.returncode==0: return 'READABLE'
+              error=(p.stderr or '').upper()
+              if 'PERMISSION_DENIED' in error or '403' in error: return 'PERMISSION_DENIED'
+              if 'NOT_FOUND' in error or '404' in error or 'NOT FOUND' in error: return 'NOT_FOUND'
+              if 'UNAUTHENTICATED' in error or '401' in error: return 'UNAUTHENTICATED'
+              return 'UNKNOWN_UNAVAILABLE'
+          status=secret_metadata_status('secrets','describe','diewish-staging-test2-database-url')
+          out['test2SecretMetadataStatus']=status
+          out['dedicatedTest2SecretExists']='CONFIRMED' if status=='READABLE' else 'NOT_CONFIRMED'
+          new=gcloud('secrets','describe','diewish-staging-test2-database-url') if status=='READABLE' else None
           if new:
               versions=gcloud('secrets','versions','list','--secret','diewish-staging-test2-database-url')
               out['test2SecretVersions']=({'status':'METADATA_OK','versions':[
