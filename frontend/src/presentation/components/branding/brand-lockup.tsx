@@ -4,9 +4,12 @@ import { APP_CONFIG } from "@/shared/constants/app";
 import styles from "./brand-lockup.module.css";
 
 /** The owner-approved symbol and transparent wordmark; never redraw the logo. */
-export function BrandLockup() {
+export function BrandLockup({ variant = "default" }: { variant?: "default" | "auth" }) {
   return (
-    <span className={styles.brand} data-testid="diewish-brand">
+    <span
+      className={`${styles.brand}${variant === "auth" ? ` ${styles.auth}` : ""}`}
+      data-testid="diewish-brand"
+    >
       <Image
         src="/brands/diewish-id-approved.webp"
         alt=""
