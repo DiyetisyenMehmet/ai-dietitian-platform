@@ -67,8 +67,12 @@ public final class LaunchVisualTest {
                             String mime = connection.getContentType();
                             InputStream input = code < 400 ? connection.getInputStream() : connection.getErrorStream();
                             byte[] bytes = input == null ? new byte[0] : input.readAllBytes();
+                            Map<String, String> headers = new HashMap<>();
+                            connection.getHeaderFields().forEach((key, values) -> {
+                                if (key != null) headers.put(key, String.join(", ", values));
+                            });
                             connection.disconnect();
-                            return new WebResourceResponse(mime == null ? "application/octet-stream" : mime.split(";")[0], "UTF-8", code, code < 400 ? "OK" : "Unauthorized", Map.of("Cache-Control", "no-store"), new ByteArrayInputStream(bytes));
+                            return new WebResourceResponse(mime == null ? "application/octet-stream" : mime.split(";")[0], "UTF-8", code, code < 400 ? "OK" : "Unauthorized", headers, new ByteArrayInputStream(bytes));
                         } catch (Exception error) { throw new AssertionError("Local fixture failed", error); }
                     }
                     @Override public void onPageStarted(WebView v, String url, Bitmap icon) { original.onPageStarted(v, url, icon); }
@@ -83,16 +87,18 @@ public final class LaunchVisualTest {
             scenario.onActivity(host -> web.loadUrl(BuildConfig.WEB_BASE_URL + "/dashboard"));
             await("document.querySelector('[data-artwork-state=ready]') !== null");
             await("document.querySelector('[data-testid=diewish-brand-splash]') !== null");
-            long deadline = System.currentTimeMillis() + 10000;
-            while (field("launchCover").get(activity) != null && System.currentTimeMillis() < deadline) Thread.sleep(50);
-            assertNull("Native cover must release when the actual web frame is ready", field("launchCover").get(activity));
+            assertNotNull("Keep one native composition while guest routing is unresolved", field("launchCover").get(activity));
             String loading = evaluate(bounds());
             screenshot(theme + "-waiting");
             readFixture("/__release");
             await("location.pathname === '/login' && document.querySelector('[data-artwork-state=ready]') !== null");
+            long deadline = System.currentTimeMillis() + 10000;
+            while (field("launchCover").get(activity) != null && System.currentTimeMillis() < deadline) Thread.sleep(50);
+            assertNull("Native cover must release on the final application frame", field("launchCover").get(activity));
             assertEquals("Lockup must stay in the same position through guest routing", loading, evaluate(bounds()));
             await("document.body.innerText.includes('Google ile devam et') && document.body.innerText.includes('Telefon numarası ile devam et')");
             await("document.getAnimations().every(a => a.playState === 'finished')");
+            assertEquals("true", evaluate("innerWidth >= 390 && innerWidth <= 430"));
             screenshot(theme + "-login");
         }
     }

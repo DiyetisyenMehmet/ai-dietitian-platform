@@ -35,6 +35,11 @@ public final class LaunchPresentationTest {
     @Implements(WebView.class)
     public static class VisualWebView extends ShadowWebView {
         static WebView.VisualStateCallback pending;
+        static String artworkReady;
+        @Implementation @Override protected void evaluateJavascript(String script, android.webkit.ValueCallback<String> result) {
+            if (result != null && script.contains("data-artwork-state")) result.onReceiveValue(artworkReady);
+            else super.evaluateJavascript(script, result);
+        }
         @Implementation protected void postVisualStateCallback(long id, WebView.VisualStateCallback callback) {
             pending = callback;
         }
@@ -44,6 +49,7 @@ public final class LaunchPresentationTest {
         SessionCookiePersistenceTest.DocumentStartFeature.supported = false;
         SessionCookiePersistenceTest.DocumentStartFeature.messagesSupported = false;
         VisualWebView.pending = null;
+        VisualWebView.artworkReady = "true";
     }
 
     @Test public void coverRemainsUntilWebFrameReadyAndNeverReturnsOnLaterNavigation() {
@@ -57,12 +63,31 @@ public final class LaunchPresentationTest {
             assertEquals(BuildConfig.WEB_BASE_URL + "/dashboard", shadowOf(view).getLastLoadedUrl());
             var client = shadowOf(view).getWebViewClient();
             client.onPageFinished(view, BuildConfig.WEB_BASE_URL + "/dashboard");
+            activity.new SystemUiBridge().onLaunchFrameReady();
+            shadowOf(android.os.Looper.getMainLooper()).idle();
             assertSame(cover, ReflectionHelpers.getField(activity, "launchCover"));
             assertNotNull(VisualWebView.pending);
             VisualWebView.pending.onComplete(0);
             assertNull(cover.getParent());
             assertNull(ReflectionHelpers.getField(activity, "launchCover"));
             client.onPageStarted(view, BuildConfig.WEB_BASE_URL + "/login", null);
+            assertNull(ReflectionHelpers.getField(activity, "launchCover"));
+        } finally { host.pause().stop().destroy(); }
+    }
+
+    @Test public void pageFinishedDoesNotRevealAnUndecodedModernHeader() {
+        var host = Robolectric.buildActivity(MainActivity.class).setup();
+        try {
+            MainActivity activity = host.get();
+            WebView view = ReflectionHelpers.getField(activity, "webView");
+            VisualWebView.artworkReady = "false";
+            shadowOf(view).getWebViewClient().onPageFinished(view, BuildConfig.WEB_BASE_URL + "/dashboard");
+            assertNull(VisualWebView.pending);
+            assertNotNull(ReflectionHelpers.getField(activity, "launchCover"));
+            VisualWebView.artworkReady = "true";
+            activity.new SystemUiBridge().onLaunchFrameReady();
+            shadowOf(android.os.Looper.getMainLooper()).idle();
+            VisualWebView.pending.onComplete(0);
             assertNull(ReflectionHelpers.getField(activity, "launchCover"));
         } finally { host.pause().stop().destroy(); }
     }

@@ -135,6 +135,7 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
         );
 
         launchCover = new View(this);
+        launchCover.setClickable(true);
         launchCover.setBackgroundResource(R.drawable.diewish_launch_background);
         launchCover.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         rootView.addView(launchCover, new FrameLayout.LayoutParams(
@@ -268,11 +269,38 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
             .setAppearanceLightNavigationBars(!dark);
     }
 
+    private static final String LAUNCH_DOM_READY =
+        "!document.querySelector('[data-testid=diewish-brand-splash]')"
+            + "&& !document.querySelector('[data-artwork-state=loading]')";
+
     private void requestLaunchCoverDismissal() {
         if (launchCover == null || isDestroyed()) return;
-        webView.postVisualStateCallback(0, new WebView.VisualStateCallback() {
-            @Override public void onComplete(long requestId) { dismissLaunchCover(); }
+        webView.evaluateJavascript("(function(){return " + LAUNCH_DOM_READY + ";})()", ready -> {
+            if (!"true".equals(ready) || launchCover == null || isDestroyed()) return;
+            webView.postVisualStateCallback(0, new WebView.VisualStateCallback() {
+                @Override public void onComplete(long requestId) { dismissLaunchCover(); }
+            });
         });
+    }
+
+    private void watchLaunchPresentation(WebView view) {
+        // Observe presentation only. RouteGuard still owns every session,
+        // consent and navigation decision. Covers full-document guest redirects
+        // as well as client-side handoffs; no timer or minimum display duration.
+        view.evaluateJavascript(
+            "(function(){if(window.__diewishLaunchWatcher)return;"
+                + "var checking=false;function ready(){return " + LAUNCH_DOM_READY + ";}"
+                + "function check(){if(checking||!ready())return;checking=true;"
+                + "var b=document.querySelector('[data-testid=diewish-brand]');"
+                + "var images=b&&!b.hasAttribute('data-artwork-state')?Array.from(b.querySelectorAll('img')):[];"
+                + "Promise.allSettled(images.map(function(i){return i.decode();})).then(function(){"
+                + "if(!ready()){checking=false;return;}observer.disconnect();"
+                + "delete window.__diewishLaunchWatcher;window.DiewishSystemUi.onLaunchFrameReady();});}"
+                + "var observer=new MutationObserver(check);window.__diewishLaunchWatcher=observer;"
+                + "observer.observe(document.documentElement,{childList:true,subtree:true,attributes:true,"
+                + "attributeFilter:['data-artwork-state']});check();})();",
+            null
+        );
     }
 
     private void dismissLaunchCover() {
@@ -831,12 +859,11 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
         @Override
         public void onPageFinished(WebView view, String url) {
             super.onPageFinished(view, url);
-            if (launchCover != null) {
-                // Page-finished alone does not guarantee a painted DOM. Wait
-                // for its visual state, never a timer or an auth/session result.
-                requestLaunchCoverDismissal();
-            }
             updateTrustedPageState(url);
+            if (launchCover != null) {
+                if (isTrustedPage()) watchLaunchPresentation(view);
+                else dismissLaunchCover();
+            }
             if (isTrustedPage()) {
                 view.evaluateJavascript(
                     DiewishSessionCookieBridge.bootstrapScript()

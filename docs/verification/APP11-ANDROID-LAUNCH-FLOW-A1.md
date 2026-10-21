@@ -17,8 +17,11 @@ replaced by a compact login header.
   splash artwork, size and light/dark surface. No timer, extra native animation,
   new Activity, credential or auth condition is introduced.
 - A presentation-only ready signal on the existing origin-checked system-UI
-  bridge removes the native cover after WebView's visual state callback, without
-  waiting for unrelated page assets. Page completion remains an older-web fallback.
+  bridge removes the native cover after WebView's visual state callback. A short-
+  lived DOM observer keeps that single composition over the existing RouteGuard
+  waiting UI and guest document redirects until the final application view and
+  its artwork are ready. It adds no timer, auth request or auth decision. Older
+  web builds and signed-in views use the same observer fallback.
   No empty initial transparent buffer is exposed. Main-frame
   network failures and SSL cancellation release the cover; resource failures do
   not. Existing WebView error behavior and SSL rejection remain intact.
@@ -43,7 +46,9 @@ The existing session-cookie host checks are relevant because MainActivity's
 startup callback changed. No real account, SMS, health record or backend is used.
 
 The API 33 emulator harness runs the real MainActivity with the actual locally
-built frontend, in light/dark mode. Test-only WebView interception serves that
+built frontend, in separate fresh light/dark app processes. The recording is a
+controlled visual test with a held guest reply, not a launch-time benchmark.
+Test-only WebView interception serves that
 frontend from a local TLS fixture with a pinned job certificate and normal
 hostname verification; all account API replies are synthetic guests. A sink proxy
 prevents the initial pre-interception navigation from reaching staging. Native
