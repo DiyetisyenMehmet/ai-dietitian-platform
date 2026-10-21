@@ -82,6 +82,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Block legacy staging deployment while Test 2 host split is active
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f .github/staging-test2-split-active ]]; then
+            echo "NO_GO: legacy workflow still migrates old Neon and reverts Admin-isolated Test 2 host routing." >&2
+            echo "Use only a reviewed split-aware staging deployment workflow." >&2
+            exit 1
+          fi
+
       - name: Wait for exact-SHA pre-deploy CI gates
         shell: bash
         env:
