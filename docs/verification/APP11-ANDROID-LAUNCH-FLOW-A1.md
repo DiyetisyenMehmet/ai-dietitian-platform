@@ -18,6 +18,8 @@ replaced by a compact login header.
   new Activity, credential or auth condition is introduced. The existing web
   theme callback recolors only the cover's surface, preserving its icon when a
   saved app theme differs from the device theme.
+  Android 13+ explicitly prefers the branded system icon even for non-launcher
+  starts, rather than allowing the platform's empty-splash default.
 - Explicit zero padding on the decorative window drawable prevents its inset
   icon from shrinking DecorView/WebView content. The API 33 phone recording
   checks the actual 390–430 CSS-pixel viewport without relaxing that assertion.

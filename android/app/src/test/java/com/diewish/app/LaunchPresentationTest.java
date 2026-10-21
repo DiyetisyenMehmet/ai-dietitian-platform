@@ -146,6 +146,13 @@ public final class LaunchPresentationTest {
         assertEquals(0, Color.alpha(bitmap.getPixel(bitmap.getWidth() - 1, bitmap.getHeight() - 1)));
         assertEquals(255, Color.alpha(bitmap.getPixel(bitmap.getWidth() / 2, bitmap.getHeight() / 2)));
         assertNotNull(resources.getDrawable(R.drawable.diewish_launch_background, null));
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            var theme = resources.newTheme();
+            theme.applyStyle(R.style.Theme_Diewish, true);
+            var attributes = theme.obtainStyledAttributes(new int[] {android.R.attr.windowSplashScreenBehavior});
+            try { assertEquals("Non-launcher starts must also prefer the branded system splash", 1, attributes.getInt(0, 0)); }
+            finally { attributes.recycle(); }
+        }
     }
 
     @Test public void windowArtworkCannotInsetTheApplicationViewport() {
