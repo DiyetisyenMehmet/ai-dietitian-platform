@@ -1,0 +1,86 @@
+name: Test 2 Preserve Legacy Admin Backend Tag
+on:
+  push:
+    branches: [feature/staging-preview]
+    paths: [.github/workflows/staging-test2-admin-legacy-tag.yml]
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: diewish-test2-admin-tag
+  cancel-in-progress: false
+jobs:
+  preserve:
+    if: ${{ github.repository == 'DiyetisyenMehmet/ai-dietitian-platform' && github.ref == 'refs/heads/feature/staging-preview' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    environment: staging
+    env:
+      PROJECT: project-a2e260c1-839d-4f1d-b90
+      REGION: europe-west1
+      SERVICE: diewish-backend-staging
+      OLD: diewish-backend-staging-00479-w44
+      NEW: diewish-backend-staging-00481-biq
+    steps:
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/730419163638/locations/global/workloadIdentityPools/github-actions/providers/diewish-staging
+          service_account: diewish-staging-deployer@project-a2e260c1-839d-4f1d-b90.iam.gserviceaccount.com
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT }}
+      - name: Verify both exact original and Test 2 revisions before tagging
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcloud run services describe "$SERVICE" --project "$PROJECT" --region "$REGION" --format=json > "$RUNNER_TEMP/before.json"
+          python3 - <<'PY'
+          import json,os,sys
+          a=json.load(open(os.environ['RUNNER_TEMP']+'/before.json'))
+          rows=a.get('status',{}).get('traffic',[])
+          old=[x for x in rows if x.get('revisionName')==os.environ['OLD']]
+          new=[x for x in rows if x.get('revisionName')==os.environ['NEW']]
+          if len(old)!=1 or old[0].get('percent')!=100 or len(new)!=1 or new[0].get('tag')!='diewish-test2' or new[0].get('percent',0)!=0:
+              print('NO_GO: existing revision boundary changed',file=sys.stderr)
+              sys.exit(2)
+          print('PASS: original backend 100% and Test 2 tagged revision 0%')
+          PY
+          gcloud run revisions describe "$OLD" --project "$PROJECT" --region "$REGION" --format=json > "$RUNNER_TEMP/oldrev.json"
+          gcloud run revisions describe "$NEW" --project "$PROJECT" --region "$REGION" --format=json > "$RUNNER_TEMP/newrev.json"
+          python3 - <<'PY'
+          import json,os,sys
+          def env(rev):
+              items=json.load(open(os.environ['RUNNER_TEMP']+'/'+rev))['spec']['containers'][0].get('env',[])
+              return {x.get('name'):x for x in items}
+          old=env('oldrev.json');new=env('newrev.json')
+          olddb=old.get('DATABASE_URL',{}).get('valueFrom',{}).get('secretKeyRef',{}).get('name')
+          newdb=new.get('DATABASE_URL',{}).get('valueFrom',{}).get('secretKeyRef',{}).get('name')
+          if olddb!='diewish-staging-database-url' or newdb!='diewish-staging-test2-database-url':
+              print('NO_GO: old Admin and new Test 2 backend DB isolation failed',file=sys.stderr)
+              sys.exit(2)
+          for key in ('STAGING_AUTOMATION_ENABLED','SCHEDULER_TRIGGER_ENABLED','NUTRITION_JOBS_ENABLED','COACH_SYNC_ENABLED'):
+              if new.get(key,{}).get('value')!='false':
+                  print('NO_GO: Test 2 automation enabled',file=sys.stderr)
+                  sys.exit(3)
+          print('PASS: old Admin and Test 2 use distinct secrets, Test 2 background jobs disabled')
+          PY
+      - name: Add exact immutable legacy Admin tag without changing backend traffic
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcloud run services update-traffic "$SERVICE" --project "$PROJECT" --region "$REGION" \
+            --update-tags "admin-legacy=$OLD" --to-revisions "$OLD=100" --quiet >/dev/null
+          gcloud run services describe "$SERVICE" --project "$PROJECT" --region "$REGION" --format=json > "$RUNNER_TEMP/after.json"
+          python3 - <<'PY'
+          import json,os,sys
+          a=json.load(open(os.environ['RUNNER_TEMP']+'/after.json'))
+          rows=a.get('status',{}).get('traffic',[])
+          old=[x for x in rows if x.get('revisionName')==os.environ['OLD']]
+          new=[x for x in rows if x.get('tag')=='diewish-test2']
+          legacy=[x for x in rows if x.get('tag')=='admin-legacy']
+          expected='https://admin-legacy---diewish-backend-staging-2qqqfr7wzq-ew.a.run.app'
+          if len(old)!=1 or old[0].get('percent')!=100 or len(new)!=1 or len(legacy)!=1 or legacy[0].get('revisionName')!=os.environ['OLD'] or legacy[0].get('url')!=expected:
+              print('NO_GO: legacy Admin tag or backend default traffic incorrect',file=sys.stderr)
+              sys.exit(3)
+          print('PASS: fixed legacy Admin tag on old backend revision; default service remains 100% old')
+          PY

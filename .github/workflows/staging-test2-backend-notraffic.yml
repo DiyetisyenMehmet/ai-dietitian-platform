@@ -1,0 +1,154 @@
+name: Test 2 Backend No-Traffic Preflight
+on:
+  push:
+    branches: [feature/staging-preview]
+    paths: [.github/workflows/staging-test2-backend-notraffic.yml]
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: diewish-test2-no-traffic-prepare
+  cancel-in-progress: false
+jobs:
+  prepare:
+    if: ${{ github.repository == 'DiyetisyenMehmet/ai-dietitian-platform' && github.ref == 'refs/heads/feature/staging-preview' }}
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 42
+    env:
+      PROJECT: project-a2e260c1-839d-4f1d-b90
+      REGION: europe-west1
+      SERVICE: diewish-backend-staging
+      OLD_BACKEND: diewish-backend-staging-00479-w44
+      OLD_FRONTEND: diewish-frontend-staging-00239-gm2
+      SECRET: diewish-staging-test2-database-url
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/730419163638/locations/global/workloadIdentityPools/github-actions/providers/diewish-staging
+          service_account: diewish-staging-deployer@project-a2e260c1-839d-4f1d-b90.iam.gserviceaccount.com
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT }}
+      - name: Guard original backend/frontend traffic and original database secret
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,subprocess,sys,os
+          def describe(s):
+              p=subprocess.run(['gcloud','run','services','describe',s,'--project',os.environ['PROJECT'],
+                                '--region',os.environ['REGION'],'--format=json'],
+                               capture_output=True,text=True,check=True)
+              return json.loads(p.stdout)
+          def guard_service(service,expected):
+              v=describe(service)
+              active=[t for t in v.get('status',{}).get('traffic',[]) if (t.get('percent') or 0)>0]
+              if len(active)!=1 or active[0].get('percent')!=100 or active[0].get('revisionName')!=expected:
+                  raise RuntimeError('NO_GO: original serving revision or traffic changed: '+service)
+              return v
+          try:
+              backend=guard_service(os.environ['SERVICE'],os.environ['OLD_BACKEND'])
+              guard_service('diewish-frontend-staging',os.environ['OLD_FRONTEND'])
+              p=subprocess.run(['gcloud','run','revisions','describe',os.environ['OLD_BACKEND'],
+                                '--project',os.environ['PROJECT'],'--region',os.environ['REGION'],'--format=json'],
+                               capture_output=True,text=True,check=True)
+              env={e.get('name'):e for e in json.loads(p.stdout)['spec']['containers'][0].get('env',[])}
+              ref=env.get('DATABASE_URL',{}).get('valueFrom',{}).get('secretKeyRef',{})
+              if ref.get('name')!='diewish-staging-database-url':
+                  raise RuntimeError('NO_GO: original Admin database secret does not match')
+              if env.get('STAGING_AUTOMATION_ENABLED',{}).get('value')!='false':
+                  raise RuntimeError('NO_GO: original staging background automation not disabled')
+              print('PASS: old Admin backend and frontend at 100%, old DB secret preserved')
+          except (RuntimeError,subprocess.CalledProcessError,KeyError,ValueError) as err:
+              print('NO_GO: original serving snapshot failed safely',file=sys.stderr)
+              sys.exit(2)
+          PY
+      - name: Build reviewed Test 2 backend image without DB migrations
+        shell: bash
+        run: |
+          set -euo pipefail
+          IMAGE="${REGION}-docker.pkg.dev/${PROJECT}/diewish-staging/backend:test2-preflight-${GITHUB_SHA}"
+          echo "IMAGE=${IMAGE}" >> "$GITHUB_ENV"
+          ID="$(gcloud builds submit --no-source --project "$PROJECT" \
+            --config .github/cloudbuild/backend-test2-buildonly.yaml \
+            --substitutions "_IMAGE=${IMAGE},_GIT_SHA=${GITHUB_SHA}" \
+            --async --format='value(id)' --quiet)"
+          test -n "$ID"
+          echo "BUILD_ID=$ID" >> "$GITHUB_ENV"
+          for i in $(seq 1 180); do
+            status="$(gcloud builds describe "$ID" --project "$PROJECT" --region=global --format='value(status)')"
+            case "$status" in
+              SUCCESS) echo 'PASS: migration-free backend image built'; exit 0;;
+              FAILURE|INTERNAL_ERROR|TIMEOUT|CANCELLED|EXPIRED)
+                echo "NO_GO: safe build did not complete: $status" >&2;exit 3;;
+            esac
+            sleep 7
+          done
+          echo 'NO_GO: build not complete within bounded wait' >&2;exit 4
+      - name: Prepare only no-traffic Test 2 backend revision with isolated secret
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Never update the original DB secret, never run Prisma migrations.
+          # User explicitly assigned Secret Accessor to existing staging runtime
+          # on this separate Test 2 secret. No new IAM permission is granted here.
+          gcloud run deploy "$SERVICE" --project "$PROJECT" --region "$REGION" \
+            --platform managed --image "$IMAGE" --no-traffic --tag diewish-test2 \
+            --service-account "diewish-staging-runtime@${PROJECT}.iam.gserviceaccount.com" \
+            --command=npm --args=start \
+            --update-secrets "DATABASE_URL=${SECRET}:1" \
+            --update-env-vars "DIEWISH_APPLICATION_SHA=${GITHUB_SHA},DIEWISH_ENVIRONMENT=staging,STAGING_AUTOMATION_ENABLED=false,NUTRITION_JOBS_ENABLED=false,COACH_SYNC_ENABLED=false,SCHEDULER_TRIGGER_ENABLED=false" \
+            --min=0 --quiet
+      - name: Read back no-traffic boundary and Test 2 DB readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcloud run services describe "$SERVICE" --project "$PROJECT" --region "$REGION" --format=json > "$RUNNER_TEMP/svc.json"
+          python3 - <<'PY'
+          import json,os,sys
+          with open(os.environ['RUNNER_TEMP']+'/svc.json') as f: obj=json.load(f)
+          rows=obj.get('status',{}).get('traffic',[])
+          old=[r for r in rows if r.get('revisionName')==os.environ['OLD_BACKEND']]
+          new=[r for r in rows if r.get('tag')=='diewish-test2']
+          if len(old)!=1 or old[0].get('percent')!=100 or len(new)!=1 or new[0].get('percent',0)!=0:
+              print('NO_GO: original backend traffic not protected',file=sys.stderr)
+              sys.exit(3)
+          url=new[0].get('url','')
+          expected='https://diewish-test2---diewish-backend-staging-2qqqfr7wzq-ew.a.run.app'
+          if url!=expected:
+              print('NO_GO: unexpected Test 2 tagged route URL',file=sys.stderr)
+              sys.exit(4)
+          print('PASS: original Admin backend 100%, new Test 2 backend tag 0% default traffic')
+          print('TEST2_TAG_URL='+url)
+          PY
+          tag="$(python3 -c 'import json,os; a=json.load(open(os.environ["RUNNER_TEMP"]+"/svc.json")); print(next(x["url"] for x in a["status"]["traffic"] if x.get("tag")=="diewish-test2"))')"
+          health="$(curl -sS --max-time 30 -o "$RUNNER_TEMP/ready.json" -w '%{http_code}' "$tag/api/health/ready" || true)"
+          if [[ "$health" != '200' ]]; then
+            echo "NO_GO: Test 2 tagged backend database readiness HTTP $health" >&2
+            exit 5
+          fi
+          python3 - <<'PY'
+          import json,os,sys
+          with open(os.environ['RUNNER_TEMP']+'/ready.json') as f: a=json.load(f)
+          s=str(a)
+          if a.get('data',{}).get('checks',{}).get('database')!='up':
+              print('NO_GO: unexpected readiness payload',file=sys.stderr)
+              sys.exit(6)
+          print('PASS: new Test 2 backend database=up (no synthetic user writes)')
+          PY
+          # Cross-check original frontend remains 100% unchanged.
+          gcloud run services describe diewish-frontend-staging --project "$PROJECT" --region "$REGION" \
+            --format=json > "$RUNNER_TEMP/frontend.json"
+          python3 - <<'PY'
+          import json,os,sys
+          with open(os.environ['RUNNER_TEMP']+'/frontend.json') as f: a=json.load(f)
+          active=[x for x in a['status']['traffic'] if x.get('percent',0)>0]
+          if len(active)!=1 or active[0].get('revisionName')!=os.environ['OLD_FRONTEND'] or active[0].get('percent')!=100:
+              print('NO_GO: old frontend serving traffic changed',file=sys.stderr)
+              sys.exit(7)
+          print('PASS: frontend 100% old; no Web/Android cutover')
+          PY

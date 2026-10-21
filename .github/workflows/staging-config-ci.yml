@@ -25,6 +25,7 @@ jobs:
         run: |
           python3 -m pip install --disable-pip-version-check PyYAML==6.0.3
           python3 scripts/staging-release-options.test.py
+          python3 scripts/mascot-split-release.test.py
 
       - name: Validate bootstrap shell syntax
         run: |

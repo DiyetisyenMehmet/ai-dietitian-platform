@@ -1,0 +1,64 @@
+name: Auth brand header alignment A2
+on:
+  pull_request:
+    branches: [feature/staging-preview]
+    paths:
+      - frontend/src/presentation/components/branding/brand-lockup*
+      - frontend/src/presentation/components/layout/auth-layout.tsx
+      - frontend/e2e/auth-brand-header-alignment.spec.ts
+      - frontend/playwright.auth-brand-header.config.ts
+      - .github/workflows/auth-brand-header-alignment.yml
+permissions:
+  contents: read
+concurrency:
+  group: auth-brand-header-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  auth-brand-header:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      NEXT_PUBLIC_API_BASE_URL: /api
+      NEXT_TELEMETRY_DISABLED: '1'
+      BRAND_HEADER_EVIDENCE_DIR: /tmp/auth-brand-header-evidence
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npx eslint src/presentation/components/branding/brand-lockup.tsx src/presentation/components/layout/auth-layout.tsx e2e/auth-brand-header-alignment.spec.ts playwright.auth-brand-header.config.ts
+      - name: Basic frontend build, types and lint
+        run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - name: Real accepted baseline React view, same assets and test harness
+        env:
+          BRAND_HEADER_PHASE: before
+        run: |
+          set -euo pipefail
+          before_app="${RUNNER_TEMP}/auth-brand-header-before"
+          git worktree add --detach "$before_app" d70832dfcce9ff4173a8f8dc470e5bde0f137d9f
+          ln -s "$GITHUB_WORKSPACE/frontend/node_modules" "$before_app/frontend/node_modules"
+          BRAND_HEADER_APP_DIRECTORY="$before_app/frontend" npx playwright test --config=playwright.auth-brand-header.config.ts --reporter=line
+      - name: Compact header geometry and six mobile light-dark comparisons
+        env:
+          BRAND_HEADER_PHASE: after
+        run: npx playwright test --config=playwright.auth-brand-header.config.ts --reporter=line
+      - name: Verify artwork, traffic routing and auth behavior source are unchanged
+        working-directory: .
+        run: git diff --exit-code d70832dfcce9ff4173a8f8dc470e5bde0f137d9f HEAD -- frontend/public/brands backend android frontend/next.config.ts frontend/src/app frontend/src/infrastructure frontend/src/application frontend/src/presentation/components/auth
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: auth-brand-header-before-after
+          path: |
+            /tmp/auth-brand-header-evidence
+            frontend/test-results
+          if-no-files-found: ignore

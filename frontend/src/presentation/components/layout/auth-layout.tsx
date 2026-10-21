@@ -25,7 +25,7 @@ export function AuthLayout({ title, subtitle, footer, children }: AuthLayoutProp
     <div className="flex min-h-dvh flex-col bg-background">
       <header className="flex items-center justify-between gap-3 px-4 py-4">
         <Link href="/" className="inline-flex min-w-0">
-          <BrandLockup />
+          <BrandLockup variant="auth" />
         </Link>
         <ThemeToggle />
       </header>

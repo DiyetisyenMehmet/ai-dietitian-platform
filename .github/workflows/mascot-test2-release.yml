@@ -1,0 +1,78 @@
+name: Mascot Test 2 Split Release
+on:
+  push:
+    branches: [feature/staging-preview]
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+concurrency:
+  group: diewish-staging-preview
+  cancel-in-progress: false
+jobs:
+  release:
+    if: ${{ github.repository == 'DiyetisyenMehmet/ai-dietitian-platform' && github.ref == 'refs/heads/feature/staging-preview' && contains(github.event.head_commit.message, '[mascot-split-release]') }}
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 55
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Wait for three mandatory exact-source checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in {1..180}; do
+            runs="$(curl --fail --silent --show-error -H "Authorization: Bearer ${GH_TOKEN}" -H 'Accept: application/vnd.github+json' "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${GITHUB_SHA}&per_page=100")"
+            ready=1
+            for name in 'Hardening CI' 'Staging Config CI' 'Notification preferences platform checks'; do
+              result="$(jq -r --arg name "$name" '[.workflow_runs[] | select(.name == $name)] | sort_by(.run_attempt,.updated_at) | last | if .status == "completed" then .conclusion else "pending" end' <<<"$runs")"
+              case "$result" in success) ;; pending) ready=0 ;; *) echo "NO_GO: required check $name => $result"; exit 1 ;; esac
+            done
+            [[ "$ready" == 1 ]] && exit 0
+            sleep 5
+          done
+          echo 'NO_GO: required checks did not complete'; exit 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci && npx prisma generate
+        working-directory: backend
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/730419163638/locations/global/workloadIdentityPools/github-actions/providers/diewish-staging
+          service_account: diewish-staging-deployer@project-a2e260c1-839d-4f1d-b90.iam.gserviceaccount.com
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: project-a2e260c1-839d-4f1d-b90
+      - name: Fresh runtime split and paused scheduler preflight
+        run: python3 scripts/mascot-split-release.py inspect
+      - name: Verify dedicated Test2 target and migration history without mutation
+        env:
+          NEON_TEST2_DATABASE_URL: ${{ secrets.NEON_TEST2_DATABASE_URL }}
+        run: node scripts/mascot-test2-database.cjs
+      - name: Build both immutable source images without migrations
+        run: python3 scripts/mascot-split-release.py build
+      - name: Apply only the two reviewed mascot CHECK migrations to Test2
+        env:
+          NEON_TEST2_DATABASE_URL: ${{ secrets.NEON_TEST2_DATABASE_URL }}
+        run: |
+          python3 scripts/mascot-split-release.py unchanged
+          node scripts/mascot-test2-database.cjs --migrate
+      - name: No-traffic candidate preparation and real synthetic API acceptance
+        run: python3 scripts/mascot-split-release.py prepare
+      - name: Release exact candidates, live persistence checks and automatic rollback
+        run: python3 scripts/mascot-split-release.py release
+      - name: Retain sanitized runtime revision evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mascot-split-release-evidence
+          path: ${{ runner.temp }}/mascot-release-snapshot.json
+          if-no-files-found: ignore
+          retention-days: 14

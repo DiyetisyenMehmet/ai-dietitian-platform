@@ -1,0 +1,224 @@
+name: Auth A2 Split-Aware Frontend-Only Staging Release
+on:
+  push:
+    branches: [feature/staging-preview]
+    paths: [.github/workflows/staging-auth-a2-frontend-only.yml]
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: diewish-staging-preview
+  cancel-in-progress: false
+jobs:
+  cutover:
+    if: ${{ github.repository == 'DiyetisyenMehmet/ai-dietitian-platform' && github.ref == 'refs/heads/feature/staging-preview' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 42
+    environment: staging
+    env:
+      PROJECT: project-a2e260c1-839d-4f1d-b90
+      REGION: europe-west1
+      OLD_FRONTEND: diewish-frontend-staging-00241-baz
+      OLD_BACKEND: diewish-backend-staging-00479-w44
+      TEST2_BACKEND: diewish-backend-staging-00481-biq
+      FRONTEND: diewish-frontend-staging
+      BACKEND: diewish-backend-staging
+      ROUTING_SOURCE: 1792b7cbc930bb16484e37c981a8deb69457339e
+      ADMIN_TAG_URL: https://admin-legacy---diewish-backend-staging-2qqqfr7wzq-ew.a.run.app
+      TEST2_TAG_URL: https://diewish-test2---diewish-backend-staging-2qqqfr7wzq-ew.a.run.app
+      APP_URL: https://staging.diewish.com
+      ADMIN_URL: https://admin-staging.diewish.com
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/730419163638/locations/global/workloadIdentityPools/github-actions/providers/diewish-staging
+          service_account: diewish-staging-deployer@project-a2e260c1-839d-4f1d-b90.iam.gserviceaccount.com
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT }}
+      - name: Preflight exact backend tagged revisions and original frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f .github/staging-test2-split-active
+          git merge-base --is-ancestor "$ROUTING_SOURCE" "$GITHUB_SHA"
+          git diff --quiet "$ROUTING_SOURCE" "$GITHUB_SHA" --             frontend/src/presentation/components/branding/brand-lockup.tsx             frontend/src/presentation/components/branding/brand-lockup.module.css             frontend/src/presentation/components/layout/auth-layout.tsx             frontend/src/middleware.ts frontend/next.config.ts
+          echo 'PASS: PR93 reviewed source and active Test2/Admin split sentinel preserved'
+          gcloud run services describe "$BACKEND" --project "$PROJECT" --region "$REGION" --format=json > "$RUNNER_TEMP/backend.json"
+          gcloud run services describe "$FRONTEND" --project "$PROJECT" --region "$REGION" --format=json > "$RUNNER_TEMP/frontend.json"
+          python3 - <<'PY'
+          import json,os,sys
+          t=os.environ['RUNNER_TEMP']
+          back=json.load(open(t+'/backend.json'))['status']['traffic']
+          front=json.load(open(t+'/frontend.json'))['status']['traffic']
+          def find(rows,rev=None,tag=None):
+              return [x for x in rows if (rev is None or x.get('revisionName')==rev) and (tag is None or x.get('tag')==tag)]
+          old=find(back,rev=os.environ['OLD_BACKEND'])
+          admin=find(back,tag='admin-legacy')
+          test=find(back,tag='diewish-test2')
+          user=find(front,rev=os.environ['OLD_FRONTEND'])
+          if not (
+            len(old)==1 and old[0].get('percent')==100 and
+            len(admin)==1 and admin[0].get('revisionName')==os.environ['OLD_BACKEND'] and admin[0].get('url')==os.environ['ADMIN_TAG_URL'] and
+            len(test)==1 and test[0].get('revisionName')==os.environ['TEST2_BACKEND'] and test[0].get('url')==os.environ['TEST2_TAG_URL'] and test[0].get('percent',0)==0 and
+            len(user)==1 and user[0].get('percent')==100 and
+            sum(x.get('percent',0) for x in front)==100
+          ):
+              print('NO_GO: old frontend/Admin tag/Test 2 tag identity or traffic drift',file=sys.stderr)
+              sys.exit(2)
+          print('PASS: old Admin 100%, separate legacy/Test 2 tags, old frontend 100%')
+          PY
+          gcloud run revisions describe "$TEST2_BACKEND" --project "$PROJECT" --region "$REGION" --format=json > "$RUNNER_TEMP/test2rev.json"
+          python3 - <<'PY'
+          import json,os,sys
+          a=json.load(open(os.environ['RUNNER_TEMP']+'/test2rev.json'))
+          env={x.get('name'):x for x in a['spec']['containers'][0].get('env',[])}
+          if env.get('DATABASE_URL',{}).get('valueFrom',{}).get('secretKeyRef',{}).get('name')!='diewish-staging-test2-database-url':
+              print('NO_GO: candidate backend not using independent Test 2 secret',file=sys.stderr);sys.exit(3)
+          for x in ['COACH_SYNC_ENABLED','STAGING_AUTOMATION_ENABLED','SCHEDULER_TRIGGER_ENABLED','NUTRITION_JOBS_ENABLED']:
+              if env.get(x,{}).get('value')!='false':
+                  print('NO_GO: candidate backend automation is not disabled',file=sys.stderr);sys.exit(4)
+          print('PASS: Test 2 DB secret and background automation boundary')
+          PY
+          test "$(curl --silent --show-error --max-time 30 -o /dev/null -w '%{http_code}' "$TEST2_TAG_URL/api/health/ready")" = "200"
+          echo 'PASS: Test 2 tagged backend ready'
+          gcloud scheduler jobs describe diewish-notification-dispatch-staging --project "$PROJECT" --location "$REGION" --format='value(state)' | grep -Fx PAUSED
+          echo 'PASS: notification scheduler paused'
+      - name: Build reviewed frontend router image without touching databases
+        shell: bash
+        run: |
+          set -euo pipefail
+          IMAGE="${REGION}-docker.pkg.dev/${PROJECT}/diewish-staging/frontend:auth-brand-a2-${ROUTING_SOURCE}"
+          echo "ROUTER_IMAGE=$IMAGE" >> "$GITHUB_ENV"
+          ID="$(gcloud builds submit --no-source --project "$PROJECT" \
+            --config .github/cloudbuild/frontend-staging.yaml \
+            --substitutions "_IMAGE=${IMAGE},_GIT_SHA=${ROUTING_SOURCE},_API_BASE_URL=/api,_SITE_URL=${APP_URL},_API_PROXY_TARGET=https://invalid-legacy-fallback.invalid" \
+            --async --format='value(id)' --quiet)"
+          test -n "$ID"
+          for i in $(seq 1 180); do
+            status="$(gcloud builds describe "$ID" --project "$PROJECT" --region=global --format='value(status)')"
+            case "$status" in
+              SUCCESS) echo 'PASS: immutable PR93 brand A2 frontend image built';exit 0;;
+              FAILURE|INTERNAL_ERROR|TIMEOUT|CANCELLED|EXPIRED) echo "NO_GO: build status $status" >&2;exit 5;;
+            esac
+            sleep 7
+          done
+          echo 'NO_GO: frontend build wait exceeded' >&2;exit 6
+      - name: Deploy reviewed frontend router without default traffic
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcloud run deploy "$FRONTEND" --project "$PROJECT" --region "$REGION" --platform managed \
+            --image "$ROUTER_IMAGE" --no-traffic --tag diewish-auth-brand-a2 \
+            --update-env-vars "DIEWISH_STAGING_HOST_ROUTING_ENABLED=true,DIEWISH_STAGING_ADMIN_API_ORIGIN=$ADMIN_TAG_URL,DIEWISH_STAGING_USER_API_ORIGIN=$TEST2_TAG_URL,NEXT_PUBLIC_API_BASE_URL=/api" \
+            --min=0 --quiet
+          gcloud run services describe "$FRONTEND" --project "$PROJECT" --region "$REGION" --format=json > "$RUNNER_TEMP/frontend-candidate.json"
+          python3 - <<'PY'
+          import json,os,sys
+          a=json.load(open(os.environ['RUNNER_TEMP']+'/frontend-candidate.json'))['status']['traffic']
+          old=[x for x in a if x.get('revisionName')==os.environ['OLD_FRONTEND']]
+          new=[x for x in a if x.get('tag')=='diewish-auth-brand-a2']
+          if len(old)!=1 or old[0].get('percent')!=100 or len(new)!=1 or new[0].get('percent',0)!=0:
+              print('NO_GO: candidate frontend switched traffic before approval checks',file=sys.stderr);sys.exit(7)
+          print('PASS: candidate frontend tagged with 0% default traffic; old frontend stays 100%')
+          print('CANDIDATE_REVISION='+new[0]['revisionName'])
+          print('CANDIDATE_TAG_URL='+new[0]['url'])
+          PY
+          candidate="$(python3 -c 'import json,os;a=json.load(open(os.environ["RUNNER_TEMP"]+"/frontend-candidate.json")); print(next(x["url"] for x in a["status"]["traffic"] if x.get("tag")=="diewish-auth-brand-a2"))')"
+          # Candidate direct Cloud Run host is deliberately rejected by exact-Host router.
+          code="$(curl -sS -o /dev/null --max-time 30 -w '%{http_code}' "$candidate/api/health/ready" || true)"
+          if [[ "$code" != "421" ]]; then
+            echo "NO_GO: isolated frontend wrong-host guard returned HTTP $code instead of 421" >&2
+            exit 8
+          fi
+          echo 'PASS: candidate frontend fails closed for its canonical/tagged Host'
+      - name: Switch only frontend traffic, smoke-test both domains, auto-rollback on failure
+        shell: bash
+        run: |
+          set -euo pipefail
+          switched=0
+          verified=0
+          rollback() {
+            code=$?
+            if [[ "$switched" == 1 && "$verified" != 1 ]]; then
+              echo 'ROLLBACK: restoring immutable original frontend revision'
+              if ! gcloud run services update-traffic "$FRONTEND" --project "$PROJECT" --region "$REGION" \
+                --to-revisions "$OLD_FRONTEND=100" --quiet; then
+                echo 'CRITICAL: automatic rollback command failed, manual restore immediately' >&2
+              fi
+            fi
+            exit "$code"
+          }
+          trap rollback EXIT
+          gcloud run services describe "$FRONTEND" --project "$PROJECT" --region "$REGION" --format=json > "$RUNNER_TEMP/fbefore.json"
+          python3 - <<'PY'
+          import json,os,sys
+          a=json.load(open(os.environ['RUNNER_TEMP']+'/fbefore.json'))['status']['traffic']
+          old=[x for x in a if x.get('revisionName')==os.environ['OLD_FRONTEND']]
+          new=[x for x in a if x.get('tag')=='diewish-auth-brand-a2']
+          if len(old)!=1 or old[0].get('percent')!=100 or len(new)!=1 or new[0].get('percent',0)!=0:
+              sys.exit('NO_GO: frontend serving changed before swap')
+          print('PASS: exact pre-cutover guard')
+          PY
+          new="$(python3 -c 'import json,os;a=json.load(open(os.environ["RUNNER_TEMP"]+"/fbefore.json"));print(next(x["revisionName"] for x in a["status"]["traffic"] if x.get("tag")=="diewish-auth-brand-a2"))')"
+          switched=1
+          gcloud run services update-traffic "$FRONTEND" --project "$PROJECT" --region "$REGION" --to-revisions "$new=100" --quiet
+          # Give Cloud Run custom domain traffic a bounded propagation window.
+          normal=000;admin=000;admin_old=000
+          admin_old="$(curl --silent --show-error --max-time 20 -o "$RUNNER_TEMP/admin-old.json" -w '%{http_code}' "$ADMIN_TAG_URL/api/health/ready" || true)"
+          for i in $(seq 1 18); do
+            normal="$(curl --silent --show-error --max-time 25 -o "$RUNNER_TEMP/normal.json" -w '%{http_code}' "$APP_URL/api/health/ready" || true)"
+            admin="$(curl --silent --show-error --max-time 25 -o "$RUNNER_TEMP/admin.json" -w '%{http_code}' "$ADMIN_URL/api/health/ready" || true)"
+            echo "SMOKE #$i normal=$normal admin=$admin directOld=$admin_old"
+            [[ "$normal" == 200 && "$admin" == "$admin_old" ]] && break
+            sleep 4
+          done
+          if [[ "$normal" != 200 || "$admin" != "$admin_old" ]]; then
+            echo 'NO_GO: normal and Admin host readiness routing mismatch' >&2
+            exit 9
+          fi
+          python3 - <<'PY'
+          import json,os,sys
+          root=os.environ['RUNNER_TEMP']
+          normal=json.load(open(root+'/normal.json'))
+          if normal.get('data',{}).get('checks',{}).get('database')!='up':
+              sys.exit('NO_GO: Diewish public host is not connected to Test 2')
+          admin=json.load(open(root+'/admin.json'))
+          direct=json.load(open(root+'/admin-old.json'))
+          def semantic(a):
+              return (a.get('success'),a.get('error',{}).get('code'),a.get('error',{}).get('details'))
+          if semantic(admin)!=semantic(direct):
+              sys.exit('NO_GO: Admin public host not semantically equal to original backend')
+          print('PASS: normal public URL reaches Test 2 backend; Admin readiness equals old backend')
+          PY
+          # Mandatory browser app surfaces, no real credentials or DB writes.
+          for path in /login /admin/login; do
+            case "$path" in
+              /login) host="$APP_URL";;
+              /admin/login) host="$ADMIN_URL";;
+            esac
+            code="$(curl -sS --max-time 30 --output /dev/null -w '%{http_code}' "$host$path" || true)"
+            case "$code" in 200|301|302|303|307|308) echo "PASS: HTML surface $path HTTP $code";;*) echo "NO_GO: $path HTTP $code" >&2;exit 11;; esac
+          done
+          gcloud run services describe "$BACKEND" --project "$PROJECT" --region "$REGION" --format=json > "$RUNNER_TEMP/backend-after.json"
+          gcloud run services describe "$FRONTEND" --project "$PROJECT" --region "$REGION" --format=json > "$RUNNER_TEMP/frontend-after.json"
+          python3 - <<'PY'
+          import json,os,sys
+          root=os.environ['RUNNER_TEMP']
+          back=json.load(open(root+'/backend-after.json'))['status']['traffic']
+          front=json.load(open(root+'/frontend-after.json'))['status']['traffic']
+          def one(rows,rev):
+              return any(x.get('revisionName')==rev and x.get('percent')==100 for x in rows)
+          if not one(back,os.environ['OLD_BACKEND']) or not any(x.get('tag')=='admin-legacy' and x.get('revisionName')==os.environ['OLD_BACKEND'] for x in back):
+              sys.exit('NO_GO: legacy Admin revision or normal backend traffic changed')
+          if one(front,os.environ['OLD_FRONTEND']) or sum(x.get('percent',0) for x in front)!=100:
+              sys.exit('NO_GO: new Web traffic not exactly 100%')
+          print('PASS: backend 100% old/legacy tagged, frontend 100% new router')
+          PY
+          verified=1
+          echo 'GO: staging.diewish.com now uses Neon Test 2; Admin stays on legacy backend revision; production untouched'
+          trap - EXIT

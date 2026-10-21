@@ -65,3 +65,33 @@ Bu engel kalkmadan yayın tamamlandı olarak raporlanmaz. Kaynak/CI paketi
 hazırlanır; #90 geçişinin sorumlusu ile mevcut staging DB, Admin izolasyonu
 ve doğru secret referansı doğrulandıktan sonra aynı test edilmiş kayıt
 üzerinden yetkili ortak yayın sürdürülebilir. Production/main değişmez.
+# 21 October 2026 — approved publication after #90
+
+The user explicitly requested publication. #90 is now closed with runtime cutover evidence;
+normal staging readiness is 200/database up. PR #91 incorporates current staging
+`47d1107732c32aa2bef37a020a92d1900d7920ff` without changing its router or branding.
+
+The legacy general deployment remains blocked. `mascot-test2-release.yml` runs only
+on a trusted staging push with `[mascot-split-release]`, after all three mandatory
+checks pass for that exact source. Its bounded release does the following:
+
+- Verify fresh immutable legacy Admin tag, Test2 tag, split-aware frontend, source
+  identity, separate Test2 secret version 1, disabled automation and PAUSED schedulers.
+- Verify Test2 database/role identity and all 50 existing migration checksums. Only
+  the two reviewed mascot CHECK expansions may be pending; no other migration is allowed.
+- Build both images from the exact source without database access. Apply the two
+  migrations through Prisma on the dedicated direct Test2 connection only.
+- Prepare no-traffic backend and frontend candidates. Run real synthetic API
+  selection/readback for all 16 IDs plus cookie refresh and logout/login persistence;
+  delete only the generated synthetic account through its own account API.
+- Move the normal Test2 tag and frontend traffic only. Legacy backend default
+  traffic and Admin tag stay unchanged. Verify live collection assets, repeat the
+  focused public API acceptance and compare Admin routing to its original backend.
+- Automatically restore the previous **Test2** tag and split-aware frontend if
+  acceptance fails. Expanded CHECK remains backward compatible. This rollback
+  preserves the new database and never reverts normal traffic to the unavailable old DB.
+
+No IAM/secret payload/production/Scheduler/APK mutation is included. No mail, AI,
+payment or health-data operation is used. Actual device QA remains distinct from
+Android browser emulation. Source/CI/runtime evidence will be recorded in PR #91.
+

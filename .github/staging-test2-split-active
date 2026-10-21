@@ -1,0 +1,6 @@
+STAGING TEST 2 SPLIT ACTIVE — 2026-10-21
+Normal Diewish https://staging.diewish.com uses Neon Test 2 via backend diewish-backend-staging-00481-biq.
+Admin https://admin-staging.diewish.com uses legacy backend diewish-backend-staging-00479-w44 and old Neon.
+Frontend diewish-frontend-staging-00241-baz is deployed via PR #92 reviewed source.
+The legacy .github/workflows/staging-preview.yml MUST NOT be used while this marker exists: it migrates old Neon and overwrites host routing.
+Release evidence GitHub Actions #39586576551. Restore only via approved split-aware deployment or explicit rollback.
