@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/staging-preview
+      - feature/mascot-full-collection-a1
       - feature/app7-staging-release-optional-qa-a1
       - feature/mirmir-a4-direct-integration
       - feature/app7-coach-p2-safe-completion-a1
@@ -24,6 +25,7 @@ jobs:
         run: |
           python3 -m pip install --disable-pip-version-check PyYAML==6.0.3
           python3 scripts/staging-release-options.test.py
+          python3 scripts/mascot-split-release.test.py
 
       - name: Validate bootstrap shell syntax
         run: |

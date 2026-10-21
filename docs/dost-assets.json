@@ -1,0 +1,28 @@
+{
+  "task": "DIEWISH-MASCOT-NEXT-CHARACTER-A1",
+  "mascotId": "dost",
+  "name": "Dost",
+  "sourceArchive": "MASKOTLAR.zip (7z container)",
+  "archiveSha256": "6bf16b6c2f402594807299a8eff8ad59c84dd3ccce2565aeeb3bc6e557f4882c",
+  "sourceFile": "file_000000006fd08246914408e28b7c792b.png",
+  "sourceSha256": "94fd65f8b9158455d631833bd75f707c267cc3c8d811368d95692e481312bd8c",
+  "sourceSize": [
+    1254,
+    1254
+  ],
+  "collectionOrder": "Mirmir -> Dost -> Nox (approved original order)",
+  "pose": "open eyes",
+  "closedEyeSource": null,
+  "animation": "static; no invented pose",
+  "transform": "full canvas resized with LANCZOS; no crop or alpha edits",
+  "outputSize": [
+    512,
+    512
+  ],
+  "outputFormat": "lossless WebP RGBA",
+  "outputSha256": "226b3c49b5afc35859311d66bfc8e0e5a40080a6ddf82f461c35d13998ad9e83",
+  "outputBytes": 190858,
+  "transparentPixels": 127467,
+  "partialAlphaPixels": 134216,
+  "visibleColorsAndAlphaVerified": true
+}

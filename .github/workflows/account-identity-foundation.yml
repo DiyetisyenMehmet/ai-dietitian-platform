@@ -63,14 +63,25 @@ jobs:
         run: |
           set -euo pipefail
           pending="${RUNNER_TEMP}/app11-foundation-migration"
-          migration="prisma/migrations/20261017123000_account_identity_foundation"
-          mv "$migration" "$pending"
-          trap 'if test -d "$pending"; then mv "$pending" "$migration"; fi' EXIT
+          mkdir -p "$pending"
+          # The baseline must exclude foundation AND its dependent successors.
+          # Applying safe_account_linking without AccountIdentityKind is invalid.
+          for migration in prisma/migrations/20*; do
+            name="$(basename "$migration")"
+            if [[ "$name" < 20261017123000_account_identity_foundation ]]; then continue; fi
+            mv "$migration" "$pending/"
+          done
+          restore_migrations() {
+            for migration in "$pending"/*; do
+              test ! -d "$migration" || mv "$migration" prisma/migrations/
+            done
+          }
+          trap restore_migrations EXIT
           npx prisma migrate deploy
           export APP11_BASELINE_SCHEMA_PATH="${RUNNER_TEMP}/app11-before-schema.prisma"
           node scripts/app11-migration-check.mjs seed
           npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel "$APP11_BASELINE_SCHEMA_PATH" --script > "${RUNNER_TEMP}/app11-drift-before.sql"
-          mv "$pending" "$migration"
+          restore_migrations
           npx prisma migrate deploy
           node scripts/app11-migration-check.mjs verify
           npx prisma migrate status

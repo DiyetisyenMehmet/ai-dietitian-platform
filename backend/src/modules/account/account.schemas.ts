@@ -82,8 +82,9 @@ export type ConfirmPasswordInput = z.infer<typeof confirmPasswordSchema>;
 export type DashboardCardPreferencesInput = z.infer<typeof dashboardCardPreferencesSchema>;
 
 /** Visual preferences are separate from card layout updates to avoid lost settings. */
+export const MASCOT_IDS = ["classic", "diewish-robot", "minis", "bilge", "enerjik", "lina", "bulut", "yesil-damla", "minik-bulut", "mirmir", "dost", "nox", "fit", "guclu", "tombis", "mini-robot"] as const;
 export const mascotPreferencesSchema = z.object({
-  mascotId: z.enum(["classic", "mirmir"]).optional(),
+  mascotId: z.enum(MASCOT_IDS).optional(),
   animationEnabled: z.boolean().optional(),
 }).strict().refine((input) => Object.keys(input).length > 0, "Empty preference update");
 export type MascotPreferencesInput = z.infer<typeof mascotPreferencesSchema>;

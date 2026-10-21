@@ -60,8 +60,13 @@ async function snapshot(client) {
       for (const pattern of [
         /^.*hasUsablePassword\s+Boolean\?[^\n]*\n/m,
         /^.*accountIdentities\s+AccountIdentity\[\][^\n]*\n/m,
+        /^.*identityOperations\s+AccountIdentityOperation\[\][^\n]*\n/m,
         /\nenum AccountIdentityKind \{[^}]*\}\n/,
         /\nmodel AccountIdentity \{[^}]*\}\n/,
+        /\nenum AccountIdentityOperationPurpose \{[^}]*\}\n/,
+        /\nmodel AccountIdentityOperation \{[^}]*\}\n/,
+        /\nmodel PhonePasswordChallenge \{[^}]*\}\n/,
+        /\nmodel PhonePasswordBudget \{[^}]*\}\n/,
       ]) {
         assert.ok(pattern.test(baselineSchema));
         baselineSchema = baselineSchema.replace(pattern, "");
