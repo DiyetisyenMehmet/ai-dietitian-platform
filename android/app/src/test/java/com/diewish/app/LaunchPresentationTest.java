@@ -18,6 +18,7 @@ import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
+import org.robolectric.annotation.GraphicsMode;
 import org.robolectric.annotation.Implementation;
 import org.robolectric.annotation.Implements;
 import org.robolectric.shadows.ShadowWebView;
@@ -26,6 +27,7 @@ import java.util.Map;
 
 /** Native resource/lifecycle evidence; not a substitute for a device recording. */
 @RunWith(RobolectricTestRunner.class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = {28, 33}, application = Application.class,
     instrumentedPackages = {"androidx.webkit"},
     shadows = {SessionCookiePersistenceTest.DocumentStartFeature.class, LaunchPresentationTest.VisualWebView.class})
@@ -65,6 +67,27 @@ public final class LaunchPresentationTest {
         } finally { host.pause().stop().destroy(); }
     }
 
+    @Test public void readySignalOnlyReleasesAVisualFrameOnTheTrustedPage() {
+        var host = Robolectric.buildActivity(MainActivity.class).setup();
+        try {
+            MainActivity activity = host.get();
+            WebView view = ReflectionHelpers.getField(activity, "webView");
+            var client = shadowOf(view).getWebViewClient();
+            client.onPageStarted(view, "https://untrusted.example/", null);
+            activity.new SystemUiBridge().onLaunchFrameReady();
+            shadowOf(android.os.Looper.getMainLooper()).idle();
+            assertNull(VisualWebView.pending);
+            assertNotNull(ReflectionHelpers.getField(activity, "launchCover"));
+            client.onPageStarted(view, BuildConfig.WEB_BASE_URL + "/dashboard", null);
+            activity.new SystemUiBridge().onLaunchFrameReady();
+            shadowOf(android.os.Looper.getMainLooper()).idle();
+            assertNotNull(VisualWebView.pending);
+            assertNotNull(ReflectionHelpers.getField(activity, "launchCover"));
+            VisualWebView.pending.onComplete(0);
+            assertNull(ReflectionHelpers.getField(activity, "launchCover"));
+        } finally { host.pause().stop().destroy(); }
+    }
+
     @Test public void onlyMainFrameFailureDismissesCover() {
         var host = Robolectric.buildActivity(MainActivity.class).setup();
         try {
@@ -93,12 +116,7 @@ public final class LaunchPresentationTest {
         assertEquals(Color.rgb(15, 20, 18), resources.getColor(R.color.diewish_launch_background, null));
     }
 
-    private WebResourceError error() {
-        return new WebResourceError() {
-            public int getErrorCode() { return -2; }
-            public CharSequence getDescription() { return "Synthetic connection failure"; }
-        };
-    }
+    private WebResourceError error() { return new android.webkit.LaunchTestWebResourceError(); }
 
     private WebResourceRequest request(boolean mainFrame) {
         return new WebResourceRequest() {

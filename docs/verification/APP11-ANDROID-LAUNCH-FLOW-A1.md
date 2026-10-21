@@ -15,9 +15,11 @@ replaced by a compact login header.
   `python scripts/branding/generate_launch_icon.py` (development-only Pillow).
 - Legacy starting windows and the in-window loading cover share the Android 12+
   splash artwork, size and light/dark surface. No timer, extra native animation,
-  new Activity, credentials, bridge or auth condition is introduced.
-- The native cover is removed only after page completion and WebView's visual
-  state callback, rather than exposing its initial transparent buffer. Main-frame
+  new Activity, credential or auth condition is introduced.
+- A presentation-only ready signal on the existing origin-checked system-UI
+  bridge removes the native cover after WebView's visual state callback, without
+  waiting for unrelated page assets. Page completion remains an older-web fallback.
+  No empty initial transparent buffer is exposed. Main-frame
   network failures and SSL cancellation release the cover; resource failures do
   not. Existing WebView error behavior and SSL rejection remain intact.
 - RouteGuard's existing waiting presentation reuses the final compact auth lockup
@@ -40,8 +42,16 @@ corners, first-frame dismissal, main-frame error recovery and dark surface.
 The existing session-cookie host checks are relevant because MainActivity's
 startup callback changed. No real account, SMS, health record or backend is used.
 
-There is no local Android SDK/emulator/attached phone. Physical Android cold/warm
-start, saved web theme differing from the device theme, offline/retry and rotation
-remain device acceptance checks before publication. No deploy or APK publication
-is performed by this PR. Native and web may deliberately use different stored
+The API 33 emulator harness runs the real MainActivity with the actual locally
+built frontend, in light/dark mode. Test-only WebView interception serves that
+frontend from a local TLS fixture with a pinned job certificate and normal
+hostname verification; all account API replies are synthetic guests. A sink proxy
+prevents the initial pre-interception navigation from reaching staging. Native
+SSL rejection and trusted-origin checks are unchanged. Ephemeral test packages
+are installed only in the fresh emulator, never uploaded or distributed.
+
+There is no attached physical phone. Physical cold/warm start, saved web theme
+differing from the device theme, offline/retry and rotation remain acceptance
+checks before publication. No deploy or APK publication is performed by this PR.
+Native and web may deliberately use different stored
 light/dark preferences; this PR does not rewrite theme preference policy.

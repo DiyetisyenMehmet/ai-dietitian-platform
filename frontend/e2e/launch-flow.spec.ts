@@ -12,6 +12,18 @@ for (const width of [390, 412, 430]) {
       await page.setViewportSize({ width, height: 900 });
       await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
       await page.addInitScript((value) => localStorage.setItem("theme", value), theme);
+      await page.addInitScript(() => {
+        const host = window as Window & {
+          launchFrames?: number;
+          DiewishSystemUi?: { onLaunchFrameReady: () => void };
+        };
+        host.launchFrames = 0;
+        host.DiewishSystemUi = {
+          onLaunchFrameReady: () => {
+            host.launchFrames!++;
+          },
+        };
+      });
       let releaseSession!: () => void;
       const session = new Promise<void>((resolve) => {
         releaseSession = resolve;
@@ -43,6 +55,9 @@ for (const width of [390, 412, 430]) {
           .poll(() => wordmark.evaluate((element) => (element as HTMLImageElement).naturalWidth))
           .toBe(1004);
         if (!before) {
+          expect(
+            await page.evaluate(() => (window as Window & { launchFrames?: number }).launchFrames),
+          ).toBe(0);
           await expect(slogan).toBeHidden();
           await expect(wordmark).toBeHidden();
           await expect(splash.locator("svg, .animate-spin")).toHaveCount(0);
@@ -55,6 +70,12 @@ for (const width of [390, 412, 430]) {
           .evaluateAll((images) =>
             Promise.all(images.map((image) => (image as HTMLImageElement).decode())),
           );
+        if (!before)
+          await expect
+            .poll(() =>
+              page.evaluate(() => (window as Window & { launchFrames?: number }).launchFrames ?? 0),
+            )
+            .toBeGreaterThan(0);
         const loading = await wordmark.boundingBox();
         await page.screenshot({ path: path.join(evidence, `${key}-waiting.png`) });
         releaseSession();
@@ -81,7 +102,11 @@ for (const width of [390, 412, 430]) {
         }
         for (const label of ["Giriş Yap", "Google ile devam et", "Telefon numarası ile devam et"])
           await expect(page.getByRole("button", { name: label, exact: true })).toBeVisible();
-        await page.screenshot({ path: path.join(evidence, `${key}-login.png`), fullPage: true });
+        await page.screenshot({
+          path: path.join(evidence, `${key}-login.png`),
+          fullPage: true,
+          animations: "disabled",
+        });
         await testInfo.attach(key, {
           path: path.join(evidence, `${key}-waiting.png`),
           contentType: "image/png",

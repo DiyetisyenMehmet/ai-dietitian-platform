@@ -268,6 +268,13 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
             .setAppearanceLightNavigationBars(!dark);
     }
 
+    private void requestLaunchCoverDismissal() {
+        if (launchCover == null || isDestroyed()) return;
+        webView.postVisualStateCallback(0, new WebView.VisualStateCallback() {
+            @Override public void onComplete(long requestId) { dismissLaunchCover(); }
+        });
+    }
+
     private void dismissLaunchCover() {
         if (launchCover == null) return;
         rootView.removeView(launchCover);
@@ -275,6 +282,14 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
     }
 
     public final class SystemUiBridge {
+        /** Presentation only: no credential, session or navigation capability. */
+        @JavascriptInterface
+        public void onLaunchFrameReady() {
+            runOnUiThread(() -> {
+                if (isTrustedPage()) requestLaunchCoverDismissal();
+            });
+        }
+
         @JavascriptInterface
         public void setDarkTheme(boolean dark) {
             runOnUiThread(() -> {
@@ -819,9 +834,7 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
             if (launchCover != null) {
                 // Page-finished alone does not guarantee a painted DOM. Wait
                 // for its visual state, never a timer or an auth/session result.
-                view.postVisualStateCallback(0, new WebView.VisualStateCallback() {
-                    @Override public void onComplete(long requestId) { dismissLaunchCover(); }
-                });
+                requestLaunchCoverDismissal();
             }
             updateTrustedPageState(url);
             if (isTrustedPage()) {

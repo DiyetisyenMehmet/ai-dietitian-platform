@@ -12,7 +12,6 @@ import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.json.JSONArray;
 import java.io.*;
 import java.lang.reflect.Field;
 import java.net.*;
@@ -93,6 +92,7 @@ public final class LaunchVisualTest {
             await("location.pathname === '/login' && document.querySelector('[data-artwork-state=ready]') !== null");
             assertEquals("Lockup must stay in the same position through guest routing", loading, evaluate(bounds()));
             await("document.body.innerText.includes('Google ile devam et') && document.body.innerText.includes('Telefon numarası ile devam et')");
+            await("document.getAnimations().every(a => a.playState === 'finished')");
             screenshot(theme + "-login");
         }
     }
