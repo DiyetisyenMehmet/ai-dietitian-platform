@@ -35,6 +35,39 @@
   line-height: 1.4;
 }
 
+/* Align the icon with the artwork row, rather than the artwork + slogan stack.
+   The compact slogan keeps the total mobile height at the existing ~53px. */
+.auth {
+  display: grid;
+  grid-template-columns: 44px minmax(0, auto);
+  column-gap: 8px;
+  row-gap: 0;
+}
+
+.auth .symbol {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.auth .wordmark {
+  display: contents;
+}
+
+.auth .name {
+  grid-column: 2;
+  grid-row: 1;
+  width: 144px;
+  align-self: center;
+}
+
+.auth .tagline {
+  grid-column: 2;
+  grid-row: 2;
+  margin-top: -5px;
+  font-size: 11px;
+  line-height: 14px;
+}
+
 @media (min-width: 1024px) and (max-width: 1279px) {
   .symbol {
     width: 36px;
@@ -47,5 +80,18 @@
 
   .tagline {
     font-size: 0.625rem;
+  }
+
+  .auth {
+    grid-template-columns: 36px minmax(0, auto);
+  }
+
+  .auth .name {
+    width: 128px;
+  }
+
+  .auth .tagline {
+    margin-top: -3px;
+    font-size: 10px;
   }
 }
