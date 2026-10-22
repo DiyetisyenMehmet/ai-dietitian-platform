@@ -203,10 +203,13 @@ jobs:
           git fetch --no-tags --depth=1 origin "$accepted"
           git worktree add --detach "${RUNNER_TEMP}/next-security-brand-baseline" "$accepted"
           ln -s "$GITHUB_WORKSPACE/frontend/node_modules" "$APPROVED_BRAND_APP_DIRECTORY/node_modules"
+          git worktree add --detach "${RUNNER_TEMP}/next-security-brand-candidate" HEAD
+          ln -s "$GITHUB_WORKSPACE/frontend/node_modules" "${RUNNER_TEMP}/next-security-brand-candidate/frontend/node_modules"
           npx playwright test --config playwright.approved-brand.config.ts --reporter=line --grep "approved artwork, stable handoff"
       - name: Test approved branding and guest handoff after Next security update
         env:
           APPROVED_BRAND_EVIDENCE_DIR: ${{ runner.temp }}/next-security-approved-brand
+          APPROVED_BRAND_APP_DIRECTORY: ${{ runner.temp }}/next-security-brand-candidate/frontend
         run: npx playwright test --config playwright.approved-brand.config.ts --reporter=line
       - name: Upload Next security branding comparison evidence
         if: always()
