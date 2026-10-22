@@ -10,8 +10,12 @@ backing on a dark surface, an unbranded WebView interval, independently fetched
 web artwork (slogan first), and a second oversized centered composition that is
 replaced by a compact login header.
 
-- Native splash uses a deterministic rounded alpha mask of the approved source
-  JPEG. The original source and launcher artwork are untouched. Reproduction:
+- Native splash uses a deterministic foreground alpha mask of the approved
+  source JPEG. Seeded colored components keep the dot, letters and both leaves;
+  the pale square tile and its separate shadow are excluded. RGB pixels and
+  coordinates stay identical to the uniformly resized approved source. Only
+  alpha changes, with a subpixel outside-edge feather. The original source and
+  launcher artwork are untouched. Reproduction:
   `python scripts/branding/generate_launch_icon.py` (development-only Pillow).
 - Android 12+ retains the actual system splash until the final web frame, avoiding
   a second icon at the platform's different scale. Legacy starting windows and
@@ -84,3 +88,21 @@ differing from the device theme, offline/retry and rotation remain acceptance
 checks before publication. No deploy or APK publication is performed by this PR.
 Native and web may deliberately use different stored
 light/dark preferences; this PR does not rewrite theme preference policy.
+
+## Manager-requested tile removal revision
+
+The accepted implementation/check baseline is commit
+`38bcd6f52fb2dfa805c18da5b4411bd471e4d80d`. No application flow, theme,
+auth, web asset, native layout or bridge code changes in this revision.
+Four Python checks verify source RGB/geometry, transparent tile edges and
+negative space, opaque mark/leaf details, and reproducibility without writing
+the original. The updated native artwork check runs on API 28 and 33; the same
+two real MainActivity emulator recordings validate actual compositing and the
+existing ready-frame handoff.
+
+CI classifies only an explicit file allowlist relative to the accepted commit
+as artwork-only. In that case it runs those changed-artwork checks and the two
+recordings, while preserving source guards and avoiding the previously accepted
+web/auth/cookie/lifecycle suites. Any change outside that allowlist returns to
+the full existing checks. Emulator images/recordings are synthetic-guest
+evidence, not physical-phone acceptance or startup-speed benchmarks.

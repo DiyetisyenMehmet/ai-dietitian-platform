@@ -138,13 +138,19 @@ public final class LaunchPresentationTest {
         } finally { host.pause().stop().destroy(); }
     }
 
-    @Test public void splashArtworkHasTransparentCornersAndKeepsOpaqueInterior() {
+    @Test public void splashArtworkKeepsMarkButRemovesTile() {
         var resources = org.robolectric.RuntimeEnvironment.getApplication().getResources();
         Bitmap bitmap = BitmapFactory.decodeResource(resources, R.drawable.diewish_splash_rounded);
         assertTrue(bitmap.hasAlpha());
         assertEquals(0, Color.alpha(bitmap.getPixel(0, 0)));
         assertEquals(0, Color.alpha(bitmap.getPixel(bitmap.getWidth() - 1, bitmap.getHeight() - 1)));
         assertEquals(255, Color.alpha(bitmap.getPixel(bitmap.getWidth() / 2, bitmap.getHeight() / 2)));
+        for (int[] point : new int[][] {{48, 256}, {470, 256}, {256, 48}, {256, 470}, {255, 100}}) {
+            assertEquals("Tile backing must be transparent", 0, Color.alpha(bitmap.getPixel(point[0], point[1])));
+        }
+        for (int[] point : new int[][] {{140, 125}, {140, 260}, {410, 270}, {280, 280}, {300, 370}}) {
+            assertEquals("Approved dot, letters and leaves must remain opaque", 255, Color.alpha(bitmap.getPixel(point[0], point[1])));
+        }
         assertNotNull(resources.getDrawable(R.drawable.diewish_launch_background, null));
         if (android.os.Build.VERSION.SDK_INT >= 33) {
             var theme = resources.newTheme();

@@ -14,7 +14,19 @@ concurrency:
   group: auth-brand-header-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  revision-scope:
+    runs-on: ubuntu-latest
+    outputs:
+      artwork_only: ${{ steps.scope.outputs.artwork_only }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: scope
+        run: bash scripts/branding/launch_revision_scope.sh "${{ github.event.pull_request.head.sha }}" >> "$GITHUB_OUTPUT"
   auth-brand-header:
+    needs: revision-scope
+    if: needs.revision-scope.outputs.artwork_only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:

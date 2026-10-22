@@ -19,11 +19,35 @@ concurrency:
   group: android-launch-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  revision-scope:
+    runs-on: ubuntu-latest
+    outputs:
+      artwork_only: ${{ steps.scope.outputs.artwork_only }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: scope
+        run: bash scripts/branding/launch_revision_scope.sh "${{ github.event.pull_request.head.sha }}" >> "$GITHUB_OUTPUT"
+      - name: Preserve accepted application flow, source artwork and protected code
+        run: |
+          git diff --exit-code "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}" -- backend frontend/public/brands frontend/next.config.ts frontend/src/app frontend/src/application frontend/src/infrastructure frontend/src/presentation/components/auth frontend/src/presentation/components/providers frontend/src/presentation/components/layout/auth-layout.tsx
+          if [ '${{ steps.scope.outputs.artwork_only }}' = true ]; then
+            git diff --exit-code 38bcd6f52fb2dfa805c18da5b4411bd471e4d80d "${{ github.event.pull_request.head.sha }}" -- android/app/src/main/java android/app/src/main/AndroidManifest.xml android/app/src/main/res/drawable-nodpi/diewish_splash_approved.jpg frontend
+          fi
   native-presentation:
+    needs: revision-scope
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Approved icon RGB, alpha, details and reproducibility
+        run: |
+          python -m pip install Pillow==12.3.0
+          python scripts/branding/test_launch_icon.py -v
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -36,13 +60,19 @@ jobs:
         with:
           gradle-version: '9.6.0'
       - name: Native launch resources and first-frame lifecycle (no APK or deployment)
+        if: needs.revision-scope.outputs.artwork_only != 'true'
         run: gradle --no-daemon -p android :app:testDebugUnitTest --tests com.diewish.app.LaunchPresentationTest --tests com.diewish.app.SessionCookiePersistenceTest
+      - name: Only the changed native icon on API 28 and 33
+        if: needs.revision-scope.outputs.artwork_only == 'true'
+        run: gradle --no-daemon -p android :app:testDebugUnitTest --tests 'com.diewish.app.LaunchPresentationTest.splashArtworkKeepsMarkButRemovesTile*'
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: native-launch-test-results
           path: android/app/build/test-results/testDebugUnitTest
   web-handoff:
+    needs: revision-scope
+    if: needs.revision-scope.outputs.artwork_only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
