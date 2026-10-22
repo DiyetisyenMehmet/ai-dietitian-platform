@@ -8,8 +8,11 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.LayerDrawable;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Build;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.PermissionRequest;
@@ -17,10 +20,12 @@ import android.webkit.SslErrorHandler;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceError;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
+import android.view.View;
 
 import androidx.core.graphics.Insets;
 import androidx.activity.ComponentActivity;
@@ -76,6 +81,9 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
     private WebView webView;
     private DiewishGoogleAuthBridge googleAuthBridge;
     private FrameLayout rootView;
+    private View launchCover;
+    private View systemLaunchSplash;
+    private Runnable removeSystemLaunchSplash;
     private BillingClient billingClient;
     private boolean billingReady = false;
     private ValueCallback<Uri[]> filePathCallback;
@@ -92,6 +100,19 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            // Keep the actual system composition until the final web frame;
+            // replacing it with another icon can change the platform's scale.
+            getSplashScreen().setOnExitAnimationListener(splash -> {
+                if (launchCover == null || isDestroyed()) { splash.remove(); return; }
+                systemLaunchSplash = splash;
+                removeSystemLaunchSplash = splash::remove;
+                if (rootView.getBackground() instanceof ColorDrawable) {
+                    splash.setBackgroundColor(((ColorDrawable) rootView.getBackground()).getColor());
+                }
+            });
+        }
 
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
 
@@ -123,6 +144,14 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
                 FrameLayout.LayoutParams.MATCH_PARENT
             )
         );
+
+        launchCover = new View(this);
+        launchCover.setClickable(true);
+        launchCover.setBackgroundResource(R.drawable.diewish_launch_background);
+        launchCover.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        rootView.addView(launchCover, new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT
+        ));
 
         ViewCompat.setOnApplyWindowInsetsListener(rootView, (view, windowInsets) -> {
             int handledInsets = WindowInsetsCompat.Type.systemBars()
@@ -242,6 +271,13 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
     private void applySystemBarTheme(boolean dark) {
         int background = dark ? Color.rgb(15, 20, 18) : Color.WHITE;
         if (rootView != null) rootView.setBackgroundColor(background);
+        if (systemLaunchSplash != null) systemLaunchSplash.setBackgroundColor(background);
+        if (launchCover != null && launchCover.getBackground() instanceof LayerDrawable) {
+            // The app's saved theme can differ from the device's launch theme.
+            // Recolor only the surface; retain the same approved icon throughout.
+            LayerDrawable layers = (LayerDrawable) launchCover.getBackground().mutate();
+            layers.setDrawableByLayerId(R.id.diewish_launch_surface, new ColorDrawable(background));
+        }
         getWindow().setStatusBarColor(Color.TRANSPARENT);
         getWindow().setNavigationBarColor(Color.TRANSPARENT);
         // The root paints the inset regions on edge-to-edge Android versions.
@@ -251,7 +287,65 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
             .setAppearanceLightNavigationBars(!dark);
     }
 
+    private static final String LAUNCH_DOM_READY =
+        "location.origin===" + JSONObject.quote(BuildConfig.WEB_BASE_URL)
+            + "&&document.readyState!=='loading'&&document.body&&document.body.childElementCount>0"
+            + "&&!document.querySelector('[data-testid=diewish-brand-splash]')"
+            + "&& !document.querySelector('[data-artwork-state=loading]')";
+
+    private void requestLaunchCoverDismissal() {
+        if (launchCover == null || isDestroyed()) return;
+        webView.evaluateJavascript("(function(){return " + LAUNCH_DOM_READY + ";})()", ready -> {
+            if (!"true".equals(ready) || launchCover == null || isDestroyed()) return;
+            webView.postVisualStateCallback(0, new WebView.VisualStateCallback() {
+                @Override public void onComplete(long requestId) { dismissLaunchCover(); }
+            });
+        });
+    }
+
+    private void watchLaunchPresentation(WebView view) {
+        // Observe presentation only. RouteGuard still owns every session,
+        // consent and navigation decision. Covers full-document guest redirects
+        // as well as client-side handoffs; no timer or minimum display duration.
+        view.evaluateJavascript(
+            "(function(){if(window.__diewishLaunchWatcher)return;"
+                + "var checking=false;function ready(){return " + LAUNCH_DOM_READY + ";}"
+                + "function check(){if(checking||!ready())return;checking=true;"
+                + "var b=document.querySelector('[data-testid=diewish-brand]');"
+                + "var images=b&&!b.hasAttribute('data-artwork-state')?Array.from(b.querySelectorAll('img')):[];"
+                + "Promise.allSettled(images.map(function(i){return i.decode();})).then(function(){"
+                + "if(!ready()){checking=false;return;}observer.disconnect();"
+                + "delete window.__diewishLaunchWatcher;window.DiewishSystemUi.onLaunchFrameReady();});}"
+                + "var observer=new MutationObserver(check);window.__diewishLaunchWatcher=observer;"
+                + "observer.observe(document.documentElement,{childList:true,subtree:true,attributes:true,"
+                + "attributeFilter:['data-artwork-state']});check();})();",
+            null
+        );
+    }
+
+    private void dismissLaunchCover() {
+        if (launchCover != null) {
+            rootView.removeView(launchCover);
+            launchCover = null;
+        }
+        dismissSystemLaunchSplash();
+    }
+
+    private void dismissSystemLaunchSplash() {
+        if (removeSystemLaunchSplash != null) removeSystemLaunchSplash.run();
+        removeSystemLaunchSplash = null;
+        systemLaunchSplash = null;
+    }
+
     public final class SystemUiBridge {
+        /** Presentation only: no credential, session or navigation capability. */
+        @JavascriptInterface
+        public void onLaunchFrameReady() {
+            runOnUiThread(() -> {
+                if (isTrustedPage()) requestLaunchCoverDismissal();
+            });
+        }
+
         @JavascriptInterface
         public void setDarkTheme(boolean dark) {
             runOnUiThread(() -> {
@@ -780,12 +874,24 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
             android.net.http.SslError error
         ) {
             handler.cancel();
+            dismissLaunchCover();
+        }
+
+        @Override
+        public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+            super.onReceivedError(view, request, error);
+            // Do not obscure WebView's existing main-frame connection error.
+            if (request.isForMainFrame()) dismissLaunchCover();
         }
 
         @Override
         public void onPageFinished(WebView view, String url) {
             super.onPageFinished(view, url);
             updateTrustedPageState(url);
+            if (launchCover != null) {
+                if (isTrustedPage()) watchLaunchPresentation(view);
+                // Initial about:blank/stale finishes are not an app frame.
+            }
             if (isTrustedPage()) {
                 view.evaluateJavascript(
                     DiewishSessionCookieBridge.bootstrapScript()
@@ -1061,6 +1167,7 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
 
     @Override
     protected void onDestroy() {
+        dismissSystemLaunchSplash();
         persistSessionCookies();
         if (googleAuthBridge != null) googleAuthBridge.close();
         if (billingClient != null) billingClient.endConnection();

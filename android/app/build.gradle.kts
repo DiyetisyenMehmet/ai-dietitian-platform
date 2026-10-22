@@ -48,6 +48,7 @@ android {
         targetSdk = 36
         versionCode = 2
         versionName = "0.1.1"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         buildConfigField("String", "BUILD_REVISION", buildConfigString(buildRevision))
     }
@@ -128,6 +129,8 @@ dependencies {
 
     implementation("com.android.billingclient:billing:9.1.0")
 
+    androidTestImplementation("androidx.test:runner:1.7.0")
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.17")
 }

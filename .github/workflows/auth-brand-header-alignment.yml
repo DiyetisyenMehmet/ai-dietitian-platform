@@ -14,7 +14,19 @@ concurrency:
   group: auth-brand-header-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  revision-scope:
+    runs-on: ubuntu-latest
+    outputs:
+      artwork_only: ${{ steps.scope.outputs.artwork_only }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: scope
+        run: bash scripts/branding/launch_revision_scope.sh "${{ github.event.pull_request.head.sha }}" >> "$GITHUB_OUTPUT"
   auth-brand-header:
+    needs: revision-scope
+    if: needs.revision-scope.outputs.artwork_only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -53,7 +65,7 @@ jobs:
         run: npx playwright test --config=playwright.auth-brand-header.config.ts --reporter=line
       - name: Verify artwork, traffic routing and auth behavior source are unchanged
         working-directory: .
-        run: git diff --exit-code d70832dfcce9ff4173a8f8dc470e5bde0f137d9f HEAD -- frontend/public/brands backend android frontend/next.config.ts frontend/src/app frontend/src/infrastructure frontend/src/application frontend/src/presentation/components/auth
+        run: git diff --exit-code "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}" -- frontend/public/brands backend frontend/next.config.ts frontend/src/app frontend/src/infrastructure frontend/src/application frontend/src/presentation/components/auth
       - uses: actions/upload-artifact@v4
         if: always()
         with:

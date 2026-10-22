@@ -1,0 +1,179 @@
+name: Android launch flow polish A1
+on:
+  pull_request:
+    branches: [feature/staging-preview]
+    paths:
+      - android/app/src/main/java/com/diewish/app/MainActivity.java
+      - android/app/src/main/res/**
+      - android/app/src/test/java/com/diewish/app/LaunchPresentationTest.java
+      - android/app/src/androidTest/**
+      - android/app/build.gradle.kts
+      - scripts/branding/**
+      - frontend/src/presentation/components/branding/**
+      - frontend/e2e/launch-flow.spec.ts
+      - frontend/playwright.launch-flow.config.ts
+      - .github/workflows/android-launch-flow-polish.yml
+permissions:
+  contents: read
+concurrency:
+  group: android-launch-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  revision-scope:
+    runs-on: ubuntu-latest
+    outputs:
+      artwork_only: ${{ steps.scope.outputs.artwork_only }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: scope
+        run: bash scripts/branding/launch_revision_scope.sh "${{ github.event.pull_request.head.sha }}" >> "$GITHUB_OUTPUT"
+      - name: Preserve accepted application flow, source artwork and protected code
+        run: |
+          git diff --exit-code "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}" -- backend frontend/public/brands frontend/next.config.ts frontend/src/app frontend/src/application frontend/src/infrastructure frontend/src/presentation/components/auth frontend/src/presentation/components/providers frontend/src/presentation/components/layout/auth-layout.tsx
+          if [ '${{ steps.scope.outputs.artwork_only }}' = true ]; then
+            git diff --exit-code 38bcd6f52fb2dfa805c18da5b4411bd471e4d80d "${{ github.event.pull_request.head.sha }}" -- android/app/src/main/java android/app/src/main/AndroidManifest.xml android/app/src/main/res/drawable-nodpi/diewish_splash_approved.jpg frontend
+          fi
+  native-presentation:
+    needs: revision-scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Approved icon RGB, alpha, details and reproducibility
+        run: |
+          python -m pip install Pillow==12.3.0
+          python scripts/branding/test_launch_icon.py -v
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.6.0'
+      - name: Native launch resources and first-frame lifecycle (no APK or deployment)
+        if: needs.revision-scope.outputs.artwork_only != 'true'
+        run: gradle --no-daemon -p android :app:testDebugUnitTest --tests com.diewish.app.LaunchPresentationTest --tests com.diewish.app.SessionCookiePersistenceTest
+      - name: Only the changed native icon on API 28 and 33
+        if: needs.revision-scope.outputs.artwork_only == 'true'
+        run: gradle --no-daemon -p android :app:testDebugUnitTest --tests 'com.diewish.app.LaunchPresentationTest.splashArtworkKeepsMarkButRemovesTile*'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-launch-test-results
+          path: android/app/build/test-results/testDebugUnitTest
+  web-handoff:
+    needs: revision-scope
+    if: needs.revision-scope.outputs.artwork_only != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      NEXT_PUBLIC_API_BASE_URL: /api
+      NEXT_TELEMETRY_DISABLED: '1'
+      LAUNCH_EVIDENCE_DIR: /tmp/launch-flow-evidence
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npx eslint src/presentation/components/branding/brand-artwork.tsx src/presentation/components/branding/brand-lockup.tsx src/presentation/components/branding/brand-splash.tsx e2e/launch-flow.spec.ts playwright.launch-flow.config.ts
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - name: Record actual accepted baseline with the same cold-cache harness
+        env:
+          LAUNCH_PHASE: before
+        run: |
+          set -euo pipefail
+          baseline="${RUNNER_TEMP}/launch-before"
+          git worktree add --detach "$baseline" 47d1107732c32aa2bef37a020a92d1900d7920ff
+          ln -s "$GITHUB_WORKSPACE/frontend/node_modules" "$baseline/frontend/node_modules"
+          LAUNCH_APP_DIRECTORY="$baseline/frontend" npx playwright test --config=playwright.launch-flow.config.ts --reporter=line --output=/tmp/launch-flow-evidence/before-recordings
+      - name: Atomic artwork, stable header, guest routing and asset failures
+        run: npx playwright test --config=playwright.launch-flow.config.ts --reporter=line --output=/tmp/launch-flow-evidence/after-recordings
+      - name: Auth logic, approved web assets, backend and host routing remain unchanged
+        working-directory: .
+        run: git diff --exit-code "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}" -- backend frontend/public/brands frontend/next.config.ts frontend/src/app frontend/src/application frontend/src/infrastructure frontend/src/presentation/components/auth frontend/src/presentation/components/providers frontend/src/presentation/components/layout/auth-layout.tsx
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: launch-flow-before-after-browser-evidence
+          path: /tmp/launch-flow-evidence
+  emulator-recording:
+    needs: native-presentation
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      NEXT_PUBLIC_API_BASE_URL: /api
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.6.0'
+      - name: Prepare real local frontend and isolated TLS fixture
+        run: |
+          set -euo pipefail
+          npm --prefix frontend ci --no-audit --no-fund
+          npm --prefix frontend run build
+          npm --prefix frontend run start -- --hostname 0.0.0.0 --port 3019 > /tmp/launch-next.log 2>&1 &
+          mkdir -p android/app/src/androidTest/assets
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=10.0.2.2 -addext 'subjectAltName=IP:10.0.2.2' -keyout /tmp/launch-fixture.key -out android/app/src/androidTest/assets/launch-fixture.pem
+          LAUNCH_FIXTURE_KEY=/tmp/launch-fixture.key LAUNCH_FIXTURE_CERT=android/app/src/androidTest/assets/launch-fixture.pem node scripts/branding/launch_fixture.cjs > /tmp/launch-fixture.log 2>&1 &
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:3019/login > /dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:3019/login > /dev/null
+      - name: Build ephemeral emulator test packages (never upload an APK)
+        run: gradle --no-daemon -p android :app:assembleDebug :app:assembleDebugAndroidTest
+      - name: Enable hardware acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 33
+          target: google_apis
+          arch: x86_64
+          profile: pixel_7
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect -camera-back none
+          disable-animations: true
+          script: bash scripts/branding/record_launch_emulator.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-launch-api33-guest-recording
+          path: |
+            /tmp/android-launch-evidence
+            /tmp/launch-next.log
+            /tmp/launch-fixture.log

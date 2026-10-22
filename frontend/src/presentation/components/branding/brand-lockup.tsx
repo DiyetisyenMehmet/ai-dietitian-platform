@@ -1,12 +1,14 @@
 import Image from "next/image";
+import { BrandArtwork } from "./brand-artwork";
 
 import { APP_CONFIG } from "@/shared/constants/app";
 import styles from "./brand-lockup.module.css";
 
 /** The owner-approved symbol and transparent wordmark; never redraw the logo. */
 export function BrandLockup({ variant = "default" }: { variant?: "default" | "auth" }) {
+  const Wrapper = variant === "auth" ? BrandArtwork : "span";
   return (
-    <span
+    <Wrapper
       className={`${styles.brand}${variant === "auth" ? ` ${styles.auth}` : ""}`}
       data-testid="diewish-brand"
     >
@@ -31,6 +33,6 @@ export function BrandLockup({ variant = "default" }: { variant?: "default" | "au
         />
         <span className={styles.tagline}>Sağlığın için, her zaman yanında.</span>
       </span>
-    </span>
+    </Wrapper>
   );
 }

@@ -4,7 +4,7 @@
 <inset xmlns:android="http://schemas.android.com/apk/res/android"
     android:inset="48dp">
     <bitmap
-        android:src="@drawable/diewish_splash_approved"
+        android:src="@drawable/diewish_splash_rounded"
         android:gravity="fill"
         android:filter="true" />
 </inset>
