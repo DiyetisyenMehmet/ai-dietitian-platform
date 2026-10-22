@@ -18,15 +18,16 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       artwork_only: ${{ steps.scope.outputs.artwork_only }}
+      brand_assets: ${{ steps.scope.outputs.brand_assets }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - id: scope
-        run: bash scripts/branding/launch_revision_scope.sh "${{ github.event.pull_request.head.sha }}" >> "$GITHUB_OUTPUT"
+        run: bash scripts/branding/launch_revision_scope.sh "${{ github.event.pull_request.head.sha }}" "${{ github.event.pull_request.base.sha }}" >> "$GITHUB_OUTPUT"
   auth-brand-header:
     needs: revision-scope
-    if: needs.revision-scope.outputs.artwork_only != 'true'
+    if: needs.revision-scope.outputs.artwork_only != 'true' && needs.revision-scope.outputs.brand_assets != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:

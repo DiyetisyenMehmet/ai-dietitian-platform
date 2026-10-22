@@ -13,7 +13,7 @@ export function BrandLockup({ variant = "default" }: { variant?: "default" | "au
       data-testid="diewish-brand"
     >
       <Image
-        src="/brands/diewish-id-approved.webp"
+        src="/brands/diewish-id-transparent-approved.png"
         alt=""
         width={44}
         height={44}
@@ -22,15 +22,27 @@ export function BrandLockup({ variant = "default" }: { variant?: "default" | "au
         className={styles.symbol}
       />
       <span className={styles.wordmark}>
-        <Image
-          src="/brands/diewish-wordmark-approved.png"
-          alt={APP_CONFIG.name}
-          width={1004}
-          height={214}
-          priority
-          unoptimized
-          className={`${styles.name} dark:drop-shadow-[0_0_2px_rgba(255,255,255,0.55)]`}
-        />
+        <span className={styles.name}>
+          <Image
+            src="/brands/diewish-wordmark-approved.png"
+            alt={APP_CONFIG.name}
+            width={1004}
+            height={214}
+            priority
+            unoptimized
+            className={`${styles.nameArtwork} ${styles.lightName}`}
+          />
+          <Image
+            src="/brands/diewish-wordmark-dark-approved.png"
+            alt=""
+            aria-hidden="true"
+            width={993}
+            height={206}
+            priority
+            unoptimized
+            className={`${styles.nameArtwork} ${styles.darkName}`}
+          />
+        </span>
         <span className={styles.tagline}>Sağlığın için, her zaman yanında.</span>
       </span>
     </Wrapper>
