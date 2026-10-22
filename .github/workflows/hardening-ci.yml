@@ -192,10 +192,29 @@ jobs:
           tests/staging-host-routing.transport.cjs
       - name: Install browser for Admin password setup regression
         run: npx playwright install --with-deps chromium
+      - name: Capture accepted staging branding baseline
+        env:
+          APPROVED_BRAND_PHASE: before
+          APPROVED_BRAND_EVIDENCE_DIR: ${{ runner.temp }}/next-security-approved-brand
+          APPROVED_BRAND_APP_DIRECTORY: ${{ runner.temp }}/next-security-brand-baseline/frontend
+        run: |
+          set -euo pipefail
+          accepted=582c2352e1e868adc18e9e9faa4efcedc2ced063
+          git fetch --no-tags --depth=1 origin "$accepted"
+          git worktree add --detach "${RUNNER_TEMP}/next-security-brand-baseline" "$accepted"
+          ln -s "$GITHUB_WORKSPACE/frontend/node_modules" "$APPROVED_BRAND_APP_DIRECTORY/node_modules"
+          npx playwright test --config playwright.approved-brand.config.ts --reporter=line --grep "approved artwork, stable handoff"
       - name: Test approved branding and guest handoff after Next security update
         env:
           APPROVED_BRAND_EVIDENCE_DIR: ${{ runner.temp }}/next-security-approved-brand
         run: npx playwright test --config playwright.approved-brand.config.ts --reporter=line
+      - name: Upload Next security branding comparison evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: next-security-approved-brand
+          path: ${{ runner.temp }}/next-security-approved-brand
+          if-no-files-found: warn
       - name: Test nutrition session readiness without accounts or AI
         run: npx playwright test e2e/nutrition-session-check.spec.ts --workers=1 --reporter=line
       - name: Test Mirmir default blink and retired video
