@@ -180,7 +180,7 @@ jobs:
       - run: npm run type-check
       - run: npm run build
         env:
-          NEXT_PUBLIC_API_BASE_URL: https://example.invalid/api
+          NEXT_PUBLIC_API_BASE_URL: /api
           NEXT_PUBLIC_SITE_URL: https://example.invalid
 
       - name: Test Next security update auth and host routing regression
