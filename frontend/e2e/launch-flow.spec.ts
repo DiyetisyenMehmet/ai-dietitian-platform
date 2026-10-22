@@ -119,7 +119,11 @@ for (const width of [390, 412, 430]) {
   }
 }
 
-for (const failedAsset of ["diewish-id-approved.webp", "diewish-wordmark-approved.png"]) {
+for (const failedAsset of [
+  "diewish-id-transparent-approved.png",
+  "diewish-wordmark-approved.png",
+  "diewish-wordmark-dark-approved.png",
+]) {
   test(`failed artwork does not hide login or leave a partial brand (${failedAsset})`, async ({
     page,
   }) => {

@@ -33,7 +33,7 @@ for (const width of [390, 412, 430]) {
       const header = page.locator("header").first();
       const brand = header.getByTestId("diewish-brand");
       const name = brand.getByAltText("Diewish", { exact: true });
-      const symbol = brand.locator('img[src="/brands/diewish-id-approved.webp"]');
+      const symbol = brand.locator('img[src="/brands/diewish-id-transparent-approved.png"]');
       const tagline = brand.getByText("Sağlığın için, her zaman yanında.", { exact: true });
       await brand
         .locator("img")

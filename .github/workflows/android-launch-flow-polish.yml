@@ -11,6 +11,9 @@ on:
       - scripts/branding/**
       - frontend/src/presentation/components/branding/**
       - frontend/e2e/launch-flow.spec.ts
+      - frontend/e2e/approved-brand-assets.spec.ts
+      - frontend/playwright.approved-brand.config.ts
+      - frontend/public/brands/diewish-*-approved.png
       - frontend/playwright.launch-flow.config.ts
       - .github/workflows/android-launch-flow-polish.yml
 permissions:
@@ -23,15 +26,20 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       artwork_only: ${{ steps.scope.outputs.artwork_only }}
+      brand_assets: ${{ steps.scope.outputs.brand_assets }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - id: scope
-        run: bash scripts/branding/launch_revision_scope.sh "${{ github.event.pull_request.head.sha }}" >> "$GITHUB_OUTPUT"
+        run: bash scripts/branding/launch_revision_scope.sh "${{ github.event.pull_request.head.sha }}" "${{ github.event.pull_request.base.sha }}" >> "$GITHUB_OUTPUT"
       - name: Preserve accepted application flow, source artwork and protected code
         run: |
-          git diff --exit-code "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}" -- backend frontend/public/brands frontend/next.config.ts frontend/src/app frontend/src/application frontend/src/infrastructure frontend/src/presentation/components/auth frontend/src/presentation/components/providers frontend/src/presentation/components/layout/auth-layout.tsx
+          if [ '${{ steps.scope.outputs.brand_assets }}' = true ]; then
+            git diff --exit-code "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}" -- backend frontend/public/brands frontend/next.config.ts frontend/src/app frontend/src/application frontend/src/infrastructure frontend/src/presentation/components/auth frontend/src/presentation/components/providers frontend/src/presentation/components/layout/auth-layout.tsx android/app/src/main/java android/app/src/main/AndroidManifest.xml android/app/src/main/res/drawable-nodpi/diewish_splash_approved.jpg ':(exclude)frontend/public/brands/diewish-id-transparent-approved.png' ':(exclude)frontend/public/brands/diewish-wordmark-dark-approved.png'
+          else
+            git diff --exit-code "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}" -- backend frontend/public/brands frontend/next.config.ts frontend/src/app frontend/src/application frontend/src/infrastructure frontend/src/presentation/components/auth frontend/src/presentation/components/providers frontend/src/presentation/components/layout/auth-layout.tsx
+          fi
           if [ '${{ steps.scope.outputs.artwork_only }}' = true ]; then
             git diff --exit-code 38bcd6f52fb2dfa805c18da5b4411bd471e4d80d "${{ github.event.pull_request.head.sha }}" -- android/app/src/main/java android/app/src/main/AndroidManifest.xml android/app/src/main/res/drawable-nodpi/diewish_splash_approved.jpg frontend
           fi
@@ -60,10 +68,10 @@ jobs:
         with:
           gradle-version: '9.6.0'
       - name: Native launch resources and first-frame lifecycle (no APK or deployment)
-        if: needs.revision-scope.outputs.artwork_only != 'true'
+        if: needs.revision-scope.outputs.artwork_only != 'true' && needs.revision-scope.outputs.brand_assets != 'true'
         run: gradle --no-daemon -p android :app:testDebugUnitTest --tests com.diewish.app.LaunchPresentationTest --tests com.diewish.app.SessionCookiePersistenceTest
       - name: Only the changed native icon on API 28 and 33
-        if: needs.revision-scope.outputs.artwork_only == 'true'
+        if: needs.revision-scope.outputs.artwork_only == 'true' || needs.revision-scope.outputs.brand_assets == 'true'
         run: gradle --no-daemon -p android :app:testDebugUnitTest --tests 'com.diewish.app.LaunchPresentationTest.splashArtworkKeepsMarkButRemovesTile*'
       - uses: actions/upload-artifact@v4
         if: always()
@@ -72,7 +80,7 @@ jobs:
           path: android/app/build/test-results/testDebugUnitTest
   web-handoff:
     needs: revision-scope
-    if: needs.revision-scope.outputs.artwork_only != 'true'
+    if: needs.revision-scope.outputs.artwork_only != 'true' && needs.revision-scope.outputs.brand_assets != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
@@ -114,6 +122,47 @@ jobs:
         with:
           name: launch-flow-before-after-browser-evidence
           path: /tmp/launch-flow-evidence
+  approved-brand-render:
+    needs: revision-scope
+    if: needs.revision-scope.outputs.brand_assets == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      NEXT_PUBLIC_API_BASE_URL: /api
+      NEXT_TELEMETRY_DISABLED: '1'
+      APPROVED_BRAND_EVIDENCE_DIR: /tmp/approved-brand-evidence
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npx eslint src/presentation/components/branding/brand-lockup.tsx e2e/approved-brand-assets.spec.ts playwright.approved-brand.config.ts
+      - run: npm run type-check
+      - run: npx playwright install --with-deps chromium
+      - name: Capture accepted staging views with the same render harness
+        env:
+          APPROVED_BRAND_PHASE: before
+        run: |
+          set -euo pipefail
+          baseline="${RUNNER_TEMP}/approved-brand-before"
+          git worktree add --detach "$baseline" 17561661d816627d009a9eeb3405d70549f933dc
+          ln -s "$GITHUB_WORKSPACE/frontend/node_modules" "$baseline/frontend/node_modules"
+          APPROVED_BRAND_APP_DIRECTORY="$baseline/frontend" npx playwright test --config=playwright.approved-brand.config.ts --reporter=line --output=/tmp/approved-brand-evidence/before-recordings
+      - name: Approved pixels, theme switch, atomic loading and failed assets
+        run: npx playwright test --config=playwright.approved-brand.config.ts --reporter=line --output=/tmp/approved-brand-evidence/after-recordings
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: approved-brand-real-browser-evidence
+          path: /tmp/approved-brand-evidence
   emulator-recording:
     needs: native-presentation
     runs-on: ubuntu-latest

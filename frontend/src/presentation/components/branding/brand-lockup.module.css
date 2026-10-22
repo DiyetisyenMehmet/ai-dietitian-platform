@@ -22,10 +22,34 @@
 }
 
 .name {
+  position: relative;
   display: block;
   width: 160px;
   max-width: 100%;
   height: auto;
+  aspect-ratio: 1004 / 214;
+}
+
+/* Decode both approved assets in BrandArtwork before revealing the group.
+   Keep one fixed box when the application theme changes. */
+.nameArtwork {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.darkName {
+  opacity: 0;
+}
+
+:global(.dark) .lightName {
+  opacity: 0;
+}
+
+:global(.dark) .darkName {
+  opacity: 1;
 }
 
 .tagline {
