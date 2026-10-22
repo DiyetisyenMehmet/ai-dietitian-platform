@@ -59,6 +59,14 @@ startup callback changed. No real account, SMS, health record or backend is used
 The API 33 Pixel 7 emulator harness runs the real MainActivity with the actual locally
 built frontend, in separate fresh light/dark app processes. The recording is a
 controlled visual test with a held guest reply, not a launch-time benchmark.
+The first scenario requires a retained system splash. Android's exit-listener
+contract is conditional on the platform showing that splash; the second
+instrumentation launch may use the native fallback. Both scenarios require the
+loading cover through guest routing, release on the final frame, stable header
+geometry and the actual mobile viewport. Any system splash already observed at
+startup must remain the same object while waiting. The selected native path is
+recorded in the evidence trace. See the platform contract:
+https://developer.android.com/reference/android/window/SplashScreen#setOnExitAnimationListener(android.window.SplashScreen.OnExitAnimationListener)
 Test-only WebView interception serves that
 frontend from a local TLS fixture with a pinned job certificate and normal
 hostname verification; all account API replies are synthetic guests. A sink proxy

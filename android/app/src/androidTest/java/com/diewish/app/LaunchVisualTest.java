@@ -30,10 +30,10 @@ public final class LaunchVisualTest {
     private MainActivity activity;
     private final List<String> trace = Collections.synchronizedList(new ArrayList<>());
 
-    @Test public void lightLaunch() throws Exception { run("light"); }
-    @Test public void darkLaunch() throws Exception { run("dark"); }
+    @Test public void lightLaunch() throws Exception { run("light", true); }
+    @Test public void darkLaunch() throws Exception { run("dark", false); }
 
-    private void run(String theme) throws Exception {
+    private void run(String theme, boolean requireSystemSplash) throws Exception {
         var instrumentation = InstrumentationRegistry.getInstrumentation();
         try (var descriptor = instrumentation.getUiAutomation().executeShellCommand(
             "cmd uimode night " + (theme.equals("dark") ? "yes" : "no"))) {
@@ -98,12 +98,23 @@ public final class LaunchVisualTest {
                 });
             });
             assertNotNull(field("launchCover").get(activity));
+            Object initialSystemSplash = field("systemLaunchSplash").get(activity);
             screenshot(theme + "-native-cover");
             scenario.onActivity(host -> web.loadUrl(BuildConfig.WEB_BASE_URL + "/dashboard?launchVisualFixture=1"));
             await("document.querySelector('[data-artwork-state=ready]') !== null");
             await("document.querySelector('[data-testid=diewish-brand-splash]') !== null");
             assertNotNull("Keep one native composition while guest routing is unresolved", field("launchCover").get(activity));
-            assertNotNull("Keep the actual system splash; do not replace its icon at another scale", field("systemLaunchSplash").get(activity));
+            Object waitingSystemSplash = field("systemLaunchSplash").get(activity);
+            // Android invokes the exit listener only when it provided a system
+            // splash. Keep one required system-splash scenario; the second
+            // instrumentation launch also validates the supported native fallback.
+            if (requireSystemSplash) {
+                assertNotNull("Keep the actual system splash; do not replace its icon at another scale", waitingSystemSplash);
+            }
+            if (initialSystemSplash != null) {
+                assertSame("An observed system splash must survive guest routing", initialSystemSplash, waitingSystemSplash);
+            }
+            trace.add("native-presentation=" + (waitingSystemSplash == null ? "fallback" : "system"));
             String loading = evaluate(bounds());
             screenshot(theme + "-waiting");
             readFixture("/__release");
