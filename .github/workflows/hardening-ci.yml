@@ -191,7 +191,16 @@ jobs:
           tests/staging-host-routing.test.cjs
           tests/staging-host-routing.transport.cjs
       - name: Install browser for Admin password setup regression
-        run: npx playwright install --with-deps chromium
+        timeout-minutes: 8
+        run: |
+          set -euo pipefail
+          # Azure's Ubuntu mirror stalled during this security verification.
+          # Keep the runner's existing signed Ubuntu HTTPS fallback mirrors.
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            grep -Fq 'https://archive.ubuntu.com/ubuntu/' /etc/apt/apt-mirrors.txt
+            sudo sed -i '/azure[.]archive[.]ubuntu[.]com/d' /etc/apt/apt-mirrors.txt
+          fi
+          npx playwright install --with-deps chromium
       - name: Capture accepted staging branding baseline
         env:
           APPROVED_BRAND_PHASE: before
@@ -386,6 +395,7 @@ jobs:
           cat /tmp/diewish-backend.log
           exit 1
       - name: Prepare frontend and Chromium
+        timeout-minutes: 10
         working-directory: frontend
         run: |
           npm ci
@@ -395,6 +405,12 @@ jobs:
           # index must not make our application E2E gate flaky, so remove only that
           # unrelated runner repository before asking Playwright for OS libraries.
           sudo find /etc/apt/sources.list.d -maxdepth 1 -type f -iname '*google*chrome*' -delete
+          # Azure's Ubuntu mirror stalled during this security verification.
+          # Keep the runner's existing signed Ubuntu HTTPS fallback mirrors.
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            grep -Fq 'https://archive.ubuntu.com/ubuntu/' /etc/apt/apt-mirrors.txt
+            sudo sed -i '/azure[.]archive[.]ubuntu[.]com/d' /etc/apt/apt-mirrors.txt
+          fi
           npx playwright install --with-deps chromium webkit
           npm run build
       - name: Test Dashboard viewport overflow and scroll containment (63 scenarios)
