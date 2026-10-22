@@ -42,8 +42,10 @@ replaced by a compact login header.
   form. Cached artwork is checked before a remounted header is painted.
 - All session, route, consent, Google, phone, cookie and API code is preserved.
   Backend, database, Admin, host configuration and approved web artwork are
-  unchanged. The auth-header CI source guard now compares the current PR base,
-  and allows this task's Android presentation changes; its geometry assertions
+  unchanged. The CI source guards compare the PR base/head merge-base diff, so a
+  refreshed GitHub merge ref cannot attribute other workers' staging changes
+  to this PR. The auth-header guard allows this task's Android presentation
+  changes; its protected path list, geometry assertions
   and original accepted visual comparison stay intact.
 
 ## Verification boundaries
