@@ -6,6 +6,7 @@ on:
       - fix/production-hardening
       - feature/android-native-scanner
       - feature/staging-preview
+      - feature/app-security-nextjs-15-5-28-a1
       - feature/mirmir-a4-direct-integration
       - feature/mirmir-final-animation-decision-a1
       - feature/mascot-dost-next-character-a1
@@ -182,8 +183,19 @@ jobs:
           NEXT_PUBLIC_API_BASE_URL: https://example.invalid/api
           NEXT_PUBLIC_SITE_URL: https://example.invalid
 
+      - name: Test Next security update auth and host routing regression
+        run: >-
+          node --test
+          tests/auth-session-restore.test.cjs
+          tests/android-google-auth.test.cjs
+          tests/staging-host-routing.test.cjs
+          tests/staging-host-routing.transport.cjs
       - name: Install browser for Admin password setup regression
         run: npx playwright install --with-deps chromium
+      - name: Test approved branding and guest handoff after Next security update
+        env:
+          APPROVED_BRAND_EVIDENCE_DIR: ${{ runner.temp }}/next-security-approved-brand
+        run: npx playwright test --config playwright.approved-brand.config.ts --reporter=line
       - name: Test nutrition session readiness without accounts or AI
         run: npx playwright test e2e/nutrition-session-check.spec.ts --workers=1 --reporter=line
       - name: Test Mirmir default blink and retired video
