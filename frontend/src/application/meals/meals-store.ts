@@ -157,6 +157,7 @@ export interface AddFoodPayload {
 }
 
 export const mealsStore = {
+  getSnapshot,
   async hydrateMealsFromBackend(): Promise<void> {
     const session = sessionVersion;
     const revision = writeVersion;

@@ -11,7 +11,7 @@ export function useDailyJourney(): JourneyStep[] {
 /** Keeps completion evidence alongside the legacy projection. */
 export function useDailyJourneyResult() {
   const result = useJourneyEngine();
-  return { steps: result.steps, status: result.status, allDone: result.status === "all-done" };
+  return { ...result, allDone: result.status === "all-done" };
 }
 
 /** Completion summary (completed vs. total, including recorded-window skips). */
@@ -25,7 +25,6 @@ export function summarizeJourney(steps: JourneyStep[]): {
   const percent = total === 0 ? 0 : Math.round((completed / total) * 100);
   return { completed, total, percent };
 }
-
 
 /**
  * Presentation-only selector for the compact Dashboard Journey.

@@ -74,6 +74,7 @@ function store(client) {
   });
   return load("application/health/nutrition-plan-store.ts", {
     "@/infrastructure/api/http-client": { ApiError },
+    "../auth/auth-store": { authStore: { getSnapshot: () => ({ user: { id: "synthetic-owner" } }) } },
     react: { useSyncExternalStore: (_subscribe, snapshot) => snapshot() },
     "@/infrastructure/nutrition/nutrition-plan-client": {
       nutritionPlanClient: { capabilities: async () => ({ resumable: false }), ...client },

@@ -3,7 +3,11 @@ import type { DailyTask, JourneyStep, JourneyStepKind } from "../../domain/healt
 export type GoalDirection = "lose" | "gain" | "maintain";
 export type Sufficiency = "UNKNOWN" | "KNOWN_ZERO" | "KNOWN";
 export type MealKind = "breakfast" | "lunch" | "dinner" | "snack";
+import type { JourneyPlannedMeal } from "./journey-plan";
+
 export interface JourneyInput {
+  plannedMeals?: JourneyPlannedMeal[];
+  nowMs?: number;
   localHour: number;
   startWeightKg: number | null;
   currentWeightKg: number | null;
@@ -20,6 +24,7 @@ export interface JourneyInput {
 }
 export interface JourneyResult {
   direction: GoalDirection | null;
+  plannedMeal: JourneyPlannedMeal | null;
   steps: JourneyStep[];
   nextBestAction: { kind: JourneyStepKind; reason: string; href: string } | null;
   sufficiency: Record<MealKind | "water" | "activity" | "sleep" | "weight", Sufficiency>;
@@ -78,8 +83,8 @@ export function buildJourney(input: JourneyInput): JourneyResult {
       state: input.weight.recordedToday ? "completed" : "pending",
     });
   }
-  const regular = input.workScheduleType === "REGULAR";
-  for (const [kind, label, icon, end] of [
+
+  for (const [kind, label, icon] of [
     ["breakfast", "Kahvaltı", "sunrise", 12],
     ["lunch", "Öğle yemeği", "sun", 17],
     ["dinner", "Akşam yemeği", "moon", 23],
@@ -93,7 +98,7 @@ export function buildJourney(input: JourneyInput): JourneyResult {
       href: `/meals/add?slot=${kind}`,
       hint: completed ? "Öğün kaydedildi" : `${label} kaydı henüz yok. ${goalReason}`,
       // A passed recording window does not imply the person skipped eating.
-      state: completed ? "completed" : regular && input.localHour >= end ? "skipped" : "pending",
+      state: completed ? "completed" : "pending",
     });
   }
   if (
@@ -132,7 +137,23 @@ export function buildJourney(input: JourneyInput): JourneyResult {
       hint: "Ara öğün kaydedildi",
       state: "completed",
     });
-  const next = steps.find((step) => step.state === "pending" && Boolean(step.href));
+  const planned = input.plannedMeals ?? [];
+  const unrecorded = planned.filter((entry) => !entry.slot || data[entry.slot] !== "KNOWN");
+  const candidates = unrecorded.length ? unrecorded : planned;
+  const plannedMeal =
+    [...candidates].reverse().find((entry) => entry.at <= (input.nowMs ?? 0)) ??
+    candidates[0] ??
+    null;
+  // The same engine owns the next action; elapsed time never marks a meal skipped.
+  const pending = (kind: JourneyStepKind) =>
+    steps.find((step) => step.kind === kind && step.state === "pending");
+  const regularKind =
+    input.localHour < 12 ? "breakfast" : input.localHour < 17 ? "lunch" : "dinner";
+  const next =
+    pending("weight") ??
+    (plannedMeal?.slot ? pending(plannedMeal.slot) : undefined) ??
+    (input.workScheduleType === "REGULAR" ? pending(regularKind) : undefined) ??
+    steps.find((step) => step.state === "pending" && Boolean(step.href));
   if (next) next.state = "recommended";
   const insufficient =
     [data.breakfast, data.lunch, data.dinner, data.water, data.weight].includes("UNKNOWN") ||
@@ -141,6 +162,7 @@ export function buildJourney(input: JourneyInput): JourneyResult {
     !Number.isFinite(input.waterGoalMl);
   return {
     direction,
+    plannedMeal,
     steps,
     sufficiency: data,
     nextBestAction: next ? { kind: next.kind, reason: next.hint, href: next.href! } : null,
