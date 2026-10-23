@@ -24,6 +24,7 @@ REUSED_BUILD = '43cd0b6a-e9d8-49d9-a531-b0584fca7596'
 REUSED_DIGEST = 'sha256:b2de3f9d240cc1adf41e211f974c0b636c7a0bd52fae545e821ebc5b232692d7'
 BACK = 'diewish-backend-staging'
 FRONT = 'diewish-frontend-staging'
+CANDIDATE_TAG = 'next-sec'
 ADMIN_REV = 'diewish-backend-staging-00479-w44'
 USER_REV = 'diewish-backend-staging-00481-biq'
 ADMIN = 'https://admin-legacy---diewish-backend-staging-2qqqfr7wzq-ew.a.run.app'
@@ -71,7 +72,7 @@ def failure_details(args, result):
     category = next((name for pattern, name in [
         (r'PERMISSION_DENIED|permission.*denied|iam\.serviceAccounts\.actAs', 'PERMISSION_DENIED'),
         (r'RESOURCE_EXHAUSTED|quota', 'QUOTA_OR_RESOURCE_LIMIT'),
-        (r'INVALID_ARGUMENT|unrecognized arguments|Invalid value|must be', 'INVALID_ARGUMENT'),
+        (r'INVALID_ARGUMENT|unrecognized arguments|Invalid value|must be|too long|cannot exceed', 'INVALID_ARGUMENT'),
         (r'FAILED_PRECONDITION', 'FAILED_PRECONDITION'),
         (r'NOT_FOUND|not found', 'NOT_FOUND')]
         if re.search(pattern, raw, re.I)), 'UNCLASSIFIED')
@@ -323,6 +324,12 @@ def reuse_image(saved):
     print('PASS: existing immutable Next 15.5.28 image reused; no build or prior test rerun', flush=True)
 
 
+def candidate_tag():
+    # Cloud Run rejects combined service + traffic tag names over 46 characters.
+    require(len(FRONT) + len(CANDIDATE_TAG) <= 46, 'candidate tag/service name exceeds Cloud Run limit')
+    return CANDIDATE_TAG
+
+
 def diagnose(saved):
     revisions = cloud('run', 'revisions', 'list', '--service', FRONT, '--region', REGION)
     summary = [{'revision': v['metadata']['name'], 'ready': [{k: c.get(k) for k in ['type', 'status', 'reason']} for c in v.get('status', {}).get('conditions', [])],
@@ -341,10 +348,10 @@ def diagnose(saved):
     unchanged(saved)
     # One targeted retry only, never a traffic change in diagnosis mode.
     cloud('run', 'deploy', FRONT, '--region', REGION, '--image', saved['newImage'], '--no-traffic',
-          '--tag', 'next-security-candidate', '--update-env-vars',
+          '--tag', candidate_tag(), '--update-env-vars',
           ','.join(k + '=' + v for k, v in {**ROUTER, 'DIEWISH_APPLICATION_SHA': IMAGE_SOURCE}.items()))
     f = unchanged(saved)
-    candidate = tag(f, 'next-security-candidate')
+    candidate = tag(f, candidate_tag())
     require(candidate.get('percent', 0) == 0, 'diagnostic candidate received traffic')
     saved['diagnosticCandidate'] = candidate['revisionName']
     saved['decision'] = 'NO_TRAFFIC_CANDIDATE_CREATED_PENDING_REVIEW'
@@ -405,10 +412,10 @@ def release(saved):
     reuse_image(saved)
     unchanged(saved)
     cloud('run', 'deploy', FRONT, '--region', REGION, '--image', saved['newImage'], '--no-traffic',
-          '--tag', 'next-security-candidate', '--update-env-vars',
+          '--tag', candidate_tag(), '--update-env-vars',
           ','.join(k + '=' + v for k, v in {**ROUTER, 'DIEWISH_APPLICATION_SHA': IMAGE_SOURCE}.items()))
     f = unchanged(saved)
-    candidate = tag(f, 'next-security-candidate')
+    candidate = tag(f, candidate_tag())
     require(candidate.get('percent', 0) == 0, 'candidate received default traffic')
     new = revision(candidate['revisionName'])
     check_router(new)

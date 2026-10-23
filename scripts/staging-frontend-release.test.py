@@ -22,6 +22,14 @@ def service(rows):
 
 
 class Guards(unittest.TestCase):
+    def test_candidate_tag_stays_within_cloud_run_combined_limit(self):
+        self.assertEqual(len(r.FRONT) + len('next-security-candidate'),47)
+        self.assertEqual(r.candidate_tag(),'next-sec')
+        self.assertLessEqual(len(r.FRONT) + len(r.candidate_tag()),46)
+        with patch.object(r,'CANDIDATE_TAG','next-security-candidate'):
+            with self.assertRaisesRegex(RuntimeError,'exceeds Cloud Run limit'):
+                r.candidate_tag()
+
     def test_diagnostics_redact_credentials_urls_and_connection_strings(self):
         payload = """ERROR INVALID_ARGUMENT: CPU must be below memory limit
 ERROR https://alice:secret@host.invalid/path?token=private
@@ -104,7 +112,7 @@ ERROR serviceAccount=person@example.com
         old = revision('real-serving-old', r.ROUTER)
         new = revision('new', {**r.ROUTER, 'DIEWISH_APPLICATION_SHA': saved['source']})
         candidate = service([{'revisionName':'real-serving-old','percent':100},
-                             {'revisionName':'new','tag':'next-security-candidate','url':'https://candidate.invalid'}])
+                             {'revisionName':'new','tag':r.CANDIDATE_TAG,'url':'https://candidate.invalid'}])
         restored = service([{'revisionName':'real-serving-old','percent':100}])
         calls = []
         def cloud(*args):
