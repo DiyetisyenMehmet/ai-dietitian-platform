@@ -6,6 +6,7 @@ on:
       - fix/production-hardening
       - feature/android-native-scanner
       - feature/staging-preview
+      - feature/app-security-nextjs-15-5-28-a1
       - feature/mirmir-a4-direct-integration
       - feature/mirmir-final-animation-decision-a1
       - feature/mascot-dost-next-character-a1
@@ -179,11 +180,53 @@ jobs:
       - run: npm run type-check
       - run: npm run build
         env:
-          NEXT_PUBLIC_API_BASE_URL: https://example.invalid/api
+          NEXT_PUBLIC_API_BASE_URL: /api
           NEXT_PUBLIC_SITE_URL: https://example.invalid
 
+      - name: Test Next security update auth and host routing regression
+        run: >-
+          node --test
+          tests/auth-session-restore.test.cjs
+          tests/android-google-auth.test.cjs
+          tests/staging-host-routing.test.cjs
+          tests/staging-host-routing.transport.cjs
       - name: Install browser for Admin password setup regression
-        run: npx playwright install --with-deps chromium
+        timeout-minutes: 8
+        run: |
+          set -euo pipefail
+          # Azure's Ubuntu mirror stalled during this security verification.
+          # Keep the runner's existing signed Ubuntu HTTPS fallback mirrors.
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            grep -Fq 'https://archive.ubuntu.com/ubuntu/' /etc/apt/apt-mirrors.txt
+            sudo sed -i '/azure[.]archive[.]ubuntu[.]com/d' /etc/apt/apt-mirrors.txt
+          fi
+          npx playwright install --with-deps chromium
+      - name: Capture accepted staging branding baseline
+        env:
+          APPROVED_BRAND_PHASE: before
+          APPROVED_BRAND_EVIDENCE_DIR: ${{ runner.temp }}/next-security-approved-brand
+          APPROVED_BRAND_APP_DIRECTORY: ${{ runner.temp }}/next-security-brand-baseline/frontend
+        run: |
+          set -euo pipefail
+          accepted=582c2352e1e868adc18e9e9faa4efcedc2ced063
+          git fetch --no-tags --depth=1 origin "$accepted"
+          git worktree add --detach "${RUNNER_TEMP}/next-security-brand-baseline" "$accepted"
+          ln -s "$GITHUB_WORKSPACE/frontend/node_modules" "$APPROVED_BRAND_APP_DIRECTORY/node_modules"
+          git worktree add --detach "${RUNNER_TEMP}/next-security-brand-candidate" HEAD
+          ln -s "$GITHUB_WORKSPACE/frontend/node_modules" "${RUNNER_TEMP}/next-security-brand-candidate/frontend/node_modules"
+          npx playwright test --config playwright.approved-brand.config.ts --reporter=line --grep "approved artwork, stable handoff"
+      - name: Test approved branding and guest handoff after Next security update
+        env:
+          APPROVED_BRAND_EVIDENCE_DIR: ${{ runner.temp }}/next-security-approved-brand
+          APPROVED_BRAND_APP_DIRECTORY: ${{ runner.temp }}/next-security-brand-candidate/frontend
+        run: npx playwright test --config playwright.approved-brand.config.ts --reporter=line
+      - name: Upload Next security branding comparison evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: next-security-approved-brand
+          path: ${{ runner.temp }}/next-security-approved-brand
+          if-no-files-found: warn
       - name: Test nutrition session readiness without accounts or AI
         run: npx playwright test e2e/nutrition-session-check.spec.ts --workers=1 --reporter=line
       - name: Test Mirmir default blink and retired video
@@ -352,6 +395,7 @@ jobs:
           cat /tmp/diewish-backend.log
           exit 1
       - name: Prepare frontend and Chromium
+        timeout-minutes: 10
         working-directory: frontend
         run: |
           npm ci
@@ -361,6 +405,12 @@ jobs:
           # index must not make our application E2E gate flaky, so remove only that
           # unrelated runner repository before asking Playwright for OS libraries.
           sudo find /etc/apt/sources.list.d -maxdepth 1 -type f -iname '*google*chrome*' -delete
+          # Azure's Ubuntu mirror stalled during this security verification.
+          # Keep the runner's existing signed Ubuntu HTTPS fallback mirrors.
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            grep -Fq 'https://archive.ubuntu.com/ubuntu/' /etc/apt/apt-mirrors.txt
+            sudo sed -i '/azure[.]archive[.]ubuntu[.]com/d' /etc/apt/apt-mirrors.txt
+          fi
           npx playwright install --with-deps chromium webkit
           npm run build
       - name: Test Dashboard viewport overflow and scroll containment (63 scenarios)
