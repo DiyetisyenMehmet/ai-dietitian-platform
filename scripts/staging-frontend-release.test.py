@@ -253,7 +253,7 @@ class SourceGuards(unittest.TestCase):
             return r.source()
 
     def test_reviewed_baseline_and_release_only_whitelist(self):
-        self.assertEqual(r.MERGED,'8ee4c2021303a0dcbfca34aeff4511794d76d71b')
+        self.assertEqual(r.MERGED,'41962ccc57d435cf0f78a373de44807db311e846')
         self.assertEqual(self.check(changed='\n'.join(sorted(r.PREP_FILES))), 'a'*40)
         self.assertEqual(len(r.PREP_FILES),4)
 

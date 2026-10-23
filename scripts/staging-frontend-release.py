@@ -18,7 +18,7 @@ import urllib.request
 PROJECT = 'project-a2e260c1-839d-4f1d-b90'
 REGION = 'europe-west1'
 REPO = 'DiyetisyenMehmet/ai-dietitian-platform'
-MERGED = '8ee4c2021303a0dcbfca34aeff4511794d76d71b'
+MERGED = '41962ccc57d435cf0f78a373de44807db311e846'
 # Deny the historic security-only image even if a build reports a new source.
 RETIRED_DIGEST = 'sha256:b2de3f9d240cc1adf41e211f974c0b636c7a0bd52fae545e821ebc5b232692d7'
 CHECKS = {'Hardening CI': '.github/workflows/hardening-ci.yml',
