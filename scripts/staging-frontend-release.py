@@ -19,6 +19,9 @@ PROJECT = 'project-a2e260c1-839d-4f1d-b90'
 REGION = 'europe-west1'
 REPO = 'DiyetisyenMehmet/ai-dietitian-platform'
 MERGED = 'bd42cfd465730a1e7d8678d0bb73bfe76939a32f'
+IMAGE_SOURCE = '1d809cfc164551e940c81a41af8fbfd7eb3d4cce'
+REUSED_BUILD = '43cd0b6a-e9d8-49d9-a531-b0584fca7596'
+REUSED_DIGEST = 'sha256:b2de3f9d240cc1adf41e211f974c0b636c7a0bd52fae545e821ebc5b232692d7'
 BACK = 'diewish-backend-staging'
 FRONT = 'diewish-frontend-staging'
 ADMIN_REV = 'diewish-backend-staging-00479-w44'
@@ -48,7 +51,43 @@ def require(ok, reason):
         raise RuntimeError('NO_GO: ' + reason)
 
 
-def cloud(*args):
+def safe_error(text):
+    """Keep actionable CLI diagnostics, never credentials or complete URLs."""
+    text = re.sub(r'(?i)\b(?:https?|postgres(?:ql)?|mysql|redis)://[^\s\]<>]+', '[URL_REDACTED]', text)
+    text = re.sub(r'(?i)\bBearer\s+\S+', 'Bearer [REDACTED]', text)
+    text = re.sub(r'\b(?:AIza[\w-]+|ya29\.[\w.-]+|eyJ[\w-]+\.[\w-]+\.[\w-]+)\b', '[TOKEN_REDACTED]', text)
+    text = re.sub(r'[\w.+-]+@[\w.-]+', '[EMAIL_REDACTED]', text)
+    lines = []
+    for line in text.splitlines():
+        if re.search(r'(?i)(?:password|authorization|cookie|database_url|direct_database_url|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret)\s*[:=]', line):
+            line = '[SENSITIVE_VALUE_LINE_REDACTED]'
+        if re.search(r'(?i)error|denied|invalid|quota|memory|cpu|limit|argument|permission|request|operation|redacted', line):
+            lines.append(line[:700])
+    return lines[:10] or ['No safe diagnostic line available']
+
+
+def failure_details(args, result):
+    raw = result.stderr or result.stdout or ''
+    category = next((name for pattern, name in [
+        (r'PERMISSION_DENIED|permission.*denied|iam\.serviceAccounts\.actAs', 'PERMISSION_DENIED'),
+        (r'RESOURCE_EXHAUSTED|quota', 'QUOTA_OR_RESOURCE_LIMIT'),
+        (r'INVALID_ARGUMENT|unrecognized arguments|Invalid value|must be', 'INVALID_ARGUMENT'),
+        (r'FAILED_PRECONDITION', 'FAILED_PRECONDITION'),
+        (r'NOT_FOUND|not found', 'NOT_FOUND')]
+        if re.search(pattern, raw, re.I)), 'UNCLASSIFIED')
+    ids = sorted(set(re.findall(r'\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b', raw, re.I)))
+    data = {'command': ' '.join(args[:3]), 'exitCode': result.returncode,
+            'classification': category, 'requestOrOperationIds': ids,
+            'stderr': safe_error(raw)}
+    print('GCP_DIAGNOSTIC ' + json.dumps(data), flush=True)
+    if args[:2] == ('run', 'deploy'):
+        directory = Path(os.environ['RUNNER_TEMP']) / 'frontend-release-evidence'
+        directory.mkdir(exist_ok=True)
+        (directory / 'gcloud-failure.json').write_text(json.dumps(data, indent=2))
+    return data
+
+
+def cloud(*args, optional=False):
     # Only the explicit FRONT service may be mutated. No arbitrary shell command.
     if args[:2] == ('run', 'deploy'):
         require(args[2] == FRONT and '--no-traffic' in args, 'unsafe deploy target')
@@ -56,11 +95,15 @@ def cloud(*args):
         require(args[3] == FRONT, 'unsafe traffic target')
     else:
         require(args[:3] in [('run', 'services', 'describe'), ('run', 'revisions', 'describe'),
-                            ('scheduler', 'jobs', 'describe'), ('builds', 'submit', '--no-source')]
-                or args[:2] == ('builds', 'describe'), 'unapproved cloud operation')
+                            ('run', 'revisions', 'list'), ('scheduler', 'jobs', 'describe'), ('builds', 'submit', '--no-source')]
+                or args[:2] in [('builds', 'describe'), ('logging', 'read')], 'unapproved cloud operation')
     p = subprocess.run(['gcloud', *args, '--project', PROJECT, '--format=json', '--quiet'],
                        capture_output=True, text=True, timeout=600, check=False)
-    require(p.returncode == 0, 'cloud command failed: ' + ' '.join(args[:3]))
+    if p.returncode:
+        data = failure_details(args, p)
+        if optional:
+            return None
+        raise RuntimeError('NO_GO: cloud command failed; exit=' + str(p.returncode) + '; ' + data['classification'])
     return json.loads(p.stdout) if p.stdout.strip() else None
 
 
@@ -94,7 +137,7 @@ def gates():
     for attempt in range(300):
         pending = False
         for sha, names in [(MERGED, ['Hardening CI', 'Staging Config CI', 'Notification preferences platform checks']),
-                           (os.environ['GITHUB_SHA'], ['Hardening CI', 'Staging Config CI'])]:
+                           (IMAGE_SOURCE, ['Hardening CI', 'Staging Config CI'])]:
             runs = api('/actions/runs?head_sha=' + sha + '&per_page=100')['workflow_runs']
             for name in names:
                 matches = [r for r in runs if r['name'] == name and r['head_sha'] == sha]
@@ -265,6 +308,49 @@ def build(saved):
     raise RuntimeError('NO_GO: cloud build timed out')
 
 
+def reuse_image(saved):
+    built = cloud('builds', 'describe', REUSED_BUILD)
+    require(built['status'] == 'SUCCESS' and built['substitutions']['_GIT_SHA'] == IMAGE_SOURCE,
+            'prior immutable build/source not reusable')
+    expected_name = f'{REGION}-docker.pkg.dev/{PROJECT}/diewish-staging/frontend:next-security-{IMAGE_SOURCE}'
+    images = built['results']['images']
+    require(any(i['name'] == expected_name and i['digest'] == REUSED_DIGEST for i in images), 'prior immutable image digest mismatch')
+    saved.update(newImage=expected_name.rsplit(':', 1)[0] + '@' + REUSED_DIGEST,
+                 buildId=REUSED_BUILD, applicationSource=IMAGE_SOURCE,
+                 verifiedImageNextVersion='15.5.28',
+                 reusedVersionEvidence='https://github.com/' + REPO + '/actions/runs/39917194478/artifacts/12486127055')
+    save(saved)
+    print('PASS: existing immutable Next 15.5.28 image reused; no build or prior test rerun', flush=True)
+
+
+def diagnose(saved):
+    revisions = cloud('run', 'revisions', 'list', '--service', FRONT, '--region', REGION)
+    summary = [{'revision': v['metadata']['name'], 'ready': [{k: c.get(k) for k in ['type', 'status', 'reason']} for c in v.get('status', {}).get('conditions', [])],
+                'image': v.get('spec', {}).get('containers', [{}])[0].get('image')}
+               for v in revisions if v['metadata']['name'].startswith(FRONT + '-')]
+    saved['revisionInventory'] = summary
+    audit_filter = 'protoPayload.serviceName="run.googleapis.com" AND resource.labels.service_name="' + FRONT + '" AND protoPayload.status.code!=0'
+    audit = cloud('logging', 'read', audit_filter, '--freshness=12h', '--limit=10', optional=True)
+    saved['auditErrors'] = [{'code': v.get('protoPayload', {}).get('status', {}).get('code'),
+                            'message': safe_error(v.get('protoPayload', {}).get('status', {}).get('message', ''))}
+                           for v in (audit or [])]
+    save(saved)
+    print('READ_ONLY_DIAGNOSIS ' + json.dumps({'revisionCount': len(summary), 'auditErrors': saved['auditErrors']}), flush=True)
+    gates()
+    reuse_image(saved)
+    unchanged(saved)
+    # One targeted retry only, never a traffic change in diagnosis mode.
+    cloud('run', 'deploy', FRONT, '--region', REGION, '--image', saved['newImage'], '--no-traffic',
+          '--tag', 'next-security-candidate', '--update-env-vars',
+          ','.join(k + '=' + v for k, v in {**ROUTER, 'DIEWISH_APPLICATION_SHA': IMAGE_SOURCE}.items()))
+    f = unchanged(saved)
+    candidate = tag(f, 'next-security-candidate')
+    require(candidate.get('percent', 0) == 0, 'diagnostic candidate received traffic')
+    saved['diagnosticCandidate'] = candidate['revisionName']
+    saved['decision'] = 'NO_TRAFFIC_CANDIDATE_CREATED_PENDING_REVIEW'
+    save(saved)
+
+
 def image_version(saved):
     host = REGION + '-docker.pkg.dev'
     token = subprocess.check_output(['gcloud', 'auth', 'print-access-token'], text=True).strip()
@@ -316,12 +402,11 @@ def surfaces():
 
 def release(saved):
     gates()
-    build(saved)
-    image_version(saved)
+    reuse_image(saved)
     unchanged(saved)
     cloud('run', 'deploy', FRONT, '--region', REGION, '--image', saved['newImage'], '--no-traffic',
           '--tag', 'next-security-candidate', '--update-env-vars',
-          ','.join(k + '=' + v for k, v in {**ROUTER, 'DIEWISH_APPLICATION_SHA': saved['source']}.items()))
+          ','.join(k + '=' + v for k, v in {**ROUTER, 'DIEWISH_APPLICATION_SHA': IMAGE_SOURCE}.items()))
     f = unchanged(saved)
     candidate = tag(f, 'next-security-candidate')
     require(candidate.get('percent', 0) == 0, 'candidate received default traffic')
@@ -330,7 +415,7 @@ def release(saved):
     require(new['status']['imageDigest'] == saved['newImage'], 'candidate digest mismatch')
     # Preserve all prior runtime env, adding only the non-secret source marker.
     old_env = env(revision(saved['old_frontend']['revision']))
-    require(env(new) == {**old_env, 'DIEWISH_APPLICATION_SHA': {'name': 'DIEWISH_APPLICATION_SHA', 'value': saved['source']}}, 'unexpected candidate environment change')
+    require(env(new) == {**old_env, 'DIEWISH_APPLICATION_SHA': {'name': 'DIEWISH_APPLICATION_SHA', 'value': IMAGE_SOURCE}}, 'unexpected candidate environment change')
     old_spec = copy.deepcopy(revision(saved['old_frontend']['revision'])['spec'])
     new_spec = copy.deepcopy(new['spec'])
     for spec in [old_spec, new_spec]:
@@ -380,7 +465,7 @@ def release(saved):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('mode', choices=['inspect', 'release'])
+    parser.add_argument('mode', choices=['inspect', 'diagnose', 'release'])
     args = parser.parse_args()
     snapshot_data = snapshot()
     snapshot_data['decision'] = 'PREFLIGHT_PASS'
@@ -388,3 +473,5 @@ if __name__ == '__main__':
     print('PASS: fresh read-only split preflight; actual serving frontend', snapshot_data['old_frontend']['revision'])
     if args.mode == 'release':
         release(snapshot_data)
+    elif args.mode == 'diagnose':
+        diagnose(snapshot_data)

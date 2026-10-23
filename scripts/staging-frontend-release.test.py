@@ -22,6 +22,38 @@ def service(rows):
 
 
 class Guards(unittest.TestCase):
+    def test_diagnostics_redact_credentials_urls_and_connection_strings(self):
+        payload = """ERROR INVALID_ARGUMENT: CPU must be below memory limit
+ERROR https://alice:secret@host.invalid/path?token=private
+ERROR Authorization: Bearer sensitive-token
+ERROR DATABASE_URL=postgresql://alice:private@db.invalid/db
+ERROR api_key=super-private
+ERROR ya29.private-access-token
+ERROR eyJheader.eyJpayload.signature
+ERROR serviceAccount=person@example.com
+"""
+        safe = str(r.safe_error(payload))
+        for secret in ['alice','private','sensitive-token','super-private','example.com','eyJheader']:
+            self.assertNotIn(secret, safe)
+        self.assertIn('CPU must be below memory limit', safe)
+
+    def test_cloud_failure_retains_exit_classification_and_safe_message(self):
+        import tempfile, os, json
+        result = r.subprocess.CompletedProcess([], 1, '', 'ERROR (gcloud.run.deploy) INVALID_ARGUMENT: CPU must be 1; request id: 12345678-abcd-abcd-abcd-123456789abc')
+        with tempfile.TemporaryDirectory() as temp, patch.dict(os.environ, {'RUNNER_TEMP':temp}), patch.object(r.subprocess, 'run', return_value=result):
+            with self.assertRaisesRegex(RuntimeError, 'exit=1; INVALID_ARGUMENT'):
+                r.cloud('run','deploy',r.FRONT,'--no-traffic')
+            record=json.loads((Path(temp)/'frontend-release-evidence/gcloud-failure.json').read_text())
+            self.assertEqual(record['exitCode'],1)
+            self.assertEqual(record['classification'],'INVALID_ARGUMENT')
+            self.assertEqual(record['requestOrOperationIds'],['12345678-abcd-abcd-abcd-123456789abc'])
+
+    def test_successful_cloud_read_does_not_print_service_json(self):
+        result = r.subprocess.CompletedProcess([],0,'{"privateEnvironment":"not-for-logs"}','')
+        with patch.object(r.subprocess,'run',return_value=result), patch('builtins.print') as out:
+            self.assertEqual(r.cloud('run','services','describe',r.FRONT), {'privateEnvironment':'not-for-logs'})
+            out.assert_not_called()
+
     def test_ambiguous_traffic_rejected(self):
         for values in [[], [{'revisionName': 'a', 'percent': 50}, {'revisionName': 'b', 'percent': 50}]]:
             with self.assertRaises(RuntimeError):
@@ -67,7 +99,7 @@ class Guards(unittest.TestCase):
             build.assert_not_called()
 
     def run_release(self, problem=None):
-        saved = {'source': 'a'*40, 'old_frontend': {'revision': 'real-serving-old'},
+        saved = {'source': r.IMAGE_SOURCE, 'old_frontend': {'revision': 'real-serving-old'},
                  'newImage': 'image@sha256:test', 'beforeHealth': {'baseline': True}}
         old = revision('real-serving-old', r.ROUTER)
         new = revision('new', {**r.ROUTER, 'DIEWISH_APPLICATION_SHA': saved['source']})
@@ -84,7 +116,7 @@ class Guards(unittest.TestCase):
         def smoke():
             if problem == 'browser':
                 raise RuntimeError('login failed')
-        with patch.object(r, 'gates'), patch.object(r, 'build'), patch.object(r, 'image_version'), patch.object(r, 'save'), patch.object(r, 'unchanged', return_value=candidate), patch.object(r, 'cloud', side_effect=cloud), patch.object(r, 'revision', side_effect=rev), patch.object(r, 'get', return_value=(421,b'')), patch.object(r, 'live', return_value={'baseline':True}), patch.object(r, 'surfaces'), patch.object(r, 'browser_smoke', side_effect=smoke), patch.object(r, 'service', return_value=restored):
+        with patch.object(r, 'gates'), patch.object(r, 'reuse_image'), patch.object(r, 'image_version'), patch.object(r, 'save'), patch.object(r, 'unchanged', return_value=candidate), patch.object(r, 'cloud', side_effect=cloud), patch.object(r, 'revision', side_effect=rev), patch.object(r, 'get', return_value=(421,b'')), patch.object(r, 'live', return_value={'baseline':True}), patch.object(r, 'surfaces'), patch.object(r, 'browser_smoke', side_effect=smoke), patch.object(r, 'service', return_value=restored):
             if problem:
                 with self.assertRaises(RuntimeError):
                     r.release(saved)
