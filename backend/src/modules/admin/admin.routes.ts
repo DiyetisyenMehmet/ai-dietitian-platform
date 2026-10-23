@@ -43,6 +43,8 @@ import {
   adminSupportEntitlementRevokeSchema,
 } from "./admin-users.schemas";
 
+import { adminSystemController } from "./admin-system.controller";
+
 export const adminRouter = Router();
 
 adminRouter.use(adminRateLimiter);
@@ -76,6 +78,17 @@ adminRouter.post(
 
 adminRouter.use(authenticate);
 adminRouter.use(authorize(UserRole.ADMIN));
+
+adminRouter.get(
+  "/system/health",
+  requireAdminPermission(ADMIN_PERMISSIONS.SYSTEM_READ),
+  adminSystemController.health,
+);
+adminRouter.get(
+  "/operations/summary",
+  requireAdminPermission(ADMIN_PERMISSIONS.OPERATIONS_READ),
+  adminSystemController.operations,
+);
 
 adminRouter.patch(
   "/account/email",

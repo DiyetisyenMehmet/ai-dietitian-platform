@@ -220,7 +220,9 @@ test("logout revokes session, clears legacy storage, and back/direct navigation 
 }) => {
   const state = await setup(page);
   await page.goto(`${WEB}/admin`);
-  await page.getByRole("link", { name: "İşlem Geçmişi" }).click();
+  await page.getByRole("navigation", { name: "Yönetim merkezi" }).getByRole("link", { name: "İşlem Geçmişi", exact: true }).click();
+  await expect(page).toHaveURL(`${WEB}/admin/audit`);
+  await expect(page.getByRole("heading", { name: "İşlem geçmişi", exact: true })).toBeVisible();
   await page.evaluate(() => localStorage.setItem("diewish.auth.session", "legacy"));
   await page.getByRole("button", { name: /^Yönetici profili:/ }).click();
   await page.getByRole("button", { name: "Çıkış Yap", exact: true }).click();

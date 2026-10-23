@@ -17,7 +17,7 @@ import { AdminNavigation } from "./admin-navigation";
 import { AdminProfileMenu } from "./admin-profile-menu";
 
 import type { AdminSession } from "@/infrastructure/admin/admin-client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/presentation/components/ui/card";
+import { AdminOwnerDashboard, AdminSystemPanel } from "./admin-owner-dashboard";
 import { AdminAccessManagement } from "./admin-access-management";
 import { AdminAccountSecurity } from "./admin-account-security";
 import { AdminUsers } from "./admin-users";
@@ -29,7 +29,7 @@ export function AdminShell({
   userId,
 }: {
   session: AdminSession;
-  view?: "overview" | "access" | "audit" | "users";
+  view?: "overview" | "access" | "audit" | "users" | "system";
   userId?: string;
 }) {
   const [mobileOpen, setMobileOpen] = React.useState(false);
@@ -74,7 +74,7 @@ export function AdminShell({
                 <Menu aria-hidden="true" />
               </Button>
             </ModalTrigger>
-            <ModalContent className="left-0 top-0 flex h-dvh w-[min(20rem,calc(100%-3rem))] max-w-none translate-x-0 translate-y-0 flex-col gap-6 overflow-y-auto rounded-r-2xl rounded-l-none border-y-0 border-l-0 bg-background/95 pb-[max(1.5rem,env(safe-area-inset-bottom))] pl-[max(1.25rem,env(safe-area-inset-left))] pt-[max(1.5rem,env(safe-area-inset-top))] shadow-xl backdrop-blur-xl">
+            <ModalContent className="left-0 top-0 flex h-dvh w-[min(20rem,calc(100%-3rem))] max-w-none translate-x-0 translate-y-0 flex-col gap-6 overflow-y-auto rounded-l-none rounded-r-2xl border-y-0 border-l-0 bg-background/95 pb-[max(1.5rem,env(safe-area-inset-bottom))] pl-[max(1.25rem,env(safe-area-inset-left))] pt-[max(1.5rem,env(safe-area-inset-top))] shadow-xl backdrop-blur-xl">
               <div className="pr-6">
                 <ModalTitle>Diewish Yönetim</ModalTitle>
                 <ModalDescription className="mt-2 text-muted-foreground">
@@ -113,7 +113,9 @@ export function AdminShell({
           className="min-w-0 scroll-mt-[calc(var(--admin-header-height)+1rem)] px-4 py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] focus:outline-none sm:px-6 lg:p-8"
         >
           <div className="mx-auto max-w-6xl space-y-6">
-            {view === "users" ? (
+            {view === "system" ? (
+              <AdminSystemPanel />
+            ) : view === "users" ? (
               <AdminUsers userId={userId} permissions={session.permissions} />
             ) : view === "access" ? (
               <AdminAccessManagement
@@ -125,49 +127,7 @@ export function AdminShell({
               <AdminAuditViewer />
             ) : (
               <>
-                <div className="rounded-2xl border border-border/60 bg-card/70 p-5 shadow-sm backdrop-blur-sm sm:p-6">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-primary">
-                    Genel Bakış
-                  </p>
-                  <h1 className="mt-1 text-2xl font-bold tracking-tight">Yönetim merkezi</h1>
-                  <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-                    Yönetici hesabınızı ve açılmış yönetim modüllerini buradan kontrol
-                    edebilirsiniz.
-                  </p>
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-2">
-                  <Card className="border-border/60 bg-card/80">
-                    <CardHeader>
-                      <CardTitle>Yetki durumu</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-2 text-sm">
-                      <p>
-                        Roller:{" "}
-                        <span className="font-medium">
-                          {session.roles.join(", ") || "Atanmamış"}
-                        </span>
-                      </p>
-                      <p>
-                        İzinler: <span className="font-medium">{session.permissions.length}</span>
-                      </p>
-                    </CardContent>
-                  </Card>
-
-                  <Card className="border-border/60 bg-card/80">
-                    <CardHeader>
-                      <CardTitle>Ortam</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-2 text-sm">
-                      <p>
-                        Çalışma ortamı: <span className="font-medium">{environment}</span>
-                      </p>
-                      <p className="break-all text-muted-foreground">
-                        Sürüm: {session.environment.commit}
-                      </p>
-                    </CardContent>
-                  </Card>
-                </div>
+                <AdminOwnerDashboard session={session} />
 
                 <div
                   id="admin-account-security"

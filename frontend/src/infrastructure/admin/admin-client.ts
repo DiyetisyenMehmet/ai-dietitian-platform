@@ -1,6 +1,28 @@
 import type { AuthSession } from "@/domain/auth/types";
 import { apiRequest } from "@/infrastructure/api/http-client";
 
+export type AdminSystemStatus = "healthy" | "attention" | "problem" | "unknown";
+export interface AdminSystemHealth extends AdminEnvironmentIdentity {
+  status: AdminSystemStatus;
+  checks: Record<
+    "backend" | "frontend" | "database" | "authentication" | "scheduler" | "criticalServices",
+    {
+      status: AdminSystemStatus;
+      detail: string;
+    }
+  >;
+  timestamp: string;
+  scope: "admin-runtime";
+}
+export interface AdminOperationsSummary {
+  users: { total: number; active: number; inactive: number };
+  accountPlans: { FREE: number; PREMIUM: number; PREMIUM_PLUS: number };
+  effectiveSubscriptions: null;
+  planBasis: "stored-account-tier";
+  timestamp: string;
+  scope: "admin-database";
+}
+
 export type AdminPermission = string;
 
 export interface AdminRoleAssignment {
@@ -192,6 +214,20 @@ export interface AdminUserSubscription {
   supportEntitlement: AdminSupportEntitlement | null;
 }
 export const adminClient = {
+  getSystemHealth(): Promise<AdminSystemHealth> {
+    return apiRequest<AdminSystemHealth>({
+      path: "/admin/system/health",
+      method: "GET",
+      auth: true,
+    });
+  },
+  getOperationsSummary(): Promise<AdminOperationsSummary> {
+    return apiRequest<AdminOperationsSummary>({
+      path: "/admin/operations/summary",
+      method: "GET",
+      auth: true,
+    });
+  },
   getUserSubscription(id: string): Promise<{ subscription: AdminUserSubscription }> {
     return apiRequest({
       path: `/admin/users/${encodeURIComponent(id)}/subscription`,
@@ -305,10 +341,17 @@ export const adminClient = {
   },
 
   verifyPasswordReset(token: string): Promise<{ context: "invitation" | "reset" }> {
-    return apiRequest({ path: "/admin/auth/password/verify", method: "POST", body: JSON.stringify({ token }) });
+    return apiRequest({
+      path: "/admin/auth/password/verify",
+      method: "POST",
+      body: JSON.stringify({ token }),
+    });
   },
 
-  resetPassword(token: string, newPassword: string): Promise<{ message: string; context: "invitation" | "reset" }> {
+  resetPassword(
+    token: string,
+    newPassword: string,
+  ): Promise<{ message: string; context: "invitation" | "reset" }> {
     return apiRequest<{ message: string; context: "invitation" | "reset" }>({
       path: "/admin/auth/password/reset",
       method: "POST",
