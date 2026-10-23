@@ -7,6 +7,7 @@ on:
       - feature/android-native-scanner
       - feature/staging-preview
       - feature/app-security-nextjs-15-5-28-a1
+      - feature/app12-daily-journey-pro-a1
       - feature/mirmir-a4-direct-integration
       - feature/mirmir-final-animation-decision-a1
       - feature/mascot-dost-next-character-a1
@@ -157,6 +158,7 @@ jobs:
           tests/sleep-account-isolation.test.cjs
           tests/journey-dashboard-activation.test.cjs
           tests/journey-compact-ui.test.cjs
+          tests/journey-plan.test.cjs
       - name: Validate staging History runtime spec syntax
         run: node --check e2e/staging-history-runtime.spec.js
       - name: Test Coach event lifecycle and account isolation
@@ -416,11 +418,6 @@ jobs:
       - name: Test Dashboard viewport overflow and scroll containment (63 scenarios)
         working-directory: frontend
         run: node --test tests/dashboard-viewport-layout.test.cjs
-      - name: Test compact Journey responsive layout
-        working-directory: frontend
-        env:
-          JOURNEY_PRODUCTION_FONTS: "1"
-        run: node --test tests/journey-compact-responsive.test.cjs
       - name: Start frontend
         working-directory: frontend
         run: |
@@ -484,7 +481,6 @@ jobs:
           e2e/dashboard-blood-test-card.spec.ts
           e2e/dashboard-live-feature-card.spec.ts
           e2e/dashboard-card-personalization.spec.ts
-          e2e/journey-compact.spec.ts
           e2e/blood-test-longitudinal-comparison.spec.ts
           e2e/admin-foundation.spec.js
           e2e/admin-shell.spec.js
@@ -528,6 +524,17 @@ jobs:
             test "$ready" = true
           done
           npx playwright test e2e/coach-event-driven.spec.ts --workers=1 --reporter=line
+      - name: Test updated Journey Pro real-plan actions and mobile layout (16 scenarios)
+        working-directory: frontend
+        run: npx playwright test --config=playwright.journey-pro.config.ts --reporter=line
+      - name: Upload Journey Pro browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: journey-pro-hardening-browser-${{ github.run_number }}
+          path: frontend/test-results/
+          if-no-files-found: warn
+          retention-days: 7
       - name: Upload Blood Test card browser screenshots
         if: always()
         uses: actions/upload-artifact@v4
