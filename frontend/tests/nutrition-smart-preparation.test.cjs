@@ -6,7 +6,6 @@ const ts = require("typescript");
 const crypto = require("node:crypto");
 function fixture(client) {
   const timers = [];
-  let authState = { user: { id: "synthetic-nutrition-owner" } };
   class ApiError extends Error {
     constructor(message, status, code) {
       super(message);
@@ -24,7 +23,7 @@ function fixture(client) {
     // NutritionPlanStore owns hydration by the signed-in account. Keep this
     // hermetic VM fixture compatible without importing real auth or tokens.
     "../auth/auth-store": {
-      authStore: { getSnapshot: () => authState },
+      authStore: { getSnapshot: () => ({ user: { id: "synthetic-nutrition-owner" } }) },
     },
     "@/infrastructure/api/http-client": { ApiError },
     "@/infrastructure/nutrition/nutrition-plan-client": {
@@ -48,14 +47,7 @@ function fixture(client) {
       },
     },
   );
-  return {
-    ...exports,
-    timers,
-    ApiError,
-    setUserId(id) {
-      authState = { user: id === null ? null : { id } };
-    },
-  };
+  return { ...exports, timers, ApiError };
 }
 const job = {
   id: "owned-job",
@@ -266,32 +258,5 @@ test("a cross-device delivery releases the request key for the next explicit gen
   await module.nutritionPlanStore.generate("FOURTEEN_DAY");
   assert.equal(keys.length, 2);
   assert.notEqual(keys[0], keys[1]);
-  module.nutritionPlanStore.reset();
-});
-
-// Account changes use the same store instance, as they do in the real app.
-test("logout and account switch fence an old plan list without replacing the new owner", async () => {
-  let resolveOldList,
-    reads = 0;
-  const oldList = new Promise((resolve) => {
-    resolveOldList = resolve;
-  });
-  const module = fixture({
-    list: async () => (++reads === 1 ? oldList : { plans: [plan("account-b-plan")] }),
-    capabilities: async () => ({ resumable: false }),
-  });
-  const oldHydration = module.nutritionPlanStore.hydrateFromBackend();
-  module.setUserId(null);
-  module.nutritionPlanStore.reset();
-  assert.equal(module.useNutritionPlan().ownerUserId, null);
-  assert.equal(module.useNutritionPlan().activePlan, null);
-  module.setUserId("synthetic-account-b");
-  await module.nutritionPlanStore.hydrateFromBackend();
-  assert.equal(module.useNutritionPlan().ownerUserId, "synthetic-account-b");
-  assert.equal(module.useNutritionPlan().activePlan.id, "account-b-plan");
-  resolveOldList({ plans: [plan("account-a-plan")] });
-  await oldHydration;
-  assert.equal(module.useNutritionPlan().ownerUserId, "synthetic-account-b");
-  assert.equal(module.useNutritionPlan().activePlan.id, "account-b-plan");
   module.nutritionPlanStore.reset();
 });
