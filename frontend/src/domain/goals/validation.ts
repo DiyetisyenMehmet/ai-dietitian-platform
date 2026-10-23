@@ -16,11 +16,11 @@ export const goalFormSchema = z
         "steps",
         "exercise",
       ],
-      { errorMap: () => ({ message: "Hedef türü seçiniz" }) },
+      { error: "Hedef türü seçiniz" },
     ),
     title: z.string().trim().max(80, "Başlık çok uzun").optional().or(z.literal("")),
     targetValue: z
-      .number({ invalid_type_error: "Hedef değer sayı olmalıdır" })
+      .number({ error: "Hedef değer sayı olmalıdır" })
       .positive("Hedef değer 0'dan büyük olmalıdır")
       .max(100000, "Hedef değer çok yüksek"),
     startDate: z.string().regex(isoDate, "Geçerli bir başlangıç tarihi giriniz"),

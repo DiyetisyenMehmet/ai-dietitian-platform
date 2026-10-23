@@ -7,7 +7,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 
-import { loginSchema, type LoginInput } from "@/domain/auth/validation";
+import { loginSchema, type LoginFormInput, type LoginInput } from "@/domain/auth/validation";
 import { authService } from "@/application/auth/auth-service";
 import { authStore } from "@/application/auth/auth-store";
 import { AuthLayout } from "@/presentation/components/layout/auth-layout";
@@ -25,7 +25,7 @@ export default function LoginPage() {
     setValue,
     watch,
     formState: { errors, isSubmitting },
-  } = useForm<LoginInput>({
+  } = useForm<LoginFormInput, unknown, LoginInput>({
     resolver: zodResolver(loginSchema),
     defaultValues: { email: "", password: "", rememberMe: false },
   });

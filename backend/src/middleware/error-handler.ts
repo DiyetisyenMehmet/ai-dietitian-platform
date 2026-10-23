@@ -26,6 +26,16 @@ function normalizeError(error: unknown): NormalizedError {
     };
   }
 
+  // Body-parser rejects oversized input before any schema or route executes.
+  if (error instanceof Error && "type" in error && error.type === "entity.too.large") {
+    return {
+      statusCode: 413,
+      code: "PAYLOAD_TOO_LARGE",
+      message: "Request body is too large.",
+      isOperational: true,
+    };
+  }
+
   if (error instanceof ZodError) {
     return {
       statusCode: 422,
