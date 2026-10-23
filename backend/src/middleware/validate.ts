@@ -1,5 +1,5 @@
 import type { NextFunction, Request, RequestHandler, Response } from "express";
-import { ZodError, type ZodTypeAny } from "zod";
+import { ZodError, type ZodType, type ZodTypeAny } from "zod";
 
 import { ApiError } from "../utils/api-error";
 
@@ -7,7 +7,7 @@ import { ApiError } from "../utils/api-error";
 export interface ValidationSchemas {
   body?: ZodTypeAny;
   query?: ZodTypeAny;
-  params?: ZodTypeAny;
+  params?: ZodType<Request["params"]>;
 }
 
 /**

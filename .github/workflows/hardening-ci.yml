@@ -6,6 +6,7 @@ on:
       - fix/production-hardening
       - feature/android-native-scanner
       - feature/staging-preview
+      - security/app12-zod-security-gate-a1
       - feature/app-security-nextjs-15-5-28-a1
       - feature/app12-daily-journey-pro-a1
       - feature/mirmir-a4-direct-integration
@@ -135,6 +136,8 @@ jobs:
             exit 0
           fi
           exit "$status"
+      - name: Test Zod 4 bounded collections and form resolver contracts
+        run: node --test tests/zod-validation-security.test.cjs
       - name: Test Nutrition A1 data accuracy
         run: node --test tests/nutrition-home-a1-data.test.cjs
       - name: Test identity runtime and error recovery

@@ -2,7 +2,7 @@ import { z } from "zod";
 
 const nonNegative = (label: string) =>
   z
-    .number({ invalid_type_error: `${label} sayı olmalıdır` })
+    .number({ error: `${label} sayı olmalıdır` })
     .min(0, `${label} negatif olamaz`)
     .max(10000, `${label} çok yüksek`);
 
@@ -19,7 +19,7 @@ export const addMealSchema = z.object({
   carbs: nonNegative("Karbonhidrat"),
   fat: nonNegative("Yağ"),
   mealSlot: z.enum(["breakfast", "lunch", "dinner", "snack"], {
-    errorMap: () => ({ message: "Öğün türü seçiniz" }),
+    error: "Öğün türü seçiniz",
   }),
   time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Geçerli bir saat giriniz"),
 });

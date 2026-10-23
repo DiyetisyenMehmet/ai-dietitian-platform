@@ -73,30 +73,27 @@ export const onboardingFormSchema = z.object({
     .min(2, "Ad soyad en az 2 karakter olmalıdır.")
     .max(120, "Ad soyad en fazla 120 karakter olabilir."),
   dateOfBirth,
-  gender: z.enum(GENDERS, { errorMap: () => ({ message: "Lütfen bir seçim yapın." }) }),
+  gender: z.enum(GENDERS, { error: "Lütfen bir seçim yapın." }),
   heightCm: numericString(80, 260, "Geçerli bir boy girin (80-260 cm)."),
   currentWeightKg: numericString(25, 400, "Geçerli bir kilo girin (25-400 kg)."),
   targetWeightKg: numericString(25, 400, "Geçerli bir hedef kilo girin (25-400 kg)."),
   activityLevel: z.enum(ACTIVITY_LEVELS, {
-    errorMap: () => ({ message: "Lütfen bir aktivite seviyesi seçin." }),
+    error: "Lütfen bir aktivite seviyesi seçin.",
   }),
   healthConditions: z
     .array(z.string().trim().min(1).max(80))
-    .min(
-      1,
-      "Lütfen \"Hastalığım yok\" seçeneğini işaretleyin veya en az bir sağlık durumu ekleyin.",
-    )
+    .min(1, 'Lütfen "Hastalığım yok" seçeneğini işaretleyin veya en az bir sağlık durumu ekleyin.')
     .max(30),
   allergies: z
     .array(z.string().trim().min(1).max(80))
-    .min(1, "Lütfen \"Alerjim yok\" seçeneğini işaretleyin veya en az bir alerji ekleyin.")
+    .min(1, 'Lütfen "Alerjim yok" seçeneğini işaretleyin veya en az bir alerji ekleyin.')
     .max(30),
   dietaryPreference: z.enum(DIETARY_PREFERENCES, {
-    errorMap: () => ({ message: "Lütfen bir beslenme tercihi seçin." }),
+    error: "Lütfen bir beslenme tercihi seçin.",
   }),
   dailyWaterGoalMl: numericString(500, 6000, "Geçerli bir su hedefi girin (500-6000 ml)."),
   workScheduleType: z.enum(WORK_SCHEDULE_TYPES, {
-    errorMap: () => ({ message: "Lütfen çalışma düzeninizi seçin." }),
+    error: "Lütfen çalışma düzeninizi seçin.",
   }),
   usualWakeTime: timeOfDay,
   usualSleepTime: timeOfDay,
