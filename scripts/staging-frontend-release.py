@@ -1,4 +1,4 @@
-"""Frontend-only release under #98. Never mutate a backend, database, secret or IAM.
+"""Frontend-only Journey release under #103. Never mutate a backend, database, secret or IAM.
 
 Replaces the historical fixed-revision Auth A2 orchestration. Inspect is read-only;
 release captures the real serving revision and rolls only frontend traffic back.
@@ -18,10 +18,14 @@ import urllib.request
 PROJECT = 'project-a2e260c1-839d-4f1d-b90'
 REGION = 'europe-west1'
 REPO = 'DiyetisyenMehmet/ai-dietitian-platform'
-MERGED = 'bd42cfd465730a1e7d8678d0bb73bfe76939a32f'
-IMAGE_SOURCE = '1d809cfc164551e940c81a41af8fbfd7eb3d4cce'
-REUSED_BUILD = '43cd0b6a-e9d8-49d9-a531-b0584fca7596'
-REUSED_DIGEST = 'sha256:b2de3f9d240cc1adf41e211f974c0b636c7a0bd52fae545e821ebc5b232692d7'
+MERGED = '8ee4c2021303a0dcbfca34aeff4511794d76d71b'
+# Deny the historic security-only image even if a build reports a new source.
+RETIRED_DIGEST = 'sha256:b2de3f9d240cc1adf41e211f974c0b636c7a0bd52fae545e821ebc5b232692d7'
+CHECKS = {'Hardening CI': '.github/workflows/hardening-ci.yml',
+          'Notification preferences platform checks': '.github/workflows/notification-alerts-native-ci.yml',
+          'Staging Config CI': '.github/workflows/staging-config-ci.yml'}
+HARDENING_JOBS = {'frontend', 'backend', 'android-native', 'browser-e2e',
+                  'Dependency vulnerability gate / osv-scan'}
 BACK = 'diewish-backend-staging'
 FRONT = 'diewish-frontend-staging'
 CANDIDATE_TAG = 'next-sec'
@@ -36,7 +40,7 @@ ROUTER = {'DIEWISH_STAGING_HOST_ROUTING_ENABLED': 'true',
           'DIEWISH_STAGING_USER_API_ORIGIN': USER,
           'NEXT_PUBLIC_API_BASE_URL': '/api'}
 PREP_FILES = {'.github/workflows/staging-auth-a2-frontend-only.yml',
-              '.github/workflows/staging-notification-test-apk.yml',
+              '.github/cloudbuild/frontend-staging.yaml',
               'scripts/staging-frontend-release.py',
               'scripts/staging-frontend-release.test.py'}
 ASSETS = ['brands/diewish-id-transparent-approved.png',
@@ -121,9 +125,12 @@ def source():
     require(re.fullmatch('[a-f0-9]{40}', sha) is not None, 'invalid source SHA')
     require(os.environ.get('GITHUB_REF') == 'refs/heads/feature/staging-preview', 'wrong ref')
     require(api('/git/ref/heads/feature/staging-preview')['object']['sha'] == sha, 'staging advanced')
-    subprocess.run(['git', 'merge-base', '--is-ancestor', MERGED, sha], check=True)
+    require(subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip() == sha, 'checkout/source mismatch')
+    require(not subprocess.check_output(['git', 'status', '--porcelain', '--untracked-files=no'], text=True).strip(), 'dirty release checkout')
+    require(subprocess.run(['git', 'merge-base', '--is-ancestor', MERGED, sha], check=False).returncode == 0,
+            'reviewed application baseline is not an ancestor')
     changed = subprocess.check_output(['git', 'diff', '--name-only', MERGED, sha], text=True).splitlines()
-    require(set(changed) <= PREP_FILES, 'application drift since reviewed PR97 merge')
+    require(set(changed) <= PREP_FILES, 'application drift since reviewed Journey merge')
     pkg = json.loads(Path('frontend/package.json').read_text())
     lock = json.loads(Path('frontend/package-lock.json').read_text())
     require(pkg['dependencies']['next'] == '15.5.28' and
@@ -133,15 +140,17 @@ def source():
 
 
 def gates():
-    # The merged application's 5/5 gate is mandatory. Preparation-only source
-    # equality above lets unchanged platform tests retain their original evidence.
+    # Both the reviewed application and the exact post-merge preparation HEAD
+    # need real staging runs; PR checks can never substitute for either source.
+    sha = source()
     for attempt in range(300):
         pending = False
-        for sha, names in [(MERGED, ['Hardening CI', 'Staging Config CI', 'Notification preferences platform checks']),
-                           (IMAGE_SOURCE, ['Hardening CI', 'Staging Config CI'])]:
-            runs = api('/actions/runs?head_sha=' + sha + '&per_page=100')['workflow_runs']
-            for name in names:
-                matches = [r for r in runs if r['name'] == name and r['head_sha'] == sha]
+        for checked_sha in dict.fromkeys([MERGED, sha]):
+            runs = api('/actions/runs?head_sha=' + checked_sha + '&per_page=100')['workflow_runs']
+            for name, path in CHECKS.items():
+                matches = [r for r in runs if r['name'] == name and r['head_sha'] == checked_sha
+                           and r.get('path') == path and r.get('head_branch') == 'feature/staging-preview'
+                           and r.get('event') in ['push', 'workflow_dispatch']]
                 if not matches:
                     pending = True
                     continue
@@ -152,13 +161,15 @@ def gates():
                 require(latest['conclusion'] == 'success', 'required check unsuccessful: ' + name)
                 if name == 'Hardening CI':
                     jobs = api('/actions/runs/' + str(latest['id']) + '/jobs?per_page=100')['jobs']
-                    require(len(jobs) == 5 and all(j['conclusion'] == 'success' for j in jobs), 'Hardening must be 5/5')
+                    require(len(jobs) == 5 and {j['name'] for j in jobs} == HARDENING_JOBS and
+                            all(j['status'] == 'completed' and j['conclusion'] == 'success' for j in jobs),
+                            'Hardening must be 5/5')
                 if attempt == 0:
-                    print('PASS check', sha, name, latest['html_url'])
+                    print('PASS check', checked_sha, name, latest['html_url'])
+        source()  # Close the source-advancement window even when every gate is green.
         if not pending:
-            print('PASS: merged 5/5 and exact release-source gates')
+            print('PASS: reviewed application and exact release HEAD gates')
             return
-        source()
         if attempt % 12 == 0:
             print('PENDING: required exact-source checks; no release mutation', flush=True)
         time.sleep(5)
@@ -290,38 +301,36 @@ def save(data):
 
 
 def build(saved):
-    sha = saved['source']
-    image = f'{REGION}-docker.pkg.dev/{PROJECT}/diewish-staging/frontend:next-security-{sha}'
+    sha = source()
+    require(saved['source'] == sha, 'snapshot/build source mismatch')
+    image = f'{REGION}-docker.pkg.dev/{PROJECT}/diewish-staging/frontend:journey-{sha}'
+    substitutions = {'_IMAGE': image, '_GIT_SHA': sha, '_API_BASE_URL': '/api',
+                     '_SITE_URL': APP, '_API_PROXY_TARGET': 'https://invalid-legacy-fallback.invalid'}
     result = cloud('builds', 'submit', '--no-source', '--config', '.github/cloudbuild/frontend-staging.yaml',
-                   '--substitutions', f'_IMAGE={image},_GIT_SHA={sha},_API_BASE_URL=/api,_SITE_URL={APP},_API_PROXY_TARGET=https://invalid-legacy-fallback.invalid', '--async')
+                   '--substitutions', ','.join(k + '=' + v for k, v in substitutions.items()), '--async')
+    require(re.fullmatch('[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}', result.get('id', '')) is not None, 'invalid build id')
     saved['buildId'] = result['id']
     save(saved)
     for _ in range(180):
         result = cloud('builds', 'describe', saved['buildId'])
+        require(result.get('id') == saved['buildId'] and result.get('projectId') == PROJECT,
+                'build identity mismatch')
+        require(all(result.get('substitutions', {}).get(k) == v for k, v in substitutions.items()),
+                'build source/substitution mismatch')
         if result['status'] == 'SUCCESS':
-            built = result['results']['images'][0]
-            require(built['name'] == image and re.fullmatch('sha256:[a-f0-9]{64}', built['digest']), 'image result mismatch')
-            saved['newImage'] = image.rsplit(':', 1)[0] + '@' + built['digest']
+            images = result.get('results', {}).get('images', [])
+            require(len(images) == 1 and images[0].get('name') == image, 'image result mismatch')
+            digest = images[0].get('digest', '')
+            require(re.fullmatch('sha256:[a-f0-9]{64}', digest) is not None and digest != RETIRED_DIGEST,
+                    'retired or invalid image digest')
+            require(saved['old_frontend']['imageDigest'].rsplit('@', 1)[-1] != digest, 'old Web image reused')
+            source()
+            saved.update(newImage=image.rsplit(':', 1)[0] + '@' + digest, applicationSource=sha)
             save(saved)
             return
         require(result['status'] in ['QUEUED', 'WORKING', 'PENDING'], 'frontend image build ' + result['status'])
         time.sleep(5)
     raise RuntimeError('NO_GO: cloud build timed out')
-
-
-def reuse_image(saved):
-    built = cloud('builds', 'describe', REUSED_BUILD)
-    require(built['status'] == 'SUCCESS' and built['substitutions']['_GIT_SHA'] == IMAGE_SOURCE,
-            'prior immutable build/source not reusable')
-    expected_name = f'{REGION}-docker.pkg.dev/{PROJECT}/diewish-staging/frontend:next-security-{IMAGE_SOURCE}'
-    images = built['results']['images']
-    require(any(i['name'] == expected_name and i['digest'] == REUSED_DIGEST for i in images), 'prior immutable image digest mismatch')
-    saved.update(newImage=expected_name.rsplit(':', 1)[0] + '@' + REUSED_DIGEST,
-                 buildId=REUSED_BUILD, applicationSource=IMAGE_SOURCE,
-                 verifiedImageNextVersion='15.5.28',
-                 reusedVersionEvidence='https://github.com/' + REPO + '/actions/runs/39917194478/artifacts/12486127055')
-    save(saved)
-    print('PASS: existing immutable Next 15.5.28 image reused; no build or prior test rerun', flush=True)
 
 
 def candidate_tag():
@@ -343,18 +352,7 @@ def diagnose(saved):
                            for v in (audit or [])]
     save(saved)
     print('READ_ONLY_DIAGNOSIS ' + json.dumps({'revisionCount': len(summary), 'auditErrors': saved['auditErrors']}), flush=True)
-    gates()
-    reuse_image(saved)
-    unchanged(saved)
-    # One targeted retry only, never a traffic change in diagnosis mode.
-    cloud('run', 'deploy', FRONT, '--region', REGION, '--image', saved['newImage'], '--no-traffic',
-          '--tag', candidate_tag(), '--update-env-vars',
-          ','.join(k + '=' + v for k, v in {**ROUTER, 'DIEWISH_APPLICATION_SHA': IMAGE_SOURCE}.items()))
-    f = unchanged(saved)
-    candidate = tag(f, candidate_tag())
-    require(candidate.get('percent', 0) == 0, 'diagnostic candidate received traffic')
-    saved['diagnosticCandidate'] = candidate['revisionName']
-    saved['decision'] = 'NO_TRAFFIC_CANDIDATE_CREATED_PENDING_REVIEW'
+    saved['decision'] = 'READ_ONLY_DIAGNOSIS_COMPLETE'
     save(saved)
 
 
@@ -363,10 +361,33 @@ def image_version(saved):
     token = subprocess.check_output(['gcloud', 'auth', 'print-access-token'], text=True).strip()
     subprocess.run(['docker', 'login', '-u', 'oauth2accesstoken', '--password-stdin', host],
                    input=token, text=True, capture_output=True, check=True)
-    version = subprocess.check_output(['docker', 'run', '--rm', '--entrypoint', 'node', saved['newImage'],
-                                       '-p', "require('next/package.json').version"], text=True).strip()
-    require(version == '15.5.28', 'built image does not contain Next 15.5.28')
-    saved['verifiedImageNextVersion'] = version
+    # Pull and inspect the immutable digest, never the mutable image tag.
+    subprocess.run(['docker', 'pull', saved['newImage']], capture_output=True, text=True, check=True)
+    labels = json.loads(subprocess.check_output(['docker', 'image', 'inspect', saved['newImage'],
+                                                '--format', '{{json .Config.Labels}}'], text=True))
+    require((labels or {}).get('DIEWISH_APPLICATION_SHA') == saved['source'] == saved['applicationSource'],
+            'image source marker mismatch')
+    js = r'''const fs=require('fs'), crypto=require('crypto');
+    const assets=JSON.parse(process.argv[1]);
+    const hashes=Object.fromEntries(assets.map(p=>[p,crypto.createHash('sha256').update(fs.readFileSync('public/'+p)).digest('hex')]));
+    const markers=['data-journey-plan-meal','data-journey-next','data-journey-progress-area'];
+    const found=new Set();
+    function scan(dir){for(const e of fs.readdirSync(dir,{withFileTypes:true})){
+      const p=dir+'/'+e.name;
+      if(e.isDirectory())scan(p);else if(p.endsWith('.js')){
+        const text=fs.readFileSync(p,'utf8');for(const m of markers)if(text.includes(m))found.add(m);
+      }
+    }}
+    scan('.next/server');scan('.next/static');
+    console.log(JSON.stringify({next:require('next/package.json').version,assets:hashes,journey:found.size===markers.length}));'''
+    report = json.loads(subprocess.check_output(['docker', 'run', '--rm', '--network=none', '--entrypoint', 'node',
+                                                 saved['newImage'], '-e', js, json.dumps(ASSETS)], text=True))
+    expected = {asset: hashlib.sha256((Path('frontend/public') / asset).read_bytes()).hexdigest() for asset in ASSETS}
+    require(report.get('next') == '15.5.28', 'built image does not contain Next 15.5.28')
+    require(report.get('assets') == expected, 'built image asset checksum mismatch')
+    require(report.get('journey') is True, 'built image Journey content missing')
+    saved.update(verifiedImageNextVersion=report['next'], verifiedImageSource=labels['DIEWISH_APPLICATION_SHA'],
+                 verifiedAssetChecksums=expected, verifiedImageJourney=True)
     save(saved)
 
 
@@ -408,12 +429,18 @@ def surfaces():
 
 
 def release(saved):
+    require(os.environ.get('GITHUB_EVENT_NAME') == 'workflow_dispatch' and os.environ.get('RELEASE_MODE') == 'release',
+            'release requires explicit workflow_dispatch mode=release')
+    require(saved['source'] == source(), 'snapshot/release source mismatch')
     gates()
-    reuse_image(saved)
+    unchanged(saved)
+    build(saved)
+    image_version(saved)
+    gates()
     unchanged(saved)
     cloud('run', 'deploy', FRONT, '--region', REGION, '--image', saved['newImage'], '--no-traffic',
           '--tag', candidate_tag(), '--update-env-vars',
-          ','.join(k + '=' + v for k, v in {**ROUTER, 'DIEWISH_APPLICATION_SHA': IMAGE_SOURCE}.items()))
+          ','.join(k + '=' + v for k, v in {**ROUTER, 'DIEWISH_APPLICATION_SHA': saved['source']}.items()))
     f = unchanged(saved)
     candidate = tag(f, candidate_tag())
     require(candidate.get('percent', 0) == 0, 'candidate received default traffic')
@@ -422,7 +449,7 @@ def release(saved):
     require(new['status']['imageDigest'] == saved['newImage'], 'candidate digest mismatch')
     # Preserve all prior runtime env, adding only the non-secret source marker.
     old_env = env(revision(saved['old_frontend']['revision']))
-    require(env(new) == {**old_env, 'DIEWISH_APPLICATION_SHA': {'name': 'DIEWISH_APPLICATION_SHA', 'value': IMAGE_SOURCE}}, 'unexpected candidate environment change')
+    require(env(new) == {**old_env, 'DIEWISH_APPLICATION_SHA': {'name': 'DIEWISH_APPLICATION_SHA', 'value': saved['source']}}, 'unexpected candidate environment change')
     old_spec = copy.deepcopy(revision(saved['old_frontend']['revision'])['spec'])
     new_spec = copy.deepcopy(new['spec'])
     for spec in [old_spec, new_spec]:
@@ -434,6 +461,7 @@ def release(saved):
     saved['candidateWrongHostStatus'] = 421
     save(saved)
     # Fresh final preflight directly before traffic, then protected frontend-only swap.
+    gates()
     unchanged(saved)
     require(live() == saved['beforeHealth'], 'health drift before cutover')
     saved['decision'] = 'CUTOVER_STARTED'
@@ -458,8 +486,9 @@ def release(saved):
     except BaseException:
         saved['decision'] = 'NO_GO'
         # Covers an uncertain response from the first traffic mutation as well.
-        current = serving(service(FRONT))
-        require(current in [candidate['revisionName'], saved['old_frontend']['revision']],
+        save(saved)
+        active = [row for row in rows(service(FRONT)) if row.get('percent', 0) > 0]
+        require(active and all(row['revisionName'] in [candidate['revisionName'], saved['old_frontend']['revision']] for row in active),
                 'foreign concurrent frontend release; refusing to overwrite it')
         cloud('run', 'services', 'update-traffic', FRONT, '--region', REGION,
               '--to-revisions', saved['old_frontend']['revision'] + '=100')
