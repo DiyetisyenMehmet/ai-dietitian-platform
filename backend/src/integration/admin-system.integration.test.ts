@@ -180,9 +180,12 @@ test("Owner system and operations HTTP boundaries on isolated PostgreSQL", async
     },
   );
   await t.test("database failure becomes a safe partial health response", async () => {
-    const transaction = t.mock.method(prisma, "$transaction", async () => {
+    // Prisma exposes $transaction through a proxy without an own descriptor;
+    // Node 20 mock.method cannot replace it. Restore the direct test double.
+    const originalTransaction = prisma.$transaction;
+    prisma.$transaction = (async () => {
       throw new Error(`private failure ${env.DATABASE_URL}`);
-    });
+    }) as typeof prisma.$transaction;
     try {
       const health = await readSystemHealth();
       assert.equal(health.checks.database.status, "problem");
@@ -191,7 +194,7 @@ test("Owner system and operations HTTP boundaries on isolated PostgreSQL", async
       assert.equal(JSON.stringify(health).includes("private failure"), false);
       assert.equal(JSON.stringify(health).includes(env.DATABASE_URL), false);
     } finally {
-      transaction.mock.restore();
+      prisma.$transaction = originalTransaction;
     }
   });
 });
