@@ -15,18 +15,116 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   apk:
     if: >-
-      ${{ (github.event_name == 'workflow_dispatch' && inputs.build_android_apk)
+      ${{ github.ref == 'refs/heads/feature/staging-preview' && ((github.event_name == 'workflow_dispatch' && inputs.build_android_apk)
           || (github.event_name == 'push' && github.ref == 'refs/heads/feature/staging-preview'
-              && contains(github.event.head_commit.message, '[apk-build]')) }}
+              && contains(github.event.head_commit.message, '[apk-build]'))) }}
     name: Build staging notification test APK
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    environment: staging
+    env:
+      PROJECT_ID: project-a2e260c1-839d-4f1d-b90
+      PROJECT_NUMBER: "730419163638"
     steps:
       - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/730419163638/locations/global/workloadIdentityPools/github-actions/providers/diewish-staging
+          service_account: diewish-staging-deployer@project-a2e260c1-839d-4f1d-b90.iam.gserviceaccount.com
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+      - name: Resolve existing staging Android Firebase and Google client config read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_name="com.diewish.app"
+          auth_header="Authorization: Bearer $(gcloud auth print-access-token)"
+          apps_file="$(mktemp)"
+          apps_code="$(curl --silent --show-error -o "$apps_file" -w '%{http_code}' \
+            -H "$auth_header" \
+            -H "x-goog-user-project: ${PROJECT_ID}" \
+            "https://firebase.googleapis.com/v1beta1/projects/${PROJECT_ID}/androidApps")"
+          if [[ "$apps_code" != "200" ]]; then
+            echo "Could not read isolated staging Firebase Android apps (HTTP ${apps_code})." >&2
+            rm -f "$apps_file"
+            exit 1
+          fi
+
+          android_app_name="$(jq -r --arg package "$package_name" '(.apps // [])[] | select(.packageName == $package) | .name' "$apps_file" | head -n 1)"
+          rm -f "$apps_file"
+
+          # Android app registration is a one-time infrastructure bootstrap
+          # operation. The deployment identity intentionally cannot self-escalate
+          # or create Firebase clients. Fail closed with an actionable message.
+          if [[ -z "$android_app_name" ]]; then
+            echo "Staging Firebase Android app com.diewish.app is missing; refusing to build an APK without FCM." >&2
+            echo "Run scripts/bootstrap-staging-auth-gcp.sh once with an authorized staging project administrator, then retry only this test APK workflow." >&2
+            exit 1
+          fi
+
+          config_file="$(mktemp)"
+          config_code="$(curl --silent --show-error -o "$config_file" -w '%{http_code}' \
+            -H "$auth_header" \
+            -H "x-goog-user-project: ${PROJECT_ID}" \
+            "https://firebase.googleapis.com/v1beta1/${android_app_name}/config")"
+          if [[ "$config_code" != "200" ]]; then
+            echo "Could not read staging Firebase Android client config (HTTP ${config_code})." >&2
+            rm -f "$config_file"
+            exit 1
+          fi
+
+          config_b64="$(jq -r '.configFileContents // empty' "$config_file")"
+          rm -f "$config_file"
+          if [[ -z "$config_b64" ]]; then
+            echo "Staging Firebase Android config payload is empty." >&2
+            exit 1
+          fi
+
+          decoded_config="$(mktemp)"
+          printf '%s' "$config_b64" | base64 --decode > "$decoded_config"
+          client_json="$(jq -c --arg package "$package_name" '.client[] | select(.client_info.android_client_info.package_name == $package)' "$decoded_config" | head -n 1)"
+          firebase_project_id="$(jq -r '.project_info.project_id // empty' "$decoded_config")"
+          firebase_sender_id="$(jq -r '.project_info.project_number // empty' "$decoded_config")"
+          rm -f "$decoded_config"
+
+          if [[ -z "$client_json" ]]; then
+            echo "Staging Firebase Android config does not contain ${package_name}." >&2
+            exit 1
+          fi
+          firebase_app_id="$(jq -r '.client_info.mobilesdk_app_id // empty' <<<"$client_json")"
+          google_web_client_id="$(jq -r '[.oauth_client[]? | select(.client_type == 3) | .client_id] | unique | if length == 1 then .[0] else empty end' <<<"$client_json")"
+          if [[ ! "$google_web_client_id" =~ ^[0-9]+-[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$ ]]; then
+            echo "Staging Google OAuth web client is missing or ambiguous; refusing an APK with broken Google sign-in." >&2
+            exit 1
+          fi
+          firebase_api_key="$(jq -r '.api_key[0].current_key // empty' <<<"$client_json")"
+
+          if [[ "$firebase_project_id" != "$PROJECT_ID" || "$firebase_sender_id" != "$PROJECT_NUMBER" ]]; then
+            echo "Refusing APK build: staging Firebase project identity mismatch." >&2
+            exit 1
+          fi
+          if [[ -z "$firebase_app_id" || -z "$firebase_api_key" ]]; then
+            echo "Staging Firebase Android client config is incomplete." >&2
+            exit 1
+          fi
+
+          echo "::add-mask::${firebase_app_id}"
+          echo "::add-mask::${firebase_api_key}"
+          {
+            echo "DIEWISH_FIREBASE_PROJECT_ID=${firebase_project_id}"
+            echo "DIEWISH_FIREBASE_APP_ID=${firebase_app_id}"
+            echo "DIEWISH_FIREBASE_API_KEY=${firebase_api_key}"
+            echo "DIEWISH_FIREBASE_SENDER_ID=${firebase_sender_id}"
+            echo "DIEWISH_GOOGLE_WEB_CLIENT_ID=${google_web_client_id}"
+            echo "DIEWISH_ANDROID_FCM_STATUS=verified"
+          } >> "$GITHUB_ENV"
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -51,20 +149,38 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          test "${DIEWISH_ANDROID_FCM_STATUS:-}" = verified
           gradle --no-daemon -p android :app:testDebugUnitTest :app:assembleDebug \
-            -PDIEWISH_WEB_BASE_URL="https://staging.diewish.com"
+            -PDIEWISH_WEB_BASE_URL="https://staging.diewish.com" \
+            -PDIEWISH_FIREBASE_PROJECT_ID="${DIEWISH_FIREBASE_PROJECT_ID}" \
+            -PDIEWISH_FIREBASE_APP_ID="${DIEWISH_FIREBASE_APP_ID}" \
+            -PDIEWISH_FIREBASE_API_KEY="${DIEWISH_FIREBASE_API_KEY}" \
+            -PDIEWISH_FIREBASE_SENDER_ID="${DIEWISH_FIREBASE_SENDER_ID}" \
+            -PDIEWISH_GOOGLE_WEB_CLIENT_ID="${DIEWISH_GOOGLE_WEB_CLIENT_ID}"
 
           short_sha="${GITHUB_SHA::7}"
           mkdir -p android/app/build/staging-notification-test
           apk="android/app/build/staging-notification-test/Diewish-staging-notification-test-${short_sha}.apk"
           cp android/app/build/outputs/apk/debug/app-debug.apk "$apk"
+          build_config="$(find android/app/build/generated -type f -path '*/debug/*/BuildConfig.java' -print -quit)"
+          test -n "$build_config"
+          grep -Fq 'WEB_BASE_URL = "https://staging.diewish.com"' "$build_config"
+          dex="$(mktemp)"
+          unzip -p "$apk" 'classes*.dex' > "$dex"
+          grep -aFq 'https://staging.diewish.com' "$dex"
+          grep -aFq "$DIEWISH_GOOGLE_WEB_CLIENT_ID" "$dex"
+          rm -f "$dex"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$apk" > "${apk}.signature.txt"
           sha256sum "$apk" > "${apk}.sha256"
           cat > android/app/build/staging-notification-test/README.txt <<EOF
           Diewish staging notification test APK
           commit=${GITHUB_SHA}
           frontend=https://staging.diewish.com
           environment=staging
-          android_fcm=disabled_until_firebase_android_app_is_registered
+          android_fcm=verified_staging_config
+          google_client=verified_staging_config
+          physical_device_qa=NOT_RUN
+          distribution=NONE
           local_reminders=exact_when_alarms_and_reminders_access_is_granted
           EOF
 
