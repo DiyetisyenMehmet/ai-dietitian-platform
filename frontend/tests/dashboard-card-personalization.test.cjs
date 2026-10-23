@@ -217,7 +217,7 @@ test("feature card source components keep approved fixed geometry contracts", ()
 });
 
 
-test("dashboard home compact refinement keeps the approved scope and geometry", () => {
+test("dashboard home retains approved header, metrics and quick actions around Journey Pro", () => {
   const header = read("src/presentation/components/dashboard/dashboard-home-header.tsx");
   const journey = read("src/presentation/components/dashboard/daily-journey-section.tsx");
   const metrics = read("src/presentation/components/dashboard/dashboard-metrics-section.tsx");
@@ -239,12 +239,17 @@ test("dashboard home compact refinement keeps the approved scope and geometry", 
   assert.doesNotMatch(header, /UserRound|href="\/profile"|Profilini aç/);
   assert.match(header, /text-\[9px\].*text-muted-foreground\/55/);
 
+  // Journey Pro intentionally supersedes the old compact layout contract.
+  // Preserve real progress, mobile touch area and next/plan sections.
   assert.match(journey, /data-journey-card-heading/);
-  assert.match(journey, /<h3 className="min-w-0 text-\[15px\] font-semibold leading-\[1\.15\] sm:text-base">/);
+  assert.match(journey, /<h3 className="min-w-0 flex-1 text-base font-semibold tracking-tight">/);
   assert.match(journey, /\$\{completed\}\/\$\{total\} adım/);
-  assert.match(journey, /space-y-1 p-1\.5 sm:space-y-1\.5 sm:p-2/);
-  assert.match(journey, /min-h-10 min-w-10/);
-  assert.match(journey, /gap-1\.5 rounded-xl border p-1\.5/);
+  assert.match(journey, /space-y-3 p-4 sm:p-5/);
+  assert.match(journey, /min-h-11 min-w-11/);
+  assert.match(journey, /gap-2\.5 rounded-xl py-2/);
+  assert.match(journey, /data-journey-next/);
+  assert.match(journey, /data-journey-plan-meal/);
+  assert.match(journey, /data-journey-plan-fallback/);
   assert.doesNotMatch(journey, /Günlük yolculuğun/);
 
   assert.match(metrics, /data-dashboard-metrics/);
