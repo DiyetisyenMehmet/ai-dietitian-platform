@@ -20,6 +20,11 @@ function fixture(client) {
   );
   const imports = {
     react: { useSyncExternalStore: (_subscribe, snapshot) => snapshot() },
+    // NutritionPlanStore owns hydration by the signed-in account. Keep this
+    // hermetic VM fixture compatible without importing real auth or tokens.
+    "../auth/auth-store": {
+      authStore: { getSnapshot: () => ({ user: { id: "synthetic-nutrition-owner" } }) },
+    },
     "@/infrastructure/api/http-client": { ApiError },
     "@/infrastructure/nutrition/nutrition-plan-client": {
       nutritionPlanClient: client,
@@ -76,6 +81,7 @@ test("hydrate recovers progress; ready delivery updates active plan once", async
     },
   });
   await module.nutritionPlanStore.hydrateFromBackend();
+  assert.equal(module.useNutritionPlan().ownerUserId, "synthetic-nutrition-owner");
   assert.equal(module.useNutritionPlan().generating, true);
   assert.equal(module.useNutritionPlan().preparation.completedDays, 5);
   module.timers.shift()();
