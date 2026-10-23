@@ -56,7 +56,7 @@ test("actionable Journey renders exactly one engine recommendation with a real h
     "presentation/components/dashboard/daily-journey-section.tsx",
     "DailyJourneySection",
   );
-  assert.equal(occurrences(html, "Önerilen"), 1);
+  assert.equal(occurrences(html, "Sıradaki adım"), 1);
   assert.doesNotMatch(html, /Bugünün yolculuğunu tamamladın/);
 });
 
@@ -71,8 +71,8 @@ test("insufficient-data stays neutral and never presents zero or visible complet
     "DailyJourneySection",
   );
   assert.match(html, /Veri bekleniyor/);
-  assert.match(html, /Bugünkü öneriyi netleştirmek için bazı takip verileri henüz hazır değil/);
-  assert.match(html, /Verilerin geldikçe yolculuğun otomatik güncellenecek/);
+  assert.match(html, /Bazı takip verileri henüz hazır değil/);
+  assert.match(html, /Verilerin geldikçe yolculuğun güncellenecek/);
   assert.doesNotMatch(html, /0\/0 adım/);
   assert.doesNotMatch(html, /%100/);
   assert.doesNotMatch(html, /Bugünün yolculuğunu tamamladın/);
@@ -111,7 +111,7 @@ test("no-actionable-step keeps the pending non-link step without inventing navig
     "presentation/components/dashboard/daily-journey-section.tsx",
     "DailyJourneySection",
   );
-  assert.match(html, /Şu an açılacak yeni bir adım yok\. Günlük ilerlemeni burada takip edebilirsin\./);
+  assert.match(html, /Günlük kayıtlarını burada takip edebilirsin\./);
   assert.doesNotMatch(html, /Bugünün yolculuğunu tamamladın/);
 });
 
@@ -124,16 +124,16 @@ test("elapsed recording windows use neutral copy instead of claiming the user sk
   h.advance(13 * 60 * 60 * 1000);
 
   const result = h.journey();
-  assert.ok(result.steps.some((step) => step.state === "skipped"));
+  assert.ok(!result.steps.some((step) => step.state === "skipped"));
 
   const { visibleJourneySteps } = h.load("application/health/daily-journey.ts");
   const collapsed = visibleJourneySteps(result.steps, result.status, false);
   const expanded = visibleJourneySteps(result.steps, result.status, true);
   assert.equal(collapsed.some((step) => step.state === "skipped"), false);
-  assert.equal(expanded.some((step) => step.state === "skipped"), true);
+  assert.equal(expanded.some((step) => step.state === "skipped"), false);
 
   const source = read("src/presentation/components/dashboard/daily-journey-section.tsx");
-  assert.match(source, /Kayıt zamanı geçti/);
+  assert.doesNotMatch(source, /Kayıt zamanı geçti/);
   assert.doesNotMatch(source, />Atlandı</);
 });
 
@@ -141,7 +141,6 @@ test("clickable Journey rows keep a visible keyboard focus contract and normal t
   const source = read("src/presentation/components/dashboard/daily-journey-section.tsx");
   assert.match(source, /focus-visible:ring-2/);
   assert.match(source, /focus-visible:ring-ring/);
-  assert.match(source, /focus-visible:ring-offset-2/);
   assert.doesNotMatch(source, /data-dashboard-fixed-geometry/);
   assert.doesNotMatch(source, /text-size-adjust/);
 });

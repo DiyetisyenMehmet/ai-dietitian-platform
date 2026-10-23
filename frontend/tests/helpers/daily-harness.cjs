@@ -94,6 +94,8 @@ function harness() {
     "@/infrastructure/tracking/meals-client": { mealsClient },
     "@/infrastructure/activity/activity-client": { activityClient },
     "@/infrastructure/sleep/sleep-client": { sleepClient },
+    "@/application/auth/auth-store": { useAuth: () => ({ status: "authenticated", user: { id: "test-owner" } }) },
+    "@/application/health/nutrition-plan-store": { useNutritionPlan: () => ({ activePlan: null, hydrated: true, loading: false, ownerUserId: "test-owner" }) },
     "@/application/health/weight-store": { useWeightCheckInStatus: () => checkIn },
     "@/application/health/health-profile-store": {
       useHealthProfile: () => profile,

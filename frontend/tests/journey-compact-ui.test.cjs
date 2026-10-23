@@ -19,7 +19,7 @@ async function completeJourney(h) {
   h.setCheckIn({ active: false, required: false, lastLoggedAt: null, nextDueAt: null });
 }
 
-test("compact actionable view exposes only the engine recommendation", async () => {
+test("professional card emphasizes the existing engine recommendation", async () => {
   const h = harness();
   await completeJourney(h);
   await h.meals.mealsStore.unmarkMealEaten("lunch");
@@ -37,13 +37,12 @@ test("compact actionable view exposes only the engine recommendation", async () 
     "presentation/components/dashboard/daily-journey-section.tsx",
     "DailyJourneySection",
   );
-  assert.match(html, /data-visible-journey-steps="1"/);
   assert.match(html, /aria-expanded="false"/);
   assert.match(html, /aria-label="Yolculuk detaylarını aç"/);
   assert.doesNotMatch(html, /Tümünü göster/);
   assert.match(html, /Öğle yemeği/);
-  assert.doesNotMatch(html, /Kahvaltı/);
-  assert.doesNotMatch(html, /Akşam yemeği/);
+  assert.match(html, /Kahvaltı/);
+  assert.match(html, /Akşam yemeği/);
 });
 
 test("completed steps stay out of compact view and return in expanded detail", async () => {
@@ -83,7 +82,7 @@ test("all-done collapses to success while expanded detail retains completed rows
   assert.match(html, /%100/);
   assert.match(html, /aria-label="Yolculuk detaylarını aç"/);
   assert.doesNotMatch(html, /Tümünü göster/);
-  assert.doesNotMatch(html, /data-journey-row/);
+  assert.match(html, /Tamamlandı/);
 });
 
 test("insufficient-data stays neutral and compact without fabricated progress", () => {
@@ -126,11 +125,11 @@ test("compact control is a real accessible local-state button", () => {
   assert.match(source, /aria-controls=\{detailsId\}/);
   assert.match(source, /onClick=\{\(\) => onExpandedChange\(!expanded\)\}/);
   assert.match(source, /focus-visible:ring-2/);
-  assert.match(source, /min-h-10 min-w-10/);
+  assert.match(source, /min-h-11/);
   assert.match(source, /React\.useState\(false\)/);
 });
 
-test("compact selector is presentation-only and preserves skipped wording", () => {
+test("selector preserves recommendations and overdue wording stays neutral", () => {
   const daily = read("src/application/health/daily-journey.ts");
   const engine = read("src/application/health/journey-engine.ts");
   const section = read("src/presentation/components/dashboard/daily-journey-section.tsx");
@@ -138,7 +137,6 @@ test("compact selector is presentation-only and preserves skipped wording", () =
   assert.match(daily, /step\.state === "recommended"/);
   assert.match(daily, /step\.state === "pending"/);
   assert.doesNotMatch(daily, /href.*water|water.*href/);
-  assert.match(section, /Kayıt zamanı geçti/);
+  assert.doesNotMatch(section, /Kayıt zamanı geçti/);
   assert.doesNotMatch(section, />Atlandı</);
-  assert.match(engine, /const next = steps\.find\(\(step\) => step\.state === "pending" && Boolean\(step\.href\)\)/);
 });

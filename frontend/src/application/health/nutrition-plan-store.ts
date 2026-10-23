@@ -12,7 +12,10 @@ import {
   type NutritionPreparation,
 } from "@/infrastructure/nutrition/nutrition-plan-client";
 
+import { authStore } from "../auth/auth-store";
+
 interface NutritionPlanState {
+  ownerUserId: string | null;
   /** Most recently updated active, completed supported plan. */
   activePlan: NutritionPlanRecord | null;
   plans: NutritionPlanRecord[];
@@ -32,6 +35,7 @@ type SupportedNutritionPlanRecord = NutritionPlanRecord & {
 };
 
 const EMPTY_STATE: NutritionPlanState = {
+  ownerUserId: null,
   activePlan: null,
   plans: [],
   hydrated: false,
@@ -70,7 +74,7 @@ async function watchPreparation(job: NutritionPreparation, epoch = accountEpoch)
           const { plan } = await nutritionPlanClient.get(job.deliveredPlanId);
           if (epoch !== accountEpoch || watcher !== watchEpoch) return;
           pendingRequest = null;
-          completeGeneration(plan);
+          completeGeneration(plan, epoch);
           patch({ preparation: null, preparationOffline: false });
           return;
         } catch {
@@ -89,7 +93,7 @@ async function watchPreparation(job: NutritionPreparation, epoch = accountEpoch)
           const { plan } = await nutritionPlanClient.deliverPreparation(job.id);
           if (epoch !== accountEpoch || watcher !== watchEpoch) return;
           pendingRequest = null;
-          completeGeneration(plan);
+          completeGeneration(plan, epoch);
           patch({ preparation: null, preparationOffline: false });
           return;
         }
@@ -195,7 +199,8 @@ function mergeActivePlan(
   ].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
-function completeGeneration(plan: NutritionPlanRecord): NutritionPlanRecord {
+function completeGeneration(plan: NutritionPlanRecord, epoch: number): NutritionPlanRecord {
+  if (epoch !== accountEpoch) throw new Error("Account changed");
   const plans = mergeActivePlan(state.plans, plan);
   emit({
     ...state,
@@ -265,6 +270,7 @@ export const nutritionPlanStore = {
   },
   async hydrateFromBackend(): Promise<NutritionPlanRecord | null> {
     const epoch = accountEpoch;
+    const ownerUserId = authStore.getSnapshot().user?.id ?? null;
     const previousActiveId = state.activePlan?.id;
     patch({ loading: true });
     try {
@@ -282,6 +288,7 @@ export const nutritionPlanStore = {
       emit({
         ...state,
         plans,
+        ownerUserId,
         activePlan,
         hydrated: true,
         loading: false,
@@ -319,6 +326,7 @@ export const nutritionPlanStore = {
     pantryText = state.pantryDraft,
   ): Promise<NutritionPlanRecord | null> {
     assertNotGenerating();
+    const epoch = accountEpoch;
     if (state.durable) {
       const epoch = accountEpoch;
       patch({ generating: true, generatingDuration: duration });
@@ -346,10 +354,11 @@ export const nutritionPlanStore = {
     patch({ generating: true, generatingDuration: duration });
     try {
       const { plan } = await nutritionPlanClient.generate(duration, pantryText);
-      const result = completeGeneration(plan);
+      const result = completeGeneration(plan, epoch);
       recordPlanDisplayTiming(startedAt);
       return result;
     } catch (error) {
+      if (epoch !== accountEpoch) throw error;
       return failGeneration(error);
     }
   },
@@ -398,14 +407,16 @@ export const nutritionPlanStore = {
 
   async regenerate(planId: string): Promise<NutritionPlanRecord | null> {
     assertNotGenerating();
+    const epoch = accountEpoch;
     const source = requireSupportedSource(planId);
     if (state.durable)
       return this.generate(source.duration, planPantryText(source) ?? state.pantryDraft);
     patch({ generating: true, generatingDuration: source.duration });
     try {
       const { plan } = await nutritionPlanClient.regenerate(planId);
-      return completeGeneration(plan);
+      return completeGeneration(plan, epoch);
     } catch (error) {
+      if (epoch !== accountEpoch) throw error;
       return failGeneration(error);
     }
   },
@@ -415,6 +426,7 @@ export const nutritionPlanStore = {
     input: RefreshNutritionPlanInput,
   ): Promise<NutritionPlanRecord | null> {
     assertNotGenerating();
+    const epoch = accountEpoch;
     const source = requireSupportedSource(planId);
     patch({ generating: true, generatingDuration: source.duration });
     if (state.durable) {
@@ -439,8 +451,9 @@ export const nutritionPlanStore = {
     }
     try {
       const { plan } = await nutritionPlanClient.refresh(planId, input);
-      return completeGeneration(plan);
+      return completeGeneration(plan, epoch);
     } catch (error) {
+      if (epoch !== accountEpoch) throw error;
       return failGeneration(error);
     }
   },
@@ -450,6 +463,7 @@ export const nutritionPlanStore = {
     duration: SupportedNutritionPlanDuration,
   ): Promise<NutritionPlanRecord | null> {
     assertNotGenerating();
+    const epoch = accountEpoch;
     const source = requireSupportedSource(planId);
     patch({ generating: true, generatingDuration: duration });
     if (state.durable) {
@@ -473,20 +487,23 @@ export const nutritionPlanStore = {
     }
     try {
       const { plan } = await nutritionPlanClient.extend(planId, duration);
-      return completeGeneration(plan);
+      return completeGeneration(plan, epoch);
     } catch (error) {
+      if (epoch !== accountEpoch) throw error;
       return failGeneration(error);
     }
   },
 
   async shiftToday(planId: string, dayNumber: number): Promise<NutritionPlanRecord> {
     if (state.generating) throw new Error("Nutrition plan generation is already in progress.");
+    const epoch = accountEpoch;
     const source = requireSupportedSource(planId);
     patch({ generating: true, generatingDuration: source.duration });
     try {
       const { plan } = await nutritionPlanClient.shiftToday(planId, dayNumber);
-      return completeGeneration(plan);
+      return completeGeneration(plan, epoch);
     } catch (error) {
+      if (epoch !== accountEpoch) throw error;
       return failGeneration(error);
     }
   },

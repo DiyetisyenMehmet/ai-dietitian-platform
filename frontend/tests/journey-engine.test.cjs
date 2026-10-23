@@ -29,9 +29,9 @@ test('breakfast completed selects lunch', () => {
   const r = run({ meals: { breakfast: 1, lunch: 0, dinner: 0 } });
   assert.equal(step(r,'breakfast').state,'completed'); assert.equal(r.nextBestAction.kind,'lunch');
 });
-test('passed meal window is skipped, next window remains actionable', () => {
-  const r = run({ localHour: 17 }); assert.equal(step(r,'breakfast').state,'skipped');
-  assert.equal(step(r,'lunch').state,'skipped'); assert.equal(r.nextBestAction.kind,'dinner');
+test('elapsed meal windows remain recordable, current window is recommended', () => {
+  const r = run({ localHour: 17 }); assert.equal(step(r,'breakfast').state,'pending');
+  assert.equal(step(r,'lunch').state,'pending'); assert.equal(r.nextBestAction.kind,'dinner');
 });
 test('shift work does not assume standard missed windows', () => {
   assert.equal(step(run({localHour:23,workScheduleType:'NIGHT_SHIFT'}),'breakfast').state,'recommended');
@@ -88,7 +88,7 @@ test('single tappable recommendation and task parity across 1152 combinations', 
   }
 });
 test('elapsed recording windows do not falsely report all-done', () => {
-  const r=run({localHour:23,waterMl:2000});assert.equal(r.nextBestAction,null);assert.equal(r.status,'no-actionable-step');
+  const r=run({localHour:23,waterMl:2000});assert.equal(r.nextBestAction.kind,'dinner');assert.equal(r.status,'actionable');
 });
 
 for (const schedule of [null, undefined, 'VARIABLE_SHIFT', 'NIGHT_SHIFT']) {
@@ -98,9 +98,10 @@ for (const schedule of [null, undefined, 'VARIABLE_SHIFT', 'NIGHT_SHIFT']) {
     assert.equal(r.nextBestAction.kind,'breakfast');
   });
 }
-test('explicit regular schedule applies all three cutoffs at 23:00',()=>{
+test('regular schedule never infers skipped eating at 23:00',()=>{
   const r=run({localHour:23,workScheduleType:'REGULAR'});
-  for(const kind of ['breakfast','lunch','dinner']) assert.equal(step(r,kind).state,'skipped');
+  assert.equal(r.steps.some(s=>s.state==='skipped'),false);
+  assert.equal(r.nextBestAction.kind,'dinner');
 });
 test('legacy task projection retains action copy without changing decisions',()=>{
   const tasks=journeyTasks(run({weight:{due:true,recordedToday:false}}));
