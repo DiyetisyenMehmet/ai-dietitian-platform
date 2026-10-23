@@ -91,19 +91,34 @@ def source():
 def gates():
     # The merged application's 5/5 gate is mandatory. Preparation-only source
     # equality above lets unchanged platform tests retain their original evidence.
-    for sha, names in [(MERGED, ['Hardening CI', 'Staging Config CI', 'Notification preferences platform checks']),
-                       (os.environ['GITHUB_SHA'], ['Hardening CI', 'Staging Config CI'])]:
-        runs = api('/actions/runs?head_sha=' + sha + '&per_page=100')['workflow_runs']
-        for name in names:
-            matches = [r for r in runs if r['name'] == name and r['head_sha'] == sha]
-            require(bool(matches), 'missing required check ' + name)
-            latest = max(matches, key=lambda r: (r['created_at'], r['run_attempt']))
-            require(latest['status'] == 'completed' and latest['conclusion'] == 'success',
-                    'required check not successful: ' + name)
-            if name == 'Hardening CI':
-                jobs = api('/actions/runs/' + str(latest['id']) + '/jobs?per_page=100')['jobs']
-                require(len(jobs) == 5 and all(j['conclusion'] == 'success' for j in jobs), 'Hardening must be 5/5')
-            print('PASS check', sha, name, latest['html_url'])
+    for attempt in range(300):
+        pending = False
+        for sha, names in [(MERGED, ['Hardening CI', 'Staging Config CI', 'Notification preferences platform checks']),
+                           (os.environ['GITHUB_SHA'], ['Hardening CI', 'Staging Config CI'])]:
+            runs = api('/actions/runs?head_sha=' + sha + '&per_page=100')['workflow_runs']
+            for name in names:
+                matches = [r for r in runs if r['name'] == name and r['head_sha'] == sha]
+                if not matches:
+                    pending = True
+                    continue
+                latest = max(matches, key=lambda r: (r['created_at'], r['run_attempt']))
+                if latest['status'] != 'completed':
+                    pending = True
+                    continue
+                require(latest['conclusion'] == 'success', 'required check unsuccessful: ' + name)
+                if name == 'Hardening CI':
+                    jobs = api('/actions/runs/' + str(latest['id']) + '/jobs?per_page=100')['jobs']
+                    require(len(jobs) == 5 and all(j['conclusion'] == 'success' for j in jobs), 'Hardening must be 5/5')
+                if attempt == 0:
+                    print('PASS check', sha, name, latest['html_url'])
+        if not pending:
+            print('PASS: merged 5/5 and exact release-source gates')
+            return
+        source()
+        if attempt % 12 == 0:
+            print('PENDING: required exact-source checks; no release mutation', flush=True)
+        time.sleep(5)
+    raise RuntimeError('NO_GO: required exact-source checks timed out')
 
 
 def service(name):
@@ -150,7 +165,7 @@ def check_backend(back, admin, user):
     require(secret(ae, 'DATABASE_URL').get('name') == 'diewish-staging-database-url', 'Admin database reference')
     require(secret(ue, 'DATABASE_URL') == {'name': 'diewish-staging-test2-database-url', 'key': '1'}, 'Test2 database reference')
     direct = secret(ue, 'DIRECT_DATABASE_URL')
-    require(not direct or direct == secret(ue, 'DATABASE_URL'), 'Test2 direct database reference')
+    require('DIRECT_DATABASE_URL' not in ue or direct == secret(ue, 'DATABASE_URL'), 'Test2 direct database reference')
     for key in ['COACH_SYNC_ENABLED', 'STAGING_AUTOMATION_ENABLED', 'SCHEDULER_TRIGGER_ENABLED', 'NUTRITION_JOBS_ENABLED']:
         require(ue.get(key, {}).get('value') == 'false', 'Test2 background flag ' + key)
 
@@ -195,6 +210,9 @@ def fingerprint(obj):
 def info(obj):
     c = obj['spec']['containers'][0]
     safe = {k: v for k, v in env(obj).items() if k in ROUTER or k in ['DATABASE_URL', 'DIRECT_DATABASE_URL', 'DIEWISH_APPLICATION_SHA', 'COACH_SYNC_ENABLED', 'SCHEDULER_TRIGGER_ENABLED', 'NUTRITION_JOBS_ENABLED', 'STAGING_AUTOMATION_ENABLED']}
+    for key in ['DATABASE_URL', 'DIRECT_DATABASE_URL']:
+        if key in safe:
+            safe[key] = {'secretReference': safe[key].get('valueFrom', {}).get('secretKeyRef', 'REDACTED')}
     return {'revision': obj['metadata']['name'], 'image': c['image'],
             'imageDigest': obj['status']['imageDigest'], 'selectedEnvironment': safe,
             'specFingerprint': fingerprint(obj)}

@@ -1,4 +1,5 @@
 name: Auth A2 Split-Aware Frontend-Only Staging Release
+# Default branch is intentionally untouched; [frontend-next-release] is the explicit staging push opt-in.
 on:
   push:
     branches: [feature/staging-preview]
@@ -24,7 +25,7 @@ jobs:
   cutover:
     if: ${{ github.repository == 'DiyetisyenMehmet/ai-dietitian-platform' && github.ref == 'refs/heads/feature/staging-preview' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 42
+    timeout-minutes: 55
     environment: staging
     env:
       GH_TOKEN: ${{ github.token }}
@@ -36,13 +37,13 @@ jobs:
       - name: Verify frontend-only failure and rollback guards offline
         run: python3 scripts/staging-frontend-release.test.py
       - uses: actions/setup-node@v4
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'release' }}
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'release') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[frontend-next-release]')) }}
         with:
           node-version: 20
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - name: Prepare existing Playwright for read-only live login verification
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'release' }}
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'release') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[frontend-next-release]')) }}
         timeout-minutes: 8
         working-directory: frontend
         run: |
@@ -62,7 +63,7 @@ jobs:
           project_id: project-a2e260c1-839d-4f1d-b90
       - name: Fresh read-only preflight or explicitly requested frontend release
         env:
-          RELEASE_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'inspect' }}
+          RELEASE_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || (contains(github.event.head_commit.message, '[frontend-next-release]') && 'release' || 'inspect') }}
         run: python3 scripts/staging-frontend-release.py "$RELEASE_MODE"
       - name: Retain sanitized source, runtime, rollback and login evidence
         if: always()
