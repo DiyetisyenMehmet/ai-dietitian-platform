@@ -17,6 +17,11 @@ on:
       - "backend/prisma/migrations/*notification*/**"
       - "backend/prisma/migrations/*water_reminder*/**"
       - "frontend/**"
+  # The fixture-only PR must run the original frontend-quality commands before merge.
+  # Existing push/manual platform coverage remains unchanged.
+  pull_request:
+    branches: [feature/staging-preview]
+    paths: [frontend/tests/nutrition-smart-preparation.test.cjs]
   workflow_dispatch:
     inputs:
       build_android_apk:
@@ -34,6 +39,7 @@ concurrency:
 
 jobs:
   android-checks:
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -67,6 +73,7 @@ jobs:
           if-no-files-found: ignore
 
   backend-durability:
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     services:
