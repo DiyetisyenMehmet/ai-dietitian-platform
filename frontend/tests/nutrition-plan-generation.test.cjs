@@ -74,7 +74,9 @@ function store(client) {
   });
   return load("application/health/nutrition-plan-store.ts", {
     "@/infrastructure/api/http-client": { ApiError },
-    "../auth/auth-store": { authStore: { getSnapshot: () => ({ user: { id: "synthetic-owner" } }) } },
+    "../auth/auth-store": {
+      authStore: { getSnapshot: () => ({ user: { id: "synthetic-owner" } }) },
+    },
     react: { useSyncExternalStore: (_subscribe, snapshot) => snapshot() },
     "@/infrastructure/nutrition/nutrition-plan-client": {
       nutritionPlanClient: { capabilities: async () => ({ resumable: false }), ...client },
@@ -203,4 +205,34 @@ test("an older list response does not erase a newly completed plan", async () =>
   await hydrate;
   assert.equal(module.useNutritionPlan().activePlan.id, "new");
   assert.equal(module.useNutritionPlan().loading, false);
+});
+
+test("late generated plan cannot revive a reset account", async () => {
+  const old = deferred();
+  const module = store({
+    generate: () => old.promise,
+    list: async () => ({ plans: [plan("new-owner")] }),
+  });
+  const operation = module.nutritionPlanStore.generate("SEVEN_DAY");
+  module.nutritionPlanStore.reset();
+  await module.nutritionPlanStore.hydrateFromBackend();
+  old.resolve({ plan: plan("old-owner") });
+  await assert.rejects(operation, /Account changed/);
+  assert.equal(module.useNutritionPlan().activePlan.id, "new-owner");
+});
+
+test("late generation error cannot unlock the next account's ongoing request", async () => {
+  const old = deferred(),
+    next = deferred();
+  let calls = 0;
+  const module = store({ generate: () => (++calls === 1 ? old.promise : next.promise) });
+  const previous = module.nutritionPlanStore.generate("SEVEN_DAY");
+  module.nutritionPlanStore.reset();
+  const current = module.nutritionPlanStore.generate("SEVEN_DAY");
+  old.reject(new Error("Old account failed"));
+  await assert.rejects(previous, /Old account failed/);
+  assert.equal(module.useNutritionPlan().generating, true);
+  next.resolve({ plan: plan("current") });
+  await current;
+  assert.equal(module.useNutritionPlan().activePlan.id, "current");
 });

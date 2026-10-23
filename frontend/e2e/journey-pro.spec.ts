@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { DEFAULT_DASHBOARD_CARD_PREFERENCES } from "../src/domain/account/dashboard-card-preferences";
 import type { NutritionPlanRecord } from "../src/infrastructure/nutrition/nutrition-plan-client";
 
 type Log = Record<string, unknown>;
@@ -124,6 +125,8 @@ async function fixture(
     if (path === "/legal/consents")
       return ok({ items: [], allMandatoryGranted: true, missingMandatory: [] });
     if (path === "/legal/documents") return ok({ documents: [] });
+    if (path === "/account/dashboard-cards")
+      return ok({ preferences: DEFAULT_DASHBOARD_CARD_PREFERENCES });
     if (path === "/onboarding")
       return ok({
         profile: {
@@ -146,7 +149,6 @@ async function fixture(
     if (path === "/nutrition-plans") {
       const snapshot = state.plan;
       if (state.delayPlan) {
-        state.delayPlan = false;
         await planGate;
       }
       return ok({ plans: snapshot ? [snapshot] : [] });
@@ -203,7 +205,10 @@ async function fixture(
   });
   return {
     state,
-    releasePlan,
+    releasePlan() {
+      state.delayPlan = false;
+      releasePlan();
+    },
     holdWrite() {
       state.hold = true;
       writeGate = new Promise<void>((resolve) => {
@@ -250,7 +255,7 @@ for (const width of [390, 412, 430])
           expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(44);
       }
       await expect(page.locator("[data-dashboard-metrics]")).toBeVisible();
-      const toggle = card.getByRole("button", { name: "Yolculuk detaylarını aç" });
+      const toggle = card.locator("[data-journey-details-toggle]");
       await toggle.focus();
       await toggle.press("Enter");
       await expect(toggle).toHaveAttribute("aria-expanded", "true");

@@ -111,9 +111,9 @@ export function DailyJourneyContent({
   const summaries = steps.filter(
     (step) => step.kind === "water" || step.kind === "weight" || step.kind === "activity",
   );
-  const list = expanded
-    ? visible
-    : steps.filter((step) => step.kind !== next?.kind && !summaries.includes(step));
+  const list = (expanded ? visible : steps.filter((step) => step.kind !== next?.kind)).filter(
+    (step) => !summaries.includes(step),
+  );
   return (
     <section
       data-daily-journey-section
@@ -190,11 +190,13 @@ export function DailyJourneyContent({
               data-journey-plan-meal
             >
               <div className="flex items-start justify-between gap-2">
-                <div>
+                <div className="min-w-0 flex-1">
                   <p className="text-[11px] font-medium text-muted-foreground">
                     Bugünkü beslenme planından
                   </p>
-                  <h4 className="mt-0.5 text-sm font-semibold">{plannedMeal.meal.name}</h4>
+                  <h4 className="mt-0.5 break-words text-sm font-semibold">
+                    {plannedMeal.meal.name}
+                  </h4>
                 </div>
                 <time className="shrink-0 rounded-lg bg-card px-2 py-1 text-sm font-semibold tabular-nums">
                   {plannedMeal.meal.time}

@@ -9,6 +9,7 @@ export default defineConfig({
     timezoneId: "Europe/Istanbul",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
+    launchOptions: { executablePath: process.env.JOURNEY_BROWSER_EXECUTABLE },
   },
   webServer: {
     command: "npm run dev -- --hostname 127.0.0.1 --port 3029",

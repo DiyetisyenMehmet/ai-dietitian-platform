@@ -35,7 +35,17 @@ jobs:
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm run type-check
       - run: node --test tests/journey-engine.test.cjs tests/journey-plan.test.cjs tests/journey-sources.test.cjs tests/journey-compact-ui.test.cjs tests/journey-dashboard-activation.test.cjs tests/nutrition-plan-generation.test.cjs tests/nutrition-plan-performance-a1.test.cjs
-      - run: npx playwright install --with-deps chromium
+      - name: Use installed runner Chrome, fall back to Playwright browser
+        timeout-minutes: 3
+        shell: bash
+        run: |
+          journey_chrome="$(command -v google-chrome || command -v chromium || true)"
+          if [ -n "$journey_chrome" ]; then
+            echo "JOURNEY_BROWSER_EXECUTABLE=$journey_chrome" >> "$GITHUB_ENV"
+            "$journey_chrome" --version
+          else
+            npx playwright install --with-deps chromium
+          fi
       - run: npx playwright test --config=playwright.journey-pro.config.ts --reporter=line,html
       - uses: actions/upload-artifact@v4
         if: always()
