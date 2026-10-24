@@ -1,0 +1,31 @@
+name: G1 Test2 offline build input checks
+on:
+  pull_request:
+    branches: [feature/staging-preview]
+    paths:
+      - .github/cloudbuild/backend-test2-buildonly.yaml
+      - scripts/test2-security-build-context.py
+      - scripts/test2-security-build-context.test.py
+      - docs/reports/g1-test2-build-contract.md
+      - .github/workflows/test2-security-build-contract-checks.yml
+permissions:
+  contents: read
+jobs:
+  offline-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install only the static YAML parser
+        run: python3 -m pip install --disable-pip-version-check PyYAML==6.0.3
+      - name: Test offline build inputs without Docker, cloud, DB or application installation
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python3 scripts/test2-security-build-context.test.py
