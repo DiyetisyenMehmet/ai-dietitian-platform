@@ -5,10 +5,7 @@ import { Loader2, ShieldX } from "lucide-react";
 
 import { authStore, useAuth } from "@/application/auth/auth-store";
 import { authClient } from "@/infrastructure/auth/auth-client";
-import {
-  adminClient,
-  type AdminSession,
-} from "@/infrastructure/admin/admin-client";
+import { adminClient, type AdminSession } from "@/infrastructure/admin/admin-client";
 import { AdminShell } from "@/presentation/components/admin/admin-shell";
 import { Button } from "@/presentation/components/ui/button";
 
@@ -38,7 +35,7 @@ export function AdminAccessBoundary({
   view = "overview",
   userId,
 }: {
-  view?: "overview" | "access" | "audit" | "users";
+  view?: "overview" | "access" | "audit" | "users" | "system";
   userId?: string;
 }) {
   const { status, user } = useAuth();
@@ -110,7 +107,10 @@ export function AdminAccessBoundary({
   }, [returnToAdminLogin, status, user]);
 
   if (state.status === "allowed" && status === "authenticated" && user?.role === "ADMIN") {
-    if (view === "users" && !state.session.permissions.includes("users.read")) return <AccessDenied />;
+    if (view === "system" && !state.session.permissions.includes("system.read"))
+      return <AccessDenied />;
+    if (view === "users" && !state.session.permissions.includes("users.read"))
+      return <AccessDenied />;
     const canOpenAccess =
       state.session.permissions.includes("admin.staff.read") &&
       state.session.permissions.includes("admin.roles.read");
