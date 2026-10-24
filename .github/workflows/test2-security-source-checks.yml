@@ -106,16 +106,13 @@ jobs:
           cd "$COMPOSED_BACKEND"
           node --test tests/body-parser-security.test.mjs
           node --import tsx --test src/middleware/zod-security.test.ts src/middleware/upload-security.test.ts src/modules/blood-test/blood-test.upload.test.ts src/lib/mailer.test.ts src/modules/nutrition-data/barcode.test.ts
-      - name: Test composed JWT and cookie boundaries without DB
-        run: node --test scripts/test2-security-runtime.test.cjs
-      - name: Set up only disposable CI database using BASE migrations
+      - name: Test JWT, cookies and reviewed 50-to-52 schema contracts only in disposable CI DB
         run: |
           python3 scripts/test2-security-source.py guard-ci-db
-          cd "$COMPOSED_BACKEND"
-          npx prisma migrate deploy
+          node --test scripts/test2-security-runtime.test.cjs
       - name: Test composed login, sessions, identity and health ownership
         run: |
           cd "$COMPOSED_BACKEND"
-          node --import tsx --test --test-concurrency=1 src/integration/auth-security.integration.test.ts src/integration/auth-onboarding.integration.test.ts src/integration/identity-lifecycle.integration.test.ts src/integration/account-identity-foundation.integration.test.ts src/integration/weight-tracking.integration.test.ts src/integration/password-recovery.integration.test.ts
+          node --import tsx --test --test-concurrency=1 src/integration/auth-security.integration.test.ts src/integration/auth-onboarding.integration.test.ts src/integration/identity-lifecycle.integration.test.ts src/integration/account-identity-foundation.integration.test.ts src/integration/weight-tracking.integration.test.ts src/integration/password-recovery.integration.test.ts src/integration/mascot-preferences.integration.test.ts
       - name: Reverify source inventory after tests
         run: python3 scripts/test2-security-source.py verify --source "$RUNNER_TEMP/g1-composed" --installed

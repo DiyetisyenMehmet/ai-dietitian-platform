@@ -39,15 +39,29 @@ class SourceGuards(unittest.TestCase):
         self.assertEqual(head, r.text(REPO, 'rev-parse', 'HEAD'))
         self.assertEqual(r.verify(REPO, self.output), first)
 
-    def test_prisma_account_and_excluded_feature_files_stay_at_base(self):
+    def test_only_five_accepted_mascot_files_join_eight_security_files(self):
         manifest = self.prepared()
-        for path in ['backend/prisma/schema.prisma', 'backend/src/modules/account/account.schemas.ts',
-                     'backend/src/modules/account/account.repository.ts', 'backend/src/utils/jwt.ts']:
+        self.assertEqual(len(r.PINS), 13)
+        self.assertEqual(len(r.MASCOT_PINS), 5)
+        self.assertEqual(manifest['format'], 3)
+        self.assertEqual(manifest['collectionCommit'], r.COLLECTION)
+        for path in r.MASCOT_PINS:
+            self.assertEqual((self.output / path).read_bytes(), r.git(REPO, 'show', r.COLLECTION + ':' + path))
+        for path in ['backend/prisma/schema.prisma', 'backend/src/modules/account/account.service.ts',
+                     'backend/src/modules/admin/admin.routes.ts', 'backend/src/utils/jwt.ts',
+                     'backend/scripts/app11-migration-check.mjs']:
             self.assertEqual((self.output / path).read_bytes(), r.git(REPO, 'show', r.BASE + ':' + path))
-        migrations = [p for p in manifest['excludedChanges'] if '/prisma/migrations/' in p]
-        self.assertEqual(len(migrations), 2)
-        for path in migrations:
-            self.assertFalse((self.output / path).exists())
+        self.assertEqual(len(list((self.output / 'backend/prisma/migrations').glob('*/migration.sql'))), 52)
+        self.assertFalse((self.output / 'backend/src/modules/admin/admin-system.service.ts').exists())
+
+    def test_unapproved_collection_reference_or_blob_is_rejected(self):
+        with patch.object(r, 'COLLECTION', r.BASE):
+            with self.assertRaisesRegex(RuntimeError, 'source policy mismatch'):
+                self.prepared()
+        with patch.dict(r.MASCOT_PINS, {'backend/src/modules/account/account.schemas.ts': '0' * 40}):
+            with self.assertRaisesRegex(RuntimeError, 'source policy mismatch'):
+                self.prepared()
+        self.assertFalse(self.output.exists())
 
     def test_wrong_security_blob_stops_before_output(self):
         with patch.dict(r.PINS, {'backend/package.json': '0' * 40}):
