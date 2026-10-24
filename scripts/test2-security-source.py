@@ -12,6 +12,14 @@ import tempfile
 
 BASE = '09a069f3271d60716efd997ad86bb05018e4d0d9'
 REVIEWED = '7a437ca4c04f61d39696c467738fa01a2e127616'
+COLLECTION = '39e315dada341ee64a96b92eb8e9a689a92c59ea'
+MASCOT_PINS = {
+    'backend/src/modules/account/account.schemas.ts': '3c4457ab3254347a062ab8a4a46480cb73a052fd',
+    'backend/src/modules/account/account.repository.ts': '78a69e0194634d1a6777e33168f744edeb244299',
+    'backend/src/integration/mascot-preferences.integration.test.ts': '1662caa99702b144caa8145d4edc07cabb8fbb07',
+    'backend/prisma/migrations/20261020110000_dost_mascot_preference/migration.sql': 'e9ed2a842d0ab917ffd16ebbb627b23dc5bd1338',
+    'backend/prisma/migrations/20261021001000_mascot_collection_preferences/migration.sql': 'b5f397097b89ea3e495e7d41a7bd3f651d794a5b',
+}
 PINS = {
     'backend/package.json': '7066ba6025144e41c256faa752a9e8f0005e13f4',
     'backend/package-lock.json': 'b55c80839af1027458090f0f39532a31bea17623',
@@ -21,9 +29,10 @@ PINS = {
     'backend/tests/body-parser-security.test.mjs': '4dbac384b7f668ab0e70ee6ba3d468e3aa478aed',
     'backend/src/middleware/upload-security.test.ts': '00a929527bca9553de4615cc6ec0a1dc8a593639',
     'backend/src/lib/mailer.test.ts': '8fe44ec01b2975d9c34819d972d565a4b63b8ec9',
+    **MASCOT_PINS,
 }
 HARNESS_FILES = frozenset(['.github/workflows/test2-security-source-checks.yml', 'scripts/test2-security-runtime.test.cjs', 'scripts/test2-security-source.py', 'scripts/test2-security-source.test.py'])
-SOURCE_POLICY_SHA256 = '22d0ceca5f0a7265903ba0db4a8cfe1ac76d473449cdf999ea7c4d2df9b897d4'
+SOURCE_POLICY_SHA256 = 'ece1e8077abaa1dbabf50067a6a315ac8099d445026d8b69b7ae074d228b55f4'
 VERSIONS = {'zod': '4.6.6', 'body-parser': '1.20.9', 'multer': '2.5.0', 'nodemailer': '10.1.4'}
 
 
@@ -68,18 +77,24 @@ def validated_harness(repo, harness_ref=None):
 
 
 def source_objects(repo, harness_ref=None):
-    policy = {'base': BASE, 'security': REVIEWED, 'blobs': PINS, 'versions': VERSIONS,
+    policy = {'base': BASE, 'security': REVIEWED, 'collection': COLLECTION,
+              'blobs': PINS, 'mascotBlobs': MASCOT_PINS, 'versions': VERSIONS,
               'harnessFiles': sorted(HARNESS_FILES)}
     policy_hash = hashlib.sha256(json.dumps(policy, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
     require(policy_hash == SOURCE_POLICY_SHA256, 'source policy mismatch')
-    for sha in (BASE, REVIEWED):
+    for sha in (BASE, COLLECTION, REVIEWED):
         require(text(repo, 'rev-parse', '--verify', sha + '^{commit}') == sha, 'pinned commit mismatch')
     git(repo, 'merge-base', '--is-ancestor', BASE, REVIEWED)
+    git(repo, 'merge-base', '--is-ancestor', BASE, COLLECTION)
+    git(repo, 'merge-base', '--is-ancestor', COLLECTION, REVIEWED)
     head = text(repo, 'rev-parse', 'HEAD')
     git(repo, 'merge-base', '--is-ancestor', REVIEWED, head)
     harness_ref, harness_files = validated_harness(repo, harness_ref)
     for path, oid in PINS.items():
-        require(text(repo, 'rev-parse', REVIEWED + ':' + path) == oid, 'reviewed blob mismatch: ' + path)
+        entry = f'100644 blob {oid}\t{path}'
+        require(text(repo, 'ls-tree', REVIEWED, '--', path) == entry, 'reviewed blob/mode mismatch: ' + path)
+        if path in MASCOT_PINS:
+            require(text(repo, 'ls-tree', COLLECTION, '--', path) == entry, 'collection blob/mode mismatch: ' + path)
     before = json.loads(git(repo, 'show', BASE + ':backend/package.json'))
     after = json.loads(git(repo, 'show', REVIEWED + ':backend/package.json'))
     expected = json.loads(json.dumps(before))
@@ -131,11 +146,13 @@ def source_objects(repo, harness_ref=None):
     inventory = {p: {'sha256': hashlib.sha256(data).hexdigest(), 'mode': oct(mode)}
                  for p, (data, mode) in sorted(files.items())}
     excluded = sorted(set(text(repo, 'diff', '--name-only', BASE, REVIEWED, '--', 'backend').splitlines()) - set(PINS))
-    manifest = {'format': 2, 'purpose': 'OFFLINE_SOURCE_ONLY_NOT_AN_IMAGE',
+    manifest = {'format': 3, 'purpose': 'OFFLINE_SOURCE_ONLY_NOT_AN_IMAGE',
                 'baseCommit': BASE, 'securityCommit': REVIEWED, 'testHarnessCommit': harness_ref,
+                'collectionCommit': COLLECTION, 'mascotBlobs': MASCOT_PINS,
                 'testHarnessFiles': harness_files, 'sourcePolicySha256': policy_hash,
                 'sourceTree': tree, 'backendTree': text(repo, 'rev-parse', tree + ':backend'),
                 'basePrismaTree': text(repo, 'rev-parse', BASE + ':backend/prisma'),
+                'prismaTree': text(repo, 'rev-parse', tree + ':backend/prisma'),
                 'versions': VERSIONS, 'allowedBlobs': PINS, 'excludedChanges': excluded,
                 'files': inventory}
     return manifest, files
@@ -220,8 +237,10 @@ def main():
     require(args.source is not None, 'source output required')
     manifest = prepare(args.repo, args.source, args.harness_ref) if args.mode == 'prepare' else verify(args.repo, args.source, args.installed, args.harness_ref)
     print(json.dumps({'result': 'PASS', 'purpose': manifest['purpose'], 'baseCommit': BASE,
-                      'securityCommit': REVIEWED, 'testHarnessCommit': manifest['testHarnessCommit'],
+                      'securityCommit': REVIEWED, 'collectionCommit': COLLECTION,
+                      'testHarnessCommit': manifest['testHarnessCommit'],
                       'sourceTree': manifest['sourceTree'], 'backendTree': manifest['backendTree'],
+                      'prismaTree': manifest['prismaTree'],
                       'executionCommit': text(args.repo, 'rev-parse', 'HEAD'),
                       'sourcePolicySha256': manifest['sourcePolicySha256'],
                       'manifestSha256': hashlib.sha256(encoded(manifest)).hexdigest(),
