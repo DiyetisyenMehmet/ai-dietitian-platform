@@ -73,7 +73,6 @@ jobs:
       BCRYPT_ROUNDS: 10
       RATE_LIMIT_MAX: 1000
       AUTH_RATE_LIMIT_MAX: 1000
-      COMPOSED_BACKEND: ${{ runner.temp }}/g1-composed/backend
     steps:
       - uses: actions/checkout@v4
         with:
@@ -89,9 +88,10 @@ jobs:
           path: ${{ runner.temp }}/scan-evidence
       - name: Recompose independently and match scanner manifest
         run: |
+          echo "COMPOSED_BACKEND=$RUNNER_TEMP/g1-composed/backend" >> "$GITHUB_ENV"
           python3 scripts/test2-security-source.py prepare --source "$RUNNER_TEMP/g1-composed"
           cmp "$RUNNER_TEMP/g1-composed/source-manifest.json" "$RUNNER_TEMP/scan-evidence/test2-source-scan/source-manifest.json"
-          cmp "$COMPOSED_BACKEND/package-lock.json" "$RUNNER_TEMP/scan-evidence/test2-source-scan/backend/package-lock.json"
+          cmp "$RUNNER_TEMP/g1-composed/backend/package-lock.json" "$RUNNER_TEMP/scan-evidence/test2-source-scan/backend/package-lock.json"
       - name: Install composed dependencies and compile without migrations
         run: |
           cd "$COMPOSED_BACKEND"
