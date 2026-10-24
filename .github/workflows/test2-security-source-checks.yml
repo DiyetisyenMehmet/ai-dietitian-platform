@@ -1,0 +1,119 @@
+name: G1 Test2 composed source checks
+on:
+  pull_request:
+    branches: [feature/staging-preview]
+    paths:
+      - scripts/test2-security-source.py
+      - scripts/test2-security-source.test.py
+      - scripts/test2-security-runtime.test.cjs
+      - .github/workflows/test2-security-source-checks.yml
+      - docs/reports/g1-test2-source-compose.md
+permissions:
+  contents: read
+concurrency:
+  group: g1-composed-source-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Test fail-closed source and future startup guards
+        run: python3 scripts/test2-security-source.test.py
+      - name: Compose pinned backend source and verify full inventory
+        run: |
+          python3 scripts/test2-security-source.py prepare --source "$RUNNER_TEMP/g1-composed"
+          mkdir -p "$RUNNER_TEMP/evidence/test2-source-scan/backend"
+          cp "$RUNNER_TEMP/g1-composed/source-manifest.json" "$RUNNER_TEMP/evidence/test2-source-scan/"
+          cp "$RUNNER_TEMP/g1-composed/backend/package-lock.json" "$RUNNER_TEMP/evidence/test2-source-scan/backend/"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: g1-composed-lock-and-manifest
+          path: ${{ runner.temp }}/evidence/
+          if-no-files-found: error
+          retention-days: 14
+  security:
+    needs: prepare
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@v2.6.0
+    with:
+      ref: ${{ github.event.pull_request.head.sha }}
+      download-artifact: g1-composed-lock-and-manifest
+      scan-args: --lockfile=test2-source-scan/backend/package-lock.json
+      upload-sarif: false
+      fail-on-vuln: true
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+  composed-backend:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: diewish
+          POSTGRES_PASSWORD: diewish
+          POSTGRES_DB: g1_test2_source
+        ports: ['5432:5432']
+        options: --health-cmd "pg_isready -U diewish -d g1_test2_source" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      NODE_ENV: test
+      DIEWISH_ENVIRONMENT: test
+      DATABASE_URL: postgresql://diewish:diewish@127.0.0.1:5432/g1_test2_source?schema=public
+      JWT_ACCESS_SECRET: g1-synthetic-access-secret-012345678901234567890123456789
+      JWT_REFRESH_SECRET: g1-synthetic-refresh-secret-01234567890123456789012345678
+      LOG_LEVEL: silent
+      BCRYPT_ROUNDS: 10
+      RATE_LIMIT_MAX: 1000
+      AUTH_RATE_LIMIT_MAX: 1000
+      COMPOSED_BACKEND: ${{ runner.temp }}/g1-composed/backend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/download-artifact@v4
+        with:
+          name: g1-composed-lock-and-manifest
+          path: ${{ runner.temp }}/scan-evidence
+      - name: Recompose independently and match scanner manifest
+        run: |
+          python3 scripts/test2-security-source.py prepare --source "$RUNNER_TEMP/g1-composed"
+          cmp "$RUNNER_TEMP/g1-composed/source-manifest.json" "$RUNNER_TEMP/scan-evidence/test2-source-scan/source-manifest.json"
+          cmp "$COMPOSED_BACKEND/package-lock.json" "$RUNNER_TEMP/scan-evidence/test2-source-scan/backend/package-lock.json"
+      - name: Install composed dependencies and compile without migrations
+        run: |
+          cd "$COMPOSED_BACKEND"
+          npm ci --ignore-scripts --no-audit --no-fund
+          npx prisma generate
+          npm run type-check
+          npm run build
+      - name: Test composed Zod, parser, uploads, mail and barcode contracts
+        run: |
+          cd "$COMPOSED_BACKEND"
+          node --test tests/body-parser-security.test.mjs
+          node --import tsx --test src/middleware/zod-security.test.ts src/middleware/upload-security.test.ts src/modules/blood-test/blood-test.upload.test.ts src/lib/mailer.test.ts src/modules/nutrition-data/barcode.test.ts
+      - name: Test composed JWT and cookie boundaries without DB
+        run: node --test scripts/test2-security-runtime.test.cjs
+      - name: Set up only disposable CI database using BASE migrations
+        run: |
+          python3 scripts/test2-security-source.py guard-ci-db
+          cd "$COMPOSED_BACKEND"
+          npx prisma migrate deploy
+      - name: Test composed login, sessions, identity and health ownership
+        run: |
+          cd "$COMPOSED_BACKEND"
+          node --import tsx --test --test-concurrency=1 src/integration/auth-security.integration.test.ts src/integration/auth-onboarding.integration.test.ts src/integration/identity-lifecycle.integration.test.ts src/integration/account-identity-foundation.integration.test.ts src/integration/weight-tracking.integration.test.ts src/integration/password-recovery.integration.test.ts
+      - name: Reverify source inventory after tests
+        run: python3 scripts/test2-security-source.py verify --source "$RUNNER_TEMP/g1-composed" --installed
