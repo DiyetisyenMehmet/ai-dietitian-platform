@@ -102,6 +102,11 @@ test("real SMTP transport negotiates TLS, sends fragment link, rejects delivery 
   assert.equal(opts.logger, false);
   assert.equal(opts.debug, false);
   assert.equal(opts.tls?.rejectUnauthorized, true);
+  await mailer.sendEmailVerification("synthetic@example.com", "verification-token");
+  assert.equal(messages.length, 2);
+  const verification = messages[1]!.replace(/=\r\n/g, "").replace(/=3D/g, "=");
+  assert.match(verification, /https:\/\/app.example.com\/verify-email\?token=verification-token/);
+  assert.doesNotMatch(verification, /reset-password/);
   rejectRecipient = true;
   await assert.rejects(
     mailer.sendPasswordReset("synthetic@example.com", "must-not-leak"),
@@ -114,4 +119,38 @@ test("real SMTP transport negotiates TLS, sends fragment link, rejects delivery 
   // Without the test-only trusted CA, the normal transport must reject an untrusted certificate.
   mock.mock.restore();
   await assert.rejects(mailer.sendPasswordReset("synthetic@example.com", "untrusted-cert"));
+});
+
+test("security address parsing preserves intended recipients without contacting SMTP", async () => {
+  const transport = nodemailer.createTransport({ streamTransport: true, buffer: true });
+  try {
+    for (const [to, expected] of [
+      [
+        "Synthetic (x(y) <unexpected@example.invalid>) <intended@example.invalid>",
+        "intended@example.invalid",
+      ],
+      [
+        "G: (a; <unexpected@example.invalid>) <intended@example.invalid>;",
+        "intended@example.invalid",
+      ],
+      ['<"a@unexpected.invalid>"@expected.invalid>', "@expected.invalid"],
+    ]) {
+      const result = await transport.sendMail({
+        from: "sender@example.invalid",
+        to,
+        subject: "Synthetic security contract",
+        text: "No real mail",
+      });
+      if (expected.startsWith("@")) {
+        // SMTP normalizes unsafe characters in quoted local parts; the
+        // security boundary is delivery to the domain outside the quotes.
+        assert.equal(result.envelope.to.length, 1);
+        assert.ok(result.envelope.to[0]!.endsWith(expected));
+      } else {
+        assert.deepEqual(result.envelope.to, [expected]);
+      }
+    }
+  } finally {
+    transport.close();
+  }
 });
