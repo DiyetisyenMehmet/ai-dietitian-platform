@@ -7,6 +7,8 @@ on:
       - feature/android-native-scanner
       - feature/staging-preview
       - security/app12-zod-security-gate-a1
+      - security/app12-test2-backend-readiness-a1
+      - security/app12-g1-upload-mail-security-a1
       - feature/app-security-nextjs-15-5-28-a1
       - feature/app12-daily-journey-pro-a1
       - feature/mirmir-a4-direct-integration
@@ -95,6 +97,10 @@ jobs:
       - run: npm ci
       - name: Verify braces GHSA depth guard
         run: node ../scripts/security-braces-depth-guard.cjs backend
+      - name: Test compressed request parsing security contracts
+        run: node --test tests/body-parser-security.test.mjs
+      - name: Test upload middleware security contracts
+        run: node --import tsx --test src/middleware/upload-security.test.ts
       - name: Test reference micronutrient normalization
         run: python3 ../scripts/nutrition-reference-sync.test.py
       - name: Validate Prisma schema
