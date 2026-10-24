@@ -16,14 +16,15 @@ kaynakları değiştirilmez; G1 ve canlı Test2/Journey Web yayını ayrıca de�
 - Gerçekte dışarı alınan **backend tree**: `40011ddd081c88d407a52f31e9c210d5850af811`.
 - Lockfile SHA-256: `e0edffd8038b97502c8e4a080f9980b9bea49e856719111d2bb7ee615614ce55`.
 - Bunlar commit/imaj digest'i veya imzalı attestasyon değildir. Test harness commit'i
-  PR HEAD'dir; uygulama kaynağı diye o SHA'yı tek başına kullanmak yanlıştır.
+  açıkça verilen onaylı, tam commit SHA'sıdır; uygulama kaynağı diye o SHA'yı tek başına kullanmak yanlıştır.
 
 `scripts/test2-security-source.py` yalnız kabul edilmiş 8 blob'u eski bazın geçici
 Git index'ine uygular. Kendi index'i/HEAD'i değiştirmez; repository dışındaki boş
 bir dizine yalnız backend'i çıkarır. Tam Git blob/mode envanteriyle arşiv eşitliği,
-izinli diff, manifest/lock uyumu, dört sürüm ve hazırlık HEAD'inin sadece bu PR'ın
-hazırlık dosyalarını içerdiği doğrulanır. Eksik nesne, farklı blob, fazladan dosya,
-symlink, değişmiş mode/içerik veya ürün drift'i NO_GO verir. Mevcut çıktı ezilmez.
+izinli diff, manifest/lock uyumu ve dört sürüm doğrulanır. Kaynak politikası ayrı
+SHA-256 ile sabittir. Çalışan oluşturucu, runtime testleri, koruma testleri ve CI
+workflow'u açıkça seçilmiş harness commit'inin blob/hash içeriğiyle eşleşmelidir. Eksik nesne, farklı blob, fazladan dosya,
+symlink, değişmiş mode/içerik veya onaysız harness değişikliği NO_GO verir. Mevcut çıktı ezilmez.
 
 İzinli dosyalar ve Git blob SHA'ları scriptte `PINS` içinde sabittir:
 `package.json`, `package-lock.json`, `validate.ts`, `error-handler.ts`,
@@ -32,10 +33,21 @@ symlink, değişmiş mode/içerik veya ürün drift'i NO_GO verir. Mevcut çıkt
 kabul edilmiş iki test dosyası eklenmiştir; mevcut kod/testler yeniden yazılmaz.
 
 Üretilen `source-manifest.json`: base/security/test-harness SHA'ları, root/backend/
-Prisma tree kimlikleri, izinli blob'lar, dışarıda bırakılan farklar ve tüm backend
+Prisma tree kimlikleri, harness dosyalarının blob/SHA-256 kimlikleri, kaynak
+politikası özeti, izinli blob'lar, dışarıda bırakılan farklar ve tüm backend
 kaynak dosyalarının SHA-256/mode envanterini içerir. Zaman damgası yoktur; aynı
 harness commit'i ve sabit Git nesneleri için byte düzeyinde tekrar üretilebilirdir.
-Manifest SHA-256 değeri CLI kanıt çıktısında verilir.
+Manifest SHA-256 değeri CLI kanıt çıktısında verilir. Güncel tüketici HEAD'i
+`executionCommit` olarak ayrı loglanır; canonical manifest'e katılmaz. Aynı kabul
+edilmiş harness ref'iyle daha sonraki, taşınmayan ürün commit'leri byte düzeyinde
+aynı kaynak manifestini üretir. Bu ürün dosyaları bileşime alınmaz. Test aracı
+dosyaları veya sabit kaynak politikası değişirse fail-closed durulur.
+
+Onaylı harness SHA'sı `--harness-ref` veya `G1_TEST_HARNESS_REF` ile açıkça
+verilmelidir; HEAD/branch/latest varsayılanı yoktur. Referansın seçimi yönetici
+onayıdır; yeni bir commit vermek eski CI kanıtını yeni onay saydırmaz. Gelecekte
+staging'e merge/squash sonrası da korunmuş dosya içeriği doğrulanır; harness ref'inin
+tüketici HEAD'inin atası olması zorunlu değildir.
 
 ## Bağımlılıklar ve dışarıda kalanlar
 
@@ -55,6 +67,8 @@ Dockerfile eski bazdaki `start:migrate` varsayılanını içerir; burada çalı�
 ## Tekrar üretme ve bağımsız testler
 
 ```sh
+# Yönetici tarafından kabul edilmiş tam 40 haneli harness commit'ini yerleştir.
+export G1_TEST_HARNESS_REF=ONAYLANMIS_40_HANELI_HARNESS_SHA
 python3 scripts/test2-security-source.test.py
 python3 scripts/test2-security-source.py prepare --source /tmp/g1-composed-source
 python3 scripts/test2-security-source.py verify --source /tmp/g1-composed-source
@@ -66,7 +80,7 @@ dışarıda tutar; manifest/lock ve bütün kaynak dosyaları yeniden doğrulan�
 
 `G1 Test2 composed source checks` yalnız bu hazırlık dosyalarına ait staging PR'ında
 çalışır; push/dispatch/deploy tetikleyicisi yoktur. Her iş raw PR HEAD'i checkout
-eder. Prepare işi manifest ve **yalnız lockfile** içeren bir CI kanıt artifact'i
+eder ve CI'da test edilen harness ref'ini bu tam SHA'ya açıkça bağlar. Prepare işi manifest ve **yalnız lockfile** içeren bir CI kanıt artifact'i
 üretir; application bundle, Docker imajı veya registry paketi yüklenmez. Mevcut OSV
 reusable action v2.6.0 bu ayrı artifact'in lockfile'ını `fail-on-vuln: true` ile
 okur. Test işi bileşimi bağımsız üretip manifest ve lockfile byte eşitliğini
@@ -112,6 +126,14 @@ https://github.com/DiyetisyenMehmet/ai-dietitian-platform/actions/runs/395789169
 Test2 `00481-biq / diewish-test2`, Admin `00479-w44 / admin-legacy`, frontend
 `00245-pim`. Bu tarihsel kayıttır; anlık servis durumu veya imaj içi paket ispatı
 olarak sunulmaz. Canlı sunucu bu hazırlıkla güncellenmez.
+
+Düzeltme talimatı:
+https://github.com/DiyetisyenMehmet/ai-dietitian-platform/issues/103#issuecomment-6383349756
+Karşıt offline regresyonlar geçici sentetik repo/commit kullanır; gerçek staging
+branch'ini değiştirmez. Taşınmayan sonraki backend/frontend ürün commit'leri aynı
+manifesti üretir; committed/uncommitted harness değişikliği, ek güvenlik kaynak
+pin'i veya çıktı dosyası NO_GO olur. Önceki kaynak tree/lock ve güvenlik SHA'ları
+değişmez; yeni harness sürümünün manifest/CI kimliği ayrıca raporlanır.
 
 G1 kapanmaz. Bağımsız frontend browser FAIL ve exact staging Notification eksikliği
 ayrıca raporlanır. Journey Web için ileride yeni exact SHA'da 5/5 Hardening + Config

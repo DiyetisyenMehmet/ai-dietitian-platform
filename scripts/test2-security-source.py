@@ -22,12 +22,8 @@ PINS = {
     'backend/src/middleware/upload-security.test.ts': '00a929527bca9553de4615cc6ec0a1dc8a593639',
     'backend/src/lib/mailer.test.ts': '8fe44ec01b2975d9c34819d972d565a4b63b8ec9',
 }
-PREP_FILES = {
-    'scripts/test2-security-source.py', 'scripts/test2-security-source.test.py',
-    'scripts/test2-security-runtime.test.cjs',
-    '.github/workflows/test2-security-source-checks.yml',
-    'docs/reports/g1-test2-source-compose.md',
-}
+HARNESS_FILES = frozenset(['.github/workflows/test2-security-source-checks.yml', 'scripts/test2-security-runtime.test.cjs', 'scripts/test2-security-source.py', 'scripts/test2-security-source.test.py'])
+SOURCE_POLICY_SHA256 = '22d0ceca5f0a7265903ba0db4a8cfe1ac76d473449cdf999ea7c4d2df9b897d4'
 VERSIONS = {'zod': '4.6.6', 'body-parser': '1.20.9', 'multer': '2.5.0', 'nodemailer': '10.1.4'}
 
 
@@ -47,14 +43,41 @@ def text(repo, *args, env=None):
     return git(repo, *args, env=env).decode().strip()
 
 
-def source_objects(repo):
+def validated_harness(repo, harness_ref=None):
+    # An immutable approved reference is an explicit input, never inferred from HEAD.
+    harness_ref = harness_ref if harness_ref is not None else os.environ.get('G1_TEST_HARNESS_REF', '')
+    require(isinstance(harness_ref, str) and re.fullmatch(r'[0-9a-f]{40}', harness_ref),
+            'explicit immutable test harness commit required')
+    require(text(repo, 'rev-parse', '--verify', harness_ref + '^{commit}') == harness_ref,
+            'test harness commit mismatch')
+    git(repo, 'merge-base', '--is-ancestor', REVIEWED, harness_ref)
+    inventory = {}
+    for path in sorted(HARNESS_FILES):
+        expected = text(repo, 'ls-tree', harness_ref, '--', path)
+        require(expected.startswith('100644 blob '), 'missing or unsafe harness entry: ' + path)
+        require(text(repo, 'ls-tree', 'HEAD', '--', path) == expected,
+                'test harness content drift: ' + path)
+        data = git(repo, 'show', harness_ref + ':' + path)
+        actual = Path(repo) / path
+        require(actual.is_file() and not actual.is_symlink() and actual.read_bytes() == data
+                and not actual.stat().st_mode & 0o111, 'test harness worktree drift: ' + path)
+        if path == 'scripts/test2-security-source.py':
+            require(Path(__file__).read_bytes() == data, 'running composer differs from trusted harness')
+        inventory[path] = {'blob': expected.split()[2], 'sha256': hashlib.sha256(data).hexdigest()}
+    return harness_ref, inventory
+
+
+def source_objects(repo, harness_ref=None):
+    policy = {'base': BASE, 'security': REVIEWED, 'blobs': PINS, 'versions': VERSIONS,
+              'harnessFiles': sorted(HARNESS_FILES)}
+    policy_hash = hashlib.sha256(json.dumps(policy, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    require(policy_hash == SOURCE_POLICY_SHA256, 'source policy mismatch')
     for sha in (BASE, REVIEWED):
         require(text(repo, 'rev-parse', '--verify', sha + '^{commit}') == sha, 'pinned commit mismatch')
     git(repo, 'merge-base', '--is-ancestor', BASE, REVIEWED)
     head = text(repo, 'rev-parse', 'HEAD')
     git(repo, 'merge-base', '--is-ancestor', REVIEWED, head)
-    changed = set(text(repo, 'diff', '--name-only', REVIEWED, head).splitlines())
-    require(changed <= PREP_FILES, 'preparation HEAD contains application drift')
+    harness_ref, harness_files = validated_harness(repo, harness_ref)
     for path, oid in PINS.items():
         require(text(repo, 'rev-parse', REVIEWED + ':' + path) == oid, 'reviewed blob mismatch: ' + path)
     before = json.loads(git(repo, 'show', BASE + ':backend/package.json'))
@@ -108,8 +131,9 @@ def source_objects(repo):
     inventory = {p: {'sha256': hashlib.sha256(data).hexdigest(), 'mode': oct(mode)}
                  for p, (data, mode) in sorted(files.items())}
     excluded = sorted(set(text(repo, 'diff', '--name-only', BASE, REVIEWED, '--', 'backend').splitlines()) - set(PINS))
-    manifest = {'format': 1, 'purpose': 'OFFLINE_SOURCE_ONLY_NOT_AN_IMAGE',
-                'baseCommit': BASE, 'securityCommit': REVIEWED, 'testHarnessCommit': head,
+    manifest = {'format': 2, 'purpose': 'OFFLINE_SOURCE_ONLY_NOT_AN_IMAGE',
+                'baseCommit': BASE, 'securityCommit': REVIEWED, 'testHarnessCommit': harness_ref,
+                'testHarnessFiles': harness_files, 'sourcePolicySha256': policy_hash,
                 'sourceTree': tree, 'backendTree': text(repo, 'rev-parse', tree + ':backend'),
                 'basePrismaTree': text(repo, 'rev-parse', BASE + ':backend/prisma'),
                 'versions': VERSIONS, 'allowedBlobs': PINS, 'excludedChanges': excluded,
@@ -121,12 +145,12 @@ def encoded(manifest):
     return (json.dumps(manifest, sort_keys=True, indent=2) + '\n').encode()
 
 
-def prepare(repo, output):
+def prepare(repo, output, harness_ref=None):
     repo, output = Path(repo).resolve(), Path(output).absolute()
     require(not output.exists() and not output.is_symlink(), 'output already exists')
     output = output.resolve()
     require(not output.is_relative_to(repo) and not repo.is_relative_to(output), 'output must be outside repository')
-    manifest, files = source_objects(repo)
+    manifest, files = source_objects(repo, harness_ref)
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='g1-compose-', dir=output.parent) as temp:
         root = Path(temp) / 'source'
@@ -138,12 +162,12 @@ def prepare(repo, output):
             target.chmod(mode)
         (root / 'source-manifest.json').write_bytes(encoded(manifest))
         root.rename(output)
-    verify(repo, output)
+    verify(repo, output, harness_ref=harness_ref)
     return manifest
 
 
-def verify(repo, source, installed=False):
-    expected, _ = source_objects(repo)
+def verify(repo, source, installed=False, harness_ref=None):
+    expected, _ = source_objects(repo, harness_ref)
     source = Path(source).absolute()
     require(not source.is_symlink(), 'source root symlink')
     source = source.resolve()
@@ -186,6 +210,7 @@ def main():
     parser.add_argument('mode', choices=['prepare', 'verify', 'guard-ci-db'])
     parser.add_argument('--repo', type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument('--source', type=Path)
+    parser.add_argument('--harness-ref', help='Approved full commit SHA; or G1_TEST_HARNESS_REF')
     parser.add_argument('--installed', action='store_true')
     args = parser.parse_args()
     if args.mode == 'guard-ci-db':
@@ -193,10 +218,12 @@ def main():
         print('PASS: disposable loopback CI database contract')
         return
     require(args.source is not None, 'source output required')
-    manifest = prepare(args.repo, args.source) if args.mode == 'prepare' else verify(args.repo, args.source, args.installed)
+    manifest = prepare(args.repo, args.source, args.harness_ref) if args.mode == 'prepare' else verify(args.repo, args.source, args.installed, args.harness_ref)
     print(json.dumps({'result': 'PASS', 'purpose': manifest['purpose'], 'baseCommit': BASE,
                       'securityCommit': REVIEWED, 'testHarnessCommit': manifest['testHarnessCommit'],
                       'sourceTree': manifest['sourceTree'], 'backendTree': manifest['backendTree'],
+                      'executionCommit': text(args.repo, 'rev-parse', 'HEAD'),
+                      'sourcePolicySha256': manifest['sourcePolicySha256'],
                       'manifestSha256': hashlib.sha256(encoded(manifest)).hexdigest(),
                       'lockSha256': manifest['files']['backend/package-lock.json']['sha256']}, sort_keys=True))
 

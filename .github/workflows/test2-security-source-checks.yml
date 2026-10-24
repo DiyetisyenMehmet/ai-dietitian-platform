@@ -10,6 +10,8 @@ on:
       - docs/reports/g1-test2-source-compose.md
 permissions:
   contents: read
+env:
+  G1_TEST_HARNESS_REF: ${{ github.event.pull_request.head.sha }}
 concurrency:
   group: g1-composed-source-${{ github.event.pull_request.number }}
   cancel-in-progress: true

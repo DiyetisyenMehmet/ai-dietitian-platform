@@ -1,6 +1,7 @@
 """Fail-closed checks against pinned real Git objects; no network or database."""
 import importlib.util
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -18,6 +19,10 @@ class SourceGuards(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.output = self.root / 'composed'
+        self.harness_ref = os.environ.get('G1_TEST_HARNESS_REF') or r.text(REPO, 'rev-parse', 'HEAD')
+        env = patch.dict(os.environ, {'G1_TEST_HARNESS_REF': self.harness_ref})
+        env.start()
+        self.addCleanup(env.stop)
 
     def prepared(self):
         return r.prepare(REPO, self.output)
@@ -46,7 +51,7 @@ class SourceGuards(unittest.TestCase):
 
     def test_wrong_security_blob_stops_before_output(self):
         with patch.dict(r.PINS, {'backend/package.json': '0' * 40}):
-            with self.assertRaisesRegex(RuntimeError, 'blob mismatch'):
+            with self.assertRaisesRegex(RuntimeError, 'source policy mismatch'):
                 self.prepared()
         self.assertFalse(self.output.exists())
 
@@ -56,15 +61,70 @@ class SourceGuards(unittest.TestCase):
                 self.prepared()
         self.assertFalse(self.output.exists())
 
-    def test_preparation_application_drift_rejected(self):
-        original = r.text
-        def drift(repo, *args, **kwargs):
-            if args[:3] == ('diff', '--name-only', r.REVIEWED):
-                return 'backend/src/app.ts'
-            return original(repo, *args, **kwargs)
-        with patch.object(r, 'text', side_effect=drift):
-            with self.assertRaisesRegex(RuntimeError, 'application drift'):
+    def temporary_repo(self):
+        repo = self.root / 'synthetic-repo'
+        r.git(REPO, 'clone', '--shared', '--no-checkout', str(REPO), str(repo))
+        r.git(repo, 'checkout', '--detach', self.harness_ref)
+        return repo
+
+    def commit_fixture(self, repo, path, content):
+        target = repo / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content)
+        r.git(repo, 'add', '--', path)
+        r.git(repo, '-c', 'user.name=G1 Synthetic', '-c', 'user.email=synthetic@example.invalid',
+              'commit', '--no-gpg-sign', '-m', 'Synthetic coordinated staging regression')
+
+    def test_later_unrelated_product_commit_keeps_identical_source_manifest(self):
+        original_head = r.text(REPO, 'rev-parse', 'HEAD')
+        original_index = r.git(REPO, 'ls-files', '--stage')
+        repo = self.temporary_repo()
+        first = r.prepare(repo, self.root / 'before')
+        app = 'backend/src/app.ts'
+        self.commit_fixture(repo, app, (repo / app).read_text() + '\n// Synthetic later product change\n')
+        self.commit_fixture(repo, 'frontend/unrelated-coordination.txt', 'Synthetic team feature\n')
+        self.assertNotEqual(r.text(repo, 'rev-parse', 'HEAD'), self.harness_ref)
+        second = r.prepare(repo, self.root / 'after')
+        self.assertEqual(r.encoded(first), r.encoded(second))
+        self.assertEqual((self.root / 'before/source-manifest.json').read_bytes(),
+                         (self.root / 'after/source-manifest.json').read_bytes())
+        self.assertEqual(r.verify(repo, self.root / 'before'), first)
+        self.assertEqual((self.root / 'after' / app).read_bytes(), r.git(REPO, 'show', r.BASE + ':' + app))
+        self.assertEqual(original_head, r.text(REPO, 'rev-parse', 'HEAD'))
+        self.assertEqual(original_index, r.git(REPO, 'ls-files', '--stage'))
+
+    def test_later_committed_or_uncommitted_harness_change_is_rejected(self):
+        repo = self.temporary_repo()
+        harness = 'scripts/test2-security-runtime.test.cjs'
+        self.commit_fixture(repo, harness, (repo / harness).read_text() + '\n// Unapproved harness change\n')
+        with self.assertRaisesRegex(RuntimeError, 'harness content drift'):
+            r.prepare(repo, self.output)
+        self.assertFalse(self.output.exists())
+        r.git(repo, 'reset', '--hard', self.harness_ref)
+        path = repo / 'scripts/test2-security-source.test.py'
+        path.write_text(path.read_text() + '\n# Uncommitted harness change\n')
+        with self.assertRaisesRegex(RuntimeError, 'harness worktree drift'):
+            r.prepare(repo, self.output)
+        self.assertFalse(self.output.exists())
+
+    def test_extra_security_source_pin_or_output_file_is_rejected(self):
+        extra = 'backend/src/app.ts'
+        with patch.dict(r.PINS, {extra: r.text(REPO, 'rev-parse', r.REVIEWED + ':' + extra)}):
+            with self.assertRaisesRegex(RuntimeError, 'source policy mismatch'):
                 self.prepared()
+        self.prepared()
+        (self.output / 'backend/src/unapproved-security.ts').write_text('// not reviewed\n')
+        with self.assertRaisesRegex(RuntimeError, 'inventory mismatch'):
+            r.verify(REPO, self.output)
+
+    def test_harness_reference_must_be_explicit_and_immutable(self):
+        for ref in ['', 'HEAD', 'feature/staging-preview', '0' * 40]:
+            with self.subTest(ref=ref), self.assertRaises(RuntimeError):
+                r.prepare(REPO, self.output, harness_ref=ref)
+        with patch.dict(os.environ, {'G1_TEST_HARNESS_REF': ''}):
+            with self.assertRaisesRegex(RuntimeError, 'explicit immutable'):
+                self.prepared()
+        self.assertFalse(self.output.exists())
 
     def test_output_inside_repo_or_existing_output_rejected(self):
         with self.assertRaisesRegex(RuntimeError, 'outside repository'):
