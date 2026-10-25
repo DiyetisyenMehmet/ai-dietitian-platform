@@ -239,17 +239,24 @@ test("dashboard home retains approved header, metrics and quick actions around J
   assert.doesNotMatch(header, /UserRound|href="\/profile"|Profilini aç/);
   assert.match(header, /text-\[9px\].*text-muted-foreground\/55/);
 
-  // Journey Pro intentionally supersedes the old compact layout contract.
-  // Preserve real progress, mobile touch area and next/plan sections.
+  // PR #115's approved expanded composition supersedes the compact CSS contract.
+  // Keep real progress, 48px actions (above the 44px minimum) and next/plan sections.
   assert.match(journey, /data-journey-card-heading/);
-  assert.match(journey, /<h3 className="min-w-0 flex-1 text-base font-semibold tracking-tight">/);
+  assert.match(journey, /<h3 className="min-w-0 flex-1 text-base font-semibold tracking-tight sm:text-lg">/);
   assert.match(journey, /\$\{completed\}\/\$\{total\} adım/);
-  assert.match(journey, /space-y-3 p-4 sm:p-5/);
-  assert.match(journey, /min-h-11 min-w-11/);
-  assert.match(journey, /gap-2\.5 rounded-xl py-2/);
+  assert.match(journey, /const \{ completed, total, percent \} = summarizeJourney\(steps\)/);
+  assert.match(journey, /<ProgressBar\s+value=\{percent\}/);
+  assert.match(journey, /space-y-4 p-4 sm:p-5/);
+  assert.match(journey, /min-h-12 min-w-11/);
+  assert.match(journey, /<div data-journey-row className="flex min-w-0 items-center gap-3 py-2\.5">/);
   assert.match(journey, /data-journey-next/);
+  assert.match(journey, /data-journey-focus-card/);
   assert.match(journey, /data-journey-plan-meal/);
+  assert.match(journey, /<div className="grid grid-cols-2 gap-2" data-journey-meal-actions>/);
+  assert.match(journey, /const \[expanded, setExpanded\] = React\.useState\(true\)/);
+  assert.match(journey, /data-journey-timeline-step data-step-state=\{step\.state\}/);
   assert.match(journey, /data-journey-plan-fallback/);
+  assert.equal((view.match(/<DailyJourneySection\s*\/>/g) ?? []).length, 1);
   assert.doesNotMatch(journey, /Günlük yolculuğun/);
 
   assert.match(metrics, /data-dashboard-metrics/);
