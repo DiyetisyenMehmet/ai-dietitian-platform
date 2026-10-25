@@ -72,6 +72,7 @@ async function fixture(
     unknown?: boolean;
     due?: boolean;
     delayPlan?: boolean;
+    delaySession?: boolean;
   } = {},
 ) {
   await page.clock.install({ time: new Date(`${today}T14:00:00+03:00`) });
@@ -88,7 +89,13 @@ async function fixture(
     water: options.complete ? 2100 : 750,
     waterPosts: 0,
     delayPlan: Boolean(options.delayPlan),
+    delaySession: Boolean(options.delaySession),
+    sessionRequests: 0,
   };
+  let releaseSession!: () => void;
+  const sessionGate = new Promise<void>((resolve) => {
+    releaseSession = resolve;
+  });
   let releasePlan!: () => void;
   const planGate = new Promise<void>((resolve) => {
     releasePlan = resolve;
@@ -107,7 +114,9 @@ async function fixture(
         status: 503,
         json: { success: false, error: { code: "QA_UNAVAILABLE", message: "Synthetic failure" } },
       });
-    if (["/auth/refresh-token", "/auth/login"].includes(path))
+    if (["/auth/refresh-token", "/auth/login"].includes(path)) {
+      state.sessionRequests++;
+      if (state.delaySession) await sessionGate;
       return ok({
         user: {
           id: state.owner,
@@ -121,6 +130,7 @@ async function fixture(
         },
         tokens: { accessToken: "synthetic-test-token", tokenType: "Bearer", expiresIn: "1h" },
       });
+    }
     if (path === "/auth/logout") return ok({});
     if (path === "/legal/consents")
       return ok({ items: [], allMandatoryGranted: true, missingMandatory: [] });
@@ -205,6 +215,10 @@ async function fixture(
   });
   return {
     state,
+    releaseSession() {
+      state.delaySession = false;
+      releaseSession();
+    },
     releasePlan() {
       state.delayPlan = false;
       releasePlan();
@@ -242,6 +256,30 @@ for (const width of [390, 412, 430])
       await expect(card).toContainText("1/4 adım");
       await expect(card).toContainText("%25");
       await expect(card.locator("[data-journey-next]")).toContainText("Öğle yemeği");
+      const focus = card.locator("[data-journey-focus-card]");
+      await expect(focus).toHaveCount(1);
+      await expect(focus.locator("[data-journey-plan-meal]")).toContainText("Mercimek çorbası");
+      await expect(focus.getByRole("button", { name: "Yedim", exact: true })).toBeVisible();
+      await expect(focus.getByRole("link", { name: "Farklı yedim", exact: true })).toBeVisible();
+      await expect(focus.getByRole("img", { name: "Öğün planı simgesi" })).toBeVisible();
+      await expect(focus.locator("img")).toHaveCount(0);
+      expect((await focus.boundingBox())!.height).toBeGreaterThanOrEqual(180);
+      const actions = focus.locator("[data-journey-meal-actions]");
+      const eatBox = (await actions
+        .getByRole("button", { name: "Yedim", exact: true })
+        .boundingBox())!;
+      const differentBox = (await actions
+        .getByRole("link", { name: "Farklı yedim", exact: true })
+        .boundingBox())!;
+      expect(eatBox.width).toBeGreaterThanOrEqual(120);
+      expect(Math.abs(eatBox.width - differentBox.width)).toBeLessThanOrEqual(1);
+      expect(Math.abs(eatBox.y - differentBox.y)).toBeLessThanOrEqual(1);
+      await expect(
+        card.locator("[data-daily-journey-steps] > [data-journey-timeline-step]"),
+      ).toHaveCount(3);
+      await expect(
+        card.locator('[data-journey-timeline-step][data-step-state="completed"]').first(),
+      ).toContainText("Kahvaltı");
       await expect(card.getByRole("link", { name: "Farklı yedim", exact: true })).toHaveAttribute(
         "href",
         "/meals/add?slot=lunch",
@@ -255,12 +293,15 @@ for (const width of [390, 412, 430])
           expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(44);
       }
       await expect(page.locator("[data-dashboard-metrics]")).toBeVisible();
+      await expect(page.locator("[data-dashboard-metrics] > div > *")).toHaveCount(4);
+      await expect(page.getByRole("navigation", { name: "Ana gezinme" })).toBeVisible();
       const toggle = card.locator("[data-journey-details-toggle]");
+      await expect(toggle).toHaveAttribute("aria-expanded", "true");
       await toggle.focus();
       await toggle.press("Enter");
-      await expect(toggle).toHaveAttribute("aria-expanded", "true");
-      await toggle.press("Space");
       await expect(toggle).toHaveAttribute("aria-expanded", "false");
+      await toggle.press("Space");
+      await expect(toggle).toHaveAttribute("aria-expanded", "true");
       await page.evaluate(() => document.fonts.ready);
       await card.screenshot({
         path: info.outputPath(`journey-pro-${width}-${theme}.png`),
@@ -271,6 +312,55 @@ for (const width of [390, 412, 430])
         fullPage: true,
         animations: "disabled",
       });
+    });
+  }
+for (const width of [390, 412, 430])
+  for (const theme of ["light", "dark"] as const) {
+    test(`${width}px ${theme}: no plan keeps a truthful timeline without fake meal actions`, async ({
+      page,
+    }, info) => {
+      await page.setViewportSize({ width, height: 932 });
+      await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
+      await page.addInitScript((value) => localStorage.setItem("theme", value), theme);
+      await fixture(page, { plan: null });
+      await open(page);
+      const card = section(page);
+      await expect(card.locator("[data-journey-plan-fallback]")).toContainText("Bugüne eşleşen");
+      await expect(card.locator("time")).toHaveCount(0);
+      await expect(card.getByRole("button", { name: "Yedim", exact: true })).toHaveCount(0);
+      await expect(card.locator("[data-journey-timeline-step]")).toHaveCount(4);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+      );
+      await card.screenshot({
+        path: info.outputPath(`journey-no-plan-${width}-${theme}.png`),
+        animations: "disabled",
+      });
+    });
+    test(`${width}px ${theme}: session loading hides prior menu and opens current journey safely`, async ({
+      page,
+    }, info) => {
+      await page.setViewportSize({ width, height: 932 });
+      await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
+      await page.addInitScript((value) => localStorage.setItem("theme", value), theme);
+      const f = await fixture(page, { delaySession: true });
+      await page.goto("/dashboard");
+      await expect.poll(() => f.state.sessionRequests).toBeGreaterThan(0);
+      await expect(section(page)).toHaveCount(0);
+      await expect(page.getByText("Mercimek çorbası", { exact: true })).toHaveCount(0);
+      await page.screenshot({
+        path: info.outputPath(`journey-session-loading-${width}-${theme}.png`),
+        fullPage: true,
+        animations: "disabled",
+      });
+      f.releaseSession();
+      await expect(section(page).locator("[data-journey-plan-meal]")).toContainText(
+        "Mercimek çorbası",
+      );
+      await expect(section(page).locator("[data-journey-details-toggle]")).toHaveAttribute(
+        "aria-expanded",
+        "true",
+      );
     });
   }
 test("double click, failed save, retry and persisted undo never invent macros", async ({
@@ -351,7 +441,9 @@ for (const mode of [
 }
 test("unready plan stays hidden; local midnight selects the next calendar day", async ({
   page,
-}) => {
+}, info) => {
+  await page.setViewportSize({ width: 390, height: 932 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
   const f = await fixture(page, { delayPlan: true });
   await open(page);
   const card = section(page);
@@ -359,9 +451,20 @@ test("unready plan stays hidden; local midnight selects the next calendar day", 
   await expect(card.locator("time")).toHaveCount(0);
   f.releasePlan();
   await expect(card).toContainText("Mercimek çorbası");
-  await page.clock.fastForward(10 * 60 * 60 * 1000 + 1000);
+  await page.clock.fastForward((9 * 60 + 59) * 60 * 1000);
+  await expect(card).toContainText("Sebzeli bulgur");
+  await card.screenshot({
+    path: info.outputPath("journey-before-midnight.png"),
+    animations: "disabled",
+  });
+  await page.clock.fastForward(61 * 1000);
   await expect(card).toContainText("İkinci gün yulafı");
   await expect(card).not.toContainText("Mercimek çorbası");
+  await expect(card).not.toContainText("Sebzeli bulgur");
+  await card.screenshot({
+    path: info.outputPath("journey-after-midnight.png"),
+    animations: "disabled",
+  });
 });
 test("account switch clears the previous menu before a delayed new plan response", async ({
   page,

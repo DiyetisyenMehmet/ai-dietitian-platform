@@ -2,7 +2,15 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Check, ChevronDown, ChevronRight, ChevronUp, Route } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  Clock3,
+  Route,
+  UtensilsCrossed,
+} from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { Card, CardContent } from "@/presentation/components/ui/card";
 import { ProgressBar } from "@/presentation/components/ui/progress-bar";
@@ -21,43 +29,65 @@ import { authStore, useAuth } from "@/application/auth/auth-store";
 import { dailyTrackingStore, useDailyTracking } from "@/application/health/daily-tracking-store";
 import { localDayKey } from "@/application/health/daily-data-readiness";
 
-export function StepRow({ step }: { step: JourneyStep; last?: boolean }) {
+export function StepRow({
+  step,
+  last = false,
+  action,
+}: {
+  step: JourneyStep;
+  last?: boolean;
+  action?: React.ReactNode;
+}) {
   const Icon = healthIcon(step.icon);
   const complete = step.state === "completed";
   const body = (
-    <div data-journey-row className="flex min-w-0 items-center gap-2.5 rounded-xl py-2">
-      <span
-        className={cn(
-          "flex size-8 shrink-0 items-center justify-center rounded-full",
-          complete
-            ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
-            : "bg-muted text-muted-foreground",
+    <div data-journey-row className="flex min-w-0 items-center gap-3 py-2.5">
+      <span className="relative flex shrink-0 items-start self-stretch pt-1">
+        {!last && (
+          <span
+            aria-hidden="true"
+            className="absolute bottom-[-22px] left-4 top-9 border-l border-border"
+          />
         )}
-      >
-        {complete ? (
-          <Check className="size-4" aria-hidden="true" />
-        ) : (
-          <Icon className="size-4" aria-hidden="true" />
-        )}
+        <span
+          className={cn(
+            "relative z-10 flex size-8 shrink-0 items-center justify-center rounded-full border bg-card",
+            complete
+              ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+              : "border-border text-muted-foreground",
+          )}
+        >
+          {complete ? (
+            <Check className="size-4" aria-hidden="true" />
+          ) : (
+            <Icon className="size-4" aria-hidden="true" />
+          )}
+        </span>
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block break-words text-sm font-medium">{step.label}</span>
-        <span className="block break-words text-xs leading-relaxed text-muted-foreground">
+        <span className="block break-words text-sm font-semibold">{step.label}</span>
+        <span className="mt-0.5 block break-words text-xs leading-relaxed text-muted-foreground">
           {step.kind === "water" || step.kind === "weight" || step.kind === "activity"
             ? step.hint
             : complete
               ? "Kaydın hazır"
-              : "Dilediğinde kaydedebilirsin"}
+              : "Hazır olduğunda kaydedebilirsin"}
         </span>
       </span>
-      <span className="shrink-0 text-[11px] text-muted-foreground">
-        {complete ? "Tamamlandı" : "Kayıt bekliyor"}
+      <span
+        className={cn(
+          action ? "sr-only" : "shrink-0 text-[11px] font-medium",
+          complete ? "text-emerald-700 dark:text-emerald-300" : "text-muted-foreground",
+        )}
+      >
+        {complete ? "Tamamlandı" : "Bekliyor"}
       </span>
+      {action && <span className="shrink-0">{action}</span>}
     </div>
   );
   return (
-    <li>
-      {step.href && !complete ? (
+    <li data-journey-timeline-step data-step-state={step.state} className="relative min-w-0">
+      {step.href && !complete && !action ? (
         <Link
           className="block min-h-11 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           href={step.href}
@@ -114,6 +144,8 @@ export function DailyJourneyContent({
   const list = (expanded ? visible : steps.filter((step) => step.kind !== next?.kind)).filter(
     (step) => !summaries.includes(step),
   );
+  const mealIsNext = Boolean(plannedMeal && next && plannedMeal.slot === next.kind);
+  const NextIcon = next ? healthIcon(next.icon) : Route;
   return (
     <section
       data-daily-journey-section
@@ -121,25 +153,31 @@ export function DailyJourneyContent({
       data-journey-expanded={String(expanded)}
     >
       <Card
-        className="overflow-hidden rounded-[22px] border-primary/15 shadow-sm"
+        className="overflow-hidden rounded-[24px] border-primary/15 bg-card shadow-sm"
         data-daily-journey-card
       >
-        <CardContent className="space-y-3 p-4 sm:p-5">
+        <CardContent className="space-y-4 p-4 sm:p-5">
           <div className="flex min-w-0 items-center gap-2.5" data-journey-card-heading>
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
               <Route className="size-5" aria-hidden="true" />
             </span>
-            <h3 className="min-w-0 flex-1 text-base font-semibold tracking-tight">
+            <h3 className="min-w-0 flex-1 text-base font-semibold tracking-tight sm:text-lg">
               Bugünkü Yolculuğum
             </h3>
-            <span className="shrink-0 text-xs font-semibold tabular-nums text-primary">
+            <span className="shrink-0 rounded-full bg-primary/10 px-2.5 py-1.5 text-xs font-semibold tabular-nums text-primary">
               {total ? `${completed}/${total} adım` : "Veri bekleniyor"}
             </span>
           </div>
           <div className="space-y-2" data-journey-progress-area>
             <div className="flex items-center gap-3">
               <div className="min-w-0 flex-1">
-                <ProgressBar value={percent} />
+                <ProgressBar
+                  value={percent}
+                  ariaLabel="Günlük yolculuk ilerlemen"
+                  ariaValueText={
+                    total ? `${completed}/${total} adım tamamlandı` : "Günlük veriler bekleniyor"
+                  }
+                />
               </div>
               <span className="text-xs font-semibold tabular-nums">
                 {total ? `%${percent}` : "—"}
@@ -152,66 +190,86 @@ export function DailyJourneyContent({
             </p>
           </div>
           {status === "all-done" ? (
-            <p className="rounded-xl bg-emerald-500/10 p-3 text-sm font-medium text-emerald-800 dark:text-emerald-200">
+            <p className="rounded-2xl bg-emerald-500/10 p-4 text-sm font-semibold text-emerald-800 dark:text-emerald-200">
               Bugünün yolculuğunu tamamladın! 🎉
             </p>
-          ) : next ? (
+          ) : next || plannedMeal ? (
             <div
-              className="rounded-2xl border border-primary/20 bg-primary/5 p-3"
-              data-journey-next
+              className="space-y-4 rounded-[20px] border border-primary/20 bg-gradient-to-br from-primary/10 via-primary/5 to-card p-4 sm:p-5"
+              data-journey-next={next ? "" : undefined}
+              data-journey-focus-card
             >
-              <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-primary">
-                Sıradaki adım
-              </p>
-              <Link
-                href={next.href!}
-                className="flex min-h-11 items-center justify-between gap-2 rounded-lg text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <span>
-                  {next.label}
-                  {!plannedMeal || plannedMeal.slot !== next.kind ? " kaydını ekle" : ""}
-                </span>
-                <ChevronRight className="size-4 shrink-0" aria-hidden="true" />
-              </Link>
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                {next.kind === "weight" ? next.hint : "Hazır olduğunda kaydedebilirsin."}
-              </p>
+              {next && !mealIsNext && (
+                <div className={plannedMeal ? "border-b border-primary/15 pb-3" : ""}>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">
+                    Sıradaki adım
+                  </p>
+                  <Link
+                    href={next.href!}
+                    className="flex min-h-12 items-center gap-3 rounded-xl text-base font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <NextIcon className="size-5 shrink-0 text-primary" aria-hidden="true" />
+                    <span className="min-w-0 flex-1 break-words">
+                      {next.label}
+                      {!plannedMeal ? " kaydını ekle" : ""}
+                    </span>
+                    <ChevronRight className="size-4 shrink-0" aria-hidden="true" />
+                  </Link>
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    {next.kind === "weight" ? next.hint : "Hazır olduğunda kaydedebilirsin."}
+                  </p>
+                </div>
+              )}
+              {plannedMeal && (
+                <div className="space-y-4" data-journey-plan-meal>
+                  <div className="flex items-start gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">
+                        {mealIsNext ? "Sıradaki adım" : "Bugünkü beslenme planından"}
+                      </p>
+                      <h4 className="mt-1.5 break-words text-xl font-semibold tracking-tight">
+                        {plannedMeal.meal.name}
+                      </h4>
+                      <time
+                        dateTime={plannedMeal.meal.time}
+                        className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-primary/15 bg-card/80 px-2.5 py-1 text-xs font-semibold tabular-nums text-primary"
+                      >
+                        <Clock3 className="size-3.5" aria-hidden="true" />
+                        {plannedMeal.meal.time}
+                      </time>
+                    </div>
+                    <span
+                      role="img"
+                      aria-label="Öğün planı simgesi"
+                      data-journey-meal-illustration
+                      className="flex size-16 shrink-0 items-center justify-center rounded-[20px] border border-primary/10 bg-card/80 text-primary sm:size-20"
+                    >
+                      <UtensilsCrossed
+                        className="size-8 sm:size-10"
+                        aria-hidden="true"
+                        strokeWidth={1.5}
+                      />
+                    </span>
+                  </div>
+                  <ul className="space-y-1.5 text-sm leading-relaxed text-foreground/90">
+                    {plannedMeal.meal.foods.map((food, i) => (
+                      <li className="break-words" key={i}>
+                        {food.name} <span className="text-muted-foreground">· {food.portion}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  {mealControls}
+                </div>
+              )}
             </div>
           ) : (
-            <p className="rounded-xl bg-muted/40 p-3 text-xs leading-relaxed text-muted-foreground">
+            <p className="rounded-2xl bg-muted/40 p-4 text-sm leading-relaxed text-muted-foreground">
               {status === "insufficient-data"
                 ? "Bazı takip verileri henüz hazır değil. Verilerin geldikçe yolculuğun güncellenecek."
                 : "Günlük kayıtlarını burada takip edebilirsin."}
             </p>
           )}
-          {plannedMeal ? (
-            <div
-              className="space-y-2 rounded-2xl border border-border bg-muted/20 p-3"
-              data-journey-plan-meal
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0 flex-1">
-                  <p className="text-[11px] font-medium text-muted-foreground">
-                    Bugünkü beslenme planından
-                  </p>
-                  <h4 className="mt-0.5 break-words text-sm font-semibold">
-                    {plannedMeal.meal.name}
-                  </h4>
-                </div>
-                <time className="shrink-0 rounded-lg bg-card px-2 py-1 text-sm font-semibold tabular-nums">
-                  {plannedMeal.meal.time}
-                </time>
-              </div>
-              <ul className="space-y-1 text-xs leading-relaxed text-muted-foreground">
-                {plannedMeal.meal.foods.map((food, i) => (
-                  <li className="break-words" key={i}>
-                    {food.name} · {food.portion}
-                  </li>
-                ))}
-              </ul>
-              {mealControls}
-            </div>
-          ) : (
+          {!plannedMeal && status !== "all-done" && (
             <p className="text-xs leading-relaxed text-muted-foreground" data-journey-plan-fallback>
               {planReady
                 ? "Bugüne eşleşen bir beslenme planı yok. Öğünlerini yine kaydedebilirsin."
@@ -225,20 +283,8 @@ export function DailyJourneyContent({
             </p>
           )}
           {feedback}
-          {summaries.length > 0 && (
-            <ul className="divide-y divide-border/60 border-y border-border/60">
-              {summaries.map((step) => (
-                <React.Fragment key={step.kind}>
-                  <StepRow step={step} />
-                  {step.kind === "water" && waterControls && (
-                    <li className="pb-2">{waterControls}</li>
-                  )}
-                </React.Fragment>
-              ))}
-            </ul>
-          )}
           {steps.length > 0 && (
-            <div>
+            <div className="border-t border-border/70 pt-1">
               <button
                 type="button"
                 aria-label={expanded ? "Yolculuk detaylarını daralt" : "Yolculuk detaylarını aç"}
@@ -246,43 +292,57 @@ export function DailyJourneyContent({
                 aria-controls={detailsId}
                 data-journey-details-toggle
                 onClick={() => onExpandedChange(!expanded)}
-                className="flex min-h-11 w-full items-center justify-between gap-2 rounded-lg text-xs font-medium text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="mb-1 flex min-h-11 w-full items-center justify-between gap-2 rounded-lg text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                <span>{expanded ? "Detayları gizle" : "Günlük adımların"}</span>
-                {expanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+                <span>Günlük adımların</span>
+                {expanded ? (
+                  <ChevronUp className="size-4 text-muted-foreground" aria-hidden="true" />
+                ) : (
+                  <ChevronDown className="size-4 text-muted-foreground" aria-hidden="true" />
+                )}
               </button>
-              <ul
+              <ol
                 id={detailsId}
-                className={
-                  expanded ? "divide-y divide-border/50" : "flex flex-wrap gap-x-3 gap-y-1"
-                }
+                className={expanded ? "space-y-0.5" : "flex flex-wrap gap-x-3 gap-y-1"}
                 data-daily-journey-steps
                 data-visible-journey-steps={list.length}
               >
-                {list
-                  .filter((step) => !expanded || !summaries.includes(step))
-                  .map((step) =>
-                    expanded ? (
-                      <StepRow key={step.kind} step={step} />
-                    ) : (
-                      <li
-                        key={step.kind}
-                        className="flex min-h-8 items-center gap-1.5 text-[11px] text-muted-foreground"
-                      >
-                        <span
-                          className={cn(
-                            "size-1.5 rounded-full",
-                            step.state === "completed"
-                              ? "bg-emerald-500"
-                              : "bg-muted-foreground/40",
-                          )}
-                          aria-hidden="true"
-                        />
-                        {step.label} · {step.state === "completed" ? "Tamamlandı" : "Bekliyor"}
-                      </li>
-                    ),
-                  )}
-              </ul>
+                {list.map((step, index) =>
+                  expanded ? (
+                    <StepRow
+                      key={step.kind}
+                      step={step}
+                      last={index === list.length - 1 && summaries.length === 0}
+                    />
+                  ) : (
+                    <li
+                      key={step.kind}
+                      className="flex min-h-8 items-center gap-1.5 text-[11px] text-muted-foreground"
+                    >
+                      <span
+                        className={cn(
+                          "size-1.5 rounded-full",
+                          step.state === "completed" ? "bg-emerald-500" : "bg-muted-foreground/40",
+                        )}
+                        aria-hidden="true"
+                      />
+                      {step.label} · {step.state === "completed" ? "Tamamlandı" : "Bekliyor"}
+                    </li>
+                  ),
+                )}
+              </ol>
+              {summaries.length > 0 && (
+                <ol className="space-y-0.5" data-journey-tracking-steps>
+                  {summaries.map((step, index) => (
+                    <StepRow
+                      key={step.kind}
+                      step={step}
+                      last={index === summaries.length - 1}
+                      action={step.kind === "water" ? waterControls : undefined}
+                    />
+                  ))}
+                </ol>
+              )}
             </div>
           )}
         </CardContent>
@@ -293,7 +353,7 @@ export function DailyJourneyContent({
 
 /** Local action state is remounted at every account/day boundary. All writes use the existing store. */
 function LiveJourney({ result }: { result: ReturnType<typeof useDailyJourneyResult> }) {
-  const [expanded, setExpanded] = React.useState(false);
+  const [expanded, setExpanded] = React.useState(true);
   const [pending, setPending] = React.useState(false);
   const locked = React.useRef(false);
   const [message, setMessage] = React.useState("");
@@ -306,7 +366,7 @@ function LiveJourney({ result }: { result: ReturnType<typeof useDailyJourneyResu
   const meal = meals.find((entry) => entry.slot === selected?.slot);
   const saved = meals.find((entry) => entry.slot === savedSlot && entry.checkInId && entry.isEaten);
   const buttonClass =
-    "flex min-h-11 min-w-11 items-center justify-center rounded-xl px-3 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50";
+    "flex min-h-12 min-w-11 items-center justify-center rounded-xl px-3 py-2.5 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50";
   async function record(slot: MealSlot, undo = false) {
     if (
       locked.current ||
@@ -365,7 +425,7 @@ function LiveJourney({ result }: { result: ReturnType<typeof useDailyJourneyResu
   const controls = selected && (
     <>
       {selected.slot && readiness !== "UNKNOWN" && meal ? (
-        <div className="flex flex-wrap gap-2">
+        <div className="grid grid-cols-2 gap-2" data-journey-meal-actions>
           {meal.isEaten ? (
             <button
               type="button"
@@ -422,7 +482,7 @@ function LiveJourney({ result }: { result: ReturnType<typeof useDailyJourneyResu
           type="button"
           disabled={pending || tracking.waterReadiness === "UNKNOWN"}
           onClick={() => void addWater()}
-          className={cn(buttonClass, "w-full bg-primary/10 text-primary")}
+          className={cn(buttonClass, "bg-primary/10 text-primary")}
         >
           {pending ? "Kaydediliyor…" : "+250 ml su ekle"}
         </button>
