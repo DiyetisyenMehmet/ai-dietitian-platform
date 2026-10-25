@@ -37,8 +37,8 @@ test("professional card emphasizes the existing engine recommendation", async ()
     "presentation/components/dashboard/daily-journey-section.tsx",
     "DailyJourneySection",
   );
-  assert.match(html, /aria-expanded="false"/);
-  assert.match(html, /aria-label="Yolculuk detaylarını aç"/);
+  assert.match(html, /aria-expanded="true"/);
+  assert.match(html, /aria-label="Yolculuk detaylarını daralt"/);
   assert.doesNotMatch(html, /Tümünü göster/);
   assert.match(html, /Öğle yemeği/);
   assert.match(html, /Kahvaltı/);
@@ -60,7 +60,10 @@ test("completed steps stay out of compact view and return in expanded detail", a
 
   assert.equal(collapsed.length, 1);
   assert.equal(collapsed[0].state, "recommended");
-  assert.equal(collapsed.some((step) => step.state === "completed"), false);
+  assert.equal(
+    collapsed.some((step) => step.state === "completed"),
+    false,
+  );
   assert.ok(expanded.some((step) => step.kind === "breakfast" && step.state === "completed"));
 });
 
@@ -80,7 +83,7 @@ test("all-done collapses to success while expanded detail retains completed rows
   );
   assert.match(html, /Bugünün yolculuğunu tamamladın! 🎉/);
   assert.match(html, /%100/);
-  assert.match(html, /aria-label="Yolculuk detaylarını aç"/);
+  assert.match(html, /aria-label="Yolculuk detaylarını daralt"/);
   assert.doesNotMatch(html, /Tümünü göster/);
   assert.match(html, /Tamamlandı/);
 });
@@ -126,7 +129,7 @@ test("compact control is a real accessible local-state button", () => {
   assert.match(source, /onClick=\{\(\) => onExpandedChange\(!expanded\)\}/);
   assert.match(source, /focus-visible:ring-2/);
   assert.match(source, /min-h-11/);
-  assert.match(source, /React\.useState\(false\)/);
+  assert.match(source, /React\.useState\(true\)/);
 });
 
 test("selector preserves recommendations and overdue wording stays neutral", () => {
