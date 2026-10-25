@@ -1,4 +1,5 @@
 name: Notification preferences platform checks
+# G1 stage-only exact-SHA notification gate invocation: offline CI only, no APK/deploy.
 
 on:
   push:
