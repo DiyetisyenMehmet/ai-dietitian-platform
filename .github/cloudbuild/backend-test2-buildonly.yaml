@@ -1,23 +1,52 @@
-# Build-only Test 2 backend image. No secrets; no Prisma migration; no deployment.
+# Future build-only definition. Requires separately approved immutable inputs.
+# Editing this file does not submit a build. Legacy callers lack the required evidence and fail closed.
 steps:
-  - name: gcr.io/cloud-builders/git
+  - id: reviewed-build-definition
+    name: gcr.io/cloud-builders/git
     entrypoint: sh
+    env: ['G1_BUILD_REF=${_GIT_SHA}']
     args:
       - -c
       - |
         set -eu
+        case "$${G1_BUILD_REF}" in ''|*[!0-9a-f]*) exit 2;; esac
+        test "$${#G1_BUILD_REF}" -eq 40
         git init /workspace/repo
         cd /workspace/repo
         git remote add origin https://github.com/DiyetisyenMehmet/ai-dietitian-platform.git
-        git fetch --depth=1 origin "${_GIT_SHA}"
+        git fetch --no-tags origin "$${G1_BUILD_REF}"
         git checkout --detach FETCH_HEAD
-        test "$(git rev-parse HEAD)" = "${_GIT_SHA}"
-  - name: gcr.io/cloud-builders/docker
+        test "$$(git rev-parse HEAD)" = "$${G1_BUILD_REF}"
+  - id: verified-composed-source
+    name: python:3.12-bookworm
+    waitFor: [reviewed-build-definition]
+    entrypoint: python3
+    env: ['PYTHONDONTWRITEBYTECODE=1']
+    args:
+      - /workspace/repo/scripts/test2-security-build-context.py
+      - prepare
+      - --repo=/workspace/repo
+      - --source=/workspace/g1-composed
+      - --build-ref=${_GIT_SHA}
+      - --harness-ref=${_SOURCE_HARNESS_SHA}
+      - --manifest-sha256=${_SOURCE_MANIFEST_SHA256}
+      - --backend-tree=${_BACKEND_TREE}
+      - --lock-sha256=${_LOCK_SHA256}
+      - --image=${_IMAGE}
+  - id: build-verified-context
+    name: gcr.io/cloud-builders/docker
+    waitFor: [verified-composed-source]
     args:
       - build
-      - --file=/workspace/repo/backend/Dockerfile
+      - --file=/workspace/g1-composed/backend/Dockerfile
       - --tag=${_IMAGE}
-      - /workspace/repo/backend
+      - --label=io.diewish.source-kind=composed
+      - --label=io.diewish.build-definition-sha=${_GIT_SHA}
+      - --label=io.diewish.source-harness-sha=${_SOURCE_HARNESS_SHA}
+      - --label=io.diewish.source-manifest-sha256=${_SOURCE_MANIFEST_SHA256}
+      - --label=io.diewish.backend-tree=${_BACKEND_TREE}
+      - --label=io.diewish.lock-sha256=${_LOCK_SHA256}
+      - /workspace/g1-composed/backend
 images:
   - ${_IMAGE}
 options:
