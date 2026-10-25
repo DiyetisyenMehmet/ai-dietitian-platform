@@ -302,6 +302,7 @@ for (const width of [390, 412, 430])
       await expect(toggle).toHaveAttribute("aria-expanded", "false");
       await toggle.press("Space");
       await expect(toggle).toHaveAttribute("aria-expanded", "true");
+      await toggle.blur();
       await page.evaluate(() => document.fonts.ready);
       await card.screenshot({
         path: info.outputPath(`journey-pro-${width}-${theme}.png`),
