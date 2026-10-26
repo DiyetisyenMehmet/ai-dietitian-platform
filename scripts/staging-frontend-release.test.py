@@ -196,10 +196,15 @@ ERROR serviceAccount=person@example.com
         self.assertEqual(calls[-1][-1], 'real-serving-old=100')
 
     def test_push_cannot_release_even_with_old_commit_trigger(self):
-        with patch.dict(os.environ, {'GITHUB_EVENT_NAME':'push','RELEASE_MODE':'release'}), patch.object(r,'cloud') as cloud:
-            with self.assertRaisesRegex(RuntimeError,'explicit workflow_dispatch'):
-                r.release({})
-            cloud.assert_not_called()
+        # Keep this negative test independent of the current runner's real push
+        # event, which may intentionally be an owner-authorized inspect marker.
+        with tempfile.TemporaryDirectory() as temp:
+            event_path = Path(temp) / 'unrelated-push.json'
+            event_path.write_text(json.dumps({'head_commit': {'message': 'unrelated source update'}}))
+            with patch.dict(os.environ, {'GITHUB_EVENT_NAME':'push','GITHUB_EVENT_PATH':str(event_path),'RELEASE_MODE':'release'}), patch.object(r,'cloud') as cloud:
+                with self.assertRaisesRegex(RuntimeError,'explicit workflow_dispatch or verified marker'):
+                    r.release({})
+                cloud.assert_not_called()
 
     def test_diagnosis_has_no_build_or_deploy_path(self):
         with patch.object(r,'cloud',return_value=[] ) as cloud, patch.object(r,'save'), patch.object(r,'build') as build:
