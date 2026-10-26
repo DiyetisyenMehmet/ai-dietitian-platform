@@ -98,6 +98,24 @@ jobs:
         with:
           workload_identity_provider: projects/730419163638/locations/global/workloadIdentityPools/github-actions/providers/diewish-staging
           service_account: diewish-staging-deployer@project-a2e260c1-839d-4f1d-b90.iam.gserviceaccount.com
+      - name: Keep temporary cloud identity outside the verified source checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          creds="${GOOGLE_GHA_CREDS_PATH:-}"
+          case "$creds" in
+            "$GITHUB_WORKSPACE"/gha-creds-*.json) ;;
+            *) echo 'NO_GO: unexpected temporary identity path' >&2; exit 1 ;;
+          esac
+          test -f "$creds" && test ! -L "$creds"
+          target="$RUNNER_TEMP/$(basename "$creds")"
+          test ! -e "$target"
+          mv -- "$creds" "$target"
+          {
+            echo "GOOGLE_GHA_CREDS_PATH=$target"
+            echo "GOOGLE_APPLICATION_CREDENTIALS=$target"
+            echo "CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE=$target"
+          } >> "$GITHUB_ENV"
       - uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: project-a2e260c1-839d-4f1d-b90
