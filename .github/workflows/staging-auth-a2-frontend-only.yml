@@ -1,5 +1,5 @@
 name: Auth A2 Split-Aware Frontend-Only Staging Release
-# Push/PR events run offline guards only. Cloud access requires workflow_dispatch.
+# Ordinary push/PR events are offline-only. Owner marker-only pushes are opt-in.
 on:
   push:
     branches: [feature/staging-preview]
@@ -8,6 +8,7 @@ on:
       - .github/cloudbuild/frontend-staging.yaml
       - scripts/staging-frontend-release.py
       - scripts/staging-frontend-release.test.py
+      - .github/staging-deploy-trigger
   pull_request:
     branches: [feature/staging-preview]
     paths:
@@ -15,6 +16,7 @@ on:
       - .github/cloudbuild/frontend-staging.yaml
       - scripts/staging-frontend-release.py
       - scripts/staging-frontend-release.test.py
+      - .github/staging-deploy-trigger
   workflow_dispatch:
     inputs:
       mode:
@@ -22,47 +24,66 @@ on:
         type: choice
         options: [inspect, release]
         default: inspect
+      inspect_run_id:
+        description: "Release only: successful inspect run for this unchanged source (six-hour limit)"
+        type: string
+        required: false
 permissions:
   contents: read
   actions: read
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
 concurrency:
   group: diewish-staging-preview
   cancel-in-progress: false
 jobs:
   offline-guards:
     runs-on: ubuntu-latest
+    outputs:
+      mode: ${{ steps.activation.outputs.mode }}
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          fetch-depth: 0
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Prepare workflow parser for offline admission tests
+        run: python3 -m pip install --disable-pip-version-check PyYAML==6.0.3
       - name: Verify source, build, split and rollback guards without cloud access
         run: python3 scripts/staging-frontend-release.test.py
+      - name: Admit only an explicit owner activation without cloud identity
+        id: activation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/staging-frontend-release.py authorize
   cutover:
     needs: offline-guards
     permissions:
       contents: read
       actions: read
       id-token: write
-    if: ${{ github.event_name == 'workflow_dispatch' && github.repository == 'DiyetisyenMehmet/ai-dietitian-platform' && github.ref == 'refs/heads/feature/staging-preview' }}
+    if: ${{ (github.event_name == 'workflow_dispatch' || github.event_name == 'push') && github.repository == 'DiyetisyenMehmet/ai-dietitian-platform' && github.ref == 'refs/heads/feature/staging-preview' && github.actor == 'DiyetisyenMehmet' && github.triggering_actor == 'DiyetisyenMehmet' && github.actor_id == '301813832' && (needs.offline-guards.outputs.mode == 'inspect' || needs.offline-guards.outputs.mode == 'release') }}
     runs-on: ubuntu-latest
     timeout-minutes: 55
     environment: staging
     env:
       GH_TOKEN: ${{ github.token }}
+      RELEASE_MODE: ${{ needs.offline-guards.outputs.mode }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: Revalidate source, intent and prior inspect before cloud identity
+        run: python3 scripts/staging-frontend-release.py authorize
       - uses: actions/setup-node@v4
-        if: ${{ inputs.mode == 'release' }}
+        if: ${{ needs.offline-guards.outputs.mode == 'release' }}
         with:
           node-version: 20
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - name: Prepare existing Playwright for read-only live login verification
-        if: ${{ inputs.mode == 'release' }}
+        if: ${{ needs.offline-guards.outputs.mode == 'release' }}
         timeout-minutes: 8
         working-directory: frontend
         run: |
@@ -81,8 +102,6 @@ jobs:
         with:
           project_id: project-a2e260c1-839d-4f1d-b90
       - name: Fresh read-only preflight or explicitly requested frontend release
-        env:
-          RELEASE_MODE: ${{ inputs.mode }}
         run: python3 scripts/staging-frontend-release.py "$RELEASE_MODE"
       - name: Retain sanitized source, runtime, rollback and login evidence
         if: always()
