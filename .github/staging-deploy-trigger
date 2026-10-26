@@ -2,3 +2,17 @@ APP-STAGING-AUTOMATION-PAUSE-A1
 Authorized staging-only pause release after PR #79 and PR #80.
 Pinned serving-schema backport: d7ced3598a41db3bd1fb76320e0149e25b3ac0ed
 No frontend release, migration, APK or production action.
+
+G1 Devam 9: INACTIVE release-entrypoint preparation; merging this note cannot activate cloud.
+After independent review/merge, owner must make TWO SEPARATE single-parent commits.
+Each push must contain exactly one commit modifying ONLY this existing file.
+Inspect commit subject (entire message): G1 frontend inspect
+Inspect file (strict JSON; substitute current staging HEAD as source_sha):
+{"version":1,"mode":"inspect","source_sha":"<current-staging-head>"}
+Wait for the actual inspect workflow SUCCESS, inspect release.json, record its numeric run ID.
+Release commit subject (entire message): G1 frontend release
+Release file (strict JSON; source_sha is the inspected staging HEAD, inspect_run_id an integer):
+{"version":1,"mode":"release","source_sha":"<inspected-staging-head>","inspect_run_id":123456789}
+The release must immediately follow that inspected source, within six hours, with no other changes.
+Baseline and exact release HEAD must have all three mandatory CI gates; snapshot must still match.
+No activation is authorized by this preparation note. No general deploy, backend, DB or APK action.

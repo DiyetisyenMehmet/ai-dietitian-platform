@@ -5,7 +5,9 @@ release captures the real serving revision and rolls only frontend traffic back.
 """
 import argparse
 import copy
+from datetime import datetime, timezone
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -14,11 +16,18 @@ import subprocess
 import time
 import urllib.error
 import urllib.request
+import zipfile
 
 PROJECT = 'project-a2e260c1-839d-4f1d-b90'
 REGION = 'europe-west1'
 REPO = 'DiyetisyenMehmet/ai-dietitian-platform'
-MERGED = '41962ccc57d435cf0f78a373de44807db311e846'
+MERGED = 'c73b27147a950e48e58f04df276807cc83b3fd6d'
+OWNER = 'DiyetisyenMehmet'
+OWNER_ID = 301813832
+WORKFLOW = '.github/workflows/staging-auth-a2-frontend-only.yml'
+MARKER = '.github/staging-deploy-trigger'
+INTENTS = {'inspect': 'G1 frontend inspect', 'release': 'G1 frontend release'}
+SNAPSHOT_FIELDS = ['old_frontend', 'backendTraffic', 'backendSpecFingerprint', 'admin', 'test2', 'beforeHealth']
 # Deny the historic security-only image even if a build reports a new source.
 RETIRED_DIGEST = 'sha256:b2de3f9d240cc1adf41e211f974c0b636c7a0bd52fae545e821ebc5b232692d7'
 CHECKS = {'Hardening CI': '.github/workflows/hardening-ci.yml',
@@ -42,7 +51,7 @@ ROUTER = {'DIEWISH_STAGING_HOST_ROUTING_ENABLED': 'true',
 PREP_FILES = {'.github/workflows/staging-auth-a2-frontend-only.yml',
               '.github/cloudbuild/frontend-staging.yaml',
               'scripts/staging-frontend-release.py',
-              'scripts/staging-frontend-release.test.py'}
+              'scripts/staging-frontend-release.test.py', MARKER}
 ASSETS = ['brands/diewish-id-transparent-approved.png',
           'brands/diewish-wordmark-approved.png',
           'brands/diewish-wordmark-dark-approved.png',
@@ -121,12 +130,13 @@ def api(path):
 
 
 def source():
+    require(os.environ.get('GITHUB_REPOSITORY') == REPO, 'wrong repository')
     sha = os.environ['GITHUB_SHA']
     require(re.fullmatch('[a-f0-9]{40}', sha) is not None, 'invalid source SHA')
     require(os.environ.get('GITHUB_REF') == 'refs/heads/feature/staging-preview', 'wrong ref')
     require(api('/git/ref/heads/feature/staging-preview')['object']['sha'] == sha, 'staging advanced')
     require(subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip() == sha, 'checkout/source mismatch')
-    require(not subprocess.check_output(['git', 'status', '--porcelain', '--untracked-files=no'], text=True).strip(), 'dirty release checkout')
+    require(not subprocess.check_output(['git', 'status', '--porcelain'], text=True).strip(), 'dirty release checkout')
     require(subprocess.run(['git', 'merge-base', '--is-ancestor', MERGED, sha], check=False).returncode == 0,
             'reviewed application baseline is not an ancestor')
     changed = subprocess.check_output(['git', 'diff', '--name-only', MERGED, sha], text=True).splitlines()
@@ -137,6 +147,114 @@ def source():
             lock['packages']['node_modules/next']['version'] == '15.5.28', 'Next version mismatch')
     require(Path('.github/staging-test2-split-active').is_file(), 'split sentinel missing')
     return sha
+
+
+def identity():
+    require(os.environ.get('GITHUB_REPOSITORY') == REPO, 'wrong repository')
+    require(os.environ.get('GITHUB_REF') == 'refs/heads/feature/staging-preview', 'wrong ref')
+    require(os.environ.get('GITHUB_ACTOR') == OWNER and
+            os.environ.get('GITHUB_TRIGGERING_ACTOR') == OWNER and
+            os.environ.get('GITHUB_ACTOR_ID') == str(OWNER_ID), 'unauthorized release actor')
+
+
+def unique_object(pairs):
+    result = {}
+    for key, value in pairs:
+        require(key not in result, 'duplicate marker field')
+        result[key] = value
+    return result
+
+
+def activation():
+    """Read-only admission before any cloud identity; ordinary pushes/PRs emit no mode."""
+    event_name = os.environ.get('GITHUB_EVENT_NAME')
+    if event_name not in ['push', 'workflow_dispatch']:
+        return None
+    event_path = os.environ.get('GITHUB_EVENT_PATH')
+    require(event_path and Path(event_path).is_file(), 'release requires explicit workflow_dispatch or verified marker event')
+    event = json.loads(Path(event_path).read_text())
+    if event_name == 'push' and event.get('head_commit', {}).get('message') not in INTENTS.values():
+        return None
+    identity()
+    require(event.get('repository', {}).get('full_name') == REPO and
+            event.get('sender', {}).get('login') == OWNER and
+            event.get('sender', {}).get('id') == OWNER_ID, 'event identity mismatch')
+    if event_name == 'workflow_dispatch':
+        inputs = event.get('inputs', {})
+        mode = inputs.get('mode')
+        require(mode in INTENTS, 'invalid explicit dispatch mode')
+        run_id = inputs.get('inspect_run_id', '')
+        base = os.environ['GITHUB_SHA']
+    else:
+        sha = os.environ['GITHUB_SHA']
+        require(re.fullmatch('[a-f0-9]{40}', sha) is not None, 'invalid activation SHA')
+        require(event.get('ref') == os.environ['GITHUB_REF'] and event.get('after') == sha and
+                event.get('forced') is False and event.get('deleted') is False and
+                event.get('created') is False, 'unsafe marker push')
+        commits = event.get('commits', [])
+        require(len(commits) == 1 and commits[0].get('id') == sha and
+                event.get('head_commit', {}).get('id') == sha, 'marker requires one explicit commit')
+        parents = subprocess.check_output(['git', 'rev-list', '--parents', '-n', '1', sha], text=True).split()
+        require(len(parents) == 2 and parents[0] == sha and parents[1] == event.get('before'),
+                'merge or multi-commit marker rejected')
+        base = parents[1]
+        changed = subprocess.check_output(['git', 'diff', '--name-status', base, sha], text=True).splitlines()
+        require(changed == ['M\t' + MARKER], 'activation must modify only the existing marker')
+        entry = subprocess.check_output(['git', 'ls-tree', sha, '--', MARKER], text=True)
+        require(entry.startswith('100644 blob '), 'marker must be a regular file')
+        require(api('/commits/' + sha + '/pulls') == [], 'PR-associated marker commit rejected')
+        data = json.loads(Path(MARKER).read_text(), object_pairs_hook=unique_object)
+        mode = data.get('mode')
+        require(mode in INTENTS and event['head_commit']['message'] == INTENTS[mode], 'marker intent mismatch')
+        keys = {'version', 'mode', 'source_sha'} | ({'inspect_run_id'} if mode == 'release' else set())
+        require(set(data) == keys and type(data['version']) is int and data['version'] == 1 and
+                data['source_sha'] == base, 'invalid marker schema/source')
+        run_id = str(data.get('inspect_run_id', ''))
+        require(mode != 'release' or type(data['inspect_run_id']) is int, 'invalid inspect run id')
+    require(mode != 'release' or re.fullmatch('[1-9][0-9]{0,19}', run_id) is not None,
+            'release requires an explicit prior inspect run id')
+    expected = os.environ.get('RELEASE_MODE')
+    require(not expected or expected == mode, 'requested mode differs from verified activation')
+    return {'mode': mode, 'inspect_run_id': run_id, 'inspected_source': base}
+
+
+def inspection(request):
+    """Bind a real successful inspect artifact to the exact unchanged predecessor."""
+    run_id = request['inspect_run_id']
+    require(request['mode'] == 'release' and re.fullmatch('[1-9][0-9]{0,19}', run_id) is not None,
+            'missing inspect evidence')
+    run = api('/actions/runs/' + run_id)
+    require(run.get('name') == 'Auth A2 Split-Aware Frontend-Only Staging Release' and
+            run.get('path') == WORKFLOW and run.get('head_branch') == 'feature/staging-preview' and
+            run.get('head_sha') == request['inspected_source'] and
+            run.get('repository', {}).get('full_name') == REPO and
+            run.get('event') in ['push', 'workflow_dispatch'] and run.get('status') == 'completed' and
+            run.get('conclusion') == 'success' and
+            run.get('actor', {}).get('id') == OWNER_ID and
+            run.get('triggering_actor', {}).get('id') == OWNER_ID, 'untrusted prior inspect run')
+    age = (datetime.now(timezone.utc) - datetime.fromisoformat(run['updated_at'].replace('Z', '+00:00'))).total_seconds()
+    require(0 <= age <= 21600, 'inspect evidence must be within six hours')
+    name = 'staging-frontend-journey-release-' + str(run['run_number'])
+    artifacts = api('/actions/runs/' + run_id + '/artifacts?per_page=100')
+    require(artifacts.get('total_count') == 1 and len(artifacts.get('artifacts', [])) == 1,
+            'missing or ambiguous inspect artifact')
+    artifact = artifacts['artifacts'][0]
+    require(artifact.get('name') == name and artifact.get('expired') is False and
+            type(artifact.get('id')) is int and 0 < artifact.get('size_in_bytes', 0) <= 2_000_000,
+            'invalid inspect artifact')
+    # GitHub CLI handles authenticated archive redirects without exposing credentials.
+    archive = subprocess.check_output(['gh', 'api', '/repos/' + REPO + '/actions/artifacts/' +
+                                      str(artifact['id']) + '/zip'], stderr=subprocess.PIPE, timeout=60)
+    require(len(archive) <= 2_000_000, 'oversized inspect archive')
+    with zipfile.ZipFile(io.BytesIO(archive)) as package:
+        require(package.namelist() == ['release.json'] and
+                package.getinfo('release.json').file_size <= 1_000_000, 'unexpected inspect archive')
+        saved = json.loads(package.read('release.json'))
+    require(saved.get('mode') == 'inspect' and saved.get('decision') == 'PREFLIGHT_PASS' and
+            saved.get('source') == request['inspected_source'] and
+            saved.get('applicationBaseline') == MERGED and all(k in saved for k in SNAPSHOT_FIELDS),
+            'artifact is not a successful source-bound inspect')
+    return saved
 
 
 def gates():
@@ -429,8 +547,12 @@ def surfaces():
 
 
 def release(saved):
-    require(os.environ.get('GITHUB_EVENT_NAME') == 'workflow_dispatch' and os.environ.get('RELEASE_MODE') == 'release',
-            'release requires explicit workflow_dispatch mode=release')
+    request = activation()
+    require(request and request['mode'] == 'release' and os.environ.get('RELEASE_MODE') == 'release',
+            'release requires explicit workflow_dispatch or verified marker mode=release')
+    prior = inspection(request)
+    require(all(saved.get(k) == prior[k] for k in SNAPSHOT_FIELDS), 'runtime changed since prior inspect')
+    saved['inspectRunId'] = request['inspect_run_id']
     require(saved['source'] == source(), 'snapshot/release source mismatch')
     gates()
     unchanged(saved)
@@ -499,15 +621,36 @@ def release(saved):
         raise
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('mode', choices=['inspect', 'diagnose', 'release'])
-    args = parser.parse_args()
+def main(mode):
+    request = activation()
+    if mode == 'authorize' and request is None:
+        print('OFFLINE_ONLY: no intentional staging frontend activation')
+        return
+    require(request is not None, 'unverified staging frontend entrypoint')
+    require(mode == 'authorize' or request['mode'] == ('inspect' if mode == 'diagnose' else mode),
+            'unverified staging frontend mode')
+    source()
+    if mode == 'authorize':
+        if request['mode'] == 'release':
+            inspection(request)  # Refuse missing/forged evidence before obtaining cloud identity.
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+            output.write('mode=' + request['mode'] + '\n')
+        return
+    if mode == 'release':
+        inspection(request)  # Prior inspect is mandatory even before a fresh cloud snapshot.
     snapshot_data = snapshot()
     snapshot_data['decision'] = 'PREFLIGHT_PASS'
+    snapshot_data['mode'] = mode
+    snapshot_data['applicationBaseline'] = MERGED
     save(snapshot_data)
     print('PASS: fresh read-only split preflight; actual serving frontend', snapshot_data['old_frontend']['revision'])
-    if args.mode == 'release':
+    if mode == 'release':
         release(snapshot_data)
-    elif args.mode == 'diagnose':
+    elif mode == 'diagnose':
         diagnose(snapshot_data)
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('mode', choices=['authorize', 'inspect', 'diagnose', 'release'])
+    main(parser.parse_args().mode)

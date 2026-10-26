@@ -3,16 +3,30 @@ import copy
 import json
 import os
 import subprocess
-from contextlib import redirect_stdout
+from contextlib import contextmanager, redirect_stdout
 from io import StringIO
 import importlib.util
+import io
+import tempfile
 import unittest
 from unittest.mock import patch
 from pathlib import Path
+import zipfile
+import yaml
 
 spec = importlib.util.spec_from_file_location('release', Path(__file__).with_name('staging-frontend-release.py'))
 r = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(r)
+
+
+@contextmanager
+def release_context(saved):
+    # Runtime/build/rollback tests start after entrypoint verification. The real
+    # admission and artifact rejection paths are exercised separately below.
+    request = {'mode': 'release', 'inspect_run_id': '123', 'inspected_source': 'a'*40}
+    prior = {key: saved.get(key) for key in r.SNAPSHOT_FIELDS}
+    with patch.object(r, 'activation', return_value=request), patch.object(r, 'inspection', return_value=prior):
+        yield
 
 
 def revision(name, values=None, secrets=None):
@@ -105,7 +119,7 @@ ERROR serviceAccount=person@example.com
             run.assert_not_called()
 
     def test_failed_gate_never_builds_or_deploys(self):
-        with patch.dict(os.environ, {'GITHUB_EVENT_NAME':'workflow_dispatch','RELEASE_MODE':'release'}), patch.object(r, 'source', return_value='a' * 40), patch.object(r, 'gates', side_effect=RuntimeError('gate failed')), patch.object(r, 'cloud') as cloud, patch.object(r, 'build') as build:
+        with release_context({'source':'a'*40}), patch.dict(os.environ, {'GITHUB_EVENT_NAME':'workflow_dispatch','RELEASE_MODE':'release'}), patch.object(r, 'source', return_value='a' * 40), patch.object(r, 'gates', side_effect=RuntimeError('gate failed')), patch.object(r, 'cloud') as cloud, patch.object(r, 'build') as build:
             with self.assertRaises(RuntimeError):
                 r.release({'source':'a' * 40})
             cloud.assert_not_called()
@@ -140,7 +154,7 @@ ERROR serviceAccount=person@example.com
         def smoke():
             if problem in ['browser', 'foreign', 'split']:
                 raise RuntimeError('login failed')
-        with patch.dict(os.environ, {'GITHUB_EVENT_NAME':'workflow_dispatch','RELEASE_MODE':'release'}), patch.object(r, 'source', return_value=saved['source']), patch.object(r, 'gates'), patch.object(r, 'build'), patch.object(r, 'image_version'), patch.object(r, 'save'), patch.object(r, 'unchanged', return_value=candidate), patch.object(r, 'cloud', side_effect=cloud), patch.object(r, 'revision', side_effect=rev), patch.object(r, 'get', return_value=(200 if problem == 'wrong_host' else 421,b'')), patch.object(r, 'live', return_value={'baseline':True}), patch.object(r, 'surfaces'), patch.object(r, 'browser_smoke', side_effect=smoke), patch.object(r, 'service', return_value=restored):
+        with release_context(saved), patch.dict(os.environ, {'GITHUB_EVENT_NAME':'workflow_dispatch','RELEASE_MODE':'release'}), patch.object(r, 'source', return_value=saved['source']), patch.object(r, 'gates'), patch.object(r, 'build'), patch.object(r, 'image_version'), patch.object(r, 'save'), patch.object(r, 'unchanged', return_value=candidate), patch.object(r, 'cloud', side_effect=cloud), patch.object(r, 'revision', side_effect=rev), patch.object(r, 'get', return_value=(200 if problem == 'wrong_host' else 421,b'')), patch.object(r, 'live', return_value={'baseline':True}), patch.object(r, 'surfaces'), patch.object(r, 'browser_smoke', side_effect=smoke), patch.object(r, 'service', return_value=restored):
             if problem:
                 with self.assertRaises(RuntimeError):
                     r.release(saved)
@@ -195,17 +209,32 @@ ERROR serviceAccount=person@example.com
             self.assertFalse(any(c.args[:2] == ('run','deploy') for c in cloud.call_args_list))
             self.assertEqual(saved['decision'],'READ_ONLY_DIAGNOSIS_COMPLETE')
 
-    def test_workflow_push_and_pr_have_no_cloud_identity_or_commit_triggers(self):
-        workflow=Path('.github/workflows/staging-auth-a2-frontend-only.yml').read_text()
-        self.assertNotIn('head_commit',workflow)
-        self.assertNotIn('[frontend-next-',workflow)
-        self.assertIn('  pull_request:',workflow)
-        offline, cutover=workflow.split('  cutover:')
-        self.assertNotIn('id-token: write',offline)
-        self.assertNotIn('google-github-actions',offline)
-        self.assertIn("github.event_name == 'workflow_dispatch'",cutover)
-        self.assertIn('needs: offline-guards',cutover)
-        self.assertIn('RELEASE_MODE: ${{ inputs.mode }}',cutover)
+    def test_workflow_ordinary_push_and_pr_cannot_obtain_cloud_identity(self):
+        workflow = yaml.load(Path(r.WORKFLOW).read_text(), Loader=yaml.BaseLoader)
+        self.assertIn('pull_request', workflow['on'])
+        self.assertIn(r.MARKER, workflow['on']['push']['paths'])
+        self.assertEqual(workflow['on']['push']['branches'], ['feature/staging-preview'])
+        offline, cutover = workflow['jobs']['offline-guards'], workflow['jobs']['cutover']
+        self.assertNotIn('id-token', workflow['permissions'])
+        self.assertNotIn('permissions', offline)
+        self.assertNotIn('google-github-actions', str(offline))
+        self.assertEqual(offline['outputs']['mode'], '${{ steps.activation.outputs.mode }}')
+        self.assertEqual(cutover['needs'], 'offline-guards')
+        for guard in ["github.event_name == 'workflow_dispatch'", "github.event_name == 'push'",
+                      "github.repository == '"+r.REPO+"'", "github.ref == 'refs/heads/feature/staging-preview'",
+                      "github.actor == '"+r.OWNER+"'", "github.triggering_actor == '"+r.OWNER+"'",
+                      "github.actor_id == '301813832'", "needs.offline-guards.outputs.mode == 'inspect'",
+                      "needs.offline-guards.outputs.mode == 'release'"]:
+            self.assertIn(guard, cutover['if'])
+        self.assertEqual(cutover['environment'], 'staging')
+        self.assertEqual(cutover['permissions'], {'contents':'read','actions':'read','id-token':'write'})
+        self.assertEqual(workflow['concurrency'], {'group':'diewish-staging-preview','cancel-in-progress':'false'})
+        steps=cutover['steps']
+        auth=next(i for i,s in enumerate(steps) if s.get('uses','').startswith('google-github-actions/auth@'))
+        self.assertTrue(any(s.get('run') == 'python3 scripts/staging-frontend-release.py authorize' for s in steps[:auth]))
+        self.assertEqual(cutover['env']['RELEASE_MODE'], '${{ needs.offline-guards.outputs.mode }}')
+        self.assertEqual(workflow['on']['workflow_dispatch']['inputs']['mode']['options'], ['inspect','release'])
+        self.assertIn('inspect_run_id', workflow['on']['workflow_dispatch']['inputs'])
         self.assertNotIn('staging-notification-test-apk.yml',r.PREP_FILES)
         builder=Path('.github/cloudbuild/frontend-staging.yaml').read_text()
         self.assertIn('--label=DIEWISH_APPLICATION_SHA=${_GIT_SHA}',builder)
@@ -249,24 +278,30 @@ class SourceGuards(unittest.TestCase):
             if cmd[1] == 'status': return dirty
             if cmd[1] == 'diff': return changed
             raise AssertionError(cmd)
-        with patch.dict(os.environ, {'GITHUB_SHA':sha,'GITHUB_REF':ref}), patch.object(r,'api',return_value={'object':{'sha':remote or sha}}), patch.object(r.subprocess,'check_output',side_effect=output), patch.object(r.subprocess,'run',return_value=subprocess.CompletedProcess([],ancestor)):
+        with patch.dict(os.environ, {'GITHUB_SHA':sha,'GITHUB_REF':ref,'GITHUB_REPOSITORY':r.REPO}), patch.object(r,'api',return_value={'object':{'sha':remote or sha}}), patch.object(r.subprocess,'check_output',side_effect=output), patch.object(r.subprocess,'run',return_value=subprocess.CompletedProcess([],ancestor)):
             return r.source()
 
     def test_reviewed_baseline_and_release_only_whitelist(self):
-        self.assertEqual(r.MERGED,'41962ccc57d435cf0f78a373de44807db311e846')
+        self.assertEqual(r.MERGED,'c73b27147a950e48e58f04df276807cc83b3fd6d')
         self.assertEqual(self.check(changed='\n'.join(sorted(r.PREP_FILES))), 'a'*40)
-        self.assertEqual(len(r.PREP_FILES),4)
+        self.assertEqual(r.PREP_FILES, {r.WORKFLOW, '.github/cloudbuild/frontend-staging.yaml', 'scripts/staging-frontend-release.py', 'scripts/staging-frontend-release.test.py', r.MARKER})
 
     def test_app_auth_dependency_or_non_release_drift_rejected(self):
         for path in ['frontend/src/app/dashboard/page.tsx','frontend/package-lock.json',
-                     'backend/src/auth.ts','.github/workflows/staging-notification-test-apk.yml']:
+                     'frontend/package.json','frontend/src/presentation/components/dashboard/daily-journey-section.tsx',
+                     'frontend/public/brands/diewish-wordmark-approved.png','android/app/build.gradle.kts',
+                     'backend/prisma/schema.prisma','backend/prisma/migrations/new/migration.sql',
+                     'backend/src/auth.ts','.github/workflows/staging-notification-test-apk.yml',
+                     '.github/workflows/staging-test2-backend-notraffic.yml','.github/workflows/staging-preview.yml',
+                     '.github/workflows/notification-alerts-native-ci.yml','secrets.env']:
             with self.subTest(path=path), self.assertRaisesRegex(RuntimeError,'application drift'):
                 self.check(changed=path)
 
     def test_wrong_sha_ref_staging_advance_checkout_or_baseline_rejected(self):
         for kwargs in [{'sha':'abc'},{'sha':'A'*40},{'sha':'a'*40+';'},
                        {'ref':'refs/heads/main'},{'remote':'b'*40}, {'ancestor':1},
-                       {'checkout':'b'*40},{'dirty':' M scripts/staging-frontend-release.py'}]:
+                       {'checkout':'b'*40},{'dirty':' M scripts/staging-frontend-release.py'},
+                       {'dirty':'?? untracked.py'}]:
             with self.subTest(kwargs=kwargs), self.assertRaises(RuntimeError): self.check(**kwargs)
 
 
@@ -289,6 +324,7 @@ class Gates(unittest.TestCase):
                   for i,(name,workflow) in enumerate(r.CHECKS.items())]
             if checked_sha == self.sha:
                 if problem == 'missing': runs=[]
+                elif problem == 'two_of_three': runs.pop()
                 elif problem in ['failure','cancelled','skipped']: runs[0]['conclusion']=problem
                 elif problem == 'wrong_sha': runs[0]['head_sha']='b'*40
                 elif problem == 'wrong_workflow': runs[0]['path']='.github/workflows/fake.yml'
@@ -312,7 +348,7 @@ class Gates(unittest.TestCase):
         self.assertEqual(sum('/jobs?' in p for p in paths),2)
 
     def test_missing_failed_unverified_or_advancing_source_never_passes(self):
-        for problem in ['missing','failure','cancelled','skipped','wrong_sha','wrong_workflow','pr',
+        for problem in ['missing','two_of_three','failure','cancelled','skipped','wrong_sha','wrong_workflow','pr',
                         'pending','latest_failed','skipped_job','duplicate_job','advanced']:
             with self.subTest(problem=problem), self.assertRaises(RuntimeError): self.run_gates(problem)
 
@@ -408,15 +444,281 @@ class BuildGuards(unittest.TestCase):
 
 
     def test_gate_recheck_failure_never_deploys_after_build(self):
-        with patch.dict(os.environ,{'GITHUB_EVENT_NAME':'workflow_dispatch','RELEASE_MODE':'release'}), patch.object(r,'source',return_value=self.sha), patch.object(r,'gates',side_effect=[None,RuntimeError('NO_GO: gate changed')]), patch.object(r,'unchanged'), patch.object(r,'build'), patch.object(r,'image_version'), patch.object(r,'cloud') as cloud:
+        with release_context({'source':self.sha}), patch.dict(os.environ,{'GITHUB_EVENT_NAME':'workflow_dispatch','RELEASE_MODE':'release'}), patch.object(r,'source',return_value=self.sha), patch.object(r,'gates',side_effect=[None,RuntimeError('NO_GO: gate changed')]), patch.object(r,'unchanged'), patch.object(r,'build'), patch.object(r,'image_version'), patch.object(r,'cloud') as cloud:
             with self.assertRaisesRegex(RuntimeError,'gate changed'): r.release({'source':self.sha})
             cloud.assert_not_called()
 
     def test_build_or_image_failure_prevents_candidate_deploy(self):
         for function in ['build','image_version']:
-            with patch.dict(os.environ,{'GITHUB_EVENT_NAME':'workflow_dispatch','RELEASE_MODE':'release'}), patch.object(r,'source',return_value=self.sha), patch.object(r,'gates'), patch.object(r,'unchanged'), patch.object(r,'build'), patch.object(r,'image_version'), patch.object(r,function,side_effect=RuntimeError('NO_GO: mismatch')), patch.object(r,'cloud') as cloud:
+            with release_context({'source':self.sha}), patch.dict(os.environ,{'GITHUB_EVENT_NAME':'workflow_dispatch','RELEASE_MODE':'release'}), patch.object(r,'source',return_value=self.sha), patch.object(r,'gates'), patch.object(r,'unchanged'), patch.object(r,'build'), patch.object(r,'image_version'), patch.object(r,function,side_effect=RuntimeError('NO_GO: mismatch')), patch.object(r,'cloud') as cloud:
                 with self.assertRaises(RuntimeError): r.release({'source':self.sha})
                 cloud.assert_not_called()
+
+
+@contextmanager
+def marker_checkout(mode='inspect', message=None, payload=None, extra=False, merge=False):
+    """Real local git commits, synthetic GitHub event; never push or contact cloud."""
+    with tempfile.TemporaryDirectory() as temp:
+        root = Path(temp)
+        checkout = root/'repo'
+        checkout.mkdir()
+        def git(*args):
+            return subprocess.check_output(['git', *args], cwd=checkout, text=True, stderr=subprocess.PIPE).strip()
+        git('init', '-q', '-b', 'feature/staging-preview')
+        git('config', 'user.name', 'Offline fixture')
+        git('config', 'user.email', 'fixture@example.invalid')
+        marker = checkout/r.MARKER
+        marker.parent.mkdir()
+        marker.write_text('Inactive fixture\n')
+        (checkout/'frontend').mkdir()
+        (checkout/'frontend/package.json').write_text('{"dependencies":{"next":"15.5.28"}}')
+        (checkout/'frontend/package-lock.json').write_text('{"packages":{"node_modules/next":{"version":"15.5.28"}}}')
+        (checkout/'.github/staging-test2-split-active').write_text('active')
+        git('add', '.')
+        git('commit', '-qm', 'Reviewed preparation')
+        before = git('rev-parse', 'HEAD')
+        data = {'version':1, 'mode':mode, 'source_sha':before}
+        if mode == 'release': data['inspect_run_id'] = 123
+        if payload is not None: data = payload(data)
+        marker.write_text(data if isinstance(data,str) else json.dumps(data))
+        if extra: (checkout/'foreign.txt').write_text('unexpected')
+        git('add', '.')
+        intent = message if message is not None else r.INTENTS[mode]
+        git('commit', '-qm', intent)
+        sha = git('rev-parse', 'HEAD')
+        if merge:
+            tree = git('rev-parse', 'HEAD^{tree}')
+            sha = git('commit-tree', tree, '-p', sha, '-p', before, '-m', intent)
+            git('reset', '--hard', sha)
+        event = {'repository':{'full_name':r.REPO}, 'sender':{'login':r.OWNER,'id':r.OWNER_ID},
+                 'ref':'refs/heads/feature/staging-preview', 'before':before, 'after':sha,
+                 'forced':False, 'deleted':False, 'created':False,
+                 'commits':[{'id':sha}], 'head_commit':{'id':sha,'message':intent}}
+        event_path = root/'event.json'
+        def write_event(): event_path.write_text(json.dumps(event))
+        write_event()
+        environment = {'GITHUB_REPOSITORY':r.REPO, 'GITHUB_REF':event['ref'], 'GITHUB_SHA':sha,
+                       'GITHUB_EVENT_NAME':'push', 'GITHUB_EVENT_PATH':str(event_path),
+                       'GITHUB_ACTOR':r.OWNER, 'GITHUB_ACTOR_ID':str(r.OWNER_ID),
+                       'GITHUB_TRIGGERING_ACTOR':r.OWNER, 'GITHUB_OUTPUT':str(root/'outputs'),
+                       'RELEASE_MODE':''}
+        old = Path.cwd()
+        try:
+            os.chdir(checkout)
+            with patch.dict(os.environ,environment), patch.object(r,'api',return_value=[]) as api:
+                yield {'git':git, 'sha':sha, 'before':before, 'marker':marker,
+                       'event':event, 'write_event':write_event, 'output':root/'outputs','api':api}
+        finally:
+            os.chdir(old)
+
+
+class Entrypoint(unittest.TestCase):
+    def test_real_git_source_accepts_only_reviewed_prep_and_clean_checkout(self):
+        with marker_checkout() as f, patch.object(r,'MERGED',f['before']), patch.object(r,'api',return_value={'object':{'sha':f['sha']}}):
+            self.assertEqual(r.source(),f['sha'])
+            Path('untracked.py').write_text('unreviewed')
+            with self.assertRaisesRegex(RuntimeError,'dirty'): r.source()
+            Path('untracked.py').unlink()
+            Path('frontend/package.json').write_text('{"dependencies":{"next":"15.5.28"},"foreign":true}')
+            f['git']('add','frontend/package.json'); f['git']('commit','-qm','Unreviewed product change')
+            sha=f['git']('rev-parse','HEAD')
+            with patch.dict(os.environ,{'GITHUB_SHA':sha}), patch.object(r,'api',return_value={'object':{'sha':sha}}):
+                with self.assertRaisesRegex(RuntimeError,'application drift'): r.source()
+
+    def test_source_rejects_foreign_repository_before_any_remote_or_git_read(self):
+        with patch.dict(os.environ,{'GITHUB_REPOSITORY':'foreign/repo'}), patch.object(r,'api') as api, patch.object(r.subprocess,'check_output') as git:
+            with self.assertRaisesRegex(RuntimeError,'wrong repository'): r.source()
+            api.assert_not_called(); git.assert_not_called()
+
+    def test_two_distinct_owner_marker_intents_use_real_single_parent_git_commits(self):
+        for mode in ['inspect','release']:
+            with self.subTest(mode=mode), marker_checkout(mode) as fixture:
+                request = r.activation()
+                self.assertEqual(request['mode'], mode)
+                self.assertEqual(request['inspected_source'], fixture['before'])
+                self.assertEqual(request['inspect_run_id'], '123' if mode == 'release' else '')
+                fixture['api'].assert_called_once_with('/commits/'+fixture['sha']+'/pulls')
+
+    def test_release_marker_is_a_separate_successor_of_the_inspected_commit(self):
+        with marker_checkout() as f:
+            inspected = f['sha']
+            self.assertEqual(r.activation()['mode'],'inspect')
+            f['marker'].write_text(json.dumps({'version':1,'mode':'release','source_sha':inspected,'inspect_run_id':123}))
+            f['git']('add',r.MARKER); f['git']('commit','-qm',r.INTENTS['release'])
+            released=f['git']('rev-parse','HEAD')
+            f['event'].update(before=inspected,after=released,commits=[{'id':released}],
+                              head_commit={'id':released,'message':r.INTENTS['release']})
+            f['write_event']()
+            with patch.dict(os.environ,{'GITHUB_SHA':released,'RELEASE_MODE':'release'}):
+                request=r.activation()
+                self.assertEqual(request,{'mode':'release','inspect_run_id':'123','inspected_source':inspected})
+            self.assertNotEqual(inspected,released)
+
+    def test_ordinary_push_pr_merge_and_multiple_commits_never_admit(self):
+        for message in ['ordinary change', 'G1 frontend inspect\n\nextra',
+                        'Merge pull request #999', 'G1 frontend release + G1 frontend inspect']:
+            with marker_checkout(message=message), patch.object(r,'cloud') as cloud:
+                self.assertIsNone(r.activation())
+                r.main('authorize')
+                for mode in ['inspect','release']:
+                    with self.assertRaisesRegex(RuntimeError,'unverified'): r.main(mode)
+                cloud.assert_not_called()
+        with marker_checkout(merge=True), self.assertRaisesRegex(RuntimeError,'merge or multi-commit'):
+            r.activation()
+        with marker_checkout() as f:
+            f['event']['commits'].append({'id':f['before']}); f['write_event']()
+            with self.assertRaisesRegex(RuntimeError,'one explicit commit'): r.activation()
+        with marker_checkout() as f:
+            f['api'].return_value=[{'number':999}]
+            with self.assertRaisesRegex(RuntimeError,'PR-associated'): r.activation()
+        with marker_checkout(), patch.dict(os.environ,{'GITHUB_EVENT_NAME':'pull_request'}):
+            self.assertIsNone(r.activation())
+
+    def test_bad_marker_schema_multiple_fields_stale_source_and_mixed_files_rejected(self):
+        mutations = [lambda d:{**d,'mode':'release'}, lambda d:{**d,'mode':'invalid'},
+                     lambda d:{**d,'source_sha':'b'*40}, lambda d:{**d,'version':True},
+                     lambda d:{**d,'extra':'value'}, lambda d:{k:v for k,v in d.items() if k!='mode'},
+                     lambda d:json.dumps(d)[:-1]+',"mode":"inspect"}', lambda d:'not json']
+        for change in mutations:
+            with self.subTest(change=change), marker_checkout(payload=change), self.assertRaises((RuntimeError, ValueError)):
+                r.activation()
+        with marker_checkout(extra=True), self.assertRaisesRegex(RuntimeError,'only the existing marker'):
+            r.activation()
+        for value in [True, '123', 0, -1, '123;echo bad']:
+            with self.subTest(value=value), marker_checkout('release',payload=lambda d:{**d,'inspect_run_id':value}), self.assertRaises(RuntimeError):
+                r.activation()
+
+    def test_wrong_actor_repository_ref_or_event_identity_never_gets_cloud(self):
+        contexts = [{'GITHUB_REPOSITORY':'foreign/repo'}, {'GITHUB_REF':'refs/heads/main'},
+                    {'GITHUB_REF':'refs/heads/other'}, {'GITHUB_ACTOR':'foreign'},
+                    {'GITHUB_TRIGGERING_ACTOR':'foreign'}, {'GITHUB_ACTOR_ID':'1'}]
+        for context in contexts:
+            with self.subTest(context=context), marker_checkout(), patch.dict(os.environ,context), patch.object(r,'cloud') as cloud:
+                with self.assertRaises(RuntimeError): r.main('inspect')
+                cloud.assert_not_called()
+        for change in [{'forced':True}, {'deleted':True}, {'created':True}, {'before':'b'*40},
+                       {'after':'b'*40}, {'ref':'refs/heads/main'}, {'sender':{'login':'foreign','id':1}},
+                       {'repository':{'full_name':'foreign/repo'}}]:
+            with marker_checkout() as f:
+                f['event'].update(change); f['write_event']()
+                with self.assertRaises(RuntimeError): r.activation()
+
+    def test_inspect_marker_cannot_authorize_release_or_emit_release_output(self):
+        with marker_checkout(), patch.dict(os.environ,{'RELEASE_MODE':'release'}), patch.object(r,'cloud') as cloud:
+            with self.assertRaisesRegex(RuntimeError,'mode differs'): r.release({})
+            cloud.assert_not_called()
+        with marker_checkout() as f, patch.object(r,'source',return_value=f['sha']), patch.object(r,'cloud') as cloud:
+            r.main('authorize')
+            self.assertEqual(f['output'].read_text(), 'mode=inspect\n')
+            cloud.assert_not_called()
+
+    def test_inspect_is_only_snapshot_and_release_requires_proof_before_any_cloud(self):
+        saved={'source':'a'*40,'old_frontend':{'revision':'old'}}
+        with marker_checkout(), patch.object(r,'source'), patch.object(r,'snapshot',return_value=saved) as snapshot, patch.object(r,'save'), patch.object(r,'cloud') as cloud, patch.object(r,'release') as release:
+            r.main('inspect')
+            snapshot.assert_called_once()
+            cloud.assert_not_called(); release.assert_not_called()
+            self.assertEqual(saved['decision'],'PREFLIGHT_PASS')
+            self.assertEqual(saved['mode'],'inspect')
+            self.assertEqual(saved['applicationBaseline'],r.MERGED)
+        with marker_checkout('release'), patch.object(r,'source'), patch.object(r,'inspection',side_effect=RuntimeError('missing proof')), patch.object(r,'snapshot') as snapshot, patch.object(r,'cloud') as cloud:
+            for mode in ['authorize','release']:
+                with self.assertRaisesRegex(RuntimeError,'missing proof'): r.main(mode)
+            snapshot.assert_not_called(); cloud.assert_not_called()
+
+    def test_dispatch_retained_with_owner_ref_explicit_mode_and_prior_inspect(self):
+        for mode in ['inspect','release']:
+            with marker_checkout() as f, patch.dict(os.environ,{'GITHUB_EVENT_NAME':'workflow_dispatch'}):
+                f['event']['inputs']={'mode':mode,'inspect_run_id':'123' if mode=='release' else ''}
+                f['write_event']()
+                self.assertEqual(r.activation()['mode'],mode)
+                if mode=='release':
+                    f['event']['inputs']['inspect_run_id']=''; f['write_event']()
+                    with self.assertRaisesRegex(RuntimeError,'prior inspect'): r.activation()
+
+    def test_runtime_drift_from_prior_inspect_blocks_before_build(self):
+        saved = {key: {'stable':True} for key in r.SNAPSHOT_FIELDS}
+        for key in r.SNAPSHOT_FIELDS:
+            with release_context(saved), patch.object(r,'inspection',return_value={**saved,key:{'drift':True}}), patch.dict(os.environ,{'RELEASE_MODE':'release'}), patch.object(r,'build') as build, patch.object(r,'cloud') as cloud:
+                with self.assertRaisesRegex(RuntimeError,'runtime changed'): r.release(dict(saved))
+                build.assert_not_called(); cloud.assert_not_called()
+
+
+class InspectEvidence(unittest.TestCase):
+    def evidence(self, change=None):
+        request={'mode':'release','inspect_run_id':'123','inspected_source':'b'*40}
+        run={'name':'Auth A2 Split-Aware Frontend-Only Staging Release','path':r.WORKFLOW,
+             'head_branch':'feature/staging-preview','head_sha':'b'*40,'repository':{'full_name':r.REPO},
+             'event':'push','status':'completed','conclusion':'success','actor':{'id':r.OWNER_ID},
+             'triggering_actor':{'id':r.OWNER_ID},'updated_at':r.datetime.now(r.timezone.utc).isoformat(), 'run_number':50}
+        artifact={'total_count':1,'artifacts':[{'id':456,'name':'staging-frontend-journey-release-50',
+                                             'expired':False,'size_in_bytes':1000}]}
+        saved={key:{'safe':True} for key in r.SNAPSHOT_FIELDS}
+        saved.update(mode='inspect',decision='PREFLIGHT_PASS',source='b'*40,applicationBaseline=r.MERGED)
+        if change: change(run,artifact,saved)
+        archive=io.BytesIO()
+        with zipfile.ZipFile(archive,'w') as z: z.writestr('release.json',json.dumps(saved))
+        with patch.object(r,'api',side_effect=[run,artifact]), patch.object(r.subprocess,'check_output',return_value=archive.getvalue()) as command:
+            result=r.inspection(request)
+            self.assertEqual(command.call_args.args[0],['gh','api','/repos/'+r.REPO+'/actions/artifacts/456/zip'])
+            self.assertEqual(command.call_args.kwargs['stderr'],subprocess.PIPE)
+            return result
+
+    def test_successful_real_run_artifact_binds_inspect_to_unchanged_source(self):
+        self.assertEqual(self.evidence()['source'],'b'*40)
+
+    def test_failed_skipped_foreign_stale_or_fake_inspect_rejected(self):
+        changes=[lambda run,a,s:run.update(conclusion='skipped'), lambda run,a,s:run.update(conclusion='failure'),
+                 lambda run,a,s:run.update(path='foreign.yml'),lambda run,a,s:run.update(head_sha='c'*40),
+                 lambda run,a,s:run.update(event='pull_request'),lambda run,a,s:run.update(head_branch='main'),
+                 lambda run,a,s:run.update(repository={'full_name':'foreign/repo'}),
+                 lambda run,a,s:run.update(actor={'id':1}), lambda run,a,s:run.update(triggering_actor={'id':1}),
+                 lambda run,a,s:run.update(updated_at='2020-01-01T00:00:00Z'),
+                 lambda run,a,s:a.update(total_count=2),lambda run,a,s:a['artifacts'][0].update(expired=True),
+                 lambda run,a,s:a['artifacts'][0].update(name='fake'),
+                 lambda run,a,s:s.update(mode='release'),lambda run,a,s:s.update(decision='NO_GO'),
+                 lambda run,a,s:s.update(source='c'*40),lambda run,a,s:s.update(applicationBaseline='a'*40)]
+        for change in changes:
+            with self.subTest(change=change), self.assertRaises(RuntimeError): self.evidence(change)
+
+
+class TriggerIsolation(unittest.TestCase):
+    def test_marker_not_in_preparation_note_and_notification_gate_is_preserved(self):
+        self.assertNotIn(Path(r.MARKER).read_text().strip(),r.INTENTS.values())
+        notification=yaml.load(Path('.github/workflows/notification-alerts-native-ci.yml').read_text(),Loader=yaml.BaseLoader)
+        self.assertIn(r.MARKER,notification['on']['push']['paths'])
+        self.assertIn('feature/staging-preview',notification['on']['push']['branches'])
+        self.assertNotIn('id-token',notification['permissions'])
+
+    def test_existing_marker_pushes_cannot_start_other_cloud_mutations(self):
+        import fnmatch
+        # Evaluate the small expression subset actually used by existing cloud
+        # jobs. Unknown syntax fails this audit; never assume it means false.
+        for message in r.INTENTS.values():
+            active=[]
+            for path in Path('.github/workflows').glob('*.yml'):
+                workflow=yaml.load(path.read_text(),Loader=yaml.BaseLoader)
+                push=workflow.get('on',{}).get('push')
+                if push is None: continue
+                push=push or {}
+                branches=push.get('branches',['*'])
+                if not any(fnmatch.fnmatch('feature/staging-preview',b) for b in branches): continue
+                if 'paths' in push and not any(fnmatch.fnmatch(r.MARKER,p) for p in push['paths']): continue
+                for name,job in workflow.get('jobs',{}).items():
+                    if not any(s.get('uses','').startswith('google-github-actions/auth@') for s in job.get('steps',[])): continue
+                    if str(path)==r.WORKFLOW: continue
+                    condition=job.get('if','true').removeprefix('${{').removesuffix('}}').strip()
+                    for key,value in {'github.event_name':'push','github.ref':'refs/heads/feature/staging-preview',
+                                      'github.repository':r.REPO,'github.event.head_commit.message':message}.items():
+                        condition=condition.replace(key,repr(value))
+                    condition=condition.replace('&&',' and ').replace('||',' or ')
+                    if eval(condition,{'__builtins__':{},'contains':lambda a,b:b in a,'true':True,'false':False}):
+                        active.append((path.name,name))
+                        self.assertEqual((path.name,name),('staging-automation-pause.yml','inspect'))
+                        self.assertEqual(job['steps'][-1]['run'],'python3 scripts/staging-automation-pause.py --phase read')
+            # This pre-existing read-only job runs on EVERY staging push, under
+            # its own group; changing marker path cannot eliminate it.
+            self.assertEqual(active,[('staging-automation-pause.yml','inspect')])
 
 
 if __name__ == '__main__':
