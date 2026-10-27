@@ -42,6 +42,21 @@ export function StepRow({
 }) {
   const Icon = healthIcon(step.icon);
   const complete = step.state === "completed";
+  const addFoodHref =
+    complete && step.hint === "Öğün işaretlendi; besin kaydı yok" && step.href
+      ? journeyHref(step.href, day)
+      : null;
+  const rowAction =
+    action ??
+    (addFoodHref ? (
+      <Link
+        href={addFoodHref}
+        aria-label={`${step.label} için besin kaydı ekle`}
+        className="inline-flex min-h-11 items-center rounded-lg px-2 text-xs font-semibold text-primary underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        Besin ekle
+      </Link>
+    ) : null);
   const body = (
     <div data-journey-row className="flex min-w-0 items-center gap-3 py-2.5">
       <span className="relative flex shrink-0 items-start self-stretch pt-1">
@@ -74,13 +89,13 @@ export function StepRow({
       </span>
       <span
         className={cn(
-          action ? "sr-only" : "shrink-0 text-[11px] font-medium",
+          rowAction ? "sr-only" : "shrink-0 text-[11px] font-medium",
           complete ? "text-emerald-700 dark:text-emerald-300" : "text-muted-foreground",
         )}
       >
         {complete ? "Tamamlandı" : "Bekliyor"}
       </span>
-      {action && <span className="shrink-0">{action}</span>}
+      {rowAction && <span className="shrink-0">{rowAction}</span>}
     </div>
   );
   return (

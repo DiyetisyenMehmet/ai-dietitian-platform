@@ -574,6 +574,12 @@ for (const width of [390, 412, 430])
       await card.locator("[data-journey-details-toggle]").click();
       await expect(card.locator("[data-journey-progress-area]")).toBeVisible();
       await expect(card).toContainText("besin kaydı yok");
+      await expect(
+        card.getByRole("link", { name: "Kahvaltı için besin kaydı ekle", exact: true }),
+      ).toBeVisible();
+      await expect(
+        card.getByRole("link", { name: "Kahvaltı için besin kaydı ekle", exact: true }),
+      ).toHaveAttribute("href", `/meals/add?slot=breakfast&day=${today}&returnTo=/dashboard`);
       await expect(card).toContainText("Kalori ve besin hedeflerin ayrı");
       await page.reload();
       await expect(outer).toHaveAttribute("aria-expanded", "true");
