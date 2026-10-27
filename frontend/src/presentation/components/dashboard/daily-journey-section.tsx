@@ -197,7 +197,7 @@ export function DailyJourneyContent({
                 ? "Doğrulanıyor"
                 : status === "all-done"
                   ? scopedTracking
-                    ? "Takip tamamlandı ✓"
+                    ? "Takip bitti ✓"
                     : "Tamamlandı ✓"
                   : total
                     ? scopedTracking

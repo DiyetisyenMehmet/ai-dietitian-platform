@@ -729,13 +729,24 @@ test("repeated snacks remain unconfirmed while trackable goals advance, fold and
   await card.getByRole("button", { name: "+250 ml su ekle", exact: true }).click();
   await expect(card).toHaveAttribute("data-journey-status", "all-done");
   await expect(outer).toHaveAttribute("aria-expanded", "false");
-  await expect(card.locator("[data-journey-card-heading]")).toContainText("Takip tamamlandı");
+  await expect(card.locator("[data-journey-card-heading]")).toContainText("Takip bitti");
   await outer.click();
   await expect(card).toContainText(
     "Eşleştirilemeyen plan öğünleri bu ilerlemeye dahil değil ve tamamlanmış sayılmadı",
   );
   await expect(unmatched.locator('[data-step-state="pending"]')).toHaveCount(2);
   expect(f.state.posts).toEqual([{ mealType: "LUNCH" }, { mealType: "DINNER" }]);
+  expect(
+    await card.locator("[data-journey-card-heading]").evaluate((heading) => {
+      const title = heading.querySelector("h3")!;
+      const range = document.createRange();
+      range.selectNodeContents(title);
+      return (
+        range.getBoundingClientRect().right + 6 <=
+        title.nextElementSibling!.getBoundingClientRect().left
+      );
+    }),
+  ).toBe(true);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await card.screenshot({ path: info.outputPath("journey-repeated-snacks-tracking-only.png") });
   await page.reload();
@@ -769,7 +780,7 @@ test("only unmatchable planned snacks: water completion is scoped and never conf
     outer = card.locator("[data-journey-outer-toggle]");
   await expect(card).toHaveAttribute("data-journey-status", "all-done");
   await expect(outer).toHaveAttribute("aria-expanded", "false");
-  await expect(card.locator("[data-journey-card-heading]")).toContainText("Takip tamamlandı");
+  await expect(card.locator("[data-journey-card-heading]")).toContainText("Takip bitti");
   await outer.click();
   await card.locator("[data-journey-details-toggle]").click();
   await expect(card.getByRole("progressbar")).toHaveAttribute(
