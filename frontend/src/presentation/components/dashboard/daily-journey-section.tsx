@@ -200,7 +200,9 @@ export function DailyJourneyContent({
                     ? "Takip tamamlandı ✓"
                     : "Tamamlandı ✓"
                   : total
-                    ? `${completed}/${total} ${scopedTracking ? "takip" : "adım"}`
+                    ? scopedTracking
+                      ? `${completed}/${total} takip`
+                      : `${completed}/${total} adım`
                     : "Veri bekleniyor"}
             </span>
             <button
