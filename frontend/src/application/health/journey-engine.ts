@@ -95,13 +95,16 @@ export function buildJourney(input: JourneyInput): JourneyResult {
         kind: entry.slot ?? "planned-meal",
         label: entry.meal.name,
         icon: "utensils",
-        href: entry.slot ? `/meals/add?slot=${entry.slot}` : "/meals",
+        href: entry.slot ? `/meals/add?slot=${entry.slot}` : "/meals/plan",
         hint: completed
           ? entry.slot && (input.foodCounts?.[entry.slot] ?? 0) > 0
             ? "Besin kaydı var"
             : "Öğün işaretlendi; besin kaydı yok"
-          : `Planlanan ${entry.meal.time} · ${goalReason}`,
+          : entry.slot
+            ? `Planlanan ${entry.meal.time} · ${goalReason}`
+            : `Planlanan ${entry.meal.time} · Tekil kayıtla eşleşmiyor; takip hedeflerine dahil değil.`,
         state: completed ? "completed" : "pending",
+        countsTowardProgress: Boolean(entry.slot),
       });
     }
   } else {
@@ -132,7 +135,9 @@ export function buildJourney(input: JourneyInput): JourneyResult {
     }
   }
   if (
-    (data.water !== "UNKNOWN" || steps.some((step) => step.countsTowardProgress !== false)) &&
+    (data.water !== "UNKNOWN" ||
+      planned.length > 0 ||
+      steps.some((step) => step.countsTowardProgress !== false)) &&
     input.waterGoalMl != null &&
     Number.isFinite(input.waterGoalMl) &&
     input.waterGoalMl > 0
@@ -175,7 +180,7 @@ export function buildJourney(input: JourneyInput): JourneyResult {
     });
   // Earliest unfinished planned meal wins, including snacks. Never skip an
   // unfinished meal merely because a later meal's clock time has elapsed.
-  const plannedMeal = planned.find((entry) => !entry.slot || data[entry.slot] !== "KNOWN") ?? null;
+  const plannedMeal = planned.find((entry) => entry.slot && data[entry.slot] !== "KNOWN") ?? null;
   // The same engine owns the next action; elapsed time never marks a meal skipped.
   const pending = (kind: JourneyStepKind) =>
     steps.find((step) => step.kind === kind && step.state === "pending");
@@ -187,11 +192,14 @@ export function buildJourney(input: JourneyInput): JourneyResult {
       ? steps.find((step) => step.id === plannedMeal.key && step.state === "pending")
       : undefined) ??
     (input.workScheduleType === "REGULAR" ? pending(regularKind) : undefined) ??
-    steps.find((step) => step.state === "pending" && Boolean(step.href));
+    steps.find(
+      (step) =>
+        step.countsTowardProgress !== false && step.state === "pending" && Boolean(step.href),
+    );
   if (next) next.state = "recommended";
   const insufficient =
     (planned.length
-      ? planned.some((entry) => !entry.slot || data[entry.slot] === "UNKNOWN")
+      ? planned.some((entry) => entry.slot && data[entry.slot] === "UNKNOWN")
       : [data.breakfast, data.lunch, data.dinner].includes("UNKNOWN")) ||
     data.water === "UNKNOWN" ||
     !input.waterGoalMl ||
@@ -207,6 +215,7 @@ export function buildJourney(input: JourneyInput): JourneyResult {
     sufficiency: data,
     nextBestAction:
       next && !complete ? { kind: next.kind, reason: next.hint, href: next.href! } : null,
+    // Completion covers trackable recording targets, never unmatched plan rows.
     status: complete
       ? "all-done"
       : next

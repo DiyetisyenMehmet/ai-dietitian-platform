@@ -481,8 +481,17 @@ for (const mode of [
     if (mode === "due")
       await expect(card.locator("[data-journey-next]")).toContainText("Kilo ölçümü");
     if (mode === "ambiguous") {
-      await expect(card).toContainText("tek bir kayıt türüyle eşleşmiyor");
-      await expect(card.getByRole("button", { name: "Yedim", exact: true })).toHaveCount(0);
+      await expect(card.locator("[data-journey-plan-meal]")).toContainText("Sebzeli bulgur");
+      await card.locator("[data-journey-details-toggle]").click();
+      await expect(card.locator("[data-journey-unmatched-plan]")).toContainText("Öğle özel öğünü");
+      await expect(
+        card.locator("[data-journey-unmatched-plan] [data-journey-timeline-step]"),
+      ).toHaveAttribute("data-step-state", "pending");
+      await expect(
+        card
+          .locator("[data-journey-unmatched-plan]")
+          .getByRole("button", { name: "Yedim", exact: true }),
+      ).toHaveCount(0);
     }
     await card.screenshot({ path: info.outputPath(`journey-${mode}.png`), animations: "disabled" });
   });
@@ -676,4 +685,105 @@ test("five fixed planned steps: snack before dinner, water reaches goal, auto fo
     "aria-expanded",
     "true",
   );
+});
+
+test("repeated snacks remain unconfirmed while trackable goals advance, fold and survive undo", async ({
+  page,
+}, info) => {
+  await page.setViewportSize({ width: 390, height: 932 });
+  const plan = activePlan();
+  plan.dailyPlans.cycle[1].meals.splice(
+    1,
+    0,
+    meal("Ara öğün", "10:00", "Birinci sentetik ara öğün"),
+  );
+  plan.dailyPlans.cycle[1].meals.splice(
+    3,
+    0,
+    meal("Ara öğün", "16:00", "İkinci sentetik ara öğün"),
+  );
+  const f = await fixture(page, { plan });
+  f.state.meals.push(log("one-snack", "SNACK"));
+  f.state.water = 1850;
+  await open(page);
+  const card = section(page),
+    outer = card.locator("[data-journey-outer-toggle]");
+  await expect(card).toContainText("1/4 takip");
+  await expect(card.locator("[data-journey-plan-meal]")).toContainText("Mercimek çorbası");
+  await card.getByRole("button", { name: "Yedim", exact: true }).click();
+  await expect(card).toContainText("2/4 takip");
+  await expect(card.locator("[data-journey-plan-meal]")).toContainText("Sebzeli bulgur");
+  await card.getByRole("button", { name: "Yedim", exact: true }).click();
+  await expect(card).toContainText("3/4 takip");
+  await expect(card.locator("[data-journey-plan-meal]")).toHaveCount(0);
+  await expect(card).not.toContainText("Bugünkü planın öğün adımları kaydedildi");
+  await card.locator("[data-journey-details-toggle]").click();
+  const unmatched = card.locator("[data-journey-unmatched-plan]");
+  await expect(
+    unmatched.locator('[data-journey-timeline-step][data-step-state="pending"]'),
+  ).toHaveCount(2);
+  await expect(unmatched.locator('[data-step-state="completed"]')).toHaveCount(0);
+  await expect(unmatched.getByRole("button", { name: "Yedim", exact: true })).toHaveCount(0);
+  for (const link of await unmatched.getByRole("link").all())
+    await expect(link).toHaveAttribute("href", "/meals/plan");
+  await card.getByRole("button", { name: "+250 ml su ekle", exact: true }).click();
+  await expect(card).toHaveAttribute("data-journey-status", "all-done");
+  await expect(outer).toHaveAttribute("aria-expanded", "false");
+  await expect(card.locator("[data-journey-card-heading]")).toContainText("Takip tamamlandı");
+  await outer.click();
+  await expect(card).toContainText(
+    "Eşleştirilemeyen plan öğünleri bu ilerlemeye dahil değil ve tamamlanmış sayılmadı",
+  );
+  await expect(unmatched.locator('[data-step-state="pending"]')).toHaveCount(2);
+  expect(f.state.posts).toEqual([{ mealType: "LUNCH" }, { mealType: "DINNER" }]);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await card.screenshot({ path: info.outputPath("journey-repeated-snacks-tracking-only.png") });
+  await page.reload();
+  await expect(outer).toHaveAttribute("aria-expanded", "true");
+  await expect(card.locator("[data-journey-details-toggle]")).toHaveAttribute(
+    "aria-expanded",
+    "true",
+  );
+  await expect(unmatched.locator('[data-step-state="pending"]')).toHaveCount(2);
+  await page.goto("/meals");
+  await page.getByRole("checkbox", { name: "Akşam Yemeği öğününü yedim", exact: true }).click();
+  await page.goto("/dashboard");
+  await expect(card).toContainText("3/4 takip");
+  await expect(card.locator("[data-journey-plan-meal]")).toContainText("Sebzeli bulgur");
+  await expect(unmatched.locator('[data-step-state="pending"]')).toHaveCount(2);
+});
+
+test("only unmatchable planned snacks: water completion is scoped and never confirms either snack", async ({
+  page,
+}, info) => {
+  await page.setViewportSize({ width: 390, height: 932 });
+  const plan = activePlan();
+  plan.dailyPlans.cycle[1].meals = [
+    meal("Ara öğün", "10:00", "Birinci ara öğün"),
+    meal("Ara öğün", "16:00", "İkinci ara öğün"),
+  ];
+  const f = await fixture(page, { plan, complete: true });
+  f.state.meals.push(log("snack-log", "SNACK"));
+  await open(page);
+  const card = section(page),
+    outer = card.locator("[data-journey-outer-toggle]");
+  await expect(card).toHaveAttribute("data-journey-status", "all-done");
+  await expect(outer).toHaveAttribute("aria-expanded", "false");
+  await expect(card.locator("[data-journey-card-heading]")).toContainText("Takip tamamlandı");
+  await outer.click();
+  await card.locator("[data-journey-details-toggle]").click();
+  await expect(card.getByRole("progressbar")).toHaveAttribute(
+    "aria-valuetext",
+    "1/1 takip hedefi tamamlandı",
+  );
+  await expect(
+    card.locator('[data-journey-unmatched-plan] [data-step-state="pending"]'),
+  ).toHaveCount(2);
+  await expect(
+    card.locator('[data-journey-unmatched-plan] [data-step-state="completed"]'),
+  ).toHaveCount(0);
+  await expect(card.getByRole("button", { name: "Yedim", exact: true })).toHaveCount(0);
+  expect(f.state.posts).toHaveLength(0);
+  expect(f.state.waterPosts).toBe(0);
+  await card.screenshot({ path: info.outputPath("journey-only-unmapped-water-tracking.png") });
 });

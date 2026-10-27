@@ -89,9 +89,15 @@ test("ambiguous plan rows cannot borrow one slot's completion; true plan revisio
     meals: { breakfast: 1, lunch: 1, snack: 1, dinner: 1 },
     waterMl: 2000,
   });
-  assert.equal(helpers.summarizeJourney(r.steps).total, 6);
-  assert.equal(r.steps.find((step) => step.id === "second-snack").state, "recommended");
-  assert.notEqual(r.status, "all-done");
+  assert.equal(helpers.summarizeJourney(r.steps).total, 5);
+  assert.equal(r.steps.find((step) => step.id === "second-snack").state, "pending");
+  assert.equal(r.steps.find((step) => step.id === "second-snack").countsTowardProgress, false);
+  assert.equal(r.status, "all-done");
+  const beforeRevision = run({
+    plannedMeals: input.plannedMeals.filter((entry) => entry.slot !== "snack"),
+  });
+  assert.equal(helpers.summarizeJourney(beforeRevision.steps).total, 4);
+  assert.equal(helpers.summarizeJourney(run().steps).total, 5);
 });
 
 test("check-in and actual nutrition have distinct truthful persisted descriptions", () => {
@@ -292,4 +298,170 @@ test("verified owner plan survives refresh, but never crosses account, day or in
   plan.isActive = true;
   h.advance(86400000);
   assert.equal(h.journey().plannedMeal, null);
+});
+
+// Manager review: use the real calendar adapter and existing persisted check-in store.
+function repeatedPlan(h, variant = "snack") {
+  const menu =
+    variant === "only-unmapped"
+      ? [
+          ["Ara öğün", "10:00"],
+          ["Ara öğün", "16:00"],
+        ]
+      : [
+          ["Kahvaltı", "08:00"],
+          [variant === "snack" ? "Ara öğün" : "Öğle", "10:00"],
+          ["Öğle yemeği", "13:00"],
+          [variant === "snack" ? "Ara öğün" : "Özel öğün", "16:00"],
+          ["Akşam yemeği", "19:00"],
+        ];
+  const plan = {
+    id: "repeated-plan",
+    isActive: true,
+    status: "COMPLETED",
+    startDate: "2026-10-02",
+    dailyPlans: {
+      durationDays: 1,
+      calendar: [{ dayNumber: 1, cycleIndex: 0 }],
+      cycle: [
+        {
+          meals: menu.map(([name, time]) => ({
+            name,
+            time,
+            foods: [{ name: "Sentetik", portion: "1 kase" }],
+          })),
+        },
+      ],
+    },
+  };
+  const { journeyPlanMeals } = h.load("application/health/journey-plan.ts");
+  return journeyPlanMeals(plan, h.now());
+}
+for (const variant of ["snack", "conflicting-lunch"]) {
+  test(`real ${variant} plan: unmatchable rows stay unconfirmed, next trackable meal advances and completion folds`, async () => {
+    const h = harness(),
+      saved = [];
+    h.mealsClient.listMeals = async () => ({ logs: saved });
+    h.mealsClient.logMeal = async (input) => {
+      const log = {
+        id: `saved-${saved.length}`,
+        ...input,
+        name: null,
+        calories: null,
+        proteinG: null,
+        carbsG: null,
+        fatG: null,
+        sodiumMg: null,
+        sugarG: null,
+        loggedAt: h.iso(),
+      };
+      saved.push(log);
+      return { log };
+    };
+    const plannedMeals = repeatedPlan(h, variant);
+    const unmapped = plannedMeals.filter((entry) => entry.slot === null);
+    assert.equal(unmapped.length, variant === "snack" ? 2 : 3);
+    await h.meals.mealsStore.hydrateMealsFromBackend();
+    await h.meals.mealsStore.markMealEaten("breakfast");
+    // Even a real SNACK or LUNCH record cannot identify either repeated row.
+    await h.meals.mealsStore.markMealEaten(variant === "snack" ? "snack" : "lunch");
+    const { buildJourney } = h.load("application/health/journey-engine.ts");
+    const helpers = h.load("application/health/daily-journey.ts");
+    const input = {
+      plannedMeals,
+      localHour: 22,
+      waterGoalMl: 2000,
+      activityMinutes: 0,
+      weight: null,
+      startWeightKg: null,
+      currentWeightKg: null,
+      targetWeightKg: null,
+    };
+    const read = (waterMl = 0) =>
+      buildJourney({
+        ...input,
+        waterMl,
+        meals: Object.fromEntries(
+          h.meals.useMeals().map((meal) => [meal.slot, meal.foods.length + (meal.isEaten ? 1 : 0)]),
+        ),
+      });
+    const expectedTotal = variant === "snack" ? 4 : 3;
+    let r = read();
+    assert.equal(r.plannedMeal.slot, variant === "snack" ? "lunch" : "dinner");
+    assert.equal(r.nextBestAction.kind, r.plannedMeal.slot);
+    assert.equal(helpers.summarizeJourney(r.steps).total, expectedTotal);
+    for (const entry of unmapped) {
+      const step = r.steps.find((step) => step.id === entry.key);
+      assert.equal(step.state, "pending");
+      assert.equal(step.countsTowardProgress, false);
+      assert.match(step.hint, /dahil değil/);
+    }
+    await h.meals.mealsStore.markMealEaten("lunch");
+    await h.meals.mealsStore.markMealEaten("dinner");
+    r = read();
+    assert.equal(r.plannedMeal, null);
+    assert.equal(r.status, "no-actionable-step");
+    assert.equal(helpers.visibleJourneySteps(r.steps, r.status, false)[0].kind, "water");
+    assert.notEqual(r.status, "all-done");
+    r = read(2000);
+    assert.equal(r.status, "all-done");
+    assert.equal(r.nextBestAction, null);
+    assert.equal(helpers.summarizeJourney(r.steps).completed, expectedTotal);
+    assert.equal(
+      helpers.settleJourneyDisclosure(helpers.journeyDisclosure(null), true).outer,
+      false,
+    );
+    assert.equal(
+      r.steps
+        .filter((step) => step.kind === "planned-meal")
+        .every((step) => step.state === "pending"),
+      true,
+    );
+    assert.equal(h.meals.computeTotals(h.meals.useMeals()).calories, 0);
+    assert.notEqual(read(null).status, "all-done");
+    assert.equal(helpers.summarizeJourney(read(null).steps).total, expectedTotal);
+    const unknownMapped = buildJourney({
+      ...input,
+      waterMl: 2000,
+      meals: { breakfast: null, lunch: 1, dinner: 1, snack: 2 },
+    });
+    assert.notEqual(unknownMapped.status, "all-done");
+    await h.meals.mealsStore.unmarkMealEaten("dinner");
+    const undone = read(2000);
+    assert.equal(undone.status, "actionable");
+    assert.equal(undone.plannedMeal.slot, "dinner");
+    assert.equal(helpers.summarizeJourney(undone.steps).total, expectedTotal);
+  });
+}
+
+test("plan containing only repeated snacks completes water tracking only, never either plan meal", () => {
+  const h = harness();
+  const { buildJourney } = h.load("application/health/journey-engine.ts");
+  const helpers = h.load("application/health/daily-journey.ts");
+  const input = {
+    plannedMeals: repeatedPlan(h, "only-unmapped"),
+    localHour: 22,
+    meals: { snack: 2 },
+    waterMl: 2000,
+    waterGoalMl: 2000,
+    activityMinutes: 0,
+    weight: null,
+    startWeightKg: null,
+    currentWeightKg: null,
+    targetWeightKg: null,
+  };
+  const r = buildJourney(input);
+  assert.equal(r.plannedMeal, null);
+  assert.equal(r.status, "all-done");
+  assert.equal(helpers.summarizeJourney(r.steps).total, 1);
+  assert.equal(helpers.summarizeJourney(r.steps).completed, 1);
+  assert.equal(
+    r.steps
+      .filter((step) => step.kind === "planned-meal")
+      .every((step) => step.state === "pending"),
+    true,
+  );
+  assert.notEqual(buildJourney({ ...input, waterMl: null }).status, "all-done");
+  assert.equal(helpers.summarizeJourney(buildJourney({ ...input, waterMl: null }).steps).total, 1);
+  assert.notEqual(buildJourney({ ...input, waterGoalMl: null }).status, "all-done");
 });

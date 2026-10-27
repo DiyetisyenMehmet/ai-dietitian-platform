@@ -35,7 +35,7 @@ export function summarizeJourney(steps: JourneyStep[]): {
 export function selectJourneyCompactStep(steps: JourneyStep[]): JourneyStep | null {
   return (
     steps.find((step) => step.state === "recommended") ??
-    steps.find((step) => step.state === "pending") ??
+    steps.find((step) => step.countsTowardProgress !== false && step.state === "pending") ??
     null
   );
 }

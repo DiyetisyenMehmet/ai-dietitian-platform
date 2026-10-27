@@ -93,7 +93,7 @@ export function StepRow({
           complete ? "text-emerald-700 dark:text-emerald-300" : "text-muted-foreground",
         )}
       >
-        {complete ? "Tamamlandı" : "Bekliyor"}
+        {complete ? "Tamamlandı" : step.kind === "planned-meal" ? "Takip dışı" : "Bekliyor"}
       </span>
       {rowAction && <span className="shrink-0">{rowAction}</span>}
     </div>
@@ -166,7 +166,9 @@ export function DailyJourneyContent({
   const summaries = steps.filter(
     (step) => step.kind === "water" || step.kind === "weight" || step.kind === "activity",
   );
-  const list = steps.filter((step) => !summaries.includes(step));
+  const unmatched = steps.filter((step) => step.kind === "planned-meal");
+  const scopedTracking = unmatched.length > 0;
+  const list = steps.filter((step) => !summaries.includes(step) && !unmatched.includes(step));
   const mealIsNext = Boolean(
     plannedMeal && next && (next.id ? plannedMeal.key === next.id : plannedMeal.slot === next.kind),
   );
@@ -194,9 +196,11 @@ export function DailyJourneyContent({
               {!progressReady
                 ? "Doğrulanıyor"
                 : status === "all-done"
-                  ? "Tamamlandı ✓"
+                  ? scopedTracking
+                    ? "Takip tamamlandı ✓"
+                    : "Tamamlandı ✓"
                   : total
-                    ? `${completed}/${total} adım`
+                    ? `${completed}/${total} ${scopedTracking ? "takip" : "adım"}`
                     : "Veri bekleniyor"}
             </span>
             <button
@@ -231,7 +235,9 @@ export function DailyJourneyContent({
             )}
             {status === "all-done" ? (
               <p className="rounded-2xl bg-emerald-500/10 p-4 text-sm font-semibold text-emerald-800 dark:text-emerald-200">
-                Günlük kayıt adımlarını tamamladın! Kalori ve besin hedeflerin ayrı takip edilir.
+                {scopedTracking
+                  ? "Takip edilebilir kayıt hedeflerini tamamladın. Eşleştirilemeyen plan öğünleri bu ilerlemeye dahil değil ve tamamlanmış sayılmadı. Kalori ve besin hedeflerin ayrı takip edilir."
+                  : "Günlük kayıt adımlarını tamamladın! Kalori ve besin hedeflerin ayrı takip edilir."}
               </p>
             ) : next || plannedMeal ? (
               <div
@@ -319,9 +325,11 @@ export function DailyJourneyContent({
                   ? "Beslenme planın doğrulanamadı. Plan ekranından tekrar deneyebilirsin."
                   : !planReady
                     ? "Beslenme planın doğrulanıyor; henüz menü gösterilmiyor."
-                    : steps.some((step) => step.id)
-                      ? "Bugünkü planın öğün adımları kaydedildi. Diğer günlük adımlarını aşağıdan takip edebilirsin."
-                      : "Bugüne eşleşen bir beslenme planı yok. Öğünlerini yine kaydedebilirsin."}{" "}
+                    : scopedTracking
+                      ? "Takip edilebilir öğün adımlarını aşağıdan kontrol edebilirsin. Eşleştirilemeyen plan öğünleri ayrıca gösterilir."
+                      : steps.some((step) => step.id)
+                        ? "Bugünkü planın öğün adımları kaydedildi. Diğer günlük adımlarını aşağıdan takip edebilirsin."
+                        : "Bugüne eşleşen bir beslenme planı yok. Öğünlerini yine kaydedebilirsin."}{" "}
                 <Link
                   href="/meals/plan"
                   className="inline-flex min-h-11 items-center font-medium text-primary underline-offset-4 hover:underline"
@@ -346,6 +354,7 @@ export function DailyJourneyContent({
                     Günlük adımlarım{" "}
                     <span className="text-xs font-normal text-muted-foreground">
                       · {completed}/{total}
+                      {scopedTracking ? " takip" : ""}
                     </span>
                   </span>
                   <ChevronDown
@@ -367,10 +376,14 @@ export function DailyJourneyContent({
                       <div className="min-w-0 flex-1">
                         <ProgressBar
                           value={percent}
-                          ariaLabel="Günlük yolculuk ilerlemen"
+                          ariaLabel={
+                            scopedTracking
+                              ? "Takip edilebilir kayıt hedeflerindeki ilerlemen"
+                              : "Günlük yolculuk ilerlemen"
+                          }
                           ariaValueText={
                             total
-                              ? `${completed}/${total} adım tamamlandı`
+                              ? `${completed}/${total} ${scopedTracking ? "takip hedefi" : "adım"} tamamlandı`
                               : "Günlük veriler bekleniyor"
                           }
                         />
@@ -390,16 +403,16 @@ export function DailyJourneyContent({
                     data-daily-journey-steps
                     data-visible-journey-steps={expanded ? list.length : 0}
                   >
-                    {steps
-                      .filter((step) => !summaries.includes(step))
-                      .map((step, index, items) => (
-                        <StepRow
-                          key={step.id ?? step.kind}
-                          step={step}
-                          day={day}
-                          last={index === items.length - 1 && summaries.length === 0}
-                        />
-                      ))}
+                    {list.map((step, index, items) => (
+                      <StepRow
+                        key={step.id ?? step.kind}
+                        step={step}
+                        day={day}
+                        last={
+                          index === items.length - 1 && summaries.length === 0 && !scopedTracking
+                        }
+                      />
+                    ))}
                   </ol>
                   {summaries.length > 0 && (
                     <ol className="space-y-0.5" data-journey-tracking-steps>
@@ -413,6 +426,26 @@ export function DailyJourneyContent({
                         />
                       ))}
                     </ol>
+                  )}
+                  {scopedTracking && (
+                    <div data-journey-unmatched-plan className="border-t border-border/70 pt-3">
+                      <p className="text-sm font-semibold">Eşleştirilemeyen plan öğünleri</p>
+                      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                        Bu {unmatched.length} öğün tekil bir tüketim kaydıyla eşleşmiyor. Takip
+                        hedeflerine dahil değil; tamamlanmış sayılmadı. Kayıtlar bu öğünlere
+                        otomatik dağıtılmaz.
+                      </p>
+                      <ol className="mt-2 space-y-0.5">
+                        {unmatched.map((step, index) => (
+                          <StepRow
+                            key={step.id}
+                            step={step}
+                            day={day}
+                            last={index === unmatched.length - 1}
+                          />
+                        ))}
+                      </ol>
+                    </div>
                   )}
                 </div>
               </div>
@@ -582,7 +615,9 @@ function LiveJourney({ result }: { result: ReturnType<typeof useDailyJourneyResu
       day={result.dayKey ?? undefined}
       status={result.planReady ? result.status : "insufficient-data"}
       progressReady={
-        result.planReady && readiness !== "UNKNOWN" && tracking.waterReadiness !== "UNKNOWN"
+        result.planReady &&
+        (result.status === "all-done" ||
+          (readiness !== "UNKNOWN" && tracking.waterReadiness !== "UNKNOWN"))
       }
       outerExpanded={outerExpanded}
       onOuterExpandedChange={(outer) => setPreference({ ...settled, outer })}
