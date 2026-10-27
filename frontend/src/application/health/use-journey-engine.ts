@@ -1,15 +1,15 @@
 "use client";
 
 import * as React from "react";
-import { useMeals, useMealsReadiness } from "../meals/meals-store";
-import { useDailyTracking } from "./daily-tracking-store";
+import { mealsStore, useMeals, useMealsReadiness } from "../meals/meals-store";
+import { dailyTrackingStore, useDailyTracking } from "./daily-tracking-store";
 import { useSleepDaily } from "./sleep-store";
 import { useActivity } from "./activity-store";
 import { useHealthProfile } from "./health-profile-store";
 import { useWeightCheckInStatus } from "./weight-store";
 import { localDateKey, localDateKeyFromIso } from "./weight-utils";
 import { useNutritionPlan } from "./nutrition-plan-store";
-import { useAuth } from "../auth/auth-store";
+import { authStore, useAuth } from "../auth/auth-store";
 import { journeyPlanMeals } from "./journey-plan";
 import { msUntilNextLocalDay } from "./daily-data-readiness";
 import { buildJourney } from "./journey-engine";
@@ -29,7 +29,22 @@ export function useJourneyEngine() {
   // Store rollover can render before the next clock tick. Use the actual local time.
   const now = clock ? new Date() : null;
   React.useEffect(() => {
-    const tick = () => setNow(new Date());
+    let previousDay = localDateKey(new Date());
+    const tick = () => {
+      const current = new Date();
+      const currentDay = localDateKey(current);
+      if (currentDay !== previousDay) {
+        previousDay = currentDay;
+        // Existing stores clear yesterday's cache at rollover. Read the new
+        // day's authoritative records once through the existing clock/resume path.
+        if (authStore.getSnapshot().status === "authenticated")
+          void Promise.allSettled([
+            mealsStore.hydrateMealsFromBackend(),
+            dailyTrackingStore.hydrateWaterFromBackend(),
+          ]);
+      }
+      setNow(current);
+    };
     tick();
     const timer = setInterval(tick, 30_000);
     const midnight = setTimeout(tick, msUntilNextLocalDay());

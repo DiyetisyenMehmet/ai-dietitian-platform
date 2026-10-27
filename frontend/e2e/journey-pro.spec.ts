@@ -83,6 +83,8 @@ async function fixture(
       ? [log("b", "BREAKFAST"), log("l", "LUNCH"), log("d", "DINNER")]
       : [log("b", "BREAKFAST")],
     posts: [] as Log[],
+    mealReads: 0,
+    waterReads: 0,
     deletes: [] as string[],
     fail: false,
     hold: false,
@@ -182,16 +184,21 @@ async function fixture(
       state.meals = state.meals.filter((item) => !path.endsWith(`/${item.id}`));
       return route.fulfill({ status: 204 });
     }
-    if (path === "/tracking/meals") return options.unknown ? fail() : ok({ logs: state.meals });
+    if (path === "/tracking/meals") {
+      state.mealReads++;
+      return options.unknown ? fail() : ok({ logs: state.meals });
+    }
     if (path === "/tracking/water" && method === "POST") {
       state.waterPosts++;
       state.water += 250;
       return ok({ log: { id: "water-post", amountMl: 250, loggedAt: `${today}T11:00:00Z` } });
     }
-    if (path === "/tracking/water")
+    if (path === "/tracking/water") {
+      state.waterReads++;
       return options.unknown
         ? fail()
         : ok({ logs: [{ id: "water", amountMl: state.water, loggedAt: `${today}T07:00:00Z` }] });
+    }
     if (path === "/tracking/weight/check-in")
       return ok({
         checkIn: {
@@ -501,6 +508,7 @@ test("unready plan stays hidden; local midnight selects the next calendar day", 
   await card.locator("[data-journey-details-toggle]").click();
   await card.locator("[data-journey-outer-toggle]").click();
   await expect(card.locator("[data-journey-body]")).not.toBeVisible();
+  const reads = { meals: f.state.mealReads, water: f.state.waterReads };
   await page.clock.fastForward(61 * 1000);
   await expect(card).toContainText("İkinci gün yulafı");
   await expect(card.locator("[data-journey-outer-toggle]")).toHaveAttribute(
@@ -511,6 +519,10 @@ test("unready plan stays hidden; local midnight selects the next calendar day", 
     "aria-expanded",
     "false",
   );
+  expect(f.state.mealReads).toBeGreaterThan(reads.meals);
+  expect(f.state.waterReads).toBeGreaterThan(reads.water);
+  expect(f.state.posts).toHaveLength(0);
+  expect(f.state.waterPosts).toBe(0);
   await expect(card).not.toContainText("Mercimek çorbası");
   await expect(card).not.toContainText("Sebzeli bulgur");
   await card.screenshot({
