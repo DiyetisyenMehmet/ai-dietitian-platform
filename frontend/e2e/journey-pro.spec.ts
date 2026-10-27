@@ -498,8 +498,19 @@ test("unready plan stays hidden; local midnight selects the next calendar day", 
     path: info.outputPath("journey-before-midnight.png"),
     animations: "disabled",
   });
+  await card.locator("[data-journey-details-toggle]").click();
+  await card.locator("[data-journey-outer-toggle]").click();
+  await expect(card.locator("[data-journey-body]")).not.toBeVisible();
   await page.clock.fastForward(61 * 1000);
   await expect(card).toContainText("İkinci gün yulafı");
+  await expect(card.locator("[data-journey-outer-toggle]")).toHaveAttribute(
+    "aria-expanded",
+    "true",
+  );
+  await expect(card.locator("[data-journey-details-toggle]")).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
   await expect(card).not.toContainText("Mercimek çorbası");
   await expect(card).not.toContainText("Sebzeli bulgur");
   await card.screenshot({

@@ -217,6 +217,11 @@ test("explicit food time reaches the existing API; stale day cannot write", asyn
     /günü değişti/,
   );
   assert.equal(payload, null);
+  await assert.rejects(
+    h.meals.mealsStore.addFood({ slot: "lunch", time: "11:00", dayKey: "2026-10-02", food }),
+    /gelecekte/,
+  );
+  assert.equal(payload, null);
 });
 
 test("failed confirmation preflight cannot initiate another write", async () => {
@@ -236,4 +241,55 @@ test("failed confirmation preflight cannot initiate another write", async () => 
     h.meals.useMeals().some((meal) => meal.isEaten),
     false,
   );
+});
+
+test("verified owner plan survives refresh, but never crosses account, day or invalid plan boundaries", () => {
+  const h = harness();
+  const plan = {
+    id: "synthetic-refresh",
+    isActive: true,
+    status: "COMPLETED",
+    startDate: "2026-10-02",
+    dailyPlans: {
+      durationDays: 1,
+      calendar: [{ dayNumber: 1, cycleIndex: 0 }],
+      cycle: [
+        {
+          meals: [
+            {
+              name: "Öğle yemeği",
+              time: "13:00",
+              foods: [{ name: "Sentetik", portion: "1 kase" }],
+            },
+          ],
+        },
+      ],
+    },
+  };
+  const state = {
+    activePlan: plan,
+    ownerUserId: "test-owner",
+    hydrated: true,
+    loading: false,
+    readError: false,
+  };
+  h.mocks["@/application/health/nutrition-plan-store"].useNutritionPlan = () => state;
+  assert.equal(h.journey().plannedMeal.meal.foods[0].name, "Sentetik");
+  state.loading = true;
+  assert.equal(h.journey().planReady, true);
+  assert.equal(h.journey().planRefreshing, true);
+  assert.equal(h.journey().plannedMeal.meal.foods[0].name, "Sentetik");
+  state.loading = false;
+  state.readError = true;
+  assert.equal(h.journey().planReadError, true);
+  assert.equal(h.journey().plannedMeal.meal.foods[0].name, "Sentetik");
+  state.ownerUserId = "other-owner";
+  assert.equal(h.journey().planReady, false);
+  assert.equal(h.journey().plannedMeal, null);
+  state.ownerUserId = "test-owner";
+  plan.isActive = false;
+  assert.equal(h.journey().plannedMeal, null);
+  plan.isActive = true;
+  h.advance(86400000);
+  assert.equal(h.journey().plannedMeal, null);
 });

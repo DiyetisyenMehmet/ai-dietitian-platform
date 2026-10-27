@@ -14,7 +14,7 @@ export function useDailyJourneyResult() {
   return { ...result, allDone: result.status === "all-done" };
 }
 
-/** Completion summary (completed vs. total, including recorded-window skips). */
+/** Required recording goals; optional logs stay visible without increasing the denominator. */
 export function summarizeJourney(steps: JourneyStep[]): {
   completed: number;
   total: number;

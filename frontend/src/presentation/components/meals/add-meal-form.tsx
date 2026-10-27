@@ -101,10 +101,12 @@ export function AddMealForm({
         if (authStore.getSnapshot().user?.id !== formOwner.current || day !== localDayKey()) return;
         toast.success("Besin öğüne eklendi");
         router.push(cancelHref);
-      } catch {
+      } catch (error) {
         if (authStore.getSnapshot().user?.id === formOwner.current && day === localDayKey())
           toast.error(
-            "Kayıt doğrulanamadı. Tekrar eklemeden önce Beslenme kayıtlarını kontrol et.",
+            error instanceof Error && error.message === "Tüketim saati gelecekte olamaz"
+              ? "Tüketim saati gelecekte olamaz. Gerçek tüketim saatini seç."
+              : "Kayıt doğrulanamadı. Tekrar eklemeden önce Beslenme kayıtlarını kontrol et.",
           );
       } finally {
         submitting.current = false;

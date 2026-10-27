@@ -294,7 +294,7 @@ export const mealsStore = {
       if (!confirmed) throw error;
       log = confirmed;
     }
-    if (session !== sessionVersion) return;
+    if (session !== sessionVersion || localDayKey() !== targetDay) return;
     ensureCurrentDay();
     writeVersion++;
     if (!isIsoOnLocalDay(log.loggedAt, cacheDayKey)) return;
@@ -320,7 +320,7 @@ export const mealsStore = {
     writeVersion++;
     meals = meals.map((meal) =>
       meal.slot === slot && meal.checkInId === current.checkInId
-        ? { ...meal, isEaten: false, checkInId: null }
+        ? { ...meal, isEaten: false, checkInId: null, recordedAt: undefined }
         : meal,
     );
     if (readiness !== "UNKNOWN") readiness = readinessFromCount(entryCount(meals));
