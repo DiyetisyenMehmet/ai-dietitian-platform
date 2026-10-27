@@ -169,7 +169,11 @@ async function fixture(
       state.posts.push(input);
       if (state.hold) await writeGate;
       if (state.fail) return fail();
-      const saved = log(`saved-${state.posts.length}`, input.mealType);
+      const saved = {
+        ...log(`saved-${state.posts.length}`, input.mealType),
+        ...input,
+        loggedAt: input.loggedAt ?? `${today}T11:00:00Z`,
+      };
       state.meals.push(saved);
       return ok({ log: saved });
     }
@@ -252,7 +256,7 @@ for (const width of [390, 412, 430])
       await open(page);
       const card = section(page);
       await expect(card.locator("[data-journey-plan-meal]")).toContainText("Mercimek çorbası");
-      await expect(card.locator("time")).toHaveText("13:25");
+      await expect(card.locator("time")).toHaveText("Planlanan 13:25");
       await expect(card).toContainText("1/4 adım");
       await expect(card).toContainText("%25");
       await expect(card.locator("[data-journey-next]")).toContainText("Öğle yemeği");
@@ -274,6 +278,9 @@ for (const width of [390, 412, 430])
       expect(eatBox.width).toBeGreaterThanOrEqual(120);
       expect(Math.abs(eatBox.width - differentBox.width)).toBeLessThanOrEqual(1);
       expect(Math.abs(eatBox.y - differentBox.y)).toBeLessThanOrEqual(1);
+      await expect(card.locator("[data-journey-details-panel]")).not.toBeVisible();
+      await card.screenshot({ path: info.outputPath(`journey-compact-${width}-${theme}.png`) });
+      await card.locator("[data-journey-details-toggle]").click();
       await expect(
         card.locator("[data-daily-journey-steps] > [data-journey-timeline-step]"),
       ).toHaveCount(3);
@@ -282,7 +289,7 @@ for (const width of [390, 412, 430])
       ).toContainText("Kahvaltı");
       await expect(card.getByRole("link", { name: "Farklı yedim", exact: true })).toHaveAttribute(
         "href",
-        "/meals/add?slot=lunch",
+        `/meals/add?slot=lunch&day=${today}&returnTo=/dashboard`,
       );
       await expect(card).not.toContainText("Kayıt zamanı geçti");
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
@@ -313,6 +320,26 @@ for (const width of [390, 412, 430])
         fullPage: true,
         animations: "disabled",
       });
+      const outer = card.locator("[data-journey-outer-toggle]");
+      await outer.focus();
+      await outer.press("Enter");
+      await expect(card.locator("[data-journey-body]")).not.toBeVisible();
+      await expect(card.locator("[data-journey-plan-meal]")).not.toBeVisible();
+      await expect(card.locator("[data-journey-tracking-steps]")).not.toBeVisible();
+      await expect(page.locator("[data-dashboard-metrics]")).toBeVisible();
+      await card.screenshot({
+        path: info.outputPath(`journey-outer-closed-${width}-${theme}.png`),
+      });
+      await page.reload();
+      await expect(section(page).locator("[data-journey-outer-toggle]")).toHaveAttribute(
+        "aria-expanded",
+        "false",
+      );
+      await section(page).locator("[data-journey-outer-toggle]").click();
+      await expect(section(page).locator("[data-journey-details-toggle]")).toHaveAttribute(
+        "aria-expanded",
+        "true",
+      );
     });
   }
 for (const width of [390, 412, 430])
@@ -329,6 +356,8 @@ for (const width of [390, 412, 430])
       await expect(card.locator("[data-journey-plan-fallback]")).toContainText("Bugüne eşleşen");
       await expect(card.locator("time")).toHaveCount(0);
       await expect(card.getByRole("button", { name: "Yedim", exact: true })).toHaveCount(0);
+      await expect(card.locator("[data-journey-details-panel]")).not.toBeVisible();
+      await card.locator("[data-journey-details-toggle]").click();
       await expect(card.locator("[data-journey-timeline-step]")).toHaveCount(4);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
         true,
@@ -360,7 +389,7 @@ for (const width of [390, 412, 430])
       );
       await expect(section(page).locator("[data-journey-details-toggle]")).toHaveAttribute(
         "aria-expanded",
-        "true",
+        "false",
       );
     });
   }
@@ -385,13 +414,16 @@ test("double click, failed save, retry and persisted undo never invent macros", 
   await expect(card).toContainText("1/4 adım");
   f.state.fail = false;
   await eat.click();
-  await expect(card).toContainText("Öğün kaydedildi. Kalori ve besin değerleri eklenmedi.");
+  await expect(card).toContainText(
+    "Öğün adımı işaretlendi; besin kaydı henüz oluşturulmadı. Kalori ve besin değerleri eklenmedi.",
+  );
   await expect(card).toContainText("2/4 adım");
   expect(f.state.posts).toEqual([{ mealType: "LUNCH" }, { mealType: "LUNCH" }]);
   await card.getByRole("button", { name: "Son öğün işaretini geri al" }).click();
   await expect(card).toContainText("Öğün işareti geri alındı.");
   await expect(card).toContainText("1/4 adım");
   expect(f.state.deletes).toEqual(["/tracking/meals/saved-2"]);
+  await card.locator("[data-journey-details-toggle]").click();
   await card.getByRole("button", { name: "+250 ml su ekle" }).click();
   await expect(card).toContainText("1000 / 2100 ml");
   expect(f.state.waterPosts).toBe(1);
@@ -428,7 +460,15 @@ for (const mode of [
       await expect(card.getByRole("button", { name: "Yedim", exact: true })).toHaveCount(0);
     }
     if (mode === "complete") {
-      await expect(card).toContainText("Bugünün yolculuğunu tamamladın");
+      await expect(card).toHaveAttribute("data-journey-status", "all-done");
+      await expect(card.locator("[data-journey-outer-toggle]")).toHaveAttribute(
+        "aria-expanded",
+        "false",
+      );
+      await expect(card.locator("[data-journey-body]")).not.toBeVisible();
+      await card.locator("[data-journey-outer-toggle]").click();
+      await card.locator("[data-journey-details-toggle]").click();
+      await expect(card).toContainText("Günlük kayıt adımlarını tamamladın");
       await expect(card).toContainText("%100");
     }
     if (mode === "due")
@@ -453,7 +493,7 @@ test("unready plan stays hidden; local midnight selects the next calendar day", 
   f.releasePlan();
   await expect(card).toContainText("Mercimek çorbası");
   await page.clock.fastForward((9 * 60 + 59) * 60 * 1000);
-  await expect(card).toContainText("Sebzeli bulgur");
+  await expect(card).toContainText("Mercimek çorbası");
   await card.screenshot({
     path: info.outputPath("journey-before-midnight.png"),
     animations: "disabled",
@@ -488,4 +528,123 @@ test("account switch clears the previous menu before a delayed new plan response
   await expect(section(page).locator("time")).toHaveCount(0);
   f.releasePlan();
   await expect(section(page)).toContainText("Bugüne eşleşen");
+});
+
+for (const width of [390, 412, 430])
+  for (const theme of ["light", "dark"] as const) {
+    test(`${width}px ${theme}: completed day compacts once, manual reopen survives reload and undo`, async ({
+      page,
+    }, info) => {
+      await page.setViewportSize({ width, height: 932 });
+      await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
+      await page.addInitScript((value) => localStorage.setItem("theme", value), theme);
+      await fixture(page, { complete: true });
+      await open(page);
+      const card = section(page),
+        outer = card.locator("[data-journey-outer-toggle]");
+      await expect(card).toHaveAttribute("data-journey-status", "all-done");
+      await expect(outer).toHaveAttribute("aria-expanded", "false");
+      await expect(card.locator("[data-journey-body]")).not.toBeVisible();
+      expect((await card.boundingBox())!.height).toBeLessThan(140);
+      await card.screenshot({ path: info.outputPath(`journey-completed-${width}-${theme}.png`) });
+      await outer.click();
+      await card.locator("[data-journey-details-toggle]").click();
+      await expect(card.locator("[data-journey-progress-area]")).toBeVisible();
+      await expect(card).toContainText("besin kaydı yok");
+      await expect(card).toContainText("Kalori ve besin hedeflerin ayrı");
+      await page.reload();
+      await expect(outer).toHaveAttribute("aria-expanded", "true");
+      await expect(card.locator("[data-journey-details-toggle]")).toHaveAttribute(
+        "aria-expanded",
+        "true",
+      );
+      await page.goto("/meals");
+      await expect(
+        page.getByText("Öğün adımları işaretlendi; besin kaydı henüz oluşturulmadı.", {
+          exact: false,
+        }),
+      ).toBeVisible();
+      await page.getByRole("checkbox", { name: "Öğle Yemeği öğününü yedim", exact: true }).click();
+      await page.goto("/dashboard");
+      await expect(outer).toHaveAttribute("aria-expanded", "true");
+      await expect(card).toContainText("3/4 adım");
+      await expect(card.locator("[data-journey-plan-meal]")).toContainText("Mercimek çorbası");
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+      );
+    });
+  }
+
+test("different meal context cancels to Journey without a write; confirmed food keeps actual time and totals", async ({
+  page,
+}) => {
+  const f = await fixture(page);
+  await open(page);
+  await section(page).getByRole("link", { name: "Farklı yedim", exact: true }).click();
+  await expect(page.locator("[data-meal-entry-context]")).toContainText(`Öğle Yemeği · ${today}`);
+  await expect(page.getByRole("combobox", { name: "Saat", exact: true })).toHaveValue("14");
+  await page.getByRole("button", { name: "İptal", exact: true }).click();
+  await expect(section(page)).toBeVisible();
+  expect(f.state.posts).toHaveLength(0);
+  await expect(section(page)).toContainText("1/4 adım");
+  await section(page).getByRole("link", { name: "Farklı yedim", exact: true }).click();
+  await page.getByLabel("Besin Adı", { exact: true }).fill("Sentetik besin");
+  await page.getByLabel("Miktar", { exact: true }).fill("1 porsiyon");
+  await page.getByLabel("Kalori (kcal)", { exact: true }).fill("100");
+  await page.getByLabel("Protein (g)", { exact: true }).fill("5");
+  await page.getByLabel("Karbonhidrat (g)", { exact: true }).fill("10");
+  await page.getByLabel("Yağ (g)", { exact: true }).fill("2");
+  await page.getByRole("combobox", { name: "Saat", exact: true }).selectOption("13");
+  await page.getByRole("combobox", { name: "Dakika", exact: true }).selectOption("10");
+  await page.getByRole("button", { name: "Kaydet", exact: true }).click();
+  await expect(section(page)).toBeVisible();
+  expect(f.state.posts).toHaveLength(1);
+  expect(f.state.posts[0]).toMatchObject({
+    name: "Sentetik besin",
+    calories: 100,
+    loggedAt: `${today}T10:10:00.000Z`,
+  });
+  await page.goto("/meals");
+  await expect(page.getByText("100 kcal", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Kaydedilen 13:10", { exact: false }).first()).toBeVisible();
+  await expect(page.getByText("Planlanan 13:25", { exact: false }).first()).toBeVisible();
+});
+
+test("five fixed planned steps: snack before dinner, water reaches goal, auto fold only once, undo preserves denominator", async ({
+  page,
+}) => {
+  const plan = activePlan();
+  plan.dailyPlans.cycle[1].meals.splice(2, 0, meal("Ara öğün", "18:00", "Sentetik ara öğün"));
+  plan.dailyPlans.cycle[1].meals[3].time = "21:55";
+  const f = await fixture(page, { plan });
+  f.state.meals.push(log("l", "LUNCH"));
+  f.state.water = 1850;
+  await open(page);
+  const card = section(page);
+  await expect(card).toContainText("2/5 adım");
+  await expect(card.locator("[data-journey-plan-meal]")).toContainText("Sentetik ara öğün");
+  await card.getByRole("button", { name: "Yedim", exact: true }).click();
+  await expect(card).toContainText("3/5 adım");
+  await expect(card.locator("[data-journey-plan-meal]")).toContainText("Sebzeli bulgur");
+  await card.getByRole("button", { name: "Yedim", exact: true }).click();
+  await expect(card).toContainText("4/5 adım");
+  await card.locator("[data-journey-details-toggle]").click();
+  await card.getByRole("button", { name: "+250 ml su ekle", exact: true }).click();
+  await expect(card.locator("[data-journey-outer-toggle]")).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
+  await card.locator("[data-journey-outer-toggle]").click();
+  await card.getByRole("button", { name: "Son öğün işaretini geri al", exact: true }).click();
+  await expect(card).toContainText("4/5 adım");
+  await expect(card.locator("[data-journey-outer-toggle]")).toHaveAttribute(
+    "aria-expanded",
+    "true",
+  );
+  await page.reload();
+  await expect(card).toContainText("4/5 adım");
+  await expect(card.locator("[data-journey-outer-toggle]")).toHaveAttribute(
+    "aria-expanded",
+    "true",
+  );
 });

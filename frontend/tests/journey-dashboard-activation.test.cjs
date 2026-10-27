@@ -70,7 +70,7 @@ test("insufficient-data stays neutral and never presents zero or visible complet
     "presentation/components/dashboard/daily-journey-section.tsx",
     "DailyJourneySection",
   );
-  assert.match(html, /Veri bekleniyor/);
+  assert.match(html, /Doğrulanıyor/);
   assert.match(html, /Bazı takip verileri henüz hazır değil/);
   assert.match(html, /Verilerin geldikçe yolculuğun güncellenecek/);
   assert.doesNotMatch(html, /0\/0 adım/);
@@ -91,7 +91,7 @@ test("all-done is the only status that renders the Journey completion message", 
     "presentation/components/dashboard/daily-journey-section.tsx",
     "DailyJourneySection",
   );
-  assert.match(html, /Bugünün yolculuğunu tamamladın! 🎉/);
+  assert.match(html, /Günlük kayıt adımlarını tamamladın!/);
   assert.doesNotMatch(html, /Önerilen/);
 });
 

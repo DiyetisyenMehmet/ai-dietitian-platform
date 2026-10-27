@@ -44,10 +44,7 @@ export function useJourneyEngine() {
   }, []);
   const today = now ? localDateKey(now) : null;
   const planReady =
-    auth.status === "authenticated" &&
-    plan.ownerUserId === auth.user?.id &&
-    plan.hydrated &&
-    !plan.loading;
+    auth.status === "authenticated" && plan.ownerUserId === auth.user?.id && plan.hydrated;
   return {
     ...buildJourney({
       plannedMeals: now && planReady ? journeyPlanMeals(plan.activePlan, now) : [],
@@ -57,6 +54,7 @@ export function useJourneyEngine() {
       currentWeightKg: profile.currentWeightKg || null,
       targetWeightKg: profile.targetWeightKg || null,
       workScheduleType: profile.workScheduleType,
+      foodCounts: Object.fromEntries(meals.map((meal) => [meal.slot, meal.foods.length])),
       meals: Object.fromEntries(
         meals.map((meal) => [
           meal.slot,
@@ -92,5 +90,7 @@ export function useJourneyEngine() {
     }),
     dayKey: today,
     planReady,
+    planReadError: plan.readError,
+    planRefreshing: plan.loading && planReady,
   };
 }

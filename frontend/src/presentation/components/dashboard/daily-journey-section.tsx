@@ -2,15 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import {
-  Check,
-  ChevronDown,
-  ChevronRight,
-  ChevronUp,
-  Clock3,
-  Route,
-  UtensilsCrossed,
-} from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Clock3, Route, UtensilsCrossed } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { Card, CardContent } from "@/presentation/components/ui/card";
 import { ProgressBar } from "@/presentation/components/ui/progress-bar";
@@ -19,6 +11,8 @@ import {
   summarizeJourney,
   useDailyJourneyResult,
   visibleJourneySteps,
+  journeyDisclosure,
+  settleJourneyDisclosure,
 } from "@/application/health/daily-journey";
 import type { JourneyResult } from "@/application/health/journey-engine";
 import type { JourneyPlannedMeal } from "@/application/health/journey-plan";
@@ -29,14 +23,22 @@ import { authStore, useAuth } from "@/application/auth/auth-store";
 import { dailyTrackingStore, useDailyTracking } from "@/application/health/daily-tracking-store";
 import { localDayKey } from "@/application/health/daily-data-readiness";
 
+function journeyHref(href: string, day?: string) {
+  return day && href.startsWith("/meals/add?slot=")
+    ? `${href}&day=${day}&returnTo=/dashboard`
+    : href;
+}
+
 export function StepRow({
   step,
   last = false,
   action,
+  day,
 }: {
   step: JourneyStep;
   last?: boolean;
   action?: React.ReactNode;
+  day?: string;
 }) {
   const Icon = healthIcon(step.icon);
   const complete = step.state === "completed";
@@ -67,11 +69,7 @@ export function StepRow({
       <span className="min-w-0 flex-1">
         <span className="block break-words text-sm font-semibold">{step.label}</span>
         <span className="mt-0.5 block break-words text-xs leading-relaxed text-muted-foreground">
-          {step.kind === "water" || step.kind === "weight" || step.kind === "activity"
-            ? step.hint
-            : complete
-              ? "Kaydın hazır"
-              : "Hazır olduğunda kaydedebilirsin"}
+          {step.hint}
         </span>
       </span>
       <span
@@ -90,7 +88,7 @@ export function StepRow({
       {step.href && !complete && !action ? (
         <Link
           className="block min-h-11 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          href={step.href}
+          href={journeyHref(step.href, day)}
         >
           {body}
         </Link>
@@ -113,9 +111,15 @@ interface DailyJourneyContentProps {
   direction?: JourneyResult["direction"];
   plannedMeal?: JourneyPlannedMeal | null;
   planReady?: boolean;
+  planReadError?: boolean;
+  planRefreshing?: boolean;
   mealControls?: React.ReactNode;
   feedback?: React.ReactNode;
   waterControls?: React.ReactNode;
+  day?: string;
+  progressReady?: boolean;
+  outerExpanded?: boolean;
+  onOuterExpandedChange?: (expanded: boolean) => void;
   expanded: boolean;
   onExpandedChange: (expanded: boolean) => void;
 }
@@ -126,31 +130,38 @@ export function DailyJourneyContent({
   direction,
   plannedMeal,
   planReady = true,
+  planReadError = false,
+  planRefreshing = false,
   mealControls,
   feedback,
   waterControls,
+  day,
+  progressReady = true,
+  outerExpanded = true,
+  onOuterExpandedChange,
   expanded,
   onExpandedChange,
 }: DailyJourneyContentProps) {
   const { completed, total, percent } = summarizeJourney(steps);
-  const visible = visibleJourneySteps(steps, status, expanded);
   const next = visibleJourneySteps(steps, status, false).find(
     (step) => step.state === "recommended",
   );
   const detailsId = React.useId();
+  const bodyId = React.useId();
   const summaries = steps.filter(
     (step) => step.kind === "water" || step.kind === "weight" || step.kind === "activity",
   );
-  const list = (expanded ? visible : steps.filter((step) => step.kind !== next?.kind)).filter(
-    (step) => !summaries.includes(step),
+  const list = steps.filter((step) => !summaries.includes(step));
+  const mealIsNext = Boolean(
+    plannedMeal && next && (next.id ? plannedMeal.key === next.id : plannedMeal.slot === next.kind),
   );
-  const mealIsNext = Boolean(plannedMeal && next && plannedMeal.slot === next.kind);
   const NextIcon = next ? healthIcon(next.icon) : Route;
   return (
     <section
       data-daily-journey-section
       data-journey-status={status}
       data-journey-expanded={String(expanded)}
+      data-journey-outer-expanded={String(outerExpanded)}
     >
       <Card
         className="overflow-hidden rounded-[24px] border-primary/15 bg-card shadow-sm"
@@ -165,186 +176,233 @@ export function DailyJourneyContent({
               Bugünkü Yolculuğum
             </h3>
             <span className="shrink-0 rounded-full bg-primary/10 px-2.5 py-1.5 text-xs font-semibold tabular-nums text-primary">
-              {total ? `${completed}/${total} adım` : "Veri bekleniyor"}
+              {!progressReady
+                ? "Doğrulanıyor"
+                : status === "all-done"
+                  ? "Tamamlandı ✓"
+                  : total
+                    ? `${completed}/${total} adım`
+                    : "Veri bekleniyor"}
             </span>
-          </div>
-          <div className="space-y-2" data-journey-progress-area>
-            <div className="flex items-center gap-3">
-              <div className="min-w-0 flex-1">
-                <ProgressBar
-                  value={percent}
-                  ariaLabel="Günlük yolculuk ilerlemen"
-                  ariaValueText={
-                    total ? `${completed}/${total} adım tamamlandı` : "Günlük veriler bekleniyor"
-                  }
-                />
-              </div>
-              <span className="text-xs font-semibold tabular-nums">
-                {total ? `%${percent}` : "—"}
-              </span>
-            </div>
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              {direction
-                ? GOAL_GUIDANCE[direction]
-                : "Küçük adımlarını kaydet, günlük ilerlemeni burada takip et."}
-            </p>
-          </div>
-          {status === "all-done" ? (
-            <p className="rounded-2xl bg-emerald-500/10 p-4 text-sm font-semibold text-emerald-800 dark:text-emerald-200">
-              Bugünün yolculuğunu tamamladın! 🎉
-            </p>
-          ) : next || plannedMeal ? (
-            <div
-              className="space-y-4 rounded-[20px] border border-primary/20 bg-gradient-to-br from-primary/10 via-primary/5 to-card p-4 sm:p-5"
-              data-journey-next={next ? "" : undefined}
-              data-journey-focus-card
+            <button
+              type="button"
+              data-journey-outer-toggle
+              aria-expanded={outerExpanded}
+              aria-controls={bodyId}
+              aria-label={
+                outerExpanded
+                  ? "Bugünkü Yolculuğum bölümünü daralt"
+                  : "Bugünkü Yolculuğum bölümünü aç"
+              }
+              onClick={() => onOuterExpandedChange?.(!outerExpanded)}
+              className="flex size-11 shrink-0 items-center justify-center rounded-xl text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              {next && !mealIsNext && (
-                <div className={plannedMeal ? "border-b border-primary/15 pb-3" : ""}>
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">
-                    Sıradaki adım
-                  </p>
-                  <Link
-                    href={next.href!}
-                    className="flex min-h-12 items-center gap-3 rounded-xl text-base font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    <NextIcon className="size-5 shrink-0 text-primary" aria-hidden="true" />
-                    <span className="min-w-0 flex-1 break-words">
-                      {next.label}
-                      {!plannedMeal ? " kaydını ekle" : ""}
-                    </span>
-                    <ChevronRight className="size-4 shrink-0" aria-hidden="true" />
-                  </Link>
-                  <p className="text-xs leading-relaxed text-muted-foreground">
-                    {next.kind === "weight" ? next.hint : "Hazır olduğunda kaydedebilirsin."}
-                  </p>
-                </div>
-              )}
-              {plannedMeal && (
-                <div className="space-y-4" data-journey-plan-meal>
-                  <div className="flex items-start gap-3">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">
-                        {mealIsNext ? "Sıradaki adım" : "Bugünkü beslenme planından"}
-                      </p>
-                      <h4 className="mt-1.5 break-words text-xl font-semibold tracking-tight">
-                        {plannedMeal.meal.name}
-                      </h4>
-                      <time
-                        dateTime={plannedMeal.meal.time}
-                        className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-primary/15 bg-card/80 px-2.5 py-1 text-xs font-semibold tabular-nums text-primary"
-                      >
-                        <Clock3 className="size-3.5" aria-hidden="true" />
-                        {plannedMeal.meal.time}
-                      </time>
-                    </div>
-                    <span
-                      role="img"
-                      aria-label="Öğün planı simgesi"
-                      data-journey-meal-illustration
-                      className="flex size-16 shrink-0 items-center justify-center rounded-[20px] border border-primary/10 bg-card/80 text-primary sm:size-20"
+              <ChevronDown
+                aria-hidden="true"
+                className={cn(
+                  "size-5 transition-transform motion-reduce:transition-none",
+                  outerExpanded && "rotate-180",
+                )}
+              />
+            </button>
+          </div>
+          <div id={bodyId} hidden={!outerExpanded} className="space-y-3" data-journey-body>
+            {(planReadError || planRefreshing) && (
+              <p role="status" className="text-sm text-muted-foreground">
+                {planReadError
+                  ? "Plan yenilenemedi. Son doğrulanmış veri varsa korunuyor."
+                  : "Plan güncelleniyor…"}
+              </p>
+            )}
+            {status === "all-done" ? (
+              <p className="rounded-2xl bg-emerald-500/10 p-4 text-sm font-semibold text-emerald-800 dark:text-emerald-200">
+                Günlük kayıt adımlarını tamamladın! Kalori ve besin hedeflerin ayrı takip edilir.
+              </p>
+            ) : next || plannedMeal ? (
+              <div
+                className="space-y-4 rounded-[20px] border border-primary/20 bg-gradient-to-br from-primary/10 via-primary/5 to-card p-4 sm:p-5"
+                data-journey-next={next ? "" : undefined}
+                data-journey-focus-card
+              >
+                {next && !mealIsNext && (
+                  <div className={plannedMeal ? "border-b border-primary/15 pb-3" : ""}>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">
+                      Sıradaki adım
+                    </p>
+                    <Link
+                      href={journeyHref(next.href!, day)}
+                      className="flex min-h-12 items-center gap-3 rounded-xl text-base font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
-                      <UtensilsCrossed
-                        className="size-8 sm:size-10"
-                        aria-hidden="true"
-                        strokeWidth={1.5}
-                      />
-                    </span>
+                      <NextIcon className="size-5 shrink-0 text-primary" aria-hidden="true" />
+                      <span className="min-w-0 flex-1 break-words">
+                        {next.label}
+                        {!plannedMeal ? " kaydını ekle" : ""}
+                      </span>
+                      <ChevronRight className="size-4 shrink-0" aria-hidden="true" />
+                    </Link>
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      {next.kind === "weight" ? next.hint : "Hazır olduğunda kaydedebilirsin."}
+                    </p>
                   </div>
-                  <ul className="space-y-1.5 text-sm leading-relaxed text-foreground/90">
-                    {plannedMeal.meal.foods.map((food, i) => (
-                      <li className="break-words" key={i}>
-                        {food.name} <span className="text-muted-foreground">· {food.portion}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  {mealControls}
-                </div>
-              )}
-            </div>
-          ) : (
-            <p className="rounded-2xl bg-muted/40 p-4 text-sm leading-relaxed text-muted-foreground">
-              {status === "insufficient-data"
-                ? "Bazı takip verileri henüz hazır değil. Verilerin geldikçe yolculuğun güncellenecek."
-                : "Günlük kayıtlarını burada takip edebilirsin."}
-            </p>
-          )}
-          {!plannedMeal && status !== "all-done" && (
-            <p className="text-xs leading-relaxed text-muted-foreground" data-journey-plan-fallback>
-              {planReady
-                ? "Bugüne eşleşen bir beslenme planı yok. Öğünlerini yine kaydedebilirsin."
-                : "Beslenme planın doğrulanıyor; henüz menü gösterilmiyor."}{" "}
-              <Link
-                href="/meals/plan"
-                className="inline-flex min-h-11 items-center font-medium text-primary underline-offset-4 hover:underline"
-              >
-                Planına bak
-              </Link>
-            </p>
-          )}
-          {feedback}
-          {steps.length > 0 && (
-            <div className="border-t border-border/70 pt-1">
-              <button
-                type="button"
-                aria-label={expanded ? "Yolculuk detaylarını daralt" : "Yolculuk detaylarını aç"}
-                aria-expanded={expanded}
-                aria-controls={detailsId}
-                data-journey-details-toggle
-                onClick={() => onExpandedChange(!expanded)}
-                className="mb-1 flex min-h-11 w-full items-center justify-between gap-2 rounded-lg text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <span>Günlük adımların</span>
-                {expanded ? (
-                  <ChevronUp className="size-4 text-muted-foreground" aria-hidden="true" />
-                ) : (
-                  <ChevronDown className="size-4 text-muted-foreground" aria-hidden="true" />
                 )}
-              </button>
-              <ol
-                id={detailsId}
-                className={expanded ? "space-y-0.5" : "flex flex-wrap gap-x-3 gap-y-1"}
-                data-daily-journey-steps
-                data-visible-journey-steps={list.length}
-              >
-                {list.map((step, index) =>
-                  expanded ? (
-                    <StepRow
-                      key={step.kind}
-                      step={step}
-                      last={index === list.length - 1 && summaries.length === 0}
-                    />
-                  ) : (
-                    <li
-                      key={step.kind}
-                      className="flex min-h-8 items-center gap-1.5 text-[11px] text-muted-foreground"
-                    >
+                {plannedMeal && (
+                  <div className="space-y-4" data-journey-plan-meal>
+                    <div className="flex items-start gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">
+                          {mealIsNext ? "Sıradaki adım" : "Bugünkü beslenme planından"}
+                        </p>
+                        <h4 className="mt-1.5 break-words text-xl font-semibold tracking-tight">
+                          {plannedMeal.meal.name}
+                        </h4>
+                        <time
+                          dateTime={plannedMeal.meal.time}
+                          className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-primary/15 bg-card/80 px-2.5 py-1 text-xs font-semibold tabular-nums text-primary"
+                        >
+                          <Clock3 className="size-3.5" aria-hidden="true" />
+                          Planlanan {plannedMeal.meal.time}
+                        </time>
+                      </div>
                       <span
-                        className={cn(
-                          "size-1.5 rounded-full",
-                          step.state === "completed" ? "bg-emerald-500" : "bg-muted-foreground/40",
-                        )}
-                        aria-hidden="true"
-                      />
-                      {step.label} · {step.state === "completed" ? "Tamamlandı" : "Bekliyor"}
-                    </li>
-                  ),
+                        role="img"
+                        aria-label="Öğün planı simgesi"
+                        data-journey-meal-illustration
+                        className="flex size-16 shrink-0 items-center justify-center rounded-[20px] border border-primary/10 bg-card/80 text-primary sm:size-20"
+                      >
+                        <UtensilsCrossed
+                          className="size-8 sm:size-10"
+                          aria-hidden="true"
+                          strokeWidth={1.5}
+                        />
+                      </span>
+                    </div>
+                    <ul className="space-y-1.5 text-sm leading-relaxed text-foreground/90">
+                      {plannedMeal.meal.foods.map((food, i) => (
+                        <li className="break-words" key={i}>
+                          {food.name}{" "}
+                          <span className="text-muted-foreground">· {food.portion}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    {mealControls}
+                  </div>
                 )}
-              </ol>
-              {summaries.length > 0 && (
-                <ol className="space-y-0.5" data-journey-tracking-steps>
-                  {summaries.map((step, index) => (
-                    <StepRow
-                      key={step.kind}
-                      step={step}
-                      last={index === summaries.length - 1}
-                      action={step.kind === "water" ? waterControls : undefined}
-                    />
-                  ))}
-                </ol>
-              )}
-            </div>
-          )}
+              </div>
+            ) : (
+              <p className="rounded-2xl bg-muted/40 p-4 text-sm leading-relaxed text-muted-foreground">
+                {status === "insufficient-data"
+                  ? "Bazı takip verileri henüz hazır değil. Verilerin geldikçe yolculuğun güncellenecek."
+                  : "Günlük kayıtlarını burada takip edebilirsin."}
+              </p>
+            )}
+            {!plannedMeal && status !== "all-done" && (
+              <p
+                className="text-xs leading-relaxed text-muted-foreground"
+                data-journey-plan-fallback
+              >
+                {planReadError
+                  ? "Beslenme planın doğrulanamadı. Plan ekranından tekrar deneyebilirsin."
+                  : !planReady
+                    ? "Beslenme planın doğrulanıyor; henüz menü gösterilmiyor."
+                    : steps.some((step) => step.id)
+                      ? "Bugünkü planın öğün adımları kaydedildi. Diğer günlük adımlarını aşağıdan takip edebilirsin."
+                      : "Bugüne eşleşen bir beslenme planı yok. Öğünlerini yine kaydedebilirsin."}{" "}
+                <Link
+                  href="/meals/plan"
+                  className="inline-flex min-h-11 items-center font-medium text-primary underline-offset-4 hover:underline"
+                >
+                  Planına bak
+                </Link>
+              </p>
+            )}
+            {feedback}
+            {steps.length > 0 && (
+              <div className="border-t border-border/70 pt-1">
+                <button
+                  type="button"
+                  aria-label={expanded ? "Yolculuk detaylarını daralt" : "Yolculuk detaylarını aç"}
+                  aria-expanded={expanded}
+                  aria-controls={detailsId}
+                  data-journey-details-toggle
+                  onClick={() => onExpandedChange(!expanded)}
+                  className="mb-1 flex min-h-11 w-full items-center justify-between gap-2 rounded-lg text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <span>
+                    Günlük adımlarım{" "}
+                    <span className="text-xs font-normal text-muted-foreground">
+                      · {completed}/{total}
+                    </span>
+                  </span>
+                  <ChevronDown
+                    aria-hidden="true"
+                    className={cn(
+                      "size-4 text-muted-foreground transition-transform motion-reduce:transition-none",
+                      expanded && "rotate-180",
+                    )}
+                  />
+                </button>
+                <div
+                  id={detailsId}
+                  hidden={!expanded}
+                  className="space-y-3"
+                  data-journey-details-panel
+                >
+                  <div className="space-y-2" data-journey-progress-area>
+                    <div className="flex items-center gap-3">
+                      <div className="min-w-0 flex-1">
+                        <ProgressBar
+                          value={percent}
+                          ariaLabel="Günlük yolculuk ilerlemen"
+                          ariaValueText={
+                            total
+                              ? `${completed}/${total} adım tamamlandı`
+                              : "Günlük veriler bekleniyor"
+                          }
+                        />
+                      </div>
+                      <span className="text-xs font-semibold tabular-nums">
+                        {progressReady && total ? `%${percent}` : "—"}
+                      </span>
+                    </div>
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      {direction
+                        ? GOAL_GUIDANCE[direction]
+                        : "Küçük adımlarını kaydet, günlük ilerlemeni burada takip et."}
+                    </p>
+                  </div>
+                  <ol
+                    className="space-y-0.5"
+                    data-daily-journey-steps
+                    data-visible-journey-steps={expanded ? list.length : 0}
+                  >
+                    {steps
+                      .filter((step) => !summaries.includes(step))
+                      .map((step, index, items) => (
+                        <StepRow
+                          key={step.id ?? step.kind}
+                          step={step}
+                          day={day}
+                          last={index === items.length - 1 && summaries.length === 0}
+                        />
+                      ))}
+                  </ol>
+                  {summaries.length > 0 && (
+                    <ol className="space-y-0.5" data-journey-tracking-steps>
+                      {summaries.map((step, index) => (
+                        <StepRow
+                          key={step.id ?? step.kind}
+                          step={step}
+                          day={day}
+                          last={index === summaries.length - 1}
+                          action={step.kind === "water" ? waterControls : undefined}
+                        />
+                      ))}
+                    </ol>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
     </section>
@@ -353,15 +411,41 @@ export function DailyJourneyContent({
 
 /** Local action state is remounted at every account/day boundary. All writes use the existing store. */
 function LiveJourney({ result }: { result: ReturnType<typeof useDailyJourneyResult> }) {
-  const [expanded, setExpanded] = React.useState(true);
+  const meals = useMeals();
+  const readiness = useMealsReadiness();
+  const tracking = useDailyTracking();
+  const storageKey = `diewish:journey-view:${encodeURIComponent(useAuth().user?.id ?? "guest")}:${result.dayKey}`;
+  const [preference, setPreference] = React.useState(() => {
+    try {
+      return journeyDisclosure(
+        typeof window === "undefined"
+          ? null
+          : JSON.parse(localStorage.getItem(storageKey) ?? "null"),
+      );
+    } catch {
+      return journeyDisclosure(null);
+    }
+  });
+  const completed = result.status === "all-done" && result.planReady;
+  const settled = settleJourneyDisclosure(preference, completed);
+  const outerExpanded =
+    settled.outer ??
+    (result.planReady && readiness !== "UNKNOWN" && tracking.waterReadiness !== "UNKNOWN");
+  const expanded = settled.inner;
+  React.useEffect(() => {
+    if (!result.dayKey) return;
+    if (settled !== preference) setPreference(settled);
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(settled));
+    } catch {
+      /* UI preference only. */
+    }
+  }, [storageKey, result.dayKey, preference, settled]);
   const [pending, setPending] = React.useState(false);
   const locked = React.useRef(false);
   const [message, setMessage] = React.useState("");
   const [savedSlot, setSavedSlot] = React.useState<MealSlot | null>(null);
-  const meals = useMeals();
-  const readiness = useMealsReadiness();
   const owner = useAuth().user?.id;
-  const tracking = useDailyTracking();
   const selected = result.plannedMeal;
   const meal = meals.find((entry) => entry.slot === selected?.slot);
   const saved = meals.find((entry) => entry.slot === savedSlot && entry.checkInId && entry.isEaten);
@@ -388,7 +472,7 @@ function LiveJourney({ result }: { result: ReturnType<typeof useDailyJourneyResu
       setMessage(
         undo
           ? "Öğün işareti geri alındı."
-          : "Öğün kaydedildi. Kalori ve besin değerleri eklenmedi.",
+          : "Öğün adımı işaretlendi; besin kaydı henüz oluşturulmadı. Kalori ve besin değerleri eklenmedi.",
       );
     } catch {
       if (authStore.getSnapshot().user?.id === owner && localDayKey() === result.dayKey)
@@ -433,10 +517,12 @@ function LiveJourney({ result }: { result: ReturnType<typeof useDailyJourneyResu
               onClick={() => void record(meal.slot, true)}
               className={cn(buttonClass, "bg-primary/10 text-primary")}
             >
-              {pending ? "Kaydediliyor…" : "Kaydı geri al"}
+              {pending ? "Kaydediliyor…" : "İşareti geri al"}
             </button>
           ) : meal.foods.length ? (
-            <span className="py-2 text-xs text-muted-foreground">Bu öğünde besin kaydın var.</span>
+            <span className="py-2 text-xs text-muted-foreground">
+              Bu öğünde besin kaydın var; kalori toplamına dahil.
+            </span>
           ) : (
             <button
               type="button"
@@ -448,7 +534,7 @@ function LiveJourney({ result }: { result: ReturnType<typeof useDailyJourneyResu
             </button>
           )}
           <Link
-            href={`/meals/add?slot=${selected.slot}`}
+            href={`/meals/add?slot=${selected.slot}&day=${result.dayKey}&returnTo=/dashboard`}
             className={cn(buttonClass, "border border-border bg-card")}
           >
             Farklı yedim
@@ -463,7 +549,11 @@ function LiveJourney({ result }: { result: ReturnType<typeof useDailyJourneyResu
           </p>
           <Link
             className={cn(buttonClass, "mt-2 border border-border")}
-            href={selected.slot ? `/meals/add?slot=${selected.slot}` : "/meals/plan"}
+            href={
+              selected.slot
+                ? `/meals/add?slot=${selected.slot}&day=${result.dayKey}&returnTo=/dashboard`
+                : "/meals/plan"
+            }
           >
             Öğün kaydına git
           </Link>
@@ -474,8 +564,14 @@ function LiveJourney({ result }: { result: ReturnType<typeof useDailyJourneyResu
   return (
     <DailyJourneyContent
       {...result}
+      status={result.planReady ? result.status : "insufficient-data"}
+      progressReady={
+        result.planReady && readiness !== "UNKNOWN" && tracking.waterReadiness !== "UNKNOWN"
+      }
+      outerExpanded={outerExpanded}
+      onOuterExpandedChange={(outer) => setPreference({ ...settled, outer })}
       expanded={expanded}
-      onExpandedChange={setExpanded}
+      onExpandedChange={(inner) => setPreference({ ...settled, inner })}
       mealControls={controls}
       waterControls={
         <button

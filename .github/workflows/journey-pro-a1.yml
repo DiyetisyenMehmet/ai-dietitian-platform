@@ -35,7 +35,12 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm run type-check
-      - run: node --test tests/journey-engine.test.cjs tests/journey-plan.test.cjs tests/journey-sources.test.cjs tests/journey-compact-ui.test.cjs tests/journey-dashboard-activation.test.cjs tests/nutrition-plan-generation.test.cjs tests/nutrition-plan-performance-a1.test.cjs tests/nutrition-smart-preparation.test.cjs
+      - run: node --test tests/journey-engine.test.cjs tests/journey-consistency.test.cjs tests/dashboard-card-personalization.test.cjs tests/zod-validation-security.test.cjs tests/journey-plan.test.cjs tests/journey-sources.test.cjs tests/journey-compact-ui.test.cjs tests/journey-dashboard-activation.test.cjs tests/nutrition-plan-generation.test.cjs tests/nutrition-plan-performance-a1.test.cjs tests/nutrition-smart-preparation.test.cjs
+      - name: Build the changed frontend without deploying
+        env:
+          NEXT_PUBLIC_API_BASE_URL: /api
+          NEXT_PUBLIC_SITE_URL: https://example.invalid
+        run: npm run build
       - name: Use installed runner Chrome, fall back to Playwright browser
         timeout-minutes: 3
         shell: bash

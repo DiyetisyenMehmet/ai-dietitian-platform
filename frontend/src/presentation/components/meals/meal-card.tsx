@@ -32,6 +32,7 @@ import type { EditFoodInput } from "@/domain/meals/validation";
 interface MealCardProps {
   meal: Meal;
   defaultOpen?: boolean;
+  plannedTime?: string;
 }
 
 /**
@@ -39,7 +40,7 @@ interface MealCardProps {
  * check-in is deliberately separate from food items: it records adherence
  * without fabricating nutrition values and can be undone without deleting food.
  */
-export function MealCard({ meal, defaultOpen = false }: MealCardProps) {
+export function MealCard({ meal, defaultOpen = false, plannedTime }: MealCardProps) {
   const [expanded, setExpanded] = React.useState(defaultOpen);
   const [editing, setEditing] = React.useState<FoodItem | null>(null);
   const [deleting, setDeleting] = React.useState<FoodItem | null>(null);
@@ -79,7 +80,7 @@ export function MealCard({ meal, defaultOpen = false }: MealCardProps) {
       try {
         if (checked) {
           await mealsStore.markMealEaten(meal.slot);
-          toast.success(`${meal.label} tamamlandı`);
+          toast.success(`${meal.label} işaretlendi; besin değerleri eklenmedi`);
         } else {
           await mealsStore.unmarkMealEaten(meal.slot);
           toast.success(`${meal.label} işareti kaldırıldı`);
@@ -130,17 +131,35 @@ export function MealCard({ meal, defaultOpen = false }: MealCardProps) {
               {meal.label}
             </span>
             <span className="mt-1 block text-sm font-semibold tabular-nums text-muted-foreground">
-              {foodCount > 0 ? (missingCalories ? "Kalori bilgisi eksik" : formatNumber(totals.calories) + " kcal") : meal.isEaten ? "Öğün işaretlendi" : "Besin eklenmedi"}
+              {foodCount > 0
+                ? missingCalories
+                  ? "Kalori bilgisi eksik"
+                  : formatNumber(totals.calories) + " kcal"
+                : meal.isEaten
+                  ? "Öğün işaretlendi"
+                  : "Besin eklenmedi"}
             </span>
             <span className="mt-1 block max-w-full truncate text-xs text-muted-foreground">
               {foodCount > 0
-                ? meal.foods.slice(0, 2).map((food) => food.name || "İsimsiz besin").join(", ")
-                : "Öğün detayını açarak besin ekleyebilirsin"}
+                ? meal.foods
+                    .slice(0, 2)
+                    .map((food) => food.name || "İsimsiz besin")
+                    .join(", ")
+                : meal.isEaten
+                  ? "Öğün işaretlendi; besin kaydı yok"
+                  : "Öğün detayını açarak besin ekleyebilirsin"}
               {foodCount > 2 ? "…" : ""}
             </span>
-            <span className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground">
+            <span className="mt-1 flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
               <Clock className="size-3" aria-hidden="true" />
-              {meal.time}
+              {plannedTime && <span>Planlanan {plannedTime} · </span>}
+              {meal.recordedAt
+                ? "Kaydedilen " +
+                  new Date(meal.recordedAt).toLocaleTimeString("tr-TR", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })
+                : "Kayıt saati yok"}
               {foodCount > 0 ? " · " + foodCount + " besin" : ""}
             </span>
           </span>
@@ -205,7 +224,10 @@ export function MealCard({ meal, defaultOpen = false }: MealCardProps) {
         onSave={handleEditSave}
       />
 
-      <Modal open={deleting !== null} onOpenChange={(open) => !open && !deletePending && setDeleting(null)}>
+      <Modal
+        open={deleting !== null}
+        onOpenChange={(open) => !open && !deletePending && setDeleting(null)}
+      >
         <ModalContent>
           <ModalHeader>
             <ModalTitle>Besini sil</ModalTitle>
@@ -218,7 +240,11 @@ export function MealCard({ meal, defaultOpen = false }: MealCardProps) {
             <Button variant="outline" disabled={deletePending} onClick={() => setDeleting(null)}>
               İptal
             </Button>
-            <Button variant="destructive" disabled={deletePending} onClick={() => void handleDeleteConfirm()}>
+            <Button
+              variant="destructive"
+              disabled={deletePending}
+              onClick={() => void handleDeleteConfirm()}
+            >
               {deletePending ? "Siliniyor…" : "Sil"}
             </Button>
           </ModalFooter>

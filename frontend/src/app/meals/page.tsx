@@ -6,7 +6,12 @@ import { CalendarDays, ChevronRight, Clock3, Plus, ScanLine } from "lucide-react
 
 import { nutritionPlanStore, useNutritionPlan } from "@/application/health/nutrition-plan-store";
 import { useHealthProfile } from "@/application/health/health-profile-store";
-import { useMeals, useMealsReadiness, computeTotals, findMissingNutrition } from "@/application/meals/meals-store";
+import {
+  useMeals,
+  useMealsReadiness,
+  computeTotals,
+  findMissingNutrition,
+} from "@/application/meals/meals-store";
 import { formatLongDate } from "@/shared/lib/format";
 import { MEAL_SLOTS, type MealSlot, type NutritionTotals } from "@/domain/meals/types";
 import type { NutritionPlanDuration } from "@/infrastructure/nutrition/nutrition-plan-client";
@@ -16,6 +21,8 @@ import { Button } from "@/presentation/components/ui/button";
 import { MicronutrientSummary } from "@/presentation/components/meals/micronutrient-summary";
 import { NutritionSummary } from "@/presentation/components/meals/nutrition-summary";
 import { MealCard } from "@/presentation/components/meals/meal-card";
+
+import { journeyPlanMeals } from "@/application/health/journey-plan";
 
 type MealFilter = "all" | MealSlot;
 
@@ -63,16 +70,19 @@ export default function MealsPage() {
   // Active plan is the macro target authority; the profile may separately provide a calorie target.
   // Neither has a legacy fallback: an unset goal must not appear as a real user goal.
   const goals: Partial<NutritionTotals> = {
-    calories: targetOrUndefined(activePlan?.dailyCalories) ?? targetOrUndefined(profile.dailyCalorieGoal),
+    calories:
+      targetOrUndefined(activePlan?.dailyCalories) ?? targetOrUndefined(profile.dailyCalorieGoal),
     protein: targetOrUndefined(activePlan?.proteinGrams),
     carbs: targetOrUndefined(activePlan?.carbsGrams),
     fat: targetOrUndefined(activePlan?.fatGrams),
   };
 
+  const plannedMeals = journeyPlanMeals(activePlan, new Date());
   const shownMeals = filter === "all" ? meals : meals.filter((meal) => meal.slot === filter);
   const hasAnyMealData = totalFoods > 0 || meals.some((meal) => meal.isEaten);
   const verified = readiness !== "UNKNOWN";
-  const selectedSlotIsEmpty = filter !== "all" && shownMeals.every((meal) => meal.foods.length === 0 && !meal.isEaten);
+  const selectedSlotIsEmpty =
+    filter !== "all" && shownMeals.every((meal) => meal.foods.length === 0 && !meal.isEaten);
 
   return (
     <AppShell title="Beslenme" hideHeader>
@@ -86,16 +96,23 @@ export default function MealsPage() {
           </div>
           <div className="flex shrink-0 items-center gap-0.5">
             <Button asChild variant="ghost" size="icon" aria-label="Besin tara">
-              <Link href="/meals/scan"><ScanLine className="size-5" aria-hidden="true" /></Link>
+              <Link href="/meals/scan">
+                <ScanLine className="size-5" aria-hidden="true" />
+              </Link>
             </Button>
             <Button asChild variant="ghost" size="icon" aria-label="Öğün ekle">
-              <Link href="/meals/add"><Plus className="size-5" aria-hidden="true" /></Link>
+              <Link href="/meals/add">
+                <Plus className="size-5" aria-hidden="true" />
+              </Link>
             </Button>
             <ThemeToggle />
           </div>
         </header>
 
-        <section aria-label="Öğün filtreleri" className="rounded-2xl border border-border/60 bg-card p-2 shadow-sm">
+        <section
+          aria-label="Öğün filtreleri"
+          className="rounded-2xl border border-border/60 bg-card p-2 shadow-sm"
+        >
           <div
             role="tablist"
             aria-label="Öğün türü"
@@ -122,11 +139,26 @@ export default function MealsPage() {
           </div>
         </section>
 
-        <NutritionSummary totals={totals} goals={goals} readiness={readiness} missingNutrition={missingNutrition} hasLoggedFoods={totalFoods > 0} />
+        {verified && totalFoods === 0 && hasAnyMealData && (
+          <p role="status" className="rounded-2xl bg-primary/5 p-3 text-sm">
+            Öğün adımları işaretlendi; besin kaydı henüz oluşturulmadı. Kalori ve makro hedefleri
+            ayrı takip edilir.
+          </p>
+        )}
+        <NutritionSummary
+          totals={totals}
+          goals={goals}
+          readiness={readiness}
+          missingNutrition={missingNutrition}
+          hasLoggedFoods={totalFoods > 0}
+        />
 
         <section className="space-y-3" aria-labelledby="today-meals-heading" id="today-meals-list">
           <div className="flex items-center justify-between gap-2">
-            <h2 id="today-meals-heading" className="min-w-0 text-xl font-extrabold tracking-tight sm:text-2xl">
+            <h2
+              id="today-meals-heading"
+              className="min-w-0 text-xl font-extrabold tracking-tight sm:text-2xl"
+            >
               Bugünün Öğünleri
             </h2>
             {filter !== "all" ? (
@@ -147,17 +179,23 @@ export default function MealsPage() {
             )}
           </div>
           {!verified && !hasAnyMealData && (
-            <p className="rounded-2xl border border-dashed p-3 text-sm text-muted-foreground" role="status">
+            <p
+              className="rounded-2xl border border-dashed p-3 text-sm text-muted-foreground"
+              role="status"
+            >
               Öğün kayıtların henüz doğrulanamadı. Veriler yüklenince günlük özet güncellenecek.
             </p>
           )}
           {verified && !hasAnyMealData && (
             <p className="rounded-2xl bg-teal-500/5 px-4 py-3 text-sm text-muted-foreground">
-              Bugün için henüz besin kaydı bulunmuyor. Öğününü işaretleyebilir veya besin ekleyebilirsin.
+              Bugün için henüz besin kaydı bulunmuyor. Öğününü işaretleyebilir veya besin
+              ekleyebilirsin.
             </p>
           )}
           {verified && selectedSlotIsEmpty && (
-            <p className="text-sm text-muted-foreground">Bu öğün türünde henüz kayıt bulunmuyor. Aşağıdaki karttan besin ekleyebilirsin.</p>
+            <p className="text-sm text-muted-foreground">
+              Bu öğün türünde henüz kayıt bulunmuyor. Aşağıdaki karttan besin ekleyebilirsin.
+            </p>
           )}
           {!verified && !hasAnyMealData ? null : shownMeals.length === 0 ? (
             <p className="rounded-2xl border border-dashed p-4 text-sm text-muted-foreground">
@@ -171,6 +209,7 @@ export default function MealsPage() {
                   <MealCard
                     key={meal.slot}
                     meal={meal}
+                    plannedTime={plannedMeals.find((entry) => entry.slot === meal.slot)?.meal.time}
                     defaultOpen={originalIndex === 0 && totalFoods > 0}
                   />
                 );
@@ -179,13 +218,17 @@ export default function MealsPage() {
           )}
           {verified && totalFoods === 0 && (
             <Button asChild className="w-full">
-              <Link href="/meals/add"><Plus className="size-4" aria-hidden="true" /> İlk besinini ekle</Link>
+              <Link href="/meals/add">
+                <Plus className="size-4" aria-hidden="true" /> İlk besinini ekle
+              </Link>
             </Button>
           )}
         </section>
 
         <section className="space-y-3" aria-labelledby="nutrition-tools-heading">
-          <h2 id="nutrition-tools-heading" className="text-base font-bold">Beslenme Araçları</h2>
+          <h2 id="nutrition-tools-heading" className="text-base font-bold">
+            Beslenme Araçları
+          </h2>
           <div className="space-y-2">
             <Link
               href="/meals/plan"
@@ -198,7 +241,10 @@ export default function MealsPage() {
                 <span className="block text-sm font-semibold">Öğün Planım</span>
                 <span className="block text-xs leading-relaxed text-muted-foreground">
                   {activePlan
-                    ? durationLabel(activePlan.duration) + " kişisel plan · " + activePlan.mealsPerDay + " öğün/gün"
+                    ? durationLabel(activePlan.duration) +
+                      " kişisel plan · " +
+                      activePlan.mealsPerDay +
+                      " öğün/gün"
                     : hydrated
                       ? "Hedeflerine ve tercihlerine göre kişisel plan oluştur"
                       : "Kişisel planın yükleniyor…"}
