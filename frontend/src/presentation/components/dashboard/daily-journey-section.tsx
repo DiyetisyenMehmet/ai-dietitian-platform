@@ -579,6 +579,7 @@ function LiveJourney({ result }: { result: ReturnType<typeof useDailyJourneyResu
   return (
     <DailyJourneyContent
       {...result}
+      day={result.dayKey ?? undefined}
       status={result.planReady ? result.status : "insufficient-data"}
       progressReady={
         result.planReady && readiness !== "UNKNOWN" && tracking.waterReadiness !== "UNKNOWN"
