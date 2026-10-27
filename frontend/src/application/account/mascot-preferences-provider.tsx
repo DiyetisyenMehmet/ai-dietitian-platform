@@ -14,6 +14,7 @@ interface MascotState {
   preferences: MascotPreferences;
   loading: boolean;
   saving: boolean;
+  /** GET confirmation failed; a rejected PATCH leaves the last confirmation intact. */
   error: boolean;
   reload: () => Promise<void>;
   save: (patch: Partial<MascotPreferences>) => Promise<boolean>;
@@ -142,7 +143,7 @@ export function MascotPreferencesProvider({ children }: { children: React.ReactN
         return true;
       } catch {
         if (generation.current === version && activeUser.current === userId)
-          setState((old) => ({ ...old, saving: false, error: true }));
+          setState((old) => ({ ...old, saving: false }));
         return false;
       } finally {
         if (generation.current === version) saveLock.current = false;
