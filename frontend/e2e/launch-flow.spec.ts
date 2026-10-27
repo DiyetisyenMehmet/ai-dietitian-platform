@@ -92,7 +92,7 @@ for (const width of [390, 412, 430]) {
           await expect(page.getByTestId("diewish-brand")).toHaveCount(1);
           const toggle = (await page
             .locator("header")
-            .getByRole("button", { name: /temaya geç/ })
+            .getByRole("button", { name: /Görünüm:|temaya geç/ })
             .boundingBox())!;
           const box = (await brand.boundingBox())!;
           expect(box.x + box.width + 12).toBeLessThanOrEqual(toggle.x);

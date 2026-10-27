@@ -343,7 +343,8 @@ test("register -> consent -> onboarding -> scanner -> same-day weigh-in preserve
   expect(decodeURIComponent(coachHref ?? "")).toContain("50 g Test Protein Bar");
   expect(decodeURIComponent(coachHref ?? "")).toContain("260 kcal");
 
-  await page.getByRole("button", { name: "Koyu temaya geç" }).evaluate((element) => element.click());
+  await page.getByRole("button", { name: /^Görünüm:/ }).evaluate((element) => element.click());
+  await page.getByRole("radio", { name: /^Koyu/ }).check();
   await expect(page.locator("html")).toHaveClass(/dark/);
   await expect(page.getByText("260 kcal", { exact: true }).first()).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
@@ -351,7 +352,8 @@ test("register -> consent -> onboarding -> scanner -> same-day weigh-in preserve
   await page.setViewportSize({ width: 412, height: 915 });
   await expect(page.getByText("Test Protein Bar", { exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  await page.getByRole("button", { name: "Açık temaya geç" }).evaluate((element) => element.click());
+  await page.getByRole("button", { name: /^Görünüm:/ }).evaluate((element) => element.click());
+  await page.getByRole("radio", { name: /^Açık/ }).check();
   await expect(page.locator("html")).not.toHaveClass(/dark/);
 
   await page.route("**/api/tracking/meals/micronutrients/day?*", async (route) => {
@@ -421,7 +423,8 @@ test("register -> consent -> onboarding -> scanner -> same-day weigh-in preserve
   await expect(page.getByRole("heading", { name: "Haftalık Değerlendirme" })).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 
-  await page.getByRole("button", { name: "Koyu temaya geç" }).evaluate((element) => element.click());
+  await page.getByRole("button", { name: /^Görünüm:/ }).evaluate((element) => element.click());
+  await page.getByRole("radio", { name: /^Koyu/ }).check();
   await expect(page.locator("html")).toHaveClass(/dark/);
   await page.setViewportSize({ width: 412, height: 915 });
   await expect(page.getByRole("heading", { name: "Haftalık Koç Özeti" })).toBeVisible();
@@ -430,7 +433,8 @@ test("register -> consent -> onboarding -> scanner -> same-day weigh-in preserve
   await page.setViewportSize({ width: 1280, height: 900 });
   await expect(page.getByRole("heading", { name: "Aylık Koç Özeti" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  await page.getByRole("button", { name: "Açık temaya geç" }).evaluate((element) => element.click());
+  await page.getByRole("button", { name: /^Görünüm:/ }).evaluate((element) => element.click());
+  await page.getByRole("radio", { name: /^Açık/ }).check();
   await expect(page.locator("html")).not.toHaveClass(/dark/);
 
   await page.goto(`${WEB_BASE_URL}/meals/scan`);
@@ -561,7 +565,8 @@ test("register -> consent -> onboarding -> scanner -> same-day weigh-in preserve
   await expect(page.getByText("Bu porsiyonda sodyum miktarı dikkat gerektirecek düzeyde.")).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 
-  await page.getByRole("button", { name: "Koyu temaya geç" }).evaluate((element) => element.click());
+  await page.getByRole("button", { name: /^Görünüm:/ }).evaluate((element) => element.click());
+  await page.getByRole("radio", { name: /^Koyu/ }).check();
   await expect(page.locator("html")).toHaveClass(/dark/);
   await expect(page.getByText("Seçilen porsiyon: 250 g", { exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
@@ -569,7 +574,8 @@ test("register -> consent -> onboarding -> scanner -> same-day weigh-in preserve
   await page.setViewportSize({ width: 412, height: 915 });
   await expect(page.getByText("Kuru fasulye", { exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  await page.getByRole("button", { name: "Açık temaya geç" }).evaluate((element) => element.click());
+  await page.getByRole("button", { name: /^Görünüm:/ }).evaluate((element) => element.click());
+  await page.getByRole("radio", { name: /^Açık/ }).check();
   await expect(page.locator("html")).not.toHaveClass(/dark/);
 
   await page.goto(`${WEB_BASE_URL}/progress`);

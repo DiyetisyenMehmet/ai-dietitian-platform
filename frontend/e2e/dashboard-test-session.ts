@@ -95,24 +95,10 @@ export async function createDashboardSession(
   return { email, fullName, token, password: DASHBOARD_TEST_PASSWORD };
 }
 
-export async function setDashboardTheme(
-  page: Page,
-  theme: "light" | "dark",
-) {
-  const html = page.locator("html");
-  const isDark = await html.evaluate((element) =>
-    element.classList.contains("dark"),
-  );
-
-  if (theme === "dark" && !isDark) {
-    await page
-      .getByRole("button", { name: "Koyu temaya geç" })
-      .evaluate((element) => (element as HTMLButtonElement).click());
-    await expect(html).toHaveClass(/dark/);
-  } else if (theme === "light" && isDark) {
-    await page
-      .getByRole("button", { name: "Açık temaya geç" })
-      .evaluate((element) => (element as HTMLButtonElement).click());
-    await expect(html).not.toHaveClass(/dark/);
-  }
+export async function setDashboardTheme(page: Page, theme: "light" | "dark") {
+  await page
+    .getByRole("button", { name: /^Görünüm:/ })
+    .evaluate((element) => (element as HTMLButtonElement).click());
+  await page.getByRole("radio", { name: theme === "dark" ? /^Koyu/ : /^Açık/ }).check();
+  await expect(page.locator("html")).toHaveClass(new RegExp(theme));
 }

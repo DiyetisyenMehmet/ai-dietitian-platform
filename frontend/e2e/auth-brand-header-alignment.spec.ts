@@ -49,7 +49,7 @@ for (const width of [390, 412, 430]) {
         name: (await name.boundingBox())!,
         symbol: (await symbol.boundingBox())!,
         tagline: (await tagline.boundingBox())!,
-        toggle: (await header.getByRole("button", { name: /temaya geç/ }).boundingBox())!,
+        toggle: (await header.getByRole("button", { name: /Görünüm:|temaya geç/ }).boundingBox())!,
         form: (await page.locator("form").boundingBox())!,
       };
       expect(rects.brand.x + rects.brand.width + 12).toBeLessThanOrEqual(rects.toggle.x);

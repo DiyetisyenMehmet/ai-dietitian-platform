@@ -67,7 +67,7 @@ for (const width of [390, 412, 430]) {
           brand: (await brand.boundingBox())!,
           name: (await name.boundingBox())!,
           form: (await page.locator("form").boundingBox())!,
-          toggle: (await header.getByRole("button", { name: /temaya geç/ }).boundingBox())!,
+          toggle: (await header.getByRole("button", { name: /Görünüm:|temaya geç/ }).boundingBox())!,
         };
         if (!before) {
           const old = JSON.parse(
@@ -113,7 +113,8 @@ for (const width of [390, 412, 430]) {
         });
         if (!before) {
           const count = requests.length;
-          await header.getByRole("button", { name: /temaya geç/ }).click();
+          await header.getByRole("button", { name: /Görünüm:/ }).click();
+          await page.getByRole("radio", { name: theme === "dark" ? /^Açık/ : /^Koyu/ }).check();
           await expect(page.locator("html")).toHaveClass(
             new RegExp(theme === "dark" ? "light" : "dark"),
           );

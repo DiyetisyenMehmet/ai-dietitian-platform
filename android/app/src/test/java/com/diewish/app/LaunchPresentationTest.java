@@ -38,7 +38,7 @@ public final class LaunchPresentationTest {
         static WebView.VisualStateCallback pending;
         static String artworkReady;
         @Implementation @Override protected void evaluateJavascript(String script, android.webkit.ValueCallback<String> result) {
-            if (result != null && script.contains("data-artwork-state")) result.onReceiveValue(artworkReady);
+            if (result != null && script.contains("data-artwork-state")) result.onReceiveValue("{\"ready\":" + artworkReady + ",\"dark\":false}");
             else super.evaluateJavascript(script, result);
         }
         @Implementation protected void postVisualStateCallback(long id, WebView.VisualStateCallback callback) {
