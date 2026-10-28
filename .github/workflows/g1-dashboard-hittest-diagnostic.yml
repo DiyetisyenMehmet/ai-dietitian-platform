@@ -1,0 +1,166 @@
+name: G1 Dashboard single-scenario geometry diagnostic
+
+on:
+  push:
+    branches:
+      - diag/app10-g1-dashboard-hittest-a1
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    if: github.repository == 'DiyetisyenMehmet/ai-dietitian-platform' && github.ref == 'refs/heads/diag/app10-g1-dashboard-hittest-a1' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: diewish
+          POSTGRES_PASSWORD: diewish
+          POSTGRES_DB: diewish_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U diewish -d diewish_e2e"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      NODE_ENV: test
+      DIEWISH_ENVIRONMENT: test
+      PORT: 4000
+      COACH_SYNC_ENABLED: "true"
+      STAGING_AUTOMATION_ENABLED: "false"
+      SCHEDULER_TRIGGER_ENABLED: "false"
+      NUTRITION_JOBS_ENABLED: "false"
+      ACCOUNT_SAFE_LINKING_ENABLED: "false"
+      PHONE_PASSWORD_AUTH_ENABLED: "false"
+      PHONE_SMS_RECOVERY_ENABLED: "false"
+      DATABASE_URL: postgresql://diewish:diewish@127.0.0.1:5432/diewish_e2e?schema=public
+      DIRECT_DATABASE_URL: postgresql://diewish:diewish@127.0.0.1:5432/diewish_e2e?schema=public
+      # Public, disposable CI signing strings, identical to Hardening; not service credentials.
+      JWT_ACCESS_SECRET: browser-e2e-access-secret-012345678901234567890123456789
+      JWT_REFRESH_SECRET: browser-e2e-refresh-secret-01234567890123456789012345678
+      CORS_ORIGIN: http://127.0.0.1:3000
+      APP_WEB_URL: http://127.0.0.1:3000
+      LOG_LEVEL: silent
+      BCRYPT_ROUNDS: 10
+      RATE_LIMIT_MAX: 1000
+      AUTH_RATE_LIMIT_MAX: 1000
+      NEXT_TELEMETRY_DISABLED: 1
+      NEXT_PUBLIC_API_BASE_URL: /api
+      DIEWISH_API_PROXY_TARGET: http://127.0.0.1:4000
+      NEXT_PUBLIC_SITE_URL: http://127.0.0.1:3000
+      E2E_WEB_BASE_URL: http://127.0.0.1:3000
+      E2E_API_BASE_URL: http://127.0.0.1:4000/api
+      DIEWISH_DIAGNOSTIC_SOURCE_SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Guard one attempt, exact baseline, scope and local database
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$(git rev-parse HEAD^)" = 905296a1d554f89157fb660d8e27008785bee9d2
+          node <<'JS'
+          const assert = require('node:assert/strict');
+          const {execFileSync} = require('node:child_process');
+          const expected = ['.github/workflows/g1-dashboard-hittest-diagnostic.yml', 'frontend/e2e/dashboard-edit-sanity.spec.ts'];
+          const changed = execFileSync('git',['diff','--name-only','HEAD^','HEAD'],{encoding:'utf8'}).trim().split('\n').sort();
+          assert.deepEqual(changed, expected);
+          for (const key of ['DATABASE_URL','DIRECT_DATABASE_URL']) {
+            const u = new URL(process.env[key]);
+            assert.equal(u.protocol, 'postgresql:'); assert.equal(u.hostname, '127.0.0.1');
+            assert.equal(u.port, '5432'); assert.equal(u.pathname, '/diewish_e2e');
+            assert.equal(u.username, 'diewish'); assert.equal(u.password, 'diewish');
+            assert.equal(u.search, '?schema=public');
+          }
+          for (const key of ['SMTP_HOST','SMTP_USER','SMTP_PASSWORD','SMTP_FROM','FIREBASE_WEB_API_KEY','GOOGLE_APPLICATION_CREDENTIALS','OPENAI_API_KEY','ABACUS_API_KEY','GEMINI_API_KEY','ANTHROPIC_API_KEY']) {
+            assert.equal(Boolean(process.env[key]), false, 'External service configuration must be absent');
+          }
+          console.log('Guard PASS: expected source, two diagnostic files, first attempt, loopback disposable database only');
+          JS
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+      - name: Prepare real backend on disposable PostgreSQL only
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          npm ci
+          npx prisma generate
+          npx prisma migrate deploy
+          npm run build
+      - name: Prepare frontend and locked Chromium
+        timeout-minutes: 10
+        working-directory: frontend
+        run: |
+          set -euo pipefail
+          npm ci
+          sudo find /etc/apt/sources.list.d -maxdepth 1 -type f -iname '*google*chrome*' -delete
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            grep -Fq 'https://archive.ubuntu.com/ubuntu/' /etc/apt/apt-mirrors.txt
+            sudo sed -i '/azure[.]archive[.]ubuntu[.]com/d' /etc/apt/apt-mirrors.txt
+          fi
+          npx playwright install --with-deps chromium
+          npm run build
+      - name: Restrict backend runtime network to loopback
+        run: |
+          cat > /tmp/dashboard-local-network.cjs <<'JS'
+          const net = require('node:net');
+          const connect = net.Socket.prototype.connect;
+          net.Socket.prototype.connect = function(...args) {
+            const normalized = Array.isArray(args[0]) ? args[0] : args;
+            const first = normalized[0];
+            const options = typeof first === 'object' && first !== null ? first : null;
+            const host = options?.host ?? options?.hostname ?? (typeof normalized[1] === 'string' ? normalized[1] : 'localhost');
+            if (!options?.path && !['127.0.0.1','localhost','::1'].includes(host)) {
+              throw new Error('Non-loopback diagnostic runtime connection refused');
+            }
+            return connect.apply(this, args);
+          };
+          JS
+      - name: Start existing backend and frontend without emitting private service logs
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd backend && NODE_OPTIONS=--require=/tmp/dashboard-local-network.cjs node dist/index.js > /tmp/dashboard-diagnostic-backend.log 2>&1 & echo $! > /tmp/dashboard-diagnostic-backend.pid)
+          (cd frontend && npm start -- -H 127.0.0.1 -p 3000 > /tmp/dashboard-diagnostic-frontend.log 2>&1 & echo $! > /tmp/dashboard-diagnostic-frontend.pid)
+          for target in http://127.0.0.1:4000/api/health http://127.0.0.1:3000/register; do
+            ready=false
+            for attempt in {1..45}; do
+              if curl --fail --silent --output /dev/null "$target"; then ready=true; break; fi
+              sleep 1
+            done
+            test "$ready" = true
+          done
+      - name: Run only the unchanged failing scenario with safe geometry measurements
+        working-directory: frontend
+        run: >-
+          npx playwright test e2e/dashboard-edit-sanity.spec.ts
+          --grep 'Dashboard deployed runtime: explicit save, discard, reorder, hide/show, refresh and navigation$'
+          --workers=1 --reporter=line
+      - name: Retain only anonymous geometry JSON
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: g1-dashboard-hittest-${{ github.run_id }}
+          path: frontend/test-results/**/hittest-*.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Stop only diagnostic services
+        if: always()
+        shell: bash
+        run: |
+          for file in /tmp/dashboard-diagnostic-backend.pid /tmp/dashboard-diagnostic-frontend.pid; do
+            if [ -f "$file" ]; then kill "$(cat "$file")" 2>/dev/null || true; fi
+          done

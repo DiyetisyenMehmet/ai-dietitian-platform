@@ -1,6 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
+import { writeFile } from "node:fs/promises";
 import { createDashboardSession } from "./dashboard-test-session";
 
+let diagnosticDragAttempt = 0;
 const api = process.env.E2E_API_BASE_URL || "http://127.0.0.1:4000/api";
 const originalCards = ["food", "blood", "progress", "coach"];
 const originalActions = ["meal", "water", "activity", "weight"];
@@ -37,12 +39,79 @@ async function drag(page: Page, sourceSelector: string, targetSelector: string, 
   const to = (await page.locator(targetSelector).boundingBox())!;
   const x = from.x + from.width / 2,
     y = from.y + from.height / 2;
-  expect(
-    await page.evaluate(
-      ({ x, y, selector }) => !!document.elementFromPoint(x, y)?.closest(selector),
-      { x, y, selector: sourceSelector },
-    ),
-  ).toBe(true);
+  // Diagnostic only: sample the original point and condition in one evaluation.
+  // Never serialize text, HTML, account data, requests, cookies or storage.
+  const geometry = await page.evaluate(
+    ({ x, y, selector, targetSelector, recordedFrom, recordedTo }) => {
+      const allowedAttributes = [
+        "data-dashboard-card-slot", "data-quick-action-slot", "data-app-scroll",
+        "data-app-shell", "data-personalize-group", "data-personalize-item",
+        "data-dashboard-card-drag-surface", "data-quick-action-drag-surface",
+        "data-dashboard-card-hide", "data-dashboard-personalization-control",
+        "data-save-dashboard-layout", "data-hidden-items-sheet",
+      ];
+      const rect = (element: Element | null) => {
+        if (!element) return null;
+        const box = element.getBoundingClientRect();
+        return { x: box.x, y: box.y, width: box.width, height: box.height,
+          top: box.top, right: box.right, bottom: box.bottom, left: box.left,
+          center: { x: box.left + box.width / 2, y: box.top + box.height / 2 } };
+      };
+      const describe = (element: Element | null) => {
+        if (!element) return null;
+        const style = getComputedStyle(element);
+        return {
+          tagName: element.tagName,
+          classes: Array.from(element.classList).slice(0, 32),
+          data: Object.fromEntries(allowedAttributes.filter((name) => element.hasAttribute(name))
+            .map((name) => [name, element.getAttribute(name)])),
+          rect: rect(element),
+          pointerEvents: style.pointerEvents, zIndex: style.zIndex,
+          transform: style.transform, visibility: style.visibility,
+          display: style.display, opacity: style.opacity,
+        };
+      };
+      const source = document.querySelector(selector);
+      const target = document.querySelector(targetSelector);
+      const top = document.elementFromPoint(x, y);
+      // This is the original assertion's exact predicate at its original x/y.
+      const matches = !!top?.closest(selector);
+      const scroll = source?.closest("[data-app-scroll]") ?? null;
+      const center = rect(source)?.center;
+      const viewport = window.visualViewport;
+      return {
+        matches, point: { x, y }, recordedFrom, recordedTo,
+        viewport: { width: innerWidth, height: innerHeight, devicePixelRatio,
+          scrollX, scrollY, visual: viewport ? {
+            width: viewport.width, height: viewport.height, scale: viewport.scale,
+            offsetLeft: viewport.offsetLeft, offsetTop: viewport.offsetTop,
+            pageLeft: viewport.pageLeft, pageTop: viewport.pageTop,
+          } : null },
+        source: describe(source), target: describe(target),
+        currentCenterMatches: center
+          ? !!document.elementFromPoint(center.x, center.y)?.closest(selector) : false,
+        top: describe(top),
+        nearestCard: describe(top?.closest("[data-dashboard-card-slot], [data-quick-action-slot]") ?? null),
+        nearestScroll: describe(top?.closest("[data-app-scroll]") ?? null),
+        scroll: scroll ? { element: describe(scroll), top: scroll.scrollTop,
+          left: scroll.scrollLeft, height: scroll.scrollHeight, width: scroll.scrollWidth } : null,
+        shell: describe(source?.closest("[data-app-shell]") ?? null),
+        layers: document.elementsFromPoint(x, y).slice(0, 8).map(describe),
+        measuredAtMs: performance.now(),
+      };
+    },
+    { x, y, selector: sourceSelector, targetSelector, recordedFrom: from, recordedTo: to },
+  );
+  const sequence = String(++diagnosticDragAttempt).padStart(2, "0");
+  await writeFile(test.info().outputPath(`hittest-${sequence}.json`), JSON.stringify({
+    sourceSha: process.env.DIEWISH_DIAGNOSTIC_SOURCE_SHA,
+    baselineSha: "905296a1d554f89157fb660d8e27008785bee9d2",
+    sourceSelector, targetSelector, axis, ...geometry,
+  }, null, 2));
+  console.log("DASHBOARD_HITTEST", JSON.stringify({ sequence, sourceSelector,
+    point: geometry.point, matches: geometry.matches,
+    top: geometry.top, scroll: geometry.scroll, viewport: geometry.viewport }));
+  expect(geometry.matches).toBe(true);
   await page.mouse.move(x, y);
   await page.mouse.down();
   await page.mouse.move(
