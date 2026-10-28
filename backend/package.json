@@ -79,7 +79,7 @@
     "typescript-eslint": "8.21.0"
   },
   "overrides": {
-    "qs": "6.16.0",
+    "qs": "6.16.1",
     "braces": "$braces"
   }
 }
