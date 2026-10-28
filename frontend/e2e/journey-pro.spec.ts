@@ -73,22 +73,29 @@ async function fixture(
     due?: boolean;
     delayPlan?: boolean;
     delaySession?: boolean;
+    now?: string;
+    waterMl?: number;
+    waterGoalMl?: number;
+    noMealRecords?: boolean;
+    planReadError?: boolean;
   } = {},
 ) {
-  await page.clock.install({ time: new Date(`${today}T14:00:00+03:00`) });
+  await page.clock.install({ time: new Date(options.now ?? `${today}T14:00:00+03:00`) });
   const state = {
     owner: "synthetic-a",
     plan: options.plan === undefined ? activePlan() : options.plan,
-    meals: options.complete
-      ? [log("b", "BREAKFAST"), log("l", "LUNCH"), log("d", "DINNER")]
-      : [log("b", "BREAKFAST")],
+    meals: options.noMealRecords
+      ? []
+      : options.complete
+        ? [log("b", "BREAKFAST"), log("l", "LUNCH"), log("d", "DINNER")]
+        : [log("b", "BREAKFAST")],
     posts: [] as Log[],
     mealReads: 0,
     waterReads: 0,
     deletes: [] as string[],
     fail: false,
     hold: false,
-    water: options.complete ? 2100 : 750,
+    water: options.waterMl ?? (options.complete ? 2100 : 750),
     waterPosts: 0,
     delayPlan: Boolean(options.delayPlan),
     delaySession: Boolean(options.delaySession),
@@ -152,13 +159,14 @@ async function fixture(
           dietaryPreference: "OMNIVORE",
           healthConditions: [],
           allergies: [],
-          dailyWaterGoalMl: 2100,
+          dailyWaterGoalMl: options.waterGoalMl ?? 2100,
           usualWakeTime: "07:00",
           usualSleepTime: "23:00",
           workScheduleType: "REGULAR",
         },
       });
     if (path === "/nutrition-plans") {
+      if (options.planReadError) return fail();
       const snapshot = state.plan;
       if (state.delayPlan) {
         await planGate;
@@ -263,7 +271,7 @@ for (const width of [390, 412, 430])
       await open(page);
       const card = section(page);
       await expect(card.locator("[data-journey-plan-meal]")).toContainText("Mercimek çorbası");
-      await expect(card.locator("time")).toHaveText("Planlanan 13:25");
+      await expect(card.locator("[data-journey-plan-meal] time")).toContainText("Planlanan 13:25");
       await expect(card).toContainText("1/4 adım");
       await expect(card).toContainText("%25");
       await expect(card.locator("[data-journey-next]")).toContainText("Öğle yemeği");
@@ -290,7 +298,7 @@ for (const width of [390, 412, 430])
       await card.locator("[data-journey-details-toggle]").click();
       await expect(
         card.locator("[data-daily-journey-steps] > [data-journey-timeline-step]"),
-      ).toHaveCount(3);
+      ).toHaveCount(2);
       await expect(
         card.locator('[data-journey-timeline-step][data-step-state="completed"]').first(),
       ).toContainText("Kahvaltı");
@@ -331,6 +339,8 @@ for (const width of [390, 412, 430])
       await outer.focus();
       await outer.press("Enter");
       await expect(card.locator("[data-journey-body]")).not.toBeVisible();
+      await expect(card.getByRole("progressbar")).toBeVisible();
+      await expect(card.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "25");
       await expect(card.locator("[data-journey-plan-meal]")).not.toBeVisible();
       await expect(card.locator("[data-journey-tracking-steps]")).not.toBeVisible();
       await expect(page.locator("[data-dashboard-metrics]")).toBeVisible();
@@ -360,7 +370,9 @@ for (const width of [390, 412, 430])
       await fixture(page, { plan: null });
       await open(page);
       const card = section(page);
-      await expect(card.locator("[data-journey-plan-fallback]")).toContainText("Bugüne eşleşen");
+      await expect(card.locator("[data-journey-plan-fallback]")).toContainText(
+        "Etkin bir beslenme planın yok",
+      );
       await expect(card.locator("time")).toHaveCount(0);
       await expect(card.getByRole("button", { name: "Yedim", exact: true })).toHaveCount(0);
       await expect(card.locator("[data-journey-details-panel]")).not.toBeVisible();
@@ -459,7 +471,10 @@ for (const mode of [
     await open(page);
     const card = section(page);
     if (["no-plan", "missing-date", "old-date"].includes(mode)) {
-      await expect(card.locator("[data-journey-plan-fallback]")).toContainText("Bugüne eşleşen");
+      await expect(card.locator("[data-journey-plan-fallback]")).toHaveAttribute(
+        "data-plan-status",
+        mode === "no-plan" ? "none" : mode === "missing-date" ? "unavailable" : "expired",
+      );
       await expect(card.locator("time")).toHaveCount(0);
     }
     if (mode === "unknown") {
@@ -479,14 +494,15 @@ for (const mode of [
       await expect(card).toContainText("%100");
     }
     if (mode === "due")
-      await expect(card.locator("[data-journey-next]")).toContainText("Kilo ölçümü");
+      await expect(card.locator("[data-journey-next]")).toContainText("Öğle yemeği");
     if (mode === "ambiguous") {
-      await expect(card.locator("[data-journey-plan-meal]")).toContainText("Sebzeli bulgur");
+      await expect(card.locator("[data-journey-plan-meal]")).toContainText("Mercimek çorbası");
+      await expect(card.getByRole("button", { name: "Yedim", exact: true })).toHaveCount(0);
       await card.locator("[data-journey-details-toggle]").click();
       await expect(card.locator("[data-journey-unmatched-plan]")).toContainText("Öğle özel öğünü");
       await expect(
         card.locator("[data-journey-unmatched-plan] [data-journey-timeline-step]"),
-      ).toHaveAttribute("data-step-state", "pending");
+      ).toHaveAttribute("data-step-state", "recommended");
       await expect(
         card
           .locator("[data-journey-unmatched-plan]")
@@ -509,7 +525,7 @@ test("unready plan stays hidden; local midnight selects the next calendar day", 
   f.releasePlan();
   await expect(card).toContainText("Mercimek çorbası");
   await page.clock.fastForward((9 * 60 + 59) * 60 * 1000);
-  await expect(card).toContainText("Mercimek çorbası");
+  await expect(card.locator("[data-journey-plan-meal]")).toContainText("Sebzeli bulgur");
   await card.screenshot({
     path: info.outputPath("journey-before-midnight.png"),
     animations: "disabled",
@@ -559,7 +575,7 @@ test("account switch clears the previous menu before a delayed new plan response
   await expect(section(page)).not.toContainText("Mercimek çorbası");
   await expect(section(page).locator("time")).toHaveCount(0);
   f.releasePlan();
-  await expect(section(page)).toContainText("Bugüne eşleşen");
+  await expect(section(page)).toContainText("Etkin bir beslenme planın yok");
 });
 
 for (const width of [390, 412, 430])
@@ -582,6 +598,7 @@ for (const width of [390, 412, 430])
       await outer.click();
       await card.locator("[data-journey-details-toggle]").click();
       await expect(card.locator("[data-journey-progress-area]")).toBeVisible();
+      await card.locator("[data-journey-completed] > summary").click();
       await expect(card).toContainText("besin kaydı yok");
       await expect(
         card.getByRole("link", { name: "Kahvaltı için besin kaydı ekle", exact: true }),
@@ -712,16 +729,21 @@ test("repeated snacks remain unconfirmed while trackable goals advance, fold and
   await expect(card.locator("[data-journey-plan-meal]")).toContainText("Mercimek çorbası");
   await card.getByRole("button", { name: "Yedim", exact: true }).click();
   await expect(card).toContainText("2/4 takip");
+  await expect(card.locator("[data-journey-plan-meal]")).toContainText("İkinci sentetik ara öğün");
+  await expect(card.getByRole("button", { name: "Yedim", exact: true })).toHaveCount(0);
+  await page.clock.fastForward(6 * 60 * 60 * 1000);
   await expect(card.locator("[data-journey-plan-meal]")).toContainText("Sebzeli bulgur");
   await card.getByRole("button", { name: "Yedim", exact: true }).click();
   await expect(card).toContainText("3/4 takip");
-  await expect(card.locator("[data-journey-plan-meal]")).toHaveCount(0);
+  await expect(card.locator("[data-journey-plan-meal]")).toContainText("İkinci sentetik ara öğün");
+  await expect(card.getByRole("button", { name: "Yedim", exact: true })).toHaveCount(0);
   await expect(card).not.toContainText("Bugünkü planın öğün adımları kaydedildi");
   await card.locator("[data-journey-details-toggle]").click();
   const unmatched = card.locator("[data-journey-unmatched-plan]");
   await expect(
     unmatched.locator('[data-journey-timeline-step][data-step-state="pending"]'),
-  ).toHaveCount(2);
+  ).toHaveCount(1);
+  await expect(unmatched.locator('[data-step-state="recommended"]')).toHaveCount(1);
   await expect(unmatched.locator('[data-step-state="completed"]')).toHaveCount(0);
   await expect(unmatched.getByRole("button", { name: "Yedim", exact: true })).toHaveCount(0);
   for (const link of await unmatched.getByRole("link").all())
@@ -729,7 +751,7 @@ test("repeated snacks remain unconfirmed while trackable goals advance, fold and
   await card.getByRole("button", { name: "+250 ml su ekle", exact: true }).click();
   await expect(card).toHaveAttribute("data-journey-status", "all-done");
   await expect(outer).toHaveAttribute("aria-expanded", "false");
-  await expect(card.locator("[data-journey-card-heading]")).toContainText("Takip bitti");
+  await expect(card.locator("[data-journey-card-heading]")).toContainText("4/4 takip");
   await outer.click();
   await expect(card).toContainText(
     "Eşleştirilemeyen plan öğünleri bu ilerlemeye dahil değil ve tamamlanmış sayılmadı",
@@ -780,7 +802,7 @@ test("only unmatchable planned snacks: water completion is scoped and never conf
     outer = card.locator("[data-journey-outer-toggle]");
   await expect(card).toHaveAttribute("data-journey-status", "all-done");
   await expect(outer).toHaveAttribute("aria-expanded", "false");
-  await expect(card.locator("[data-journey-card-heading]")).toContainText("Takip bitti");
+  await expect(card.locator("[data-journey-card-heading]")).toContainText("1/1 takip");
   await outer.click();
   await card.locator("[data-journey-details-toggle]").click();
   await expect(card.getByRole("progressbar")).toHaveAttribute(
@@ -797,4 +819,179 @@ test("only unmatchable planned snacks: water completion is scoped and never conf
   expect(f.state.posts).toHaveLength(0);
   expect(f.state.waterPosts).toBe(0);
   await card.screenshot({ path: info.outputPath("journey-only-unmapped-water-tracking.png") });
+});
+
+function fullCalendarPlan(days: 7 | 14 | 30, startDate = today) {
+  const p = activePlan(startDate);
+  p.duration = days === 7 ? "SEVEN_DAY" : days === 14 ? "FOURTEEN_DAY" : "THIRTY_DAY";
+  p.dailyPlans.durationDays = days;
+  p.dailyPlans.calendar = Array.from({ length: days }, (_, i) => ({
+    dayNumber: i + 1,
+    cycleIndex: i,
+  }));
+  p.dailyPlans.cycle = Array.from({ length: days }, (_, i) => ({
+    dayLabel: String(i + 1),
+    meals: [
+      meal("Kahvaltı", "08:00", `Gün ${i + 1} yulafı`),
+      meal("Öğle yemeği", "13:00", `Gün ${i + 1} mercimeği`),
+      meal("Akşam yemeği", "19:00", `Gün ${i + 1} sebzesi`),
+    ],
+  })) as NutritionPlanRecord["dailyPlans"]["cycle"];
+  return p;
+}
+test("11-A: 19:00 shows the upcoming 19:25 dinner instead of unconfirmed lunch or weight", async ({
+  page,
+}) => {
+  const p = fullCalendarPlan(7);
+  p.dailyPlans.cycle[0].meals[2].time = "19:25";
+  await fixture(page, { plan: p, now: `${today}T19:00:00+03:00`, noMealRecords: true, due: true });
+  await open(page);
+  const focus = section(page).locator("[data-journey-plan-meal]");
+  await expect(focus).toContainText("Gün 1 sebzesi");
+  await expect(focus).toContainText("Yaklaşıyor");
+  await expect(focus.locator("time")).toContainText("19:25");
+  await section(page).locator("[data-journey-details-toggle]").click();
+  await expect(section(page).locator("[data-daily-journey-steps]")).toContainText(
+    "Gün 1 mercimeği",
+  );
+  await expect(
+    section(page).locator('[data-daily-journey-steps] [data-step-state="completed"]'),
+  ).toHaveCount(0);
+});
+for (const days of [7, 14, 30] as const) {
+  test(`11-A: ${days}-day current dinner takes priority over weighing and earlier unconfirmed meals`, async ({
+    page,
+  }) => {
+    const p = fullCalendarPlan(days);
+    const f = await fixture(page, {
+      plan: p,
+      now: `${today}T19:00:00+03:00`,
+      noMealRecords: true,
+      due: true,
+    });
+    await open(page);
+    const card = section(page),
+      focus = card.locator("[data-journey-plan-meal]");
+    await expect(focus).toContainText("Gün 1 sebzesi");
+    await expect(focus).toContainText("1 kase");
+    await expect(focus).toContainText("Şimdi");
+    await expect(focus.locator("time")).toContainText("23 Ekim · Planlanan 19:00");
+    await card.locator("[data-journey-details-toggle]").click();
+    const rows = card.locator("[data-daily-journey-steps]");
+    await expect(rows).toContainText("Gün 1 yulafı");
+    await expect(rows).toContainText("Daha önceki öğün");
+    await expect(rows.locator('[data-step-state="completed"]')).toHaveCount(0);
+    await expect(card.locator("[data-journey-tracking-steps]")).toContainText("Kilo ölçümü");
+    await expect(card).toContainText("0/4 adım");
+    await focus.getByRole("button", { name: "Yedim", exact: true }).click();
+    await expect(card).toContainText("1/4 adım");
+    expect(f.state.posts).toEqual([{ mealType: "DINNER" }]);
+    expect(f.state.meals.every((entry) => entry.calories == null && entry.name == null)).toBe(true);
+  });
+}
+for (const mode of ["expired", "future", "none", "error", "loading"] as const) {
+  test(`11-A: ${mode} plan is explained without invented menu or paid generation`, async ({
+    page,
+  }) => {
+    const p = fullCalendarPlan(7, mode === "future" ? "2026-10-29" : "2026-10-21");
+    const f = await fixture(page, {
+      plan: mode === "none" ? null : p,
+      now: "2026-10-28T19:00:00+03:00",
+      noMealRecords: true,
+      planReadError: mode === "error",
+      delayPlan: mode === "loading",
+    });
+    const planWrites: string[] = [];
+    page.on("request", (req) => {
+      if (new URL(req.url()).pathname.startsWith("/api/nutrition-plans") && req.method() !== "GET")
+        planWrites.push(req.method());
+    });
+    await open(page);
+    const notice = section(page).locator("[data-journey-plan-fallback]");
+    await expect(notice).toHaveAttribute("data-plan-status", mode === "future" ? "upcoming" : mode);
+    if (mode === "expired") await expect(notice).toContainText("27 Ekim 2026 tarihinde sona erdi");
+    if (mode === "future") await expect(notice).toContainText("29 Ekim 2026");
+    if (mode === "none") await expect(notice).toContainText("Etkin bir beslenme planın yok");
+    if (mode === "error") await expect(notice).toContainText("doğrulanamadı");
+    if (mode === "loading") await expect(notice).toContainText("doğrulanıyor");
+    await expect(section(page).locator("[data-journey-plan-meal]")).toHaveCount(0);
+    const outer = section(page).locator("[data-journey-outer-toggle]");
+    if ((await outer.getAttribute("aria-expanded")) === "false") await outer.click();
+    await expect(notice).toBeVisible();
+    await expect(notice.getByRole("link", { name: "Planı görüntüle" })).toHaveAttribute(
+      "href",
+      "/meals/plan",
+    );
+    expect(planWrites).toEqual([]);
+    expect(f.state.posts).toEqual([]);
+  });
+}
+for (const water of [0, 2250, 2500, 2750]) {
+  test(`11-A: water ${water} keeps a fixed denominator and only pending water can be added in Journey`, async ({
+    page,
+  }) => {
+    const f = await fixture(page, { waterMl: water, waterGoalMl: 2500 });
+    await open(page);
+    const card = section(page);
+    await card.locator("[data-journey-details-toggle]").click();
+    if (water < 2500) {
+      await expect(
+        card.getByRole("button", { name: "+250 ml su ekle", exact: true }),
+      ).toBeVisible();
+      await expect(card).toContainText("1/4 adım");
+    } else {
+      await expect(card.getByRole("button", { name: "+250 ml su ekle", exact: true })).toHaveCount(
+        0,
+      );
+      await expect(card).toContainText("2/4 adım");
+      await expect(
+        card
+          .locator("[data-journey-tracking-steps] [data-journey-timeline-step]")
+          .filter({ hasText: "Su hedefin tamamlandı" }),
+      ).toHaveCount(0);
+      await card.locator("[data-journey-completed] > summary").click();
+      await expect(card.locator("[data-journey-completed]")).toContainText(
+        `Su hedefin tamamlandı (${water}/2500 ml)`,
+      );
+      // Simulate the authoritative record being removed, then re-read it on reload.
+      f.state.water = 0;
+      await page.reload();
+      await expect(card).toContainText("1/4 adım");
+      await expect(
+        card.getByRole("button", { name: "+250 ml su ekle", exact: true }),
+      ).toBeVisible();
+    }
+    expect(f.state.waterPosts).toBe(0);
+  });
+}
+test("11-A: completing Journey water does not block the existing independent water action", async ({
+  page,
+}) => {
+  const f = await fixture(page, { waterMl: 2500, waterGoalMl: 2500 });
+  await open(page);
+  await page.getByRole("button", { name: "Su Ekle", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Su ekle", exact: true });
+  await dialog.getByRole("button", { name: "250 ml su ekle", exact: true }).click();
+  await expect.poll(() => f.state.waterPosts).toBe(1);
+  expect(f.state.water).toBe(2750);
+  await expect(
+    section(page).getByRole("button", { name: "+250 ml su ekle", exact: true }),
+  ).toHaveCount(0);
+});
+test("11-A: postponed final day keeps the real overnight menu before showing expiration", async ({
+  page,
+}) => {
+  const p = fullCalendarPlan(7, "2026-10-16");
+  p.dailyPlans.calendar.forEach((entry) => (entry.dateOffsetDays = 1));
+  p.dailyPlans.cycle[6].meals = [
+    meal("Akşam yemeği", "22:00", "Gece ana öğünü"),
+    meal("Ara öğün", "02:00", "Gece ara öğünü"),
+  ];
+  await fixture(page, { plan: p, now: "2026-10-24T01:00:00+03:00", noMealRecords: true });
+  // Last mapped day is 23 October after postponement; its 02:00 meal is on 24 October.
+  await open(page);
+  const focus = section(page).locator("[data-journey-plan-meal]");
+  await expect(focus).toContainText("Gece ara öğünü");
+  await expect(focus).toContainText("Yaklaşıyor");
+  await expect(focus.locator("time")).toContainText("24 Ekim · Planlanan 02:00");
 });
