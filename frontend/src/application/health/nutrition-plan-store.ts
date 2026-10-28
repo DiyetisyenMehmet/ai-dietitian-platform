@@ -21,6 +21,7 @@ interface NutritionPlanState {
   plans: NutritionPlanRecord[];
   hydrated: boolean;
   loading: boolean;
+  readError: boolean;
   generating: boolean;
   generatingDuration: SupportedNutritionPlanDuration | null;
   /** Optional household ingredients for the next generated plan. Never persisted in browser storage. */
@@ -40,6 +41,7 @@ const EMPTY_STATE: NutritionPlanState = {
   plans: [],
   hydrated: false,
   loading: false,
+  readError: false,
   generating: false,
   generatingDuration: null,
   pantryDraft: "",
@@ -272,7 +274,7 @@ export const nutritionPlanStore = {
     const epoch = accountEpoch;
     const ownerUserId = authStore.getSnapshot().user?.id ?? null;
     const previousActiveId = state.activePlan?.id;
-    patch({ loading: true });
+    patch({ loading: true, readError: false });
     try {
       const [{ plans }, capability] = await Promise.all([
         nutritionPlanClient.list(),
@@ -312,7 +314,7 @@ export const nutritionPlanStore = {
       return activePlan;
     } catch {
       // A failed concurrent read must not unlock an ongoing generation.
-      if (epoch === accountEpoch) patch({ loading: false, hydrated: true });
+      if (epoch === accountEpoch) patch({ loading: false, hydrated: true, readError: true });
       return state.activePlan;
     }
   },

@@ -112,8 +112,8 @@ test("existing engine recommends the real pending plan meal and keeps past meals
   };
   const result = buildJourney(input);
   assert.equal(result.direction, "gain");
-  assert.equal(result.plannedMeal.slot, "lunch");
-  assert.equal(result.nextBestAction.kind, "lunch");
-  assert.equal(result.steps.find((x) => x.kind === "breakfast").state, "pending");
+  assert.equal(result.plannedMeal.slot, "breakfast");
+  assert.equal(result.nextBestAction.kind, "breakfast");
+  assert.equal(result.steps.find((x) => x.kind === "breakfast").state, "recommended");
   assert.ok(!result.steps.some((x) => x.state === "skipped"));
 });

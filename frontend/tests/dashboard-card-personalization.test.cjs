@@ -253,7 +253,8 @@ test("dashboard home retains approved header, metrics and quick actions around J
   assert.match(journey, /data-journey-focus-card/);
   assert.match(journey, /data-journey-plan-meal/);
   assert.match(journey, /<div className="grid grid-cols-2 gap-2" data-journey-meal-actions>/);
-  assert.match(journey, /const \[expanded, setExpanded\] = React\.useState\(true\)/);
+  assert.match(journey, /const expanded = settled\.inner/);
+  assert.match(journey, /settleJourneyDisclosure\(preference, completed\)/);
   assert.match(journey, /data-journey-timeline-step data-step-state=\{step\.state\}/);
   assert.match(journey, /data-journey-plan-fallback/);
   assert.equal((view.match(/<DailyJourneySection\s*\/>/g) ?? []).length, 1);

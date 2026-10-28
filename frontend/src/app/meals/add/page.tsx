@@ -16,14 +16,18 @@ function parseReturnTo(value: string | undefined): string {
 export default async function AddMealPage({
   searchParams,
 }: {
-  searchParams: Promise<{ slot?: string; returnTo?: string }>;
+  searchParams: Promise<{ slot?: string; returnTo?: string; day?: string }>;
 }) {
-  const { slot, returnTo } = await searchParams;
+  const { slot, returnTo, day } = await searchParams;
 
   return (
     <AppShell title="Öğün Ekle" showBack hideBottomNav>
       <div className="animate-fade-in">
-        <AddMealForm initialSlot={parseSlot(slot)} cancelHref={parseReturnTo(returnTo)} />
+        <AddMealForm
+          initialSlot={parseSlot(slot)}
+          cancelHref={parseReturnTo(returnTo)}
+          initialDay={day && /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : undefined}
+        />
       </div>
     </AppShell>
   );

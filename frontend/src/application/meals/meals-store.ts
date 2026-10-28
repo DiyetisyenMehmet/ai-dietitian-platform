@@ -17,7 +17,11 @@ import {
   startOfLocalDay,
   type DailyDataReadiness,
 } from "@/application/health/daily-data-readiness";
-import { mealsClient, type MealLog, type MealLogType } from "@/infrastructure/tracking/meals-client";
+import {
+  mealsClient,
+  type MealLog,
+  type MealLogType,
+} from "@/infrastructure/tracking/meals-client";
 
 /**
  * Meals store shared across routes via useSyncExternalStore. The backend is the
@@ -96,13 +100,11 @@ let readiness: DailyDataReadiness = "UNKNOWN";
 let sessionVersion = 0;
 let writeVersion = 0;
 const listeners = new Set<() => void>();
+const checkInWrites = new Map<string, Promise<void>>();
 let rolloverTimer: ReturnType<typeof setTimeout> | null = null;
 
 function entryCount(source: Meal[]): number {
-  return source.reduce(
-    (count, meal) => count + meal.foods.length + (meal.checkInId ? 1 : 0),
-    0,
-  );
+  return source.reduce((count, meal) => count + meal.foods.length + (meal.checkInId ? 1 : 0), 0);
 }
 
 function emit() {
@@ -153,6 +155,7 @@ function getReadinessSnapshot(): DailyDataReadiness {
 export interface AddFoodPayload {
   slot: MealSlot;
   time: string;
+  dayKey?: string;
   food: Omit<FoodItem, "id">;
 }
 
@@ -186,6 +189,10 @@ export const mealsStore = {
           slot,
           label,
           time: defaultTime,
+          recordedAt: slotLogs
+            .map((log) => log.loggedAt)
+            .sort()
+            .at(-1),
           foods: slotLogs.filter((log) => !isMealCheckIn(log)).map((log) => toFoodItem(log)),
           isEaten: checkIn !== null,
           checkInId: checkIn?.id ?? null,
@@ -202,10 +209,17 @@ export const mealsStore = {
     }
   },
 
-  async addFood({ slot, time, food }: AddFoodPayload): Promise<void> {
+  async addFood({ slot, time, dayKey, food }: AddFoodPayload): Promise<void> {
     const session = sessionVersion;
     ensureCurrentDay();
+    if (dayKey && dayKey !== cacheDayKey) throw new Error("Kayıt günü değişti");
+    const consumed = new Date();
+    const [hour, minute] = time.split(":").map(Number);
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) throw new Error("Geçersiz tüketim saati");
+    consumed.setHours(hour, minute, 0, 0);
+    if (consumed.getTime() > Date.now()) throw new Error("Tüketim saati gelecekte olamaz");
     const { log } = await mealsClient.logMeal({
+      loggedAt: consumed.toISOString(),
       mealType: MEAL_TYPE_BY_SLOT[slot],
       name: food.name,
       calories: food.calories,
@@ -223,6 +237,7 @@ export const mealsStore = {
         ? {
             ...meal,
             time: time || meal.time,
+            recordedAt: log.loggedAt,
             foods: [...meal.foods, toFoodItem(log, food.quantity)],
           }
         : meal,
@@ -231,20 +246,63 @@ export const mealsStore = {
     emit();
   },
 
-  async markMealEaten(slot: MealSlot): Promise<void> {
+  markMealEaten(slot: MealSlot): Promise<void> {
+    const key = `${sessionVersion}:${localDayKey()}:${slot}`;
+    const current = checkInWrites.get(key);
+    if (current) return current;
+    const request = mealsStore.persistMealCheckIn(slot).finally(() => checkInWrites.delete(key));
+    checkInWrites.set(key, request);
+    return request;
+  },
+
+  async persistMealCheckIn(slot: MealSlot): Promise<void> {
     const session = sessionVersion;
     ensureCurrentDay();
+    const targetDay = cacheDayKey;
     const current = meals.find((meal) => meal.slot === slot);
     if (current?.isEaten) return;
 
-    const { log } = await mealsClient.logMeal({ mealType: MEAL_TYPE_BY_SLOT[slot] });
-    if (session !== sessionVersion) return;
+    let log: MealLog;
+    // A refresh/retry observes an existing confirmation before another POST.
+    // This is not a substitute for server-side atomic idempotency across devices.
+    const existing =
+      readiness === "UNKNOWN"
+        ? undefined
+        : await mealsClient
+            .listMeals(startOfLocalDay())
+            .then(({ logs }) =>
+              logs.find(
+                (entry) =>
+                  entry.mealType === MEAL_TYPE_BY_SLOT[slot] &&
+                  isIsoOnLocalDay(entry.loggedAt, targetDay) &&
+                  isMealCheckIn(entry),
+              ),
+            );
+    if (session !== sessionVersion || localDayKey() !== targetDay) return;
+    try {
+      if (existing) log = existing;
+      else ({ log } = await mealsClient.logMeal({ mealType: MEAL_TYPE_BY_SLOT[slot] }));
+    } catch (error) {
+      if (session !== sessionVersion || localDayKey() !== targetDay) return;
+      const { logs } = await mealsClient.listMeals(startOfLocalDay());
+      const confirmed = logs.find(
+        (entry) =>
+          entry.mealType === MEAL_TYPE_BY_SLOT[slot] &&
+          isIsoOnLocalDay(entry.loggedAt, targetDay) &&
+          isMealCheckIn(entry),
+      );
+      if (!confirmed) throw error;
+      log = confirmed;
+    }
+    if (session !== sessionVersion || localDayKey() !== targetDay) return;
     ensureCurrentDay();
     writeVersion++;
     if (!isIsoOnLocalDay(log.loggedAt, cacheDayKey)) return;
 
     meals = meals.map((meal) =>
-      meal.slot === slot ? { ...meal, isEaten: true, checkInId: log.id } : meal,
+      meal.slot === slot
+        ? { ...meal, isEaten: true, checkInId: log.id, recordedAt: log.loggedAt }
+        : meal,
     );
     readiness = readiness === "UNKNOWN" ? "UNKNOWN" : "KNOWN";
     emit();
@@ -262,7 +320,8 @@ export const mealsStore = {
     writeVersion++;
     meals = meals.map((meal) =>
       meal.slot === slot && meal.checkInId === current.checkInId
-        ? { ...meal, isEaten: false, checkInId: null } : meal,
+        ? { ...meal, isEaten: false, checkInId: null, recordedAt: undefined }
+        : meal,
     );
     if (readiness !== "UNKNOWN") readiness = readinessFromCount(entryCount(meals));
     emit();
@@ -309,7 +368,9 @@ export const mealsStore = {
     ensureCurrentDay();
     writeVersion++;
     meals = meals.map((meal) =>
-      meal.slot === slot ? { ...meal, foods: meal.foods.filter((food) => food.id !== foodId) } : meal,
+      meal.slot === slot
+        ? { ...meal, foods: meal.foods.filter((food) => food.id !== foodId) }
+        : meal,
     );
     if (readiness !== "UNKNOWN") readiness = readinessFromCount(entryCount(meals));
     emit();

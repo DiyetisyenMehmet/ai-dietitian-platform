@@ -70,7 +70,7 @@ test('missing water differs from known zero; invalid goal never completes', () =
   assert.equal(run({waterMl:0}).sufficiency.water,'KNOWN_ZERO');
   for (const goal of [0,-1,NaN,Infinity,null]) assert.equal(step(run({waterGoalMl:goal}),'water'),undefined);
 });
-test('unknown meal after window is not skipped', () => assert.equal(step(run({localHour:23,meals:{}}),'breakfast'),undefined));
+test('unknown meals keep their required slots while water is already known', () => assert.notEqual(step(run({localHour:23,meals:{}}),'breakfast').state,'completed'));
 test('invalid values are unknown', () => {
   for (const value of [-1,NaN,Infinity,null]) {
     assert.equal(run({waterMl:value}).sufficiency.water,'UNKNOWN'); assert.equal(deriveGoalDirection(value,70),null);

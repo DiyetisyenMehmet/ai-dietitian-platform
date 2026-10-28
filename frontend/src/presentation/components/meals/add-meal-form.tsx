@@ -9,6 +9,8 @@ import { toast } from "sonner";
 import { cn } from "@/shared/lib/utils";
 import { addMealSchema, type AddMealInput } from "@/domain/meals/validation";
 import { MEAL_SLOTS, type MealSlot } from "@/domain/meals/types";
+import { authStore, useAuth } from "@/application/auth/auth-store";
+import { localDayKey } from "@/application/health/daily-data-readiness";
 import { mealsStore } from "@/application/meals/meals-store";
 import { Card, CardContent } from "@/presentation/components/ui/card";
 import { FormField } from "@/presentation/components/ui/form-field";
@@ -21,15 +23,9 @@ import { MealSearch } from "./meal-search";
 
 interface AddMealFormProps {
   initialSlot?: MealSlot;
+  initialDay?: string;
   cancelHref?: string;
 }
-
-const DEFAULT_TIME: Record<MealSlot, string> = {
-  breakfast: "08:00",
-  lunch: "13:00",
-  dinner: "19:00",
-  snack: "16:00",
-};
 
 const HOURS = Array.from({ length: 24 }, (_, index) => String(index).padStart(2, "0"));
 const MINUTES = Array.from({ length: 60 }, (_, index) => String(index).padStart(2, "0"));
@@ -37,8 +33,17 @@ const TIME_SELECT_CLASS =
   "h-11 w-full rounded-xl border border-input bg-background px-3 text-base tabular-nums outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring";
 
 /** Add Meal form: search + manual entry, meal type, time, validation and toasts. */
-export function AddMealForm({ initialSlot = "breakfast", cancelHref = "/meals" }: AddMealFormProps) {
+export function AddMealForm({
+  initialSlot = "breakfast",
+  cancelHref = "/meals",
+  initialDay,
+}: AddMealFormProps) {
   const router = useRouter();
+  const owner = useAuth().user?.id;
+  const formOwner = React.useRef(owner);
+  const submitting = React.useRef(false);
+  if (!formOwner.current && owner) formOwner.current = owner;
+  const [day] = React.useState(() => initialDay ?? localDayKey());
   const {
     register,
     handleSubmit,
@@ -56,16 +61,34 @@ export function AddMealForm({ initialSlot = "breakfast", cancelHref = "/meals" }
       carbs: 0,
       fat: 0,
       mealSlot: initialSlot,
-      time: DEFAULT_TIME[initialSlot],
+      time: "00:00",
     },
   });
 
+  React.useEffect(() => {
+    const now = new Date();
+    setValue(
+      "time",
+      `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`,
+    );
+  }, [setValue]);
   const onSubmit = React.useCallback(
     async (values: AddMealInput) => {
+      if (submitting.current) return;
+      submitting.current = true;
       try {
+        if (
+          day !== localDayKey() ||
+          !formOwner.current ||
+          authStore.getSnapshot().user?.id !== formOwner.current
+        ) {
+          toast.error("Hesap veya kayıt günü değişti. Lütfen formu yeniden aç.");
+          return;
+        }
         await mealsStore.addFood({
           slot: values.mealSlot,
           time: values.time,
+          dayKey: day,
           food: {
             name: values.name,
             quantity: values.quantity,
@@ -75,13 +98,21 @@ export function AddMealForm({ initialSlot = "breakfast", cancelHref = "/meals" }
             fat: values.fat,
           },
         });
+        if (authStore.getSnapshot().user?.id !== formOwner.current || day !== localDayKey()) return;
         toast.success("Besin öğüne eklendi");
-        router.push("/meals");
-      } catch {
-        toast.error("Besin kaydedilemedi. Lütfen tekrar deneyin.");
+        router.push(cancelHref);
+      } catch (error) {
+        if (authStore.getSnapshot().user?.id === formOwner.current && day === localDayKey())
+          toast.error(
+            error instanceof Error && error.message === "Tüketim saati gelecekte olamaz"
+              ? "Tüketim saati gelecekte olamaz. Gerçek tüketim saatini seç."
+              : "Kayıt doğrulanamadı. Tekrar eklemeden önce Beslenme kayıtlarını kontrol et.",
+          );
+      } finally {
+        submitting.current = false;
       }
     },
-    [router],
+    [router, cancelHref, day],
   );
 
   const foodName = watch("name");
@@ -89,6 +120,9 @@ export function AddMealForm({ initialSlot = "breakfast", cancelHref = "/meals" }
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-5">
+      <p className="text-sm text-muted-foreground" data-meal-entry-context>
+        {MEAL_SLOTS.find((item) => item.slot === watch("mealSlot"))?.label} · {day} · Tüketim kaydı
+      </p>
       <Card>
         <CardContent className="space-y-4 p-5">
           <div>
@@ -127,16 +161,32 @@ export function AddMealForm({ initialSlot = "breakfast", cancelHref = "/meals" }
 
           <div className="grid grid-cols-2 gap-3">
             <FormField id="calories" label="Kalori (kcal)" error={errors.calories?.message}>
-              <Input type="number" inputMode="numeric" {...register("calories", { valueAsNumber: true })} />
+              <Input
+                type="number"
+                inputMode="numeric"
+                {...register("calories", { valueAsNumber: true })}
+              />
             </FormField>
             <FormField id="protein" label="Protein (g)" error={errors.protein?.message}>
-              <Input type="number" inputMode="numeric" {...register("protein", { valueAsNumber: true })} />
+              <Input
+                type="number"
+                inputMode="numeric"
+                {...register("protein", { valueAsNumber: true })}
+              />
             </FormField>
             <FormField id="carbs" label="Karbonhidrat (g)" error={errors.carbs?.message}>
-              <Input type="number" inputMode="numeric" {...register("carbs", { valueAsNumber: true })} />
+              <Input
+                type="number"
+                inputMode="numeric"
+                {...register("carbs", { valueAsNumber: true })}
+              />
             </FormField>
             <FormField id="fat" label="Yağ (g)" error={errors.fat?.message}>
-              <Input type="number" inputMode="numeric" {...register("fat", { valueAsNumber: true })} />
+              <Input
+                type="number"
+                inputMode="numeric"
+                {...register("fat", { valueAsNumber: true })}
+              />
             </FormField>
           </div>
         </CardContent>
@@ -160,10 +210,7 @@ export function AddMealForm({ initialSlot = "breakfast", cancelHref = "/meals" }
                       <button
                         key={slot}
                         type="button"
-                        onClick={() => {
-                          field.onChange(slot);
-                          setValue("time", DEFAULT_TIME[slot], { shouldValidate: true });
-                        }}
+                        onClick={() => field.onChange(slot)}
                         className={cn(
                           "flex flex-col items-center gap-1.5 rounded-xl border p-3 text-xs font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                           active
@@ -187,7 +234,7 @@ export function AddMealForm({ initialSlot = "breakfast", cancelHref = "/meals" }
             )}
           />
 
-          <FormField id="time" label="Saat" error={errors.time?.message}>
+          <FormField id="time" label="Tüketim saati" error={errors.time?.message}>
             <Controller
               control={control}
               name="time"
@@ -204,10 +251,17 @@ export function AddMealForm({ initialSlot = "breakfast", cancelHref = "/meals" }
                       className={TIME_SELECT_CLASS}
                     >
                       {HOURS.map((value) => (
-                        <option key={value} value={value}>{value}</option>
+                        <option key={value} value={value}>
+                          {value}
+                        </option>
                       ))}
                     </select>
-                    <span className="text-lg font-semibold text-muted-foreground" aria-hidden="true">:</span>
+                    <span
+                      className="text-lg font-semibold text-muted-foreground"
+                      aria-hidden="true"
+                    >
+                      :
+                    </span>
                     <select
                       aria-label="Dakika"
                       value={minute}
@@ -216,7 +270,9 @@ export function AddMealForm({ initialSlot = "breakfast", cancelHref = "/meals" }
                       className={TIME_SELECT_CLASS}
                     >
                       {MINUTES.map((value) => (
-                        <option key={value} value={value}>{value}</option>
+                        <option key={value} value={value}>
+                          {value}
+                        </option>
                       ))}
                     </select>
                   </div>

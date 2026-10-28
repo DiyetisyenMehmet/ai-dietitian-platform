@@ -22,6 +22,8 @@ export interface Meal {
   /** Local time in HH:MM (24h). */
   time: string;
   foods: FoodItem[];
+  /** Real backend log time, independent of the plan schedule. */
+  recordedAt?: string;
   /** Explicit user confirmation that this meal was eaten today. */
   isEaten: boolean;
   /** Backend id of the bare MealLog used as the reversible check-in. */

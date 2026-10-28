@@ -37,8 +37,8 @@ test("professional card emphasizes the existing engine recommendation", async ()
     "presentation/components/dashboard/daily-journey-section.tsx",
     "DailyJourneySection",
   );
-  assert.match(html, /aria-expanded="true"/);
-  assert.match(html, /aria-label="Yolculuk detaylarını daralt"/);
+  assert.match(html, /aria-expanded="false"/);
+  assert.match(html, /aria-label="Yolculuk detaylarını aç"/);
   assert.doesNotMatch(html, /Tümünü göster/);
   assert.match(html, /Öğle yemeği/);
   assert.match(html, /Kahvaltı/);
@@ -81,9 +81,9 @@ test("all-done collapses to success while expanded detail retains completed rows
     "presentation/components/dashboard/daily-journey-section.tsx",
     "DailyJourneySection",
   );
-  assert.match(html, /Bugünün yolculuğunu tamamladın! 🎉/);
+  assert.match(html, /Günlük kayıt adımlarını tamamladın!/);
   assert.match(html, /%100/);
-  assert.match(html, /aria-label="Yolculuk detaylarını daralt"/);
+  assert.match(html, /aria-label="Yolculuk detaylarını aç"/);
   assert.doesNotMatch(html, /Tümünü göster/);
   assert.match(html, /Tamamlandı/);
 });
@@ -99,7 +99,7 @@ test("insufficient-data stays neutral and compact without fabricated progress", 
     "presentation/components/dashboard/daily-journey-section.tsx",
     "DailyJourneySection",
   );
-  assert.match(html, /Veri bekleniyor/);
+  assert.match(html, /Doğrulanıyor/);
   assert.doesNotMatch(html, /0\/0 adım/);
   assert.doesNotMatch(html, /%100/);
   assert.doesNotMatch(html, /Bugünün yolculuğunu tamamladın/);
@@ -129,7 +129,9 @@ test("compact control is a real accessible local-state button", () => {
   assert.match(source, /onClick=\{\(\) => onExpandedChange\(!expanded\)\}/);
   assert.match(source, /focus-visible:ring-2/);
   assert.match(source, /min-h-11/);
-  assert.match(source, /React\.useState\(true\)/);
+  assert.match(source, /const expanded = settled\.inner/);
+  assert.match(source, /hidden=\{!expanded\}/);
+  assert.match(source, /hidden=\{!outerExpanded\}/);
 });
 
 test("selector preserves recommendations and overdue wording stays neutral", () => {

@@ -105,14 +105,7 @@ export interface JourneyEvent {
 }
 
 /** Categories of daily tasks the coach generates. */
-export type DailyTaskKind =
-  | "breakfast"
-  | "lunch"
-  | "dinner"
-  | "water"
-  | "chat"
-  | "weight"
-  | "plan";
+export type DailyTaskKind = "breakfast" | "lunch" | "dinner" | "water" | "chat" | "weight" | "plan";
 
 /** A single dynamically-generated task for today. */
 export interface DailyTask {
@@ -189,6 +182,7 @@ export type HealthIconKey =
 
 /** The steps of the guided "Today's Journey". */
 export type JourneyStepKind =
+  | "planned-meal"
   | "breakfast"
   | "lunch"
   | "dinner"
@@ -203,6 +197,10 @@ export type JourneyStepState = "completed" | "pending" | "recommended" | "skippe
 
 /** A single step in the guided daily journey. */
 export interface JourneyStep {
+  /** Plan entry identity; duplicate/unsupported slots never borrow another meal completion. */
+  id?: string;
+  /** Optional acknowledgements cannot enlarge the daily required step set. */
+  countsTowardProgress?: boolean;
   kind: JourneyStepKind;
   label: string;
   /** Short supporting hint shown under the label. */

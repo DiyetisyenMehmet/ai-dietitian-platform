@@ -8,6 +8,7 @@ import type { JourneyPlannedMeal } from "./journey-plan";
 export interface JourneyInput {
   plannedMeals?: JourneyPlannedMeal[];
   nowMs?: number;
+  foodCounts?: Partial<Record<MealKind, number>>;
   localHour: number;
   startWeightKg: number | null;
   currentWeightKg: number | null;
@@ -81,28 +82,62 @@ export function buildJourney(input: JourneyInput): JourneyResult {
       href: "/progress",
       hint: input.weight.recordedToday ? "Bugün kaydettin" : `Haftalık ölçüm zamanı. ${goalReason}`,
       state: input.weight.recordedToday ? "completed" : "pending",
+      countsTowardProgress: false,
     });
   }
 
-  for (const [kind, label, icon] of [
-    ["breakfast", "Kahvaltı", "sunrise", 12],
-    ["lunch", "Öğle yemeği", "sun", 17],
-    ["dinner", "Akşam yemeği", "moon", 23],
-  ] as const) {
-    if (data[kind] === "UNKNOWN") continue;
-    const completed = input.meals[kind]! > 0;
-    steps.push({
-      kind,
-      label,
-      icon,
-      href: `/meals/add?slot=${kind}`,
-      hint: completed ? "Öğün kaydedildi" : `${label} kaydı henüz yok. ${goalReason}`,
-      // A passed recording window does not imply the person skipped eating.
-      state: completed ? "completed" : "pending",
-    });
+  const planned = input.plannedMeals ?? [];
+  if (planned.length) {
+    for (const entry of planned) {
+      const completed = Boolean(entry.slot && data[entry.slot] === "KNOWN");
+      steps.push({
+        id: entry.key,
+        kind: entry.slot ?? "planned-meal",
+        label: entry.meal.name,
+        icon: "utensils",
+        href: entry.slot ? `/meals/add?slot=${entry.slot}` : "/meals/plan",
+        hint: completed
+          ? entry.slot && (input.foodCounts?.[entry.slot] ?? 0) > 0
+            ? "Besin kaydı var"
+            : "Öğün işaretlendi; besin kaydı yok"
+          : entry.slot
+            ? `Planlanan ${entry.meal.time} · ${goalReason}`
+            : `Planlanan ${entry.meal.time} · Tekil kayıtla eşleşmiyor; takip hedeflerine dahil değil.`,
+        state: completed ? "completed" : "pending",
+        countsTowardProgress: Boolean(entry.slot),
+      });
+    }
+  } else {
+    for (const [kind, label, icon] of [
+      ["breakfast", "Kahvaltı", "sunrise"],
+      ["lunch", "Öğle yemeği", "sun"],
+      ["dinner", "Akşam yemeği", "moon"],
+    ] as const) {
+      if (
+        data[kind] === "UNKNOWN" &&
+        data.water === "UNKNOWN" &&
+        [data.breakfast, data.lunch, data.dinner].every((value) => value === "UNKNOWN")
+      )
+        continue;
+      steps.push({
+        kind,
+        label,
+        icon,
+        href: `/meals/add?slot=${kind}`,
+        hint:
+          input.meals[kind]! > 0
+            ? (input.foodCounts?.[kind] ?? 0) > 0
+              ? "Besin kaydı var"
+              : "Öğün işaretlendi; besin kaydı yok"
+            : `${label} kaydı henüz yok. ${goalReason}`,
+        state: input.meals[kind]! > 0 ? "completed" : "pending",
+      });
+    }
   }
   if (
-    data.water !== "UNKNOWN" &&
+    (data.water !== "UNKNOWN" ||
+      planned.length > 0 ||
+      steps.some((step) => step.countsTowardProgress !== false)) &&
     input.waterGoalMl != null &&
     Number.isFinite(input.waterGoalMl) &&
     input.waterGoalMl > 0
@@ -111,8 +146,12 @@ export function buildJourney(input: JourneyInput): JourneyResult {
       kind: "water",
       label: "Su",
       icon: "droplet",
-      hint: `${input.waterMl} / ${input.waterGoalMl} ml su kaydı`,
-      progress: Math.min(1, input.waterMl! / input.waterGoalMl),
+      hint:
+        data.water === "UNKNOWN"
+          ? "Su kayıtları doğrulanıyor"
+          : `${input.waterMl} / ${input.waterGoalMl} ml su kaydı`,
+      progress:
+        data.water === "UNKNOWN" ? undefined : Math.min(1, input.waterMl! / input.waterGoalMl),
       state: input.waterMl! >= input.waterGoalMl ? "completed" : "pending",
     });
   }
@@ -124,26 +163,24 @@ export function buildJourney(input: JourneyInput): JourneyResult {
       icon: "activity",
       href: "/activity",
       hint: `${input.activityMinutes} dakika aktivite kaydedildi`,
+      countsTowardProgress: false,
       state: "completed",
     });
   }
   // Optional snacks are acknowledged, never prescribed as an obligation.
-  if (data.snack === "KNOWN")
+  if (!planned.length && data.snack === "KNOWN")
     steps.push({
       kind: "snack",
       label: "Ara öğün",
       icon: "utensils",
       href: "/meals/add?slot=snack",
-      hint: "Ara öğün kaydedildi",
+      hint: "İsteğe bağlı ara öğün kaydedildi",
+      countsTowardProgress: false,
       state: "completed",
     });
-  const planned = input.plannedMeals ?? [];
-  const unrecorded = planned.filter((entry) => !entry.slot || data[entry.slot] !== "KNOWN");
-  const candidates = unrecorded.length ? unrecorded : planned;
-  const plannedMeal =
-    [...candidates].reverse().find((entry) => entry.at <= (input.nowMs ?? 0)) ??
-    candidates[0] ??
-    null;
+  // Earliest unfinished planned meal wins, including snacks. Never skip an
+  // unfinished meal merely because a later meal's clock time has elapsed.
+  const plannedMeal = planned.find((entry) => entry.slot && data[entry.slot] !== "KNOWN") ?? null;
   // The same engine owns the next action; elapsed time never marks a meal skipped.
   const pending = (kind: JourneyStepKind) =>
     steps.find((step) => step.kind === kind && step.state === "pending");
@@ -151,35 +188,56 @@ export function buildJourney(input: JourneyInput): JourneyResult {
     input.localHour < 12 ? "breakfast" : input.localHour < 17 ? "lunch" : "dinner";
   const next =
     pending("weight") ??
-    (plannedMeal?.slot ? pending(plannedMeal.slot) : undefined) ??
+    (plannedMeal
+      ? steps.find((step) => step.id === plannedMeal.key && step.state === "pending")
+      : undefined) ??
     (input.workScheduleType === "REGULAR" ? pending(regularKind) : undefined) ??
-    steps.find((step) => step.state === "pending" && Boolean(step.href));
+    steps.find(
+      (step) =>
+        step.countsTowardProgress !== false && step.state === "pending" && Boolean(step.href),
+    );
   if (next) next.state = "recommended";
   const insufficient =
-    [data.breakfast, data.lunch, data.dinner, data.water, data.weight].includes("UNKNOWN") ||
+    (planned.length
+      ? planned.some((entry) => entry.slot && data[entry.slot] === "UNKNOWN")
+      : [data.breakfast, data.lunch, data.dinner].includes("UNKNOWN")) ||
+    data.water === "UNKNOWN" ||
     !input.waterGoalMl ||
     input.waterGoalMl <= 0 ||
     !Number.isFinite(input.waterGoalMl);
+  const required = steps.filter((step) => step.countsTowardProgress !== false);
+  const complete =
+    !insufficient && required.length > 0 && required.every((step) => step.state === "completed");
   return {
     direction,
     plannedMeal,
     steps,
     sufficiency: data,
-    nextBestAction: next ? { kind: next.kind, reason: next.hint, href: next.href! } : null,
-    status: next
-      ? "actionable"
-      : insufficient
-        ? "insufficient-data"
-        : steps.some((s) => s.state !== "completed")
-          ? "no-actionable-step"
-          : "all-done",
+    nextBestAction:
+      next && !complete ? { kind: next.kind, reason: next.hint, href: next.href! } : null,
+    // Completion covers trackable recording targets, never unmatched plan rows.
+    status: complete
+      ? "all-done"
+      : next
+        ? "actionable"
+        : insufficient
+          ? "insufficient-data"
+          : steps.some((s) => s.state !== "completed")
+            ? "no-actionable-step"
+            : "all-done",
   };
 }
 
 /** Legacy task shape, derived without making a second set of decisions. */
 export function journeyTasks(result: JourneyResult): DailyTask[] {
   return result.steps.flatMap((step) => {
-    if (step.kind === "snack" || step.kind === "activity" || step.kind === "coach") return [];
+    if (
+      step.kind === "planned-meal" ||
+      step.kind === "snack" ||
+      step.kind === "activity" ||
+      step.kind === "coach"
+    )
+      return [];
     return [
       {
         id: `task-${step.kind}`,
