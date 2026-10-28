@@ -14,12 +14,12 @@ function scenario() {
   ].map(([slot, name, time], index) => ({
     key: String(index),
     slot,
-    at: index,
+    at: new Date(2026, 9, 2, ...time.split(":").map(Number)).getTime(),
     meal: { name, time, foods: [{ name: "Sentetik", portion: "1 porsiyon" }] },
   }));
   const input = {
     plannedMeals,
-    nowMs: 99,
+    nowMs: new Date(2026, 9, 2, 22).getTime(),
     localHour: 22,
     startWeightKg: 80,
     targetWeightKg: 70,
@@ -33,11 +33,12 @@ function scenario() {
   return { h, input, helpers, run: (patch = {}) => buildJourney({ ...input, ...patch }) };
 }
 
-test("planned snack precedes dinner even late in the day; zero/partial/full/undo keep denominator", () => {
+test("current dinner precedes the earlier unconfirmed snack; zero/partial/full/undo keep denominator", () => {
   const { input, run, helpers } = scenario();
   const partial = run();
-  assert.equal(partial.plannedMeal.slot, "snack");
-  assert.equal(partial.nextBestAction.kind, "snack");
+  assert.equal(partial.plannedMeal.slot, "dinner");
+  assert.equal(partial.nextBestAction.kind, "dinner");
+  assert.equal(partial.steps.find((step) => step.kind === "snack").state, "pending");
   const states = [
     run({ meals: { breakfast: 0, lunch: 0, snack: 0, dinner: 0 } }),
     run({ meals: { ...input.meals, snack: 1 } }),

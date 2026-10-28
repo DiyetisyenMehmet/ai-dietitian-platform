@@ -229,7 +229,9 @@ export function DailyJourneyContent({
                 : planStatus === "none"
                   ? "Etkin bir beslenme planın yok. Öğünlerini yine kaydedebilirsin."
                   : !plannedMeal && steps.some((step) => step.id) && status !== "all-done"
-                    ? "Bugünkü planın öğün adımları kaydedildi. Diğer günlük adımlarını aşağıdan takip edebilirsin."
+                    ? scopedTracking
+                      ? "Takip edilebilir adımlarını aşağıdan kontrol edebilirsin. Ayrı onay bekleyen plan öğünleri detaylarda."
+                      : "Bugünkü planın öğün adımları kaydedildi. Diğer günlük adımlarını aşağıdan takip edebilirsin."
                     : null;
   const mealIsNext = Boolean(
     plannedMeal && next && (next.id ? plannedMeal.key === next.id : plannedMeal.slot === next.kind),

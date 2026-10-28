@@ -199,11 +199,14 @@ export function buildJourney(input: JourneyInput): JourneyResult {
   // Prefer the scheduled current/next meal. Earlier unconfirmed meals remain
   // pending in the timeline; elapsed time is never a skipped/eaten decision.
   const unfinished = planned.filter((entry) => !entry.slot || data[entry.slot] !== "KNOWN");
+  const trackable = unfinished.filter((entry) => entry.slot);
+  const clockKnown = Number.isFinite(input.nowMs);
+  const candidates = clockKnown ? unfinished : trackable;
   const plannedMeal =
-    unfinished.find((entry) => entry.timing === "now") ??
-    unfinished.find((entry) => entry.timing === "upcoming") ??
-    [...unfinished].reverse().find((entry) => entry.timing === "earlier") ??
-    unfinished[0] ??
+    candidates.find((entry) => entry.timing === "now") ??
+    candidates.find((entry) => entry.timing === "upcoming") ??
+    [...trackable].reverse().find((entry) => entry.timing === "earlier") ??
+    (!clockKnown ? trackable[0] : null) ??
     null;
   // The same engine owns the next action; elapsed time never marks a meal skipped.
   const pending = (kind: JourneyStepKind) =>
@@ -234,7 +237,7 @@ export function buildJourney(input: JourneyInput): JourneyResult {
   if (next && !complete) next.state = "recommended";
   return {
     direction,
-    plannedMeal,
+    plannedMeal: complete ? null : plannedMeal,
     plannedMeals: planned,
     steps,
     sufficiency: data,

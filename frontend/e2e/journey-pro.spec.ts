@@ -735,15 +735,15 @@ test("repeated snacks remain unconfirmed while trackable goals advance, fold and
   await expect(card.locator("[data-journey-plan-meal]")).toContainText("Sebzeli bulgur");
   await card.getByRole("button", { name: "Yedim", exact: true }).click();
   await expect(card).toContainText("3/4 takip");
-  await expect(card.locator("[data-journey-plan-meal]")).toContainText("İkinci sentetik ara öğün");
+  await expect(card.locator("[data-journey-plan-meal]")).toHaveCount(0);
   await expect(card.getByRole("button", { name: "Yedim", exact: true })).toHaveCount(0);
   await expect(card).not.toContainText("Bugünkü planın öğün adımları kaydedildi");
   await card.locator("[data-journey-details-toggle]").click();
   const unmatched = card.locator("[data-journey-unmatched-plan]");
   await expect(
     unmatched.locator('[data-journey-timeline-step][data-step-state="pending"]'),
-  ).toHaveCount(1);
-  await expect(unmatched.locator('[data-step-state="recommended"]')).toHaveCount(1);
+  ).toHaveCount(2);
+  await expect(unmatched.locator('[data-step-state="recommended"]')).toHaveCount(0);
   await expect(unmatched.locator('[data-step-state="completed"]')).toHaveCount(0);
   await expect(unmatched.getByRole("button", { name: "Yedim", exact: true })).toHaveCount(0);
   for (const link of await unmatched.getByRole("link").all())
