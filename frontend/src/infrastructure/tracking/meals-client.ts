@@ -96,12 +96,13 @@ export const mealsClient = {
   },
 
   /** Persists a food entry or a bare meal check-in and returns it. */
-  logMeal(input: LogMealInput) {
+  logMeal(input: LogMealInput, retryOnUnauthorized = true) {
     return apiRequest<{ log: MealLog }>({
       path: TRACKING_ENDPOINTS.meals,
       method: "POST",
       auth: true,
       body: JSON.stringify(input),
+      retryOnUnauthorized,
     });
   },
 

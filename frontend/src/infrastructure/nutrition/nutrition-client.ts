@@ -455,14 +455,17 @@ export const nutritionClient = {
     food: CanonicalFoodDto,
     personalization: PersonalizationContextDto,
     consumption: { amount: number; unit: "g" | "ml" },
+    options?: { loggedAt: string; retryOnUnauthorized: false },
   ) {
     const n = personalization.nutrients;
     return apiRequest<{ log: { id: string } }>({
       path: "/tracking/meals",
       method: "POST",
       auth: true,
+      retryOnUnauthorized: options?.retryOnUnauthorized,
       body: JSON.stringify({
         mealType,
+        ...(options ? { loggedAt: options.loggedAt } : {}),
         name: food.displayNameTr || food.name,
         calories: n.energyKcal ?? undefined,
         proteinG: n.proteinG ?? undefined,

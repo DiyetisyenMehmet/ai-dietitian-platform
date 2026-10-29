@@ -17,6 +17,7 @@ const meal = (name: string, time: string, food: string) => ({
 function activePlan(startDate: string | undefined = today): NutritionPlanRecord {
   return {
     id: "synthetic-plan",
+    version: 1,
     startDate,
     duration: "SEVEN_DAY",
     isActive: true,
@@ -64,6 +65,11 @@ function log(id: string, mealType: string): Log {
     createdAt: `${today}T07:00:00Z`,
   };
 }
+const syntheticNutrients = { energyKcal: 100, proteinG: 5, carbohydratesG: 10, fatG: 2, saturatedFatG: 0, sugarsG: 1, fiberG: 2, sodiumMg: 20, saltG: 0.05, micronutrients: { iron: 2 } };
+const syntheticPersonalization = { nutrients: syntheticNutrients, grams: 100, metrics: null, profileContextUsed: false, activePlanUsed: false, dietaryCompatibility: "UNKNOWN", allergenDataComplete: false, allergenSafety: null, warnings: [], attentionFlags: [], windowHours: 24 };
+const syntheticPhoto = { isFood: true, confidence: 90, reason: "Synthetic", dishName: "Sentetik taranan yemek", estimatedPortion: "1 porsiyon", estimatedGrams: 100, ingredients: [], totals: syntheticNutrients, disclaimer: "Yalnız sentetik test verisi" };
+const syntheticProduct = { externalId: "synthetic-product", provider: "DIEWISH", name: "Synthetic product", displayNameTr: "Sentetik barkod ürünü", brand: "Sentetik", barcode: "8690000000001", imageUrl: null, quantity: "100 g", serving: null, nutrientsPer100g: syntheticNutrients, ingredients: ["Sentetik"], allergens: [], additives: [], labels: [], vegan: null, vegetarian: null, glutenFree: null, nutriScore: null, novaGroup: null,
+  provenance: { provider: "DIEWISH", externalId: "synthetic-product", retrievedAt: `${today}T00:00:00Z`, dataBasis: "PER_100_G" } };
 async function fixture(
   page: Page,
   options: {
@@ -78,6 +84,7 @@ async function fixture(
     waterGoalMl?: number;
     noMealRecords?: boolean;
     planReadError?: boolean;
+    decisionStatus?: number;
   } = {},
 ) {
   await page.clock.install({ time: new Date(options.now ?? `${today}T14:00:00+03:00`) });
@@ -90,6 +97,16 @@ async function fixture(
         ? [log("b", "BREAKFAST"), log("l", "LUNCH"), log("d", "DINNER")]
         : [log("b", "BREAKFAST")],
     posts: [] as Log[],
+    decisions: new Map<string, { id: string | null; state: "PENDING" | "EATEN" | "SKIPPED"; revision: number }>(),
+    decisionWrites: [] as Array<{ path: string; method: string; revision: number; desired: string }>,
+    decisionReads: 0,
+    decisionStatus: options.decisionStatus ?? 0,
+    conflict: false,
+    mutationStatus: 0,
+    abortDecisionRead: false,
+    loseDecisionResponse: false,
+    photoScans: 0,
+    barcodeReads: 0,
     mealReads: 0,
     waterReads: 0,
     deletes: [] as string[],
@@ -111,6 +128,34 @@ async function fixture(
   });
   let releaseWrite!: () => void;
   let writeGate = Promise.resolve();
+  const decisionKey = (id: string, day: number, index: number, date: string) => `${state.owner}:${id}:${day}:${index}:${date}`;
+  function decision(id: string, day: number, index: number, date: string) {
+    const key = decisionKey(id, day, index, date);
+    if (!state.decisions.has(key)) {
+      const map = state.plan?.dailyPlans.calendar.find(d => d.dayNumber === day);
+      const name = state.plan?.dailyPlans.cycle[map?.cycleIndex ?? -1]?.meals[index]?.name;
+      // Explicit synthetic v2 server seed, independent of legacy MealLog rows.
+      const eaten = !options.noMealRecords && day === 1 && date === today &&
+        (name === "Kahvaltı" || Boolean(options.complete && ["Öğle yemeği", "Akşam yemeği"].includes(name ?? "")));
+      state.decisions.set(key, { id: eaten ? `seed:${key}` : null, state: eaten ? "EATEN" : "PENDING", revision: eaten ? 1 : 0 });
+    }
+    return state.decisions.get(key)!;
+  }
+  function rowsFor(day: number, date: string) {
+    const p = state.plan;
+    const map = p?.dailyPlans.calendar.find(d => d.dayNumber === day);
+    if (!p?.startDate || !map) return [];
+    const base = new Date(`${p.startDate.slice(0, 10)}T12:00:00Z`);
+    base.setUTCDate(base.getUTCDate() + day - 1 + (map.dateOffsetDays ?? 0));
+    let previous = -1, rollover = 0;
+    return p.dailyPlans.cycle[map.cycleIndex].meals.map((m, mealIndex) => {
+      const [h, min] = m.time.split(":").map(Number), minutes = h * 60 + min;
+      if (previous >= 0 && minutes <= previous) rollover++;
+      previous = minutes;
+      const scheduled = new Date(base); scheduled.setUTCDate(scheduled.getUTCDate() + rollover);
+      return { mealIndex, localDate: scheduled.toISOString().slice(0, 10), scheduledTime: m.time };
+    }).filter(m => m.localDate === date).map(m => ({ ...m, ...decision(p.id, day, m.mealIndex, date), active: decision(p.id, day, m.mealIndex, date).state === "EATEN" }));
+  }
   await page.route("**/*", async (route) => {
     const url = new URL(route.request().url());
     if (url.origin !== "http://127.0.0.1:3029") return route.abort();
@@ -132,6 +177,7 @@ async function fixture(
           fullName: "Yolculuk Testi",
           email: "journey@example.com",
           role: "USER",
+          subscriptionTier: "FREE",
           isActive: true,
           emailVerified: true,
           onboardingCompleted: true,
@@ -174,6 +220,44 @@ async function fixture(
       return ok({ plans: snapshot ? [snapshot] : [] });
     }
     if (path.endsWith("/capabilities")) return ok({ resumable: false });
+    if (path === "/tracking/meal-check-ins" && method === "GET") {
+      state.decisionReads++;
+      if (state.abortDecisionRead) return route.abort();
+      if (options.unknown || state.decisionStatus) return route.fulfill({ status: state.decisionStatus || 503, json: { success: false, error: { code: "QA_DECISION_UNAVAILABLE", message: "Synthetic decision failure" } } });
+      const id = url.searchParams.get("planId"), dayNumber = Number(url.searchParams.get("dayNumber")), localDate = url.searchParams.get("localDate")!;
+      if (id !== state.plan?.id) return route.fulfill({ status: 404, json: { success: false, error: { code: "NOT_FOUND", message: "No plan" } } });
+      const checkIns = rowsFor(dayNumber, localDate), eaten = checkIns.filter(r => r.state === "EATEN").length, skipped = checkIns.filter(r => r.state === "SKIPPED").length;
+      return ok({ day: { contractVersion: 2, source: "PLAN_CHECK_INS_ONLY", legacyMealLogsExcluded: true, unplannedSupported: false,
+        planId: id, planVersion: state.plan.version, dayNumber, localDate, planDate: localDate, checkIns, total: checkIns.length, completed: eaten, eaten, skipped,
+        decided: eaten + skipped, pending: checkIns.length - eaten - skipped, allDone: checkIns.length > 0 && eaten === checkIns.length, allDecided: checkIns.length > 0 && eaten + skipped === checkIns.length } });
+    }
+    const target = path.match(/^\/tracking\/meal-check-ins\/([^/]+)\/(\d+)\/(\d+)(\/skip)?$/);
+    if (target && ["PUT", "DELETE"].includes(method)) {
+      const id = decodeURIComponent(target[1]), dayNumber = Number(target[2]), mealIndex = Number(target[3]), localDate = url.searchParams.get("localDate")!;
+      const revision = Number(route.request().headers()["if-match"]?.replaceAll('"', ''));
+      const desired = method === "DELETE" ? "PENDING" : target[4] ? "SKIPPED" : "EATEN";
+      state.decisionWrites.push({ path, method, revision, desired });
+      expect(route.request().postData()).toBeNull();
+      if (state.hold) await writeGate;
+      if (state.fail) return fail();
+      if (state.mutationStatus) return route.fulfill({ status: state.mutationStatus, json: { success: false, error: { code: "QA_ERROR", message: "Synthetic mutation failure" } } });
+      if (id !== state.plan?.id || !rowsFor(dayNumber, localDate).some(r => r.mealIndex === mealIndex)) return route.fulfill({ status: 404, json: { success: false, error: { code: "NOT_FOUND", message: "Invalid plan meal" } } });
+      const current = decision(id, dayNumber, mealIndex, localDate);
+      if (state.conflict || (current.revision !== revision && !(current.revision === revision + 1 && current.state === desired))) {
+        state.conflict = false;
+        return route.fulfill({ status: 409, json: { success: false, error: { code: "MEAL_CHECK_IN_REVISION_CONFLICT", message: "Changed on another device" } } });
+      }
+      if (current.revision === revision) {
+        current.id ??= `saved:${decisionKey(id, dayNumber, mealIndex, localDate)}`;
+        current.state = desired; current.revision++;
+      }
+      if (state.loseDecisionResponse) { state.loseDecisionResponse = false; return route.abort(); }
+      return ok({ checkIn: { ...current, active: current.state === "EATEN", contractVersion: 2, planId: id, planVersion: state.plan.version, dayNumber, mealIndex, localDate } });
+    }
+    if (path === "/food-scan/analyze") { state.photoScans++; return ok({ analysis: syntheticPhoto, scan: null }); }
+    if (path.startsWith("/nutrition/barcode/")) { state.barcodeReads++; return ok({ found: true, food: syntheticProduct, scan: null }); }
+    if (["/nutrition/personalize", "/nutrition/personalize-nutrients"].includes(path)) return ok({ personalization: syntheticPersonalization });
+    if (path === "/nutrition/history") return ok({ scans: [] });
     if (path === "/tracking/meals" && method === "POST") {
       const input = route.request().postDataJSON();
       state.posts.push(input);
@@ -234,6 +318,11 @@ async function fixture(
   });
   return {
     state,
+    decide(index: number, desired: "PENDING" | "EATEN" | "SKIPPED", dayNumber = 1, localDate = today) {
+      if (!state.plan) throw new Error("No fixture plan");
+      const current = decision(state.plan.id, dayNumber, index, localDate);
+      current.id ??= `external:${index}:${localDate}`; current.state = desired; current.revision++;
+    },
     releaseSession() {
       state.delaySession = false;
       releaseSession();
@@ -279,7 +368,7 @@ for (const width of [390, 412, 430])
       await expect(focus).toHaveCount(1);
       await expect(focus.locator("[data-journey-plan-meal]")).toContainText("Mercimek çorbası");
       await expect(focus.getByRole("button", { name: "Yedim", exact: true })).toBeVisible();
-      await expect(focus.getByRole("link", { name: "Farklı yedim", exact: true })).toBeVisible();
+      await expect(focus.getByRole("button", { name: "Farklı yedim", exact: true })).toBeVisible();
       await expect(focus.getByRole("img", { name: "Öğün planı simgesi" })).toBeVisible();
       await expect(focus.locator("img")).toHaveCount(0);
       expect((await focus.boundingBox())!.height).toBeGreaterThanOrEqual(180);
@@ -288,7 +377,7 @@ for (const width of [390, 412, 430])
         .getByRole("button", { name: "Yedim", exact: true })
         .boundingBox())!;
       const differentBox = (await actions
-        .getByRole("link", { name: "Farklı yedim", exact: true })
+        .getByRole("button", { name: "Yemedim", exact: true })
         .boundingBox())!;
       expect(eatBox.width).toBeGreaterThanOrEqual(120);
       expect(Math.abs(eatBox.width - differentBox.width)).toBeLessThanOrEqual(1);
@@ -302,10 +391,7 @@ for (const width of [390, 412, 430])
       await expect(
         card.locator('[data-journey-timeline-step][data-step-state="completed"]').first(),
       ).toContainText("Kahvaltı");
-      await expect(card.getByRole("link", { name: "Farklı yedim", exact: true })).toHaveAttribute(
-        "href",
-        `/meals/add?slot=lunch&day=${today}&returnTo=/dashboard`,
-      );
+      await expect(card.getByRole("button", { name: "Farklı yedim", exact: true })).toBeEnabled();
       await expect(card).not.toContainText("Kayıt zamanı geçti");
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
         true,
@@ -420,28 +506,31 @@ test("double click, failed save, retry and persisted undo never invent macros", 
   const card = section(page);
   const eat = card.getByRole("button", { name: "Yedim", exact: true });
   await expect(eat).toBeVisible();
+  await expect(eat).toBeEnabled();
   f.state.fail = true;
   f.holdWrite();
   await eat.evaluate((button) => {
     (button as HTMLButtonElement).click();
     (button as HTMLButtonElement).click();
   });
-  await expect.poll(() => f.state.posts.length).toBe(1);
-  await expect(card.getByRole("button", { name: "Kaydediliyor…" }).first()).toBeDisabled();
+  await expect.poll(() => f.state.decisionWrites.length).toBe(1);
+  await expect(eat).toBeDisabled();
   f.releaseWrite();
-  await expect(card).toContainText("İşlem tamamlanamadı");
+  await expect(card).toContainText("İşlem doğrulanamadı");
   await expect(card).toContainText("1/4 adım");
   f.state.fail = false;
   await eat.click();
   await expect(card).toContainText(
-    "Öğün adımı işaretlendi; besin kaydı henüz oluşturulmadı. Kalori ve besin değerleri eklenmedi.",
+    "Yedim kaydedildi. Besin veya kalori eklenmedi.",
   );
   await expect(card).toContainText("2/4 adım");
-  expect(f.state.posts).toEqual([{ mealType: "LUNCH" }, { mealType: "LUNCH" }]);
-  await card.getByRole("button", { name: "Son öğün işaretini geri al" }).click();
-  await expect(card).toContainText("Öğün işareti geri alındı.");
+  expect(f.state.posts).toHaveLength(0);
+  expect(f.state.decisionWrites.map(w => w.revision)).toEqual([0, 0]);
+  await card.getByRole("button", { name: "Son öğün kararını geri al" }).click();
+  await expect(card).toContainText("Karar geri alındı; besin kayıtları korunuyor.");
   await expect(card).toContainText("1/4 adım");
-  expect(f.state.deletes).toEqual(["/tracking/meals/saved-2"]);
+  expect(f.state.deletes).toHaveLength(0);
+  expect(f.state.decisionWrites.at(-1)).toMatchObject({ method: "DELETE", revision: 1 });
   await card.locator("[data-journey-details-toggle]").click();
   await card.getByRole("button", { name: "+250 ml su ekle" }).click();
   await expect(card).toContainText("1000 / 2100 ml");
@@ -478,8 +567,8 @@ for (const mode of [
       await expect(card.locator("time")).toHaveCount(0);
     }
     if (mode === "unknown") {
-      await expect(card).toContainText("Öğün kayıtları doğrulanamadı");
-      await expect(card.getByRole("button", { name: "Yedim", exact: true })).toHaveCount(0);
+      await expect(card).toContainText("Öğün takibi şu anda kullanılamıyor");
+      await expect(card.getByRole("button", { name: "Yedim", exact: true })).toBeDisabled();
     }
     if (mode === "complete") {
       await expect(card).toHaveAttribute("data-journey-status", "all-done");
@@ -490,24 +579,17 @@ for (const mode of [
       await expect(card.locator("[data-journey-body]")).not.toBeVisible();
       await card.locator("[data-journey-outer-toggle]").click();
       await card.locator("[data-journey-details-toggle]").click();
-      await expect(card).toContainText("Günlük kayıt adımlarını tamamladın");
+      await expect(card).toContainText("Öğün kararlarını ve günlük kayıt adımlarını tamamladın");
       await expect(card).toContainText("%100");
     }
     if (mode === "due")
       await expect(card.locator("[data-journey-next]")).toContainText("Öğle yemeği");
     if (mode === "ambiguous") {
       await expect(card.locator("[data-journey-plan-meal]")).toContainText("Mercimek çorbası");
-      await expect(card.getByRole("button", { name: "Yedim", exact: true })).toHaveCount(0);
-      await card.locator("[data-journey-details-toggle]").click();
-      await expect(card.locator("[data-journey-unmatched-plan]")).toContainText("Öğle özel öğünü");
-      await expect(
-        card.locator("[data-journey-unmatched-plan] [data-journey-timeline-step]"),
-      ).toHaveAttribute("data-step-state", "recommended");
-      await expect(
-        card
-          .locator("[data-journey-unmatched-plan]")
-          .getByRole("button", { name: "Yedim", exact: true }),
-      ).toHaveCount(0);
+      await expect(card.getByRole("button", { name: "Yedim", exact: true })).toBeEnabled();
+      await card.getByRole("button", { name: "Yemedim", exact: true }).click();
+      await expect(card).toContainText("2/4 adım");
+      await expect(card.locator("[data-journey-unmatched-plan]")).toHaveCount(0);
     }
     await card.screenshot({ path: info.outputPath(`journey-${mode}.png`), animations: "disabled" });
   });
@@ -599,14 +681,9 @@ for (const width of [390, 412, 430])
       await card.locator("[data-journey-details-toggle]").click();
       await expect(card.locator("[data-journey-progress-area]")).toBeVisible();
       await card.locator("[data-journey-completed] > summary").click();
-      await expect(card).toContainText("besin kaydı yok");
-      await expect(
-        card.getByRole("link", { name: "Kahvaltı için besin kaydı ekle", exact: true }),
-      ).toBeVisible();
-      await expect(
-        card.getByRole("link", { name: "Kahvaltı için besin kaydı ekle", exact: true }),
-      ).toHaveAttribute("href", `/meals/add?slot=breakfast&day=${today}&returnTo=/dashboard`);
-      await expect(card).toContainText("Kalori ve besin hedeflerin ayrı");
+      await expect(card).toContainText("Besin kaydı ayrı tutulur");
+      await expect(card.locator("[data-journey-completed]").getByRole("button", { name: "Kararı düzenle" }).first()).toBeVisible();
+      await expect(card).toContainText("kalori ve besin hedeflerin ayrı");
       await page.reload();
       await expect(outer).toHaveAttribute("aria-expanded", "true");
       await expect(card.locator("[data-journey-details-toggle]")).toHaveAttribute(
@@ -622,6 +699,11 @@ for (const width of [390, 412, 430])
       await page.getByRole("checkbox", { name: "Öğle Yemeği öğününü yedim", exact: true }).click();
       await page.goto("/dashboard");
       await expect(outer).toHaveAttribute("aria-expanded", "true");
+      // Legacy slot undo is not evidence for an exact plan decision.
+      await expect(card).toContainText("4/4 adım");
+      await card.locator("[data-journey-completed] > summary").click();
+      await card.locator("[data-journey-completed] [data-journey-timeline-step]").filter({ hasText: "Mercimek çorbası" }).getByRole("button", { name: "Kararı düzenle" }).click();
+      await card.getByRole("button", { name: "Kararı geri al", exact: true }).click();
       await expect(card).toContainText("3/4 adım");
       await expect(card.locator("[data-journey-plan-meal]")).toContainText("Mercimek çorbası");
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
@@ -635,14 +717,14 @@ test("different meal context cancels to Journey without a write; confirmed food 
 }) => {
   const f = await fixture(page);
   await open(page);
-  await section(page).getByRole("link", { name: "Farklı yedim", exact: true }).click();
+  await section(page).getByRole("button", { name: "Farklı yedim", exact: true }).click();
   await expect(page.locator("[data-meal-entry-context]")).toContainText(`Öğle Yemeği · ${today}`);
   await expect(page.getByRole("combobox", { name: "Saat", exact: true })).toHaveValue("14");
   await page.getByRole("button", { name: "İptal", exact: true }).click();
   await expect(section(page)).toBeVisible();
   expect(f.state.posts).toHaveLength(0);
   await expect(section(page)).toContainText("1/4 adım");
-  await section(page).getByRole("link", { name: "Farklı yedim", exact: true }).click();
+  await section(page).getByRole("button", { name: "Farklı yedim", exact: true }).click();
   await page.getByLabel("Besin Adı", { exact: true }).fill("Sentetik besin");
   await page.getByLabel("Miktar", { exact: true }).fill("1 porsiyon");
   await page.getByLabel("Kalori (kcal)", { exact: true }).fill("100");
@@ -653,6 +735,8 @@ test("different meal context cancels to Journey without a write; confirmed food 
   await page.getByRole("combobox", { name: "Dakika", exact: true }).selectOption("10");
   await page.getByRole("button", { name: "Kaydet", exact: true }).click();
   await expect(section(page)).toBeVisible();
+  await expect(section(page)).toContainText("1/4 adım");
+  expect(f.state.decisionWrites).toHaveLength(0);
   expect(f.state.posts).toHaveLength(1);
   expect(f.state.posts[0]).toMatchObject({
     name: "Sentetik besin",
@@ -673,6 +757,7 @@ test("five fixed planned steps: snack before dinner, water reaches goal, auto fo
   plan.dailyPlans.cycle[1].meals[3].time = "21:55";
   const f = await fixture(page, { plan });
   f.state.meals.push(log("l", "LUNCH"));
+  f.decide(1, "EATEN");
   f.state.water = 1850;
   await open(page);
   const card = section(page);
@@ -690,7 +775,7 @@ test("five fixed planned steps: snack before dinner, water reaches goal, auto fo
     "false",
   );
   await card.locator("[data-journey-outer-toggle]").click();
-  await card.getByRole("button", { name: "Son öğün işaretini geri al", exact: true }).click();
+  await card.getByRole("button", { name: "Son öğün kararını geri al", exact: true }).click();
   await expect(card).toContainText("4/5 adım");
   await expect(card.locator("[data-journey-outer-toggle]")).toHaveAttribute(
     "aria-expanded",
@@ -704,121 +789,74 @@ test("five fixed planned steps: snack before dinner, water reaches goal, auto fo
   );
 });
 
-test("repeated snacks remain unconfirmed while trackable goals advance, fold and survive undo", async ({
-  page,
-}, info) => {
+test("repeated snacks have independent v2 decisions, fixed denominator, reload and safe undo", async ({ page }, info) => {
   await page.setViewportSize({ width: 390, height: 932 });
   const plan = activePlan();
-  plan.dailyPlans.cycle[1].meals.splice(
-    1,
-    0,
-    meal("Ara öğün", "10:00", "Birinci sentetik ara öğün"),
-  );
-  plan.dailyPlans.cycle[1].meals.splice(
-    3,
-    0,
-    meal("Ara öğün", "16:00", "İkinci sentetik ara öğün"),
-  );
+  plan.dailyPlans.cycle[1].meals.splice(1, 0, meal("Ara öğün", "10:00", "Birinci sentetik ara öğün"));
+  plan.dailyPlans.cycle[1].meals.splice(3, 0, meal("Ara öğün", "16:00", "İkinci sentetik ara öğün"));
   const f = await fixture(page, { plan });
-  f.state.meals.push(log("one-snack", "SNACK"));
+  f.state.meals.push(log("legacy-snack", "SNACK"));
   f.state.water = 1850;
   await open(page);
-  const card = section(page),
-    outer = card.locator("[data-journey-outer-toggle]");
-  await expect(card).toContainText("1/4 takip");
-  await expect(card.locator("[data-journey-plan-meal]")).toContainText("Mercimek çorbası");
+  const card = section(page), outer = card.locator("[data-journey-outer-toggle]");
+  await expect(card).toContainText("1/6 adım");
   await card.getByRole("button", { name: "Yedim", exact: true }).click();
-  await expect(card).toContainText("2/4 takip");
+  await expect(card).toContainText("2/6 adım");
   await expect(card.locator("[data-journey-plan-meal]")).toContainText("İkinci sentetik ara öğün");
-  await expect(card.getByRole("button", { name: "Yedim", exact: true })).toHaveCount(0);
+  await card.getByRole("button", { name: "Yemedim", exact: true }).click();
+  await expect(card).toContainText("3/6 adım");
   await page.clock.fastForward(6 * 60 * 60 * 1000);
   await expect(card.locator("[data-journey-plan-meal]")).toContainText("Sebzeli bulgur");
   await card.getByRole("button", { name: "Yedim", exact: true }).click();
-  await expect(card).toContainText("3/4 takip");
-  await expect(card.locator("[data-journey-plan-meal]")).toHaveCount(0);
-  await expect(card.getByRole("button", { name: "Yedim", exact: true })).toHaveCount(0);
-  await expect(card).not.toContainText("Bugünkü planın öğün adımları kaydedildi");
+  await expect(card).toContainText("4/6 adım");
   await card.locator("[data-journey-details-toggle]").click();
-  const unmatched = card.locator("[data-journey-unmatched-plan]");
-  await expect(
-    unmatched.locator('[data-journey-timeline-step][data-step-state="pending"]'),
-  ).toHaveCount(2);
-  await expect(unmatched.locator('[data-step-state="recommended"]')).toHaveCount(0);
-  await expect(unmatched.locator('[data-step-state="completed"]')).toHaveCount(0);
-  await expect(unmatched.getByRole("button", { name: "Yedim", exact: true })).toHaveCount(0);
-  for (const link of await unmatched.getByRole("link").all())
-    await expect(link).toHaveAttribute("href", "/meals/plan");
   await card.getByRole("button", { name: "+250 ml su ekle", exact: true }).click();
-  await expect(card).toHaveAttribute("data-journey-status", "all-done");
-  await expect(outer).toHaveAttribute("aria-expanded", "false");
-  await expect(card.locator("[data-journey-card-heading]")).toContainText("4/4 takip");
-  await outer.click();
-  await expect(card).toContainText(
-    "Eşleştirilemeyen plan öğünleri bu ilerlemeye dahil değil ve tamamlanmış sayılmadı",
-  );
-  await expect(unmatched.locator('[data-step-state="pending"]')).toHaveCount(2);
-  expect(f.state.posts).toEqual([{ mealType: "LUNCH" }, { mealType: "DINNER" }]);
-  expect(
-    await card.locator("[data-journey-card-heading]").evaluate((heading) => {
-      const title = heading.querySelector("h3")!;
-      const range = document.createRange();
-      range.selectNodeContents(title);
-      return (
-        range.getBoundingClientRect().right + 6 <=
-        title.nextElementSibling!.getBoundingClientRect().left
-      );
-    }),
-  ).toBe(true);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await card.screenshot({ path: info.outputPath("journey-repeated-snacks-tracking-only.png") });
-  await page.reload();
+  await expect(card).toContainText("5/6 adım");
   await expect(outer).toHaveAttribute("aria-expanded", "true");
-  await expect(card.locator("[data-journey-details-toggle]")).toHaveAttribute(
-    "aria-expanded",
-    "true",
-  );
-  await expect(unmatched.locator('[data-step-state="pending"]')).toHaveCount(2);
-  await page.goto("/meals");
-  await page.getByRole("checkbox", { name: "Akşam Yemeği öğününü yedim", exact: true }).click();
-  await page.goto("/dashboard");
-  await expect(card).toContainText("3/4 takip");
-  await expect(card.locator("[data-journey-plan-meal]")).toContainText("Sebzeli bulgur");
-  await expect(unmatched.locator('[data-step-state="pending"]')).toHaveCount(2);
+  const earlier = card.locator("[data-daily-journey-steps] [data-journey-timeline-step]").filter({ hasText: "Birinci sentetik ara öğün" });
+  await earlier.getByRole("button", { name: "Karar ver", exact: true }).click();
+  await card.getByRole("button", { name: "Yedim", exact: true }).click();
+  await expect(card).toContainText("6/6 adım");
+  await expect(outer).toHaveAttribute("aria-expanded", "false");
+  expect(f.state.posts).toHaveLength(0);
+  expect(f.state.decisionWrites.map(w => w.desired)).toEqual(["EATEN", "SKIPPED", "EATEN", "EATEN"]);
+  await outer.click();
+  await card.locator("[data-journey-completed] > summary").click();
+  const completed = card.locator("[data-journey-completed]");
+  await expect(completed.locator("[data-journey-timeline-step]").filter({ hasText: "Birinci sentetik ara öğün" })).toContainText("Yedim");
+  await expect(completed.locator("[data-journey-timeline-step]").filter({ hasText: "İkinci sentetik ara öğün" })).toContainText("Yemedim");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await card.screenshot({ path: info.outputPath("journey-independent-snacks-v2.png") });
+  await page.reload();
+  await expect(card).toContainText("6/6 adım");
+  await expect(outer).toHaveAttribute("aria-expanded", "true");
+  await card.locator("[data-journey-completed] > summary").click();
+  await card.locator("[data-journey-completed] [data-journey-timeline-step]").filter({ hasText: "İkinci sentetik ara öğün" }).getByRole("button", { name: "Kararı düzenle" }).click();
+  await card.getByRole("button", { name: "Kararı geri al", exact: true }).click();
+  await expect(card).toContainText("5/6 adım");
+  expect(f.state.decisionWrites.at(-1)?.path).toMatch(/\/1\/3$/);
+  await page.reload();
+  await expect(card).toContainText("5/6 adım");
 });
 
-test("only unmatchable planned snacks: water completion is scoped and never confirms either snack", async ({
-  page,
-}, info) => {
+test("only planned snacks: legacy food and water never confirm either exact snack", async ({ page }, info) => {
   await page.setViewportSize({ width: 390, height: 932 });
   const plan = activePlan();
-  plan.dailyPlans.cycle[1].meals = [
-    meal("Ara öğün", "10:00", "Birinci ara öğün"),
-    meal("Ara öğün", "16:00", "İkinci ara öğün"),
-  ];
+  plan.dailyPlans.cycle[1].meals = [meal("Ara öğün", "10:00", "Birinci ara öğün"), meal("Ara öğün", "16:00", "İkinci ara öğün")];
   const f = await fixture(page, { plan, complete: true });
-  f.state.meals.push(log("snack-log", "SNACK"));
+  f.state.meals.push(log("legacy-snack-log", "SNACK"));
   await open(page);
-  const card = section(page),
-    outer = card.locator("[data-journey-outer-toggle]");
-  await expect(card).toHaveAttribute("data-journey-status", "all-done");
-  await expect(outer).toHaveAttribute("aria-expanded", "false");
-  await expect(card.locator("[data-journey-card-heading]")).toContainText("1/1 takip");
-  await outer.click();
+  const card = section(page);
+  await expect(card).not.toHaveAttribute("data-journey-status", "all-done");
+  await expect(card.locator("[data-journey-card-heading]")).toContainText("1/3 adım");
   await card.locator("[data-journey-details-toggle]").click();
-  await expect(card.getByRole("progressbar")).toHaveAttribute(
-    "aria-valuetext",
-    "1/1 takip hedefi tamamlandı",
-  );
-  await expect(
-    card.locator('[data-journey-unmatched-plan] [data-step-state="pending"]'),
-  ).toHaveCount(2);
-  await expect(
-    card.locator('[data-journey-unmatched-plan] [data-step-state="completed"]'),
-  ).toHaveCount(0);
-  await expect(card.getByRole("button", { name: "Yedim", exact: true })).toHaveCount(0);
+  await expect(card.locator("[data-daily-journey-steps] [data-journey-timeline-step]")).toHaveCount(2);
+  await expect(card.locator('[data-daily-journey-steps] [data-step-state="completed"]')).toHaveCount(0);
+  await expect(card.getByRole("button", { name: "Yedim", exact: true })).toBeEnabled();
   expect(f.state.posts).toHaveLength(0);
+  expect(f.state.decisionWrites).toHaveLength(0);
   expect(f.state.waterPosts).toBe(0);
-  await card.screenshot({ path: info.outputPath("journey-only-unmapped-water-tracking.png") });
+  await card.screenshot({ path: info.outputPath("journey-snacks-water-independent.png") });
 });
 
 function fullCalendarPlan(days: 7 | 14 | 30, startDate = today) {
@@ -994,4 +1032,197 @@ test("11-A: postponed final day keeps the real overnight menu before showing exp
   await expect(focus).toContainText("Gece ara öğünü");
   await expect(focus).toContainText("Yaklaşıyor");
   await expect(focus.locator("time")).toContainText("24 Ekim · Planlanan 02:00");
+});
+
+test("11-B: 409 re-reads the other device decision without replaying an old intent", async ({ page }) => {
+  const f = await fixture(page);
+  await open(page);
+  const card = section(page), eat = card.getByRole("button", { name: "Yedim", exact: true });
+  await expect(eat).toBeEnabled();
+  f.decide(1, "SKIPPED");
+  await eat.click();
+  await expect(card).toContainText("başka bir cihazda değişti");
+  await expect(card).toContainText("2/4 adım");
+  expect(f.state.decisionWrites).toHaveLength(1);
+  expect(f.state.decisionWrites[0]).toMatchObject({ revision: 0, desired: "EATEN" });
+  expect(f.state.posts).toHaveLength(0);
+  await page.reload();
+  await expect(card).toContainText("2/4 adım");
+  expect(f.state.decisionWrites).toHaveLength(1);
+});
+for (const status of [401, 403, 404, 422, 503]) {
+  test(`11-B: ${status} mutation error never completes or falls back to legacy food writes`, async ({ page }) => {
+    const f = await fixture(page);
+    await open(page);
+    await expect(section(page).getByRole("button", { name: "Yedim", exact: true })).toBeEnabled();
+    f.state.mutationStatus = status;
+    await section(page).getByRole("button", { name: "Yedim", exact: true }).click();
+    await expect(section(page)).toContainText("İşlem doğrulanamadı");
+    await expect(section(page)).toContainText("1/4 adım");
+    expect(f.state.decisionWrites).toHaveLength(1);
+    expect(f.state.posts).toHaveLength(0);
+  });
+}
+test("11-B: unavailable v2 storage stays unknown and explicit re-read restores the same scope", async ({ page }) => {
+  const f = await fixture(page, { decisionStatus: 503 });
+  await open(page);
+  await expect(section(page).getByText("Öğün takibi şu anda kullanılamıyor", { exact: false })).toBeVisible();
+  await expect(section(page).getByRole("button", { name: "Yedim", exact: true })).toBeDisabled();
+  await expect(section(page).getByRole("progressbar")).not.toHaveAttribute("aria-valuenow", "100");
+  expect(f.state.posts).toHaveLength(0);
+  f.state.decisionStatus = 0;
+  await section(page).getByRole("button", { name: "Öğünleri tekrar oku", exact: true }).click();
+  await expect(section(page)).toContainText("1/4 adım");
+  await expect(section(page).getByRole("button", { name: "Yedim", exact: true })).toBeEnabled();
+  expect(f.state.decisionWrites).toHaveLength(0);
+});
+test("11-B: lost write response is resolved by a read, never a second mutation", async ({ page }) => {
+  const f = await fixture(page);
+  await open(page);
+  await expect(section(page).getByRole("button", { name: "Yedim", exact: true })).toBeEnabled();
+  f.state.loseDecisionResponse = true;
+  await section(page).getByRole("button", { name: "Yedim", exact: true }).click();
+  await expect(section(page)).toContainText("2/4 adım");
+  await expect(section(page)).toContainText("otomatik tekrar yapılmadı");
+  expect(f.state.decisionWrites).toHaveLength(1);
+  expect(f.state.posts).toHaveLength(0);
+});
+test("11-B: a network read failure cannot reuse old slot evidence", async ({ page }) => {
+  const f = await fixture(page);
+  f.state.abortDecisionRead = true;
+  await open(page);
+  await expect(section(page)).toContainText("Öğün takibi şu anda kullanılamıyor");
+  await expect(section(page).getByRole("button", { name: "Yedim", exact: true })).toBeDisabled();
+  expect(f.state.decisionWrites).toHaveLength(0);
+  expect(f.state.posts).toHaveLength(0);
+});
+async function enterDifferent(page: Page) {
+  await section(page).getByRole("button", { name: "Farklı yedim", exact: true }).click();
+  await expect(page.locator("[data-journey-food-entry]")).toBeVisible();
+}
+async function fillSyntheticFood(page: Page) {
+  await page.getByLabel("Besin Adı", { exact: true }).fill("Sentetik farklı besin");
+  await page.getByLabel("Miktar", { exact: true }).fill("1 porsiyon");
+  await page.getByLabel("Kalori (kcal)", { exact: true }).fill("100");
+}
+test("11-B: food search fills the existing form without writing or confirming until explicit save", async ({ page }) => {
+  const f = await fixture(page);
+  await open(page); await enterDifferent(page);
+  await page.getByRole("searchbox", { name: "Besin ara", exact: true }).fill("tavuk");
+  await page.getByRole("button", { name: /Tavuk/i }).first().click();
+  expect(f.state.posts).toHaveLength(0); expect(f.state.decisionWrites).toHaveLength(0);
+  await page.getByRole("button", { name: "Kaydet", exact: true }).click();
+  await expect(section(page)).toBeVisible();
+  await expect(section(page)).toContainText("1/4 adım");
+  expect(f.state.posts).toHaveLength(1); expect(f.state.decisionWrites).toHaveLength(0);
+});
+test("11-B: changed plan while editing prevents a food write", async ({ page }) => {
+  const f = await fixture(page);
+  await open(page); await enterDifferent(page); await fillSyntheticFood(page);
+  f.state.plan = { ...f.state.plan!, id: "other-plan" };
+  await page.getByRole("button", { name: "Kaydet", exact: true }).click();
+  await expect(page.getByText("Kayıt doğrulanamadı", { exact: false })).toBeVisible();
+  expect(f.state.posts).toHaveLength(0); expect(f.state.decisionWrites).toHaveLength(0);
+});
+test("11-B: midnight and malformed meal context fail closed without a food write", async ({ page }) => {
+  const f = await fixture(page, { now: `${today}T23:59:00+03:00` });
+  await open(page); await enterDifferent(page);
+  const url = page.url();
+  await page.clock.fastForward(61_000);
+  await expect(page.locator("[data-journey-entry-blocked]")).toBeVisible();
+  await page.goto(url.replace(/journey=[^&]+/, "journey=invalid"));
+  await expect(page.locator("[data-journey-entry-blocked]")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Kaydet", exact: true })).toHaveCount(0);
+  expect(f.state.posts).toHaveLength(0); expect(f.state.decisionWrites).toHaveLength(0);
+});
+test("11-B: prior account entry context cannot be used by another authenticated account", async ({ page }) => {
+  const f = await fixture(page);
+  await open(page); await enterDifferent(page);
+  const oldEntry = page.url();
+  await page.goto("/profile"); await page.getByText("Çıkış yap", { exact: true }).click();
+  await expect(page).toHaveURL(/\/login$/);
+  f.state.owner = "synthetic-b";
+  await page.getByLabel("E-posta").fill("journey-b@example.com");
+  await page.getByLabel("Şifre", { exact: true }).fill("SyntheticPass123");
+  await page.getByRole("button", { name: "Giriş Yap", exact: true }).click();
+  await expect(section(page)).toBeVisible();
+  await page.goto(oldEntry);
+  await expect(page.locator("[data-journey-entry-blocked]")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Kaydet", exact: true })).toHaveCount(0);
+  expect(f.state.posts).toHaveLength(0); expect(f.state.decisionWrites).toHaveLength(0);
+});
+for (const mode of ["photo", "barcode"] as const) {
+  test(`11-B: ${mode} scan keeps exact entry context and only explicit food save writes once`, async ({ page }) => {
+    const f = await fixture(page);
+    await open(page); await enterDifferent(page);
+    await page.getByRole("link", { name: mode === "photo" ? "Fotoğrafla tara" : "Barkod okut", exact: true }).click();
+    await expect(page.locator("[data-journey-scan-context]")).toContainText("Öğle yemeği");
+    expect(f.state.posts).toHaveLength(0); expect(f.state.decisionWrites).toHaveLength(0);
+    if (mode === "photo") {
+      await page.locator('input[type="file"]').first().setInputFiles({ name: "synthetic.png", mimeType: "image/png", buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64") });
+      await page.getByRole("button", { name: "Görseli analiz et", exact: true }).click();
+      await expect(page.getByRole("heading", { name: "Sentetik taranan yemek", exact: true })).toBeVisible();
+      expect(f.state.photoScans).toBe(1);
+      expect(f.state.posts).toHaveLength(0);
+      await page.getByRole("button", { name: "Seçilen porsiyonu öğüne ekle", exact: true }).click();
+    } else {
+      await expect(page.getByRole("tab", { name: "Barkod Tara", exact: true })).toHaveAttribute("aria-selected", "true");
+      await page.getByLabel("Barkod numarası", { exact: true }).fill("8690000000001");
+      await page.getByRole("button", { name: "Sorgula", exact: true }).click();
+      await expect(page.getByText("Sentetik barkod ürünü", { exact: true }).first()).toBeVisible();
+      expect(f.state.posts).toHaveLength(0);
+      await page.getByRole("button", { name: "Öğüne ekle", exact: true }).click();
+      await expect(page.getByText("1 paket tüketim", { exact: true })).toBeVisible();
+      await page.getByRole("button", { name: "Öğüne ekle", exact: true }).click();
+    }
+    await expect(section(page)).toBeVisible();
+    await expect(section(page)).toContainText("Besin kaydedildi. Öğün kararını ayrıca seç");
+    await expect(section(page)).toContainText("1/4 adım");
+    expect(f.state.posts).toHaveLength(1); expect(f.state.decisionWrites).toHaveLength(0);
+    expect(f.state.posts[0]).toMatchObject({ mealType: "LUNCH", calories: 100, micronutrients: { iron: 2 }, loggedAt: `${today}T11:00:00.000Z` });
+    await section(page).getByRole("button", { name: "Yedim", exact: true }).click();
+    await expect(section(page)).toContainText("2/4 adım");
+    expect(f.state.posts).toHaveLength(1); expect(f.state.decisionWrites).toHaveLength(1);
+  });
+}
+
+test("11-B: FREE Yemedim is a reversible decision, with no calories and a fixed denominator", async ({ page }) => {
+  const f = await fixture(page);
+  await open(page);
+  await section(page).getByRole("button", { name: "Yemedim", exact: true }).click();
+  await expect(section(page)).toContainText("Yemedim kaydedildi. Besin veya kalori eklenmedi.");
+  await expect(section(page)).toContainText("2/4 adım");
+  expect(f.state.posts).toHaveLength(0);
+  await section(page).getByRole("button", { name: "Son öğün kararını geri al", exact: true }).click();
+  await expect(section(page)).toContainText("1/4 adım");
+  expect(f.state.decisionWrites.map(w => w.desired)).toEqual(["SKIPPED", "PENDING"]);
+  await page.reload();
+  await expect(section(page)).toContainText("1/4 adım");
+  expect(f.state.posts).toHaveLength(0);
+});
+test("11-B: tampered meal index and reused saved entry cannot create another food record", async ({ page }) => {
+  const f = await fixture(page);
+  await open(page); await enterDifferent(page);
+  const original = page.url();
+  await page.evaluate(() => {
+    const token = new URLSearchParams(location.search).get("journey")!;
+    const key = "diewish:journey-entry:" + token;
+    const entry = JSON.parse(sessionStorage.getItem(key)!);
+    entry.identity.mealIndex = 99;
+    sessionStorage.setItem(key, JSON.stringify(entry));
+  });
+  await page.reload();
+  await expect(page.locator("[data-journey-entry-blocked]")).toBeVisible();
+  expect(f.state.posts).toHaveLength(0);
+  await page.goto("/dashboard");
+  await enterDifferent(page); await fillSyntheticFood(page);
+  const savedEntry = page.url();
+  await page.getByRole("button", { name: "Kaydet", exact: true }).click();
+  await expect(section(page)).toBeVisible();
+  expect(f.state.posts).toHaveLength(1);
+  await page.goto(savedEntry);
+  await expect(page.locator("[data-journey-entry-blocked]")).toContainText("Besin zaten kaydedildi");
+  await expect(page.getByRole("button", { name: "Kaydet", exact: true })).toHaveCount(0);
+  expect(f.state.posts).toHaveLength(1); expect(f.state.decisionWrites).toHaveLength(0);
+  expect(savedEntry).not.toBe(original);
 });

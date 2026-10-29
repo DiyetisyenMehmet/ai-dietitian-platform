@@ -156,6 +156,8 @@ export interface AddFoodPayload {
   slot: MealSlot;
   time: string;
   dayKey?: string;
+  /** Exact-plan entry must not replay a write after an account/session change. */
+  pinSession?: boolean;
   food: Omit<FoodItem, "id">;
 }
 
@@ -209,7 +211,7 @@ export const mealsStore = {
     }
   },
 
-  async addFood({ slot, time, dayKey, food }: AddFoodPayload): Promise<void> {
+  async addFood({ slot, time, dayKey, food, pinSession }: AddFoodPayload): Promise<void> {
     const session = sessionVersion;
     ensureCurrentDay();
     if (dayKey && dayKey !== cacheDayKey) throw new Error("Kayıt günü değişti");
@@ -226,7 +228,8 @@ export const mealsStore = {
       proteinG: food.protein,
       carbsG: food.carbs,
       fatG: food.fat,
-    });
+    }, !pinSession);
+    if (pinSession && (typeof log?.id !== "string" || !log.id)) throw new Error("Besin kaydı doğrulanamadı");
     if (session !== sessionVersion) return;
     ensureCurrentDay();
     writeVersion++;

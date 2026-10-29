@@ -91,13 +91,15 @@ export const foodScanClient = {
     });
   },
 
-  logMeal(mealType: MealTypeDto, analysis: FoodScanResultDto) {
+  logMeal(mealType: MealTypeDto, analysis: FoodScanResultDto, options?: { loggedAt: string; retryOnUnauthorized: false }) {
     return apiRequest<{ log: { id: string } }>({
       path: "/tracking/meals",
       method: "POST",
       auth: true,
+      retryOnUnauthorized: options?.retryOnUnauthorized,
       body: JSON.stringify({
         mealType,
+        ...(options ? { loggedAt: options.loggedAt } : {}),
         name: analysis.dishName,
         calories: analysis.totals.energyKcal ?? undefined,
         proteinG: analysis.totals.proteinG ?? undefined,

@@ -1,6 +1,8 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
+import { useJourneyEntry } from "@/application/meals/journey-entry";
 import { useRouter } from "next/navigation";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -22,6 +24,7 @@ import { SLOT_ICON } from "./meal-visuals";
 import { MealSearch } from "./meal-search";
 
 interface AddMealFormProps {
+  journeyToken?: string;
   initialSlot?: MealSlot;
   initialDay?: string;
   cancelHref?: string;
@@ -34,11 +37,14 @@ const TIME_SELECT_CLASS =
 
 /** Add Meal form: search + manual entry, meal type, time, validation and toasts. */
 export function AddMealForm({
+  journeyToken,
   initialSlot = "breakfast",
   cancelHref = "/meals",
   initialDay,
 }: AddMealFormProps) {
   const router = useRouter();
+  const journey = useJourneyEntry(journeyToken);
+  const scoped = journeyToken !== undefined;
   const owner = useAuth().user?.id;
   const formOwner = React.useRef(owner);
   const submitting = React.useRef(false);
@@ -72,10 +78,14 @@ export function AddMealForm({
       `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`,
     );
   }, [setValue]);
+  React.useEffect(() => {
+    if (scoped && journey.valid && journey.meal?.foodSlot) setValue("mealSlot", journey.meal.foodSlot);
+  }, [journeyToken, journey.valid, journey.meal?.foodSlot, setValue]);
   const onSubmit = React.useCallback(
     async (values: AddMealInput) => {
       if (submitting.current) return;
       submitting.current = true;
+      let foodAttempted = false;
       try {
         if (
           day !== localDayKey() ||
@@ -85,8 +95,12 @@ export function AddMealForm({
           toast.error("Hesap veya kayıt günü değişti. Lütfen formu yeniden aç.");
           return;
         }
+        const context = scoped ? await journey.prepare() : null;
+        const slot = context?.meal.foodSlot ?? values.mealSlot;
+        foodAttempted = true;
         await mealsStore.addFood({
-          slot: values.mealSlot,
+          pinSession: scoped,
+          slot,
           time: values.time,
           dayKey: day,
           food: {
@@ -99,9 +113,11 @@ export function AddMealForm({
           },
         });
         if (authStore.getSnapshot().user?.id !== formOwner.current || day !== localDayKey()) return;
+        if (scoped) journey.finish("saved");
         toast.success("Besin öğüne eklendi");
-        router.push(cancelHref);
+        router.push(scoped ? journey.backHref : cancelHref);
       } catch (error) {
+        if (scoped && foodAttempted) journey.finish("uncertain");
         if (authStore.getSnapshot().user?.id === formOwner.current && day === localDayKey())
           toast.error(
             error instanceof Error && error.message === "Tüketim saati gelecekte olamaz"
@@ -112,17 +128,31 @@ export function AddMealForm({
         submitting.current = false;
       }
     },
-    [router, cancelHref, day],
+    [router, cancelHref, day, journeyToken, scoped, journey],
   );
 
   const foodName = watch("name");
   const warnings = useFoodWarnings(foodName ?? "");
 
+  if (scoped && (!journey.loaded || !journey.valid || journey.entry?.phase !== "open")) {
+    return <div className="space-y-3" role="status" data-journey-entry-blocked>
+      <p>{!journey.loaded ? "Öğün bağlamı doğrulanıyor…" : journey.valid && journey.entry?.phase === "saving" ? "Besin kaydı işleniyor. Yeniden kaydetmeden önce işlemin sonucunu bekle." : journey.valid && journey.entry?.phase === "saved" ? "Besin zaten kaydedildi. Öğün kararını Yolculuğundan ayrıca seç." : "Öğün bağlamı veya kayıt durumu doğrulanamadı. Yeniden kaydetmeden önce Beslenme kayıtlarını kontrol et."}</p>
+      <Link href={journey.backHref} className="inline-flex min-h-11 items-center text-primary">Yolculuğuma dön</Link>
+    </div>;
+  }
   return (
     <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-5">
       <p className="text-sm text-muted-foreground" data-meal-entry-context>
         {MEAL_SLOTS.find((item) => item.slot === watch("mealSlot"))?.label} · {day} · Tüketim kaydı
       </p>
+      {scoped && <div className="space-y-2 rounded-xl border p-3" data-journey-food-entry>
+        <p className="text-sm font-semibold">{journey.meal?.meal.name} · {journey.meal?.meal.time} · {day}</p>
+        <p className="text-xs text-muted-foreground">Farklı yedim: besin kaydı ve öğün kararı ayrıdır. Kaydetmek otomatik Yedim değildir.</p>
+        <div className="flex flex-wrap gap-2">
+          <Link href={journey.scanHref("photo")} className="inline-flex min-h-11 items-center rounded-xl border px-3 text-sm">Fotoğrafla tara</Link>
+          <Link href={journey.scanHref("barcode")} className="inline-flex min-h-11 items-center rounded-xl border px-3 text-sm">Barkod okut</Link>
+        </div>
+      </div>}
       <Card>
         <CardContent className="space-y-4 p-5">
           <div>
@@ -210,6 +240,7 @@ export function AddMealForm({
                       <button
                         key={slot}
                         type="button"
+                        disabled={Boolean(scoped && journey.meal?.foodSlot)}
                         onClick={() => field.onChange(slot)}
                         className={cn(
                           "flex flex-col items-center gap-1.5 rounded-xl border p-3 text-xs font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
@@ -289,7 +320,7 @@ export function AddMealForm({
             type="button"
             variant="outline"
             className="flex-1"
-            onClick={() => router.push(cancelHref)}
+            onClick={() => router.push(scoped ? journey.backHref : cancelHref)}
             disabled={isSubmitting}
           >
             İptal
