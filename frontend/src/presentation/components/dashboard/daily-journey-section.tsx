@@ -15,7 +15,7 @@ import {
   settleJourneyDisclosure,
 } from "@/application/health/daily-journey";
 import type { JourneyResult } from "@/application/health/journey-engine";
-import type { JourneyPlannedMeal } from "@/application/health/journey-plan";
+import type { JourneyPlannedMeal, JourneyPlanDay } from "@/application/health/journey-plan";
 import type { JourneyStep } from "@/domain/health/types";
 import type { MealSlot } from "@/domain/meals/types";
 import { mealsStore, useMeals, useMealsReadiness } from "@/application/meals/meals-store";
@@ -29,16 +29,28 @@ function journeyHref(href: string, day?: string) {
     : href;
 }
 
+const mealTimingLabel = { now: "Şimdi", upcoming: "Yaklaşıyor", earlier: "Daha önceki öğün" };
+function planDateLabel(day: string) {
+  const [year, month, date] = day.split("-").map(Number);
+  return new Date(year, month - 1, date, 12).toLocaleDateString("tr-TR", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+
 export function StepRow({
   step,
   last = false,
   action,
   day,
+  plannedMeal,
 }: {
   step: JourneyStep;
   last?: boolean;
   action?: React.ReactNode;
   day?: string;
+  plannedMeal?: JourneyPlannedMeal;
 }) {
   const Icon = healthIcon(step.icon);
   const complete = step.state === "completed";
@@ -84,8 +96,25 @@ export function StepRow({
       <span className="min-w-0 flex-1">
         <span className="block break-words text-sm font-semibold">{step.label}</span>
         <span className="mt-0.5 block break-words text-xs leading-relaxed text-muted-foreground">
-          {step.hint}
+          {plannedMeal && !complete && plannedMeal.timing
+            ? mealTimingLabel[plannedMeal.timing]
+            : step.hint}
         </span>
+        {plannedMeal && (
+          <span
+            className="mt-1 block text-xs leading-relaxed text-muted-foreground"
+            data-journey-row-menu
+          >
+            <time dateTime={new Date(plannedMeal.at).toISOString()}>
+              Planlanan {plannedMeal.meal.time}
+            </time>
+            {plannedMeal.meal.foods.map((food, index) => (
+              <span className="block break-words" key={index}>
+                {food.name} · {food.portion}
+              </span>
+            ))}
+          </span>
+        )}
       </span>
       <span
         className={cn(
@@ -125,6 +154,8 @@ interface DailyJourneyContentProps {
   status: JourneyResult["status"];
   direction?: JourneyResult["direction"];
   plannedMeal?: JourneyPlannedMeal | null;
+  plannedMeals?: JourneyPlannedMeal[];
+  planValidity?: JourneyPlanDay;
   planReady?: boolean;
   planReadError?: boolean;
   planRefreshing?: boolean;
@@ -144,6 +175,8 @@ export function DailyJourneyContent({
   status,
   direction,
   plannedMeal,
+  plannedMeals = [],
+  planValidity,
   planReady = true,
   planReadError = false,
   planRefreshing = false,
@@ -163,12 +196,43 @@ export function DailyJourneyContent({
   );
   const detailsId = React.useId();
   const bodyId = React.useId();
+  const completedSteps = steps.filter((step) => step.state === "completed");
   const summaries = steps.filter(
-    (step) => step.kind === "water" || step.kind === "weight" || step.kind === "activity",
+    (step) =>
+      step.state !== "completed" &&
+      (step.kind === "water" || step.kind === "weight" || step.kind === "activity"),
   );
   const unmatched = steps.filter((step) => step.kind === "planned-meal");
   const scopedTracking = unmatched.length > 0;
-  const list = steps.filter((step) => !summaries.includes(step) && !unmatched.includes(step));
+  const list = steps.filter(
+    (step) => step.state !== "completed" && !summaries.includes(step) && !unmatched.includes(step),
+  );
+  const planStatus = planReadError
+    ? "error"
+    : !planReady
+      ? "loading"
+      : (planValidity?.status ??
+        (plannedMeal || steps.some((step) => step.id) ? "active" : "none"));
+  const planMessage =
+    planStatus === "error"
+      ? "Beslenme planın doğrulanamadı. Son doğrulanmış menü varsa korunuyor."
+      : planStatus === "loading"
+        ? "Beslenme planın doğrulanıyor; henüz menü gösterilmiyor."
+        : planStatus === "expired" && planValidity?.endsOn
+          ? `Planın ${planDateLabel(planValidity.endsOn)} tarihinde sona erdi. Yeni plan / yenileme seçenekleri plan ekranında.`
+          : planStatus === "upcoming" && planValidity?.startsOn
+            ? `Planın henüz başlamadı. Başlangıç: ${planDateLabel(planValidity.startsOn)}.`
+            : planStatus === "unavailable"
+              ? "Planın tarih veya menü bilgisi doğrulanamadı. Plan ekranından kontrol edebilirsin."
+              : planStatus === "no-meals"
+                ? "Planında bugün için öğün bulunmuyor. Öğünlerini yine kaydedebilirsin."
+                : planStatus === "none"
+                  ? "Etkin bir beslenme planın yok. Öğünlerini yine kaydedebilirsin."
+                  : !plannedMeal && steps.some((step) => step.id) && status !== "all-done"
+                    ? scopedTracking
+                      ? "Takip edilebilir adımlarını aşağıdan kontrol edebilirsin. Ayrı onay bekleyen plan öğünleri detaylarda."
+                      : "Bugünkü planın öğün adımları kaydedildi. Diğer günlük adımlarını aşağıdan takip edebilirsin."
+                    : null;
   const mealIsNext = Boolean(
     plannedMeal && next && (next.id ? plannedMeal.key === next.id : plannedMeal.slot === next.kind),
   );
@@ -184,26 +248,24 @@ export function DailyJourneyContent({
         className="overflow-hidden rounded-[24px] border-primary/15 bg-card shadow-sm"
         data-daily-journey-card
       >
-        <CardContent className="space-y-4 p-4 sm:p-5">
-          <div className="flex min-w-0 items-center gap-2.5" data-journey-card-heading>
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-              <Route className="size-5" aria-hidden="true" />
+        <CardContent className="space-y-3 p-4 sm:p-5">
+          <div className="flex min-w-0 items-center gap-2" data-journey-card-heading>
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <Route className="size-4" aria-hidden="true" />
             </span>
-            <h3 className="min-w-0 flex-1 text-base font-semibold tracking-tight sm:text-lg">
+            <h3 className="min-w-0 flex-1 text-sm font-semibold tracking-tight sm:text-lg">
               Bugünkü Yolculuğum
             </h3>
             <span className="shrink-0 rounded-full bg-primary/10 px-2.5 py-1.5 text-xs font-semibold tabular-nums text-primary">
               {!progressReady
-                ? "Doğrulanıyor"
-                : status === "all-done"
+                ? planReadError
+                  ? "Plan okunamadı"
+                  : "Doğrulanıyor"
+                : total
                   ? scopedTracking
-                    ? "Takip bitti ✓"
-                    : "Tamamlandı ✓"
-                  : total
-                    ? scopedTracking
-                      ? `${completed}/${total} takip`
-                      : `${completed}/${total} adım`
-                    : "Veri bekleniyor"}
+                    ? `${completed}/${total} takip`
+                    : `${completed}/${total} adım`
+                  : "Veri bekleniyor"}
             </span>
             <button
               type="button"
@@ -216,23 +278,43 @@ export function DailyJourneyContent({
                   : "Bugünkü Yolculuğum bölümünü aç"
               }
               onClick={() => onOuterExpandedChange?.(!outerExpanded)}
-              className="flex size-11 shrink-0 items-center justify-center rounded-xl text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-primary/5 text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <ChevronDown
                 aria-hidden="true"
                 className={cn(
-                  "size-5 transition-transform motion-reduce:transition-none",
+                  "size-4 transition-transform motion-reduce:transition-none",
                   outerExpanded && "rotate-180",
                 )}
               />
             </button>
           </div>
+          <div className="space-y-2" data-journey-progress-area>
+            <div className="flex items-center gap-3">
+              <div className="min-w-0 flex-1">
+                <ProgressBar
+                  value={progressReady ? percent : 0}
+                  ariaLabel={
+                    scopedTracking
+                      ? "Takip edilebilir kayıt hedeflerindeki ilerlemen"
+                      : "Günlük yolculuk ilerlemen"
+                  }
+                  ariaValueText={
+                    progressReady && total
+                      ? `${completed}/${total} ${scopedTracking ? "takip hedefi" : "adım"} tamamlandı`
+                      : "Günlük veriler bekleniyor"
+                  }
+                />
+              </div>
+              <span className="text-xs font-semibold tabular-nums">
+                {progressReady && total ? `%${percent}` : "—"}
+              </span>
+            </div>
+          </div>
           <div id={bodyId} hidden={!outerExpanded} className="space-y-3" data-journey-body>
-            {(planReadError || planRefreshing) && (
+            {planRefreshing && !planReadError && (
               <p role="status" className="text-sm text-muted-foreground">
-                {planReadError
-                  ? "Plan yenilenemedi. Son doğrulanmış veri varsa korunuyor."
-                  : "Plan güncelleniyor…"}
+                Plan güncelleniyor…
               </p>
             )}
             {status === "all-done" ? (
@@ -273,17 +355,23 @@ export function DailyJourneyContent({
                     <div className="flex items-start gap-3">
                       <div className="min-w-0 flex-1">
                         <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">
-                          {mealIsNext ? "Sıradaki adım" : "Bugünkü beslenme planından"}
+                          {plannedMeal.timing
+                            ? mealTimingLabel[plannedMeal.timing]
+                            : "Bugünkü beslenme planından"}
                         </p>
                         <h4 className="mt-1.5 break-words text-xl font-semibold tracking-tight">
                           {plannedMeal.meal.name}
                         </h4>
                         <time
-                          dateTime={plannedMeal.meal.time}
+                          dateTime={new Date(plannedMeal.at).toISOString()}
                           className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-primary/15 bg-card/80 px-2.5 py-1 text-xs font-semibold tabular-nums text-primary"
                         >
                           <Clock3 className="size-3.5" aria-hidden="true" />
-                          Planlanan {plannedMeal.meal.time}
+                          {new Date(plannedMeal.at).toLocaleDateString("tr-TR", {
+                            day: "numeric",
+                            month: "long",
+                          })}{" "}
+                          · Planlanan {plannedMeal.meal.time}
                         </time>
                       </div>
                       <span
@@ -318,27 +406,20 @@ export function DailyJourneyContent({
                   : "Günlük kayıtlarını burada takip edebilirsin."}
               </p>
             )}
-            {!plannedMeal && status !== "all-done" && (
-              <p
+            {planMessage && (
+              <div
                 className="text-xs leading-relaxed text-muted-foreground"
                 data-journey-plan-fallback
+                data-plan-status={planStatus}
               >
-                {planReadError
-                  ? "Beslenme planın doğrulanamadı. Plan ekranından tekrar deneyebilirsin."
-                  : !planReady
-                    ? "Beslenme planın doğrulanıyor; henüz menü gösterilmiyor."
-                    : scopedTracking
-                      ? "Takip edilebilir öğün adımlarını aşağıdan kontrol edebilirsin. Eşleştirilemeyen plan öğünleri ayrıca gösterilir."
-                      : steps.some((step) => step.id)
-                        ? "Bugünkü planın öğün adımları kaydedildi. Diğer günlük adımlarını aşağıdan takip edebilirsin."
-                        : "Bugüne eşleşen bir beslenme planı yok. Öğünlerini yine kaydedebilirsin."}{" "}
+                <p role="status">{planMessage}</p>
                 <Link
                   href="/meals/plan"
                   className="inline-flex min-h-11 items-center font-medium text-primary underline-offset-4 hover:underline"
                 >
-                  Planına bak
+                  Planı görüntüle
                 </Link>
-              </p>
+              </div>
             )}
             {feedback}
             {steps.length > 0 && (
@@ -373,33 +454,11 @@ export function DailyJourneyContent({
                   className="space-y-3"
                   data-journey-details-panel
                 >
-                  <div className="space-y-2" data-journey-progress-area>
-                    <div className="flex items-center gap-3">
-                      <div className="min-w-0 flex-1">
-                        <ProgressBar
-                          value={percent}
-                          ariaLabel={
-                            scopedTracking
-                              ? "Takip edilebilir kayıt hedeflerindeki ilerlemen"
-                              : "Günlük yolculuk ilerlemen"
-                          }
-                          ariaValueText={
-                            total
-                              ? `${completed}/${total} ${scopedTracking ? "takip hedefi" : "adım"} tamamlandı`
-                              : "Günlük veriler bekleniyor"
-                          }
-                        />
-                      </div>
-                      <span className="text-xs font-semibold tabular-nums">
-                        {progressReady && total ? `%${percent}` : "—"}
-                      </span>
-                    </div>
-                    <p className="text-xs leading-relaxed text-muted-foreground">
-                      {direction
-                        ? GOAL_GUIDANCE[direction]
-                        : "Küçük adımlarını kaydet, günlük ilerlemeni burada takip et."}
-                    </p>
-                  </div>
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    {direction
+                      ? GOAL_GUIDANCE[direction]
+                      : "Küçük adımlarını kaydet, günlük ilerlemeni burada takip et."}
+                  </p>
                   <ol
                     className="space-y-0.5"
                     data-daily-journey-steps
@@ -410,6 +469,7 @@ export function DailyJourneyContent({
                         key={step.id ?? step.kind}
                         step={step}
                         day={day}
+                        plannedMeal={plannedMeals.find((meal) => meal.key === step.id)}
                         last={
                           index === items.length - 1 && summaries.length === 0 && !scopedTracking
                         }
@@ -429,13 +489,33 @@ export function DailyJourneyContent({
                       ))}
                     </ol>
                   )}
+                  {completedSteps.length > 0 && (
+                    <details
+                      className="rounded-xl border border-border/70 px-3"
+                      data-journey-completed
+                    >
+                      <summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-emerald-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:text-emerald-200">
+                        Tamamlananlar ({completedSteps.length})
+                      </summary>
+                      <ol className="space-y-0.5">
+                        {completedSteps.map((step, index) => (
+                          <StepRow
+                            key={step.id ?? step.kind}
+                            step={step}
+                            day={day}
+                            plannedMeal={plannedMeals.find((meal) => meal.key === step.id)}
+                            last={index === completedSteps.length - 1}
+                          />
+                        ))}
+                      </ol>
+                    </details>
+                  )}
                   {scopedTracking && (
                     <div data-journey-unmatched-plan className="border-t border-border/70 pt-3">
                       <p className="text-sm font-semibold">Eşleştirilemeyen plan öğünleri</p>
                       <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                        Bu {unmatched.length} öğün tekil bir tüketim kaydıyla eşleşmiyor. Takip
-                        hedeflerine dahil değil; tamamlanmış sayılmadı. Kayıtlar bu öğünlere
-                        otomatik dağıtılmaz.
+                        Bu {unmatched.length} öğün için ayrı onay henüz desteklenmiyor. Tamamlanmış
+                        sayılmadı; ilerleme hesabına dahil değil.
                       </p>
                       <ol className="mt-2 space-y-0.5">
                         {unmatched.map((step, index) => (
@@ -443,6 +523,7 @@ export function DailyJourneyContent({
                             key={step.id}
                             step={step}
                             day={day}
+                            plannedMeal={plannedMeals.find((meal) => meal.key === step.id)}
                             last={index === unmatched.length - 1}
                           />
                         ))}
@@ -480,7 +561,9 @@ function LiveJourney({ result }: { result: ReturnType<typeof useDailyJourneyResu
   const settled = settleJourneyDisclosure(preference, completed);
   const outerExpanded =
     settled.outer ??
-    (result.planReady && readiness !== "UNKNOWN" && tracking.waterReadiness !== "UNKNOWN");
+    ((result.planReady || result.planReadError) &&
+      readiness !== "UNKNOWN" &&
+      tracking.waterReadiness !== "UNKNOWN");
   const expanded = settled.inner;
   React.useEffect(() => {
     if (!result.dayKey) return;
@@ -533,8 +616,10 @@ function LiveJourney({ result }: { result: ReturnType<typeof useDailyJourneyResu
     }
   }
   async function addWater() {
+    const currentWater = tracking;
     if (
       locked.current ||
+      (currentWater.waterGoalMl > 0 && currentWater.waterMl >= currentWater.waterGoalMl) ||
       tracking.waterReadiness === "UNKNOWN" ||
       tracking.dayKey !== result.dayKey ||
       localDayKey() !== result.dayKey ||
@@ -595,7 +680,7 @@ function LiveJourney({ result }: { result: ReturnType<typeof useDailyJourneyResu
           <p>
             {readiness === "UNKNOWN"
               ? "Öğün kayıtları doğrulanamadı. Kayıt ekranından devam edebilirsin."
-              : "Bu öğün tek bir kayıt türüyle eşleşmiyor. Planından kontrol edebilirsin."}
+              : "Bu öğün için ayrı onay henüz desteklenmiyor. Planından kontrol edebilirsin."}
           </p>
           <Link
             className={cn(buttonClass, "mt-2 border border-border")}
@@ -605,7 +690,7 @@ function LiveJourney({ result }: { result: ReturnType<typeof useDailyJourneyResu
                 : "/meals/plan"
             }
           >
-            Öğün kaydına git
+            {selected.slot ? "Öğün kaydına git" : "Planı görüntüle"}
           </Link>
         </div>
       )}
@@ -627,14 +712,18 @@ function LiveJourney({ result }: { result: ReturnType<typeof useDailyJourneyResu
       onExpandedChange={(inner) => setPreference({ ...settled, inner })}
       mealControls={controls}
       waterControls={
-        <button
-          type="button"
-          disabled={pending || tracking.waterReadiness === "UNKNOWN"}
-          onClick={() => void addWater()}
-          className={cn(buttonClass, "bg-primary/10 text-primary")}
-        >
-          {pending ? "Kaydediliyor…" : "+250 ml su ekle"}
-        </button>
+        tracking.waterReadiness !== "UNKNOWN" &&
+        tracking.waterGoalMl > 0 &&
+        tracking.waterMl >= tracking.waterGoalMl ? null : (
+          <button
+            type="button"
+            disabled={pending || tracking.waterReadiness === "UNKNOWN"}
+            onClick={() => void addWater()}
+            className={cn(buttonClass, "bg-primary/10 text-primary")}
+          >
+            {pending ? "Kaydediliyor…" : "+250 ml su ekle"}
+          </button>
+        )
       }
       feedback={
         <div aria-live="polite" aria-atomic="true">

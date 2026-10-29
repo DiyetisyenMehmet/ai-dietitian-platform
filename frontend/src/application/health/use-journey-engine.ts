@@ -10,7 +10,7 @@ import { useWeightCheckInStatus } from "./weight-store";
 import { localDateKey, localDateKeyFromIso } from "./weight-utils";
 import { useNutritionPlan } from "./nutrition-plan-store";
 import { authStore, useAuth } from "../auth/auth-store";
-import { journeyPlanMeals } from "./journey-plan";
+import { journeyPlanDay } from "./journey-plan";
 import { msUntilNextLocalDay } from "./daily-data-readiness";
 import { buildJourney } from "./journey-engine";
 
@@ -60,9 +60,10 @@ export function useJourneyEngine() {
   const today = now ? localDateKey(now) : null;
   const planReady =
     auth.status === "authenticated" && plan.ownerUserId === auth.user?.id && plan.hydrated;
+  const planDay = journeyPlanDay(now && planReady ? plan.activePlan : null, now ?? new Date());
   return {
     ...buildJourney({
-      plannedMeals: now && planReady ? journeyPlanMeals(plan.activePlan, now) : [],
+      plannedMeals: planDay.meals,
       nowMs: now?.getTime(),
       localHour: now?.getHours() ?? 0,
       startWeightKg: profile.startWeightKg || null,
@@ -105,6 +106,7 @@ export function useJourneyEngine() {
     }),
     dayKey: today,
     planReady,
+    planValidity: planDay,
     planReadError: plan.readError,
     planRefreshing: plan.loading && planReady,
   };

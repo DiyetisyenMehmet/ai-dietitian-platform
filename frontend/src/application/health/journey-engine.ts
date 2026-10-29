@@ -26,6 +26,7 @@ export interface JourneyInput {
 export interface JourneyResult {
   direction: GoalDirection | null;
   plannedMeal: JourneyPlannedMeal | null;
+  plannedMeals: JourneyPlannedMeal[];
   steps: JourneyStep[];
   nextBestAction: { kind: JourneyStepKind; reason: string; href: string } | null;
   sufficiency: Record<MealKind | "water" | "activity" | "sleep" | "weight", Sufficiency>;
@@ -86,7 +87,22 @@ export function buildJourney(input: JourneyInput): JourneyResult {
     });
   }
 
-  const planned = input.plannedMeals ?? [];
+  const ordered = [...(input.plannedMeals ?? [])].sort((a, b) => a.at - b.at);
+  // Display-only grace around the scheduled time; never a skipped/eaten rule.
+  const currentMealLabelMs = 60 * 60 * 1000;
+  const planned = ordered.map(
+    (entry, index): JourneyPlannedMeal => ({
+      ...entry,
+      timing: !Number.isFinite(input.nowMs)
+        ? undefined
+        : entry.at > input.nowMs!
+          ? "upcoming"
+          : (ordered[index + 1] && ordered[index + 1].at <= input.nowMs!) ||
+              input.nowMs! - entry.at > currentMealLabelMs
+            ? "earlier"
+            : "now",
+    }),
+  );
   if (planned.length) {
     for (const entry of planned) {
       const completed = Boolean(entry.slot && data[entry.slot] === "KNOWN");
@@ -149,7 +165,9 @@ export function buildJourney(input: JourneyInput): JourneyResult {
       hint:
         data.water === "UNKNOWN"
           ? "Su kayıtları doğrulanıyor"
-          : `${input.waterMl} / ${input.waterGoalMl} ml su kaydı`,
+          : input.waterMl! >= input.waterGoalMl
+            ? `Su hedefin tamamlandı (${input.waterMl}/${input.waterGoalMl} ml)`
+            : `${input.waterMl} / ${input.waterGoalMl} ml su kaydı`,
       progress:
         data.water === "UNKNOWN" ? undefined : Math.min(1, input.waterMl! / input.waterGoalMl),
       state: input.waterMl! >= input.waterGoalMl ? "completed" : "pending",
@@ -178,25 +196,33 @@ export function buildJourney(input: JourneyInput): JourneyResult {
       countsTowardProgress: false,
       state: "completed",
     });
-  // Earliest unfinished planned meal wins, including snacks. Never skip an
-  // unfinished meal merely because a later meal's clock time has elapsed.
-  const plannedMeal = planned.find((entry) => entry.slot && data[entry.slot] !== "KNOWN") ?? null;
+  // Prefer the scheduled current/next meal. Earlier unconfirmed meals remain
+  // pending in the timeline; elapsed time is never a skipped/eaten decision.
+  const unfinished = planned.filter((entry) => !entry.slot || data[entry.slot] !== "KNOWN");
+  const trackable = unfinished.filter((entry) => entry.slot);
+  const clockKnown = Number.isFinite(input.nowMs);
+  const candidates = clockKnown ? unfinished : trackable;
+  const plannedMeal =
+    candidates.find((entry) => entry.timing === "now") ??
+    candidates.find((entry) => entry.timing === "upcoming") ??
+    [...trackable].reverse().find((entry) => entry.timing === "earlier") ??
+    (!clockKnown ? trackable[0] : null) ??
+    null;
   // The same engine owns the next action; elapsed time never marks a meal skipped.
   const pending = (kind: JourneyStepKind) =>
     steps.find((step) => step.kind === kind && step.state === "pending");
   const regularKind =
     input.localHour < 12 ? "breakfast" : input.localHour < 17 ? "lunch" : "dinner";
   const next =
-    pending("weight") ??
     (plannedMeal
       ? steps.find((step) => step.id === plannedMeal.key && step.state === "pending")
       : undefined) ??
+    pending("weight") ??
     (input.workScheduleType === "REGULAR" ? pending(regularKind) : undefined) ??
     steps.find(
       (step) =>
         step.countsTowardProgress !== false && step.state === "pending" && Boolean(step.href),
     );
-  if (next) next.state = "recommended";
   const insufficient =
     (planned.length
       ? planned.some((entry) => entry.slot && data[entry.slot] === "UNKNOWN")
@@ -208,9 +234,11 @@ export function buildJourney(input: JourneyInput): JourneyResult {
   const required = steps.filter((step) => step.countsTowardProgress !== false);
   const complete =
     !insufficient && required.length > 0 && required.every((step) => step.state === "completed");
+  if (next && !complete) next.state = "recommended";
   return {
     direction,
-    plannedMeal,
+    plannedMeal: complete ? null : plannedMeal,
+    plannedMeals: planned,
     steps,
     sufficiency: data,
     nextBestAction:

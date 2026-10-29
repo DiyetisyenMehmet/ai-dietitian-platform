@@ -239,14 +239,15 @@ test("dashboard home retains approved header, metrics and quick actions around J
   assert.doesNotMatch(header, /UserRound|href="\/profile"|Profilini aç/);
   assert.match(header, /text-\[9px\].*text-muted-foreground\/55/);
 
-  // PR #115's approved expanded composition supersedes the compact CSS contract.
-  // Keep real progress, 48px actions (above the 44px minimum) and next/plan sections.
+  // G1 11-A keeps the approved content/actions while the header compacts and
+  // progress remains outside the collapsible body, including before data is ready.
   assert.match(journey, /data-journey-card-heading/);
-  assert.match(journey, /<h3 className="min-w-0 flex-1 text-base font-semibold tracking-tight sm:text-lg">/);
+  assert.match(journey, /<h3 className="min-w-0 flex-1 text-sm font-semibold tracking-tight sm:text-lg">/);
   assert.match(journey, /\$\{completed\}\/\$\{total\} adım/);
   assert.match(journey, /const \{ completed, total, percent \} = summarizeJourney\(steps\)/);
-  assert.match(journey, /<ProgressBar\s+value=\{percent\}/);
-  assert.match(journey, /space-y-4 p-4 sm:p-5/);
+  assert.match(journey, /<ProgressBar\s+value=\{progressReady \? percent : 0\}/);
+  assert.ok(journey.indexOf("data-journey-progress-area") < journey.indexOf("<div id={bodyId}"));
+  assert.match(journey, /space-y-3 p-4 sm:p-5/);
   assert.match(journey, /min-h-12 min-w-11/);
   assert.match(journey, /<div data-journey-row className="flex min-w-0 items-center gap-3 py-2\.5">/);
   assert.match(journey, /data-journey-next/);
