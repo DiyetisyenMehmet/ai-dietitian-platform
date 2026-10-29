@@ -1,0 +1,82 @@
+.control {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.button {
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.hint,
+.explanation {
+  position: absolute;
+  z-index: 30;
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.625rem;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.08);
+  pointer-events: none;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.hint {
+  right: calc(100% + 6px);
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 5px 7px;
+  white-space: nowrap;
+  animation: appear 120ms ease-out;
+}
+
+.explanation {
+  pointer-events: auto;
+  right: 0;
+  top: calc(100% + 10px);
+  width: max-content;
+  max-width: min(340px, calc(100vw - 32px));
+  padding: 5px 8px;
+}
+
+/* Keep mouse help reachable while crossing the gap from the button. */
+.explanation::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -10px;
+  height: 10px;
+}
+
+/* Below the artwork row on narrow phones; reserve the same button footprint. */
+@media (max-width: 430px) {
+  .hint {
+    top: calc(100% + 8px);
+    transform: none;
+  }
+}
+
+@media (max-width: 389px) {
+  .explanation {
+    font-size: 10px;
+  }
+}
+
+@keyframes appear {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hint {
+    animation: none;
+  }
+}

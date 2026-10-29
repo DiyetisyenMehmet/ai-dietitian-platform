@@ -87,16 +87,10 @@ async function themeIs(page: Page, dark: boolean) {
   expect(await page.evaluate(() => document.documentElement.classList.contains("dark"))).toBe(dark);
 }
 async function choose(page: Page, value: "system" | "light" | "dark") {
-  await page
-    .getByRole("button", { name: /^Görünüm:/ })
-    .first()
-    .click();
-  await page
-    .getByRole("radio", {
-      name: value === "system" ? /^Sistemle aynı/ : value === "dark" ? /^Koyu/ : /^Açık/,
-    })
-    .check();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
+  const button = page.getByRole("button", { name: /^Görünüm:/ }).first();
+  for (let step = 0; step < 3 && (await button.getAttribute("data-mode")) !== value; step++)
+    await button.click();
+  await expect(button).toHaveAttribute("data-mode", value);
 }
 for (const width of [390, 412, 430])
   for (const system of ["light", "dark"] as const)
@@ -152,15 +146,11 @@ for (const width of [390, 412, 430])
           await expect(
             page.locator('img[src="/brands/diewish-id-transparent-approved.png"]'),
           ).toBeVisible();
-          await page.getByRole("button", { name: /^Görünüm:/ }).click();
-          await expect(page.getByRole("radio")).toHaveCount(3);
-          await expect(
-            page.getByRole("radio", {
-              name: preference === "system" ? /^Sistemle aynı/ : dark ? /^Koyu/ : /^Açık/,
-            }),
-          ).toBeChecked();
-          await page.screenshot({ path: info.outputPath("theme-options.png") });
-          await page.keyboard.press("Escape");
+          await expect(page.getByRole("button", { name: /^Görünüm:/ })).toHaveAttribute(
+            "data-mode",
+            preference,
+          );
+          await page.screenshot({ path: info.outputPath("theme-control.png") });
           await page.reload();
           await themeIs(page, dark);
           expect(await page.evaluate(() => localStorage.getItem("theme"))).toBe(preference);

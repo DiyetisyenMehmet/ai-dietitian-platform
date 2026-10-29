@@ -13,6 +13,14 @@
         <item name="android:windowLightNavigationBar">true</item>
     </style>
 
+    <!-- Presentation-only overlays; the saved choice can oppose device night mode. -->
+    <style name="Diewish.Appearance.Light" parent="">
+        <item name="android:isLightTheme">true</item>
+    </style>
+    <style name="Diewish.Appearance.Dark" parent="">
+        <item name="android:isLightTheme">false</item>
+    </style>
+
     <style name="Theme.Diewish.Camera" parent="android:style/Theme.Material.NoActionBar">
         <item name="android:fontFamily">sans</item>
         <item name="android:windowActionModeOverlay">true</item>

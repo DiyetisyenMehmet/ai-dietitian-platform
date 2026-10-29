@@ -109,6 +109,8 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // Resolve the saved local choice before WebView reads isLightTheme.
+        applyNativeThemeAttributes();
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             // Keep the actual system composition until the final web frame;
@@ -274,9 +276,16 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
         }
     }
 
+    private void applyNativeThemeAttributes() {
+        getTheme().applyStyle(nativeThemeDark()
+            ? R.style.Diewish_Appearance_Dark : R.style.Diewish_Appearance_Light, true);
+    }
+
     @SuppressWarnings("deprecation")
     private void applySystemBarTheme(boolean dark) {
-        int background = dark ? Color.rgb(15, 20, 18) : Color.WHITE;
+        applyNativeThemeAttributes();
+        int background = getColor(dark ? R.color.diewish_surface_dark : R.color.diewish_surface_light);
+        getWindow().setBackgroundDrawable(new ColorDrawable(background));
         if (rootView != null) rootView.setBackgroundColor(background);
         if (webView != null) webView.setBackgroundColor(background);
         if (systemLaunchSplash != null) systemLaunchSplash.setBackgroundColor(background);
@@ -379,7 +388,9 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
                                 : "dark".equals(preference) ? UiModeManager.MODE_NIGHT_YES : UiModeManager.MODE_NIGHT_NO);
                     }
                 }
-                applySystemBarTheme(dark);
+                // In system mode, the device configuration is authoritative, not
+                // the media query inherited from the preceding manual app theme.
+                applySystemBarTheme("system".equals(preference) ? nativeThemeDark() : dark);
             });
         }
         /** Presentation only: no credential, session or navigation capability. */

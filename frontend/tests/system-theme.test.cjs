@@ -8,7 +8,7 @@ function model({ pathname = '/login', theme = 'system', resolvedTheme = 'dark', 
   let effect, observer;
   const calls = [], selected = [];
   const root = { dataset: {}, style: { colorScheme: scheme }, classList: { contains: () => classDark } };
-  const react = { useEffect(fn) { effect = fn; }, useState(initial) { return [initial, () => {}]; }, createElement(type, props, ...children) { return { type, props: { ...props, children } }; } };
+  const react = { useRef(value) { return { current: value }; }, useId() { return "theme-description"; }, useEffect(fn) { effect = fn; }, useState(initial) { return [initial, () => {}]; }, createElement(type, props, ...children) { return { type, props: { ...props, children } }; } };
   const bridge = { setDarkTheme: dark => calls.push(['legacy', dark]) };
   if (modern) bridge.setThemePreference = (choice, dark) => { if (throwing) throw Error('synthetic unavailable host'); calls.push([choice, dark]); };
   const context = { exports: {}, window: { DiewishSystemUi: bridge }, document: { documentElement: root }, MutationObserver: class {

@@ -1,7 +1,7 @@
 import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: "system-theme.spec.ts",
+  testMatch: ["system-theme.spec.ts", "appearance-control.spec.ts"],
   workers: 1,
   timeout: 60000,
   use: {
