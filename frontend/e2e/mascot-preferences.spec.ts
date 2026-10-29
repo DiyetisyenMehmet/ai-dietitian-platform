@@ -1,4 +1,4 @@
-import { expect, test, type Locator } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import {
   createDashboardSession,
   loginDashboardSession,
@@ -139,11 +139,13 @@ test("Mirmir default blink preserves layout and selection across two sessions, w
     });
     await page.getByRole("radio", { name: "Diewish Klasik", exact: true }).click();
     await expect(
-      page.getByRole("alert").filter({ hasText: "Maskot tercihin doğrulanamadı" }),
+      page.getByText("Tercihin kaydedilemedi. Lütfen tekrar dene.", { exact: true }),
     ).toBeVisible();
+    await expect(
+      page.getByRole("alert").filter({ hasText: "Maskot tercihin doğrulanamadı" }),
+    ).toHaveCount(0);
     await expect(page.getByRole("radio", { name: "Mırmır", exact: true })).toBeChecked();
     await page.unroute("**/api/account/mascot");
-    await page.getByRole("button", { name: "Tekrar yükle" }).click();
     await expect(page.getByRole("radio", { name: "Diewish Klasik", exact: true })).toBeEnabled();
     await page.getByRole("radio", { name: "Diewish Klasik", exact: true }).click();
     await expect(page.getByRole("radio", { name: "Diewish Klasik", exact: true })).toBeChecked();
@@ -189,11 +191,13 @@ test("Dost persists across account sessions and a failed save retains the confir
     });
     await page.getByRole("radio", { name: "Mırmır", exact: true }).click();
     await expect(
-      page.getByRole("alert").filter({ hasText: "Maskot tercihin doğrulanamadı" }),
+      page.getByText("Tercihin kaydedilemedi. Lütfen tekrar dene.", { exact: true }),
     ).toBeVisible();
+    await expect(
+      page.getByRole("alert").filter({ hasText: "Maskot tercihin doğrulanamadı" }),
+    ).toHaveCount(0);
     await expect(page.getByRole("radio", { name: "Dost", exact: true })).toBeChecked();
     await page.unroute("**/api/account/mascot");
-    await page.getByRole("button", { name: "Tekrar yükle" }).click();
     await expect(page.getByRole("radio", { name: "Dost", exact: true })).toBeChecked();
     await other.getByRole("radio", { name: "Diewish Klasik", exact: true }).click();
     await expect(other.getByText("Maskot tercihin kaydedildi.", { exact: true })).toBeVisible();
@@ -202,4 +206,159 @@ test("Dost persists across account sessions and a failed save retains the confir
   } finally {
     await otherContext.close();
   }
+});
+
+// Real React UI + HTTP client, with all APIs intercepted locally. No account or DB writes.
+async function errorFixture(page: Page) {
+  const origin = new URL(base).origin;
+  if (!["localhost", "127.0.0.1"].includes(new URL(origin).hostname))
+    throw new Error("M1 error simulations require a local frontend");
+  let releasePatch = () => {};
+  let patchGate = Promise.resolve();
+  const state = {
+    getStatus: 200,
+    patchStatus: 200,
+    sessionExpired: false,
+    preferences: { mascotId: "dost", animationEnabled: false },
+    gets: 0,
+    patches: [] as { mascotId: string }[],
+    hold() {
+      patchGate = new Promise<void>((resolve) => {
+        releasePatch = resolve;
+      });
+    },
+    release() {
+      releasePatch();
+    },
+  };
+  await page.route("**/*", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.origin !== origin) return route.abort();
+    if (!url.pathname.startsWith("/api/")) return route.continue();
+    const ok = (data: unknown) => route.fulfill({ json: { success: true, data } });
+    const fail = (status: number) =>
+      route.fulfill({
+        status,
+        json: {
+          success: false,
+          error: { code: "SYNTHETIC_FAILURE", message: "Synthetic failure" },
+        },
+      });
+    if (url.pathname === "/api/auth/refresh-token") {
+      if (state.sessionExpired) return fail(401);
+      return ok({
+        user: {
+          id: "mascot-ui-a",
+          fullName: "Maskot Testi",
+          email: "mascot-ui@example.invalid",
+          role: "USER",
+          isActive: true,
+          onboardingCompleted: true,
+        },
+        tokens: { accessToken: "synthetic-ui-token", tokenType: "Bearer", expiresIn: "1h" },
+      });
+    }
+    if (url.pathname === "/api/legal/consents")
+      return ok({ items: [], allMandatoryGranted: true, missingMandatory: [] });
+    if (url.pathname === "/api/legal/documents") return ok({ documents: [] });
+    if (url.pathname === "/api/account/mascot") {
+      if (route.request().method() === "PATCH") {
+        const input = route.request().postDataJSON() as { mascotId: string };
+        state.patches.push(input);
+        const status = state.patchStatus;
+        await patchGate;
+        if (status !== 200) return fail(status);
+        state.preferences = { ...state.preferences, ...input };
+      } else {
+        state.gets++;
+        if (state.getStatus !== 200) return fail(state.getStatus);
+      }
+      return ok({ preferences: state.preferences });
+    }
+    return fail(503); // Never fall through to a real backend for unrelated APIs.
+  });
+  return state;
+}
+
+test.describe("M1 local error contract", () => {
+  for (const status of [422, 503]) {
+    test(`PATCH ${status} shows only the save error and allows a confirmed retry`, async ({
+      page,
+    }) => {
+      const state = await errorFixture(page);
+      state.patchStatus = status;
+      await page.goto(base + "/profile/mascot");
+      const dost = page.getByRole("radio", { name: "Dost", exact: true });
+      const mirmir = page.getByRole("radio", { name: "Mırmır", exact: true });
+      const readError = page
+        .getByRole("alert")
+        .filter({ hasText: "Maskot tercihin doğrulanamadı" });
+      await expect(page.getByRole("radio")).toHaveCount(16);
+      await expect(dost).toBeChecked();
+      await mirmir.click();
+      await expect(
+        page.getByText("Tercihin kaydedilemedi. Lütfen tekrar dene.", { exact: true }),
+      ).toHaveCount(1);
+      await expect(readError).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "Tekrar yükle", exact: true })).toHaveCount(0);
+      await expect(dost).toBeChecked();
+      await expect(mirmir).toBeEnabled();
+      await expect(page.getByText("Maskot tercihin kaydedildi.", { exact: true })).toHaveCount(0);
+      expect(state.patches).toEqual([{ mascotId: "mirmir" }]);
+
+      state.patchStatus = 200;
+      state.hold();
+      try {
+        await mirmir.click();
+        await expect(mirmir).toBeDisabled();
+        await expect(dost).toBeChecked(); // No optimistic or fabricated save success.
+        const gets = state.gets;
+        await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+        expect(state.gets).toBe(gets);
+        expect(state.patches).toEqual([{ mascotId: "mirmir" }, { mascotId: "mirmir" }]);
+      } finally {
+        state.release();
+      }
+      await expect(mirmir).toBeChecked();
+      await expect(page.getByText("Maskot tercihin kaydedildi.", { exact: true })).toBeVisible();
+      expect(state.preferences).toEqual({ mascotId: "mirmir", animationEnabled: false });
+    });
+  }
+
+  test("GET failure blocks selection and recovers only after a successful reload", async ({
+    page,
+  }) => {
+    const state = await errorFixture(page);
+    state.getStatus = 503;
+    await page.goto(base + "/profile/mascot");
+    await expect(
+      page.getByRole("alert").filter({ hasText: "Maskot tercihin doğrulanamadı" }),
+    ).toBeVisible();
+    for (const radio of await page.getByRole("radio").all()) await expect(radio).toBeDisabled();
+    await expect(
+      page.getByText("Tercihin kaydedilemedi. Lütfen tekrar dene.", { exact: true }),
+    ).toHaveCount(0);
+    expect(state.patches).toHaveLength(0);
+    state.getStatus = 200;
+    await page.getByRole("button", { name: "Tekrar yükle", exact: true }).click();
+    await expect(page.getByRole("radio", { name: "Dost", exact: true })).toBeChecked();
+    await expect(page.getByRole("radio", { name: "Mırmır", exact: true })).toBeEnabled();
+    await expect(
+      page.getByRole("alert").filter({ hasText: "Maskot tercihin doğrulanamadı" }),
+    ).toHaveCount(0);
+    expect(state.patches).toHaveLength(0);
+  });
+
+  test("session loss during PATCH never reports a saved preference", async ({ page }) => {
+    const state = await errorFixture(page);
+    await page.goto(base + "/profile/mascot");
+    await expect(page.getByRole("radio", { name: "Dost", exact: true })).toBeChecked();
+    state.patchStatus = 401;
+    state.sessionExpired = true;
+    await page.getByRole("radio", { name: "Mırmır", exact: true }).click();
+    await expect(page).toHaveURL(/\/login$/);
+    await expect(page.getByText("Maskot tercihin kaydedildi.", { exact: true })).toHaveCount(0);
+    expect(state.preferences.mascotId).toBe("dost");
+    expect(state.patches).toEqual([{ mascotId: "mirmir" }]);
+  });
 });

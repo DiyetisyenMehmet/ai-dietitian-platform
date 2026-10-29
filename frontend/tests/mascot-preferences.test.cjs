@@ -205,7 +205,7 @@ test("late old-account loads and saves never populate a new account", async () =
   assert.equal(await oldSave, false);
   assert.equal(f.value.preferences.mascotId, "classic");
 });
-test("failed load/save is visible, preserves confirmed selection and recovers", async () => {
+test("failed GET blocks selection until a confirmed reload; failed PATCH keeps that confirmation", async () => {
   const f = fixture();
   f.requests[0].reject(new Error("unavailable"));
   await new Promise((resolve) => setImmediate(resolve));
@@ -219,8 +219,90 @@ test("failed load/save is visible, preserves confirmed selection and recovers", 
   f.requests[2].reject(new Error("save failed"));
   assert.equal(await save, false);
   f.flush();
-  assert.equal(f.value.error, true);
+  assert.equal(f.value.error, false, "a failed PATCH is not a failed GET");
   assert.equal(f.value.preferences.animationEnabled, true);
+});
+
+for (const status of [422, 503]) {
+  test(`PATCH ${status} preserves the confirmed choice and permits an explicit retry without GET`, async () => {
+    const f = fixture();
+    await f.settle(f.requests[0], { mascotId: "dost", animationEnabled: false });
+    const save = f.value.save({ mascotId: "mirmir" });
+    f.requests[1].reject(Object.assign(new Error("synthetic failure"), { status }));
+    assert.equal(await save, false);
+    f.flush();
+    assert.equal(f.value.error, false);
+    assert.equal(f.value.saving, false);
+    assert.deepEqual(plain(f.value.preferences), { mascotId: "dost", animationEnabled: false });
+    const retry = f.value.save({ mascotId: "mirmir" });
+    assert.equal(f.requests.length, 3);
+    assert.equal(f.requests[2].args.method, "PATCH");
+    await f.settle(f.requests[2], { mascotId: "mirmir", animationEnabled: false });
+    assert.equal(await retry, true);
+    assert.equal(f.value.preferences.mascotId, "mirmir");
+  });
+}
+
+test("rapid saves and concurrent focus/reload cannot duplicate or overwrite a failed save", async () => {
+  const f = fixture();
+  await f.settle(f.requests[0], { mascotId: "dost", animationEnabled: true });
+  const save = f.value.save({ mascotId: "mirmir" });
+  assert.equal(await f.value.save({ mascotId: "classic" }), false);
+  f.event("focus");
+  await f.value.reload();
+  assert.equal(f.requests.length, 2);
+  f.requests[1].reject(new Error("synthetic failure"));
+  assert.equal(await save, false);
+  f.flush();
+  assert.equal(f.value.error, false);
+  assert.equal(f.value.preferences.mascotId, "dost");
+  const retry = f.value.save({ mascotId: "mirmir" });
+  await f.settle(f.requests[2], { mascotId: "mirmir", animationEnabled: true });
+  assert.equal(await retry, true);
+});
+
+test("a late GET cannot replace the outcome of a newer PATCH", async () => {
+  const f = fixture();
+  await f.settle(f.requests[0], { mascotId: "dost", animationEnabled: true });
+  f.event("focus");
+  const pendingGet = f.requests[1];
+  const save = f.value.save({ mascotId: "mirmir" });
+  await f.settle(f.requests[2], { mascotId: "mirmir", animationEnabled: false });
+  assert.equal(await save, true);
+  await f.settle(pendingGet, { mascotId: "classic", animationEnabled: true });
+  assert.equal(f.value.preferences.mascotId, "mirmir");
+  assert.equal(f.value.error, false);
+});
+
+test("a late failed old-account PATCH cannot affect the new account or release its save lock", async () => {
+  const f = fixture();
+  await f.settle(f.requests[0], { mascotId: "dost", animationEnabled: false });
+  const oldSave = f.value.save({ mascotId: "mirmir" });
+  f.changeUser("account-b");
+  await f.settle(f.requests[2], { mascotId: "classic", animationEnabled: true });
+  const newSave = f.value.save({ mascotId: "lina" });
+  f.requests[1].reject(new Error("old-account failure"));
+  assert.equal(await oldSave, false);
+  f.flush();
+  assert.equal(f.value.saving, true);
+  assert.equal(f.value.error, false);
+  assert.equal(f.value.preferences.mascotId, "classic");
+  f.event("focus");
+  assert.equal(f.requests.length, 4);
+  await f.settle(f.requests[3], { mascotId: "lina", animationEnabled: true });
+  assert.equal(await newSave, true);
+});
+
+test("session loss never confirms a late save or keeps the old account's mascot", async () => {
+  const f = fixture();
+  await f.settle(f.requests[0], { mascotId: "dost", animationEnabled: false });
+  const save = f.value.save({ mascotId: "mirmir" });
+  f.changeUser(null);
+  await f.settle(f.requests[1], { mascotId: "mirmir", animationEnabled: false });
+  assert.equal(await save, false);
+  assert.equal(f.value.preferences.mascotId, "classic");
+  assert.equal(await f.value.save({ mascotId: "dost" }), false);
+  assert.equal(f.requests.length, 2);
 });
 test("route return/native resume revalidate while admin and logout clear visual identity", async () => {
   const f = fixture();

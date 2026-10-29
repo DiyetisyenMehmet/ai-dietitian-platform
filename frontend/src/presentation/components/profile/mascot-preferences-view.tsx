@@ -8,7 +8,7 @@ import { Button } from "@/presentation/components/ui/button";
 import { MASCOT_OPTIONS, type MascotPreferences } from "@/domain/account/mascot-preferences";
 
 export function MascotPreferencesView() {
-  const { preferences, loading, saving, error, reload, save } = useMascotPreferences();
+  const { preferences, loading, saving, error: loadError, reload, save } = useMascotPreferences();
   const update = async (patch: Partial<MascotPreferences>) => {
     if (await save(patch)) toast.success("Maskot tercihin kaydedildi.");
     else toast.error("Tercihin kaydedilemedi. Lütfen tekrar dene.");
@@ -24,7 +24,7 @@ export function MascotPreferencesView() {
       <p className="text-sm text-muted-foreground">
         Ana sayfa ve Diewish Koçta sana eşlik edecek maskotu seç.
       </p>
-      {error && (
+      {loadError && (
         <div
           role="alert"
           className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm"
@@ -35,7 +35,7 @@ export function MascotPreferencesView() {
           </Button>
         </div>
       )}
-      <fieldset disabled={saving || error} className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <fieldset disabled={saving || loadError} className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <legend className="sr-only">Maskot seçimi</legend>
         {MASCOT_OPTIONS.map(({ id, name }) => (
           <label
