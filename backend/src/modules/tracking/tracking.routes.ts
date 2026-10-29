@@ -49,6 +49,14 @@ trackingRouter.put(
   validate({ params: checkInParamsSchema, query: checkInDateSchema, body: checkInEmptyBodySchema }),
   mealCheckInController.confirm,
 );
+// A basic plan decision for every tier; never delegates to paid deviations.
+trackingRouter.put(
+  `${checkInPath}/skip`,
+  authenticate,
+  requireConsent,
+  validate({ params: checkInParamsSchema, query: checkInDateSchema, body: checkInEmptyBodySchema }),
+  mealCheckInController.skip,
+);
 // Like existing deletes, undo remains available after consent withdrawal.
 trackingRouter.delete(
   checkInPath,

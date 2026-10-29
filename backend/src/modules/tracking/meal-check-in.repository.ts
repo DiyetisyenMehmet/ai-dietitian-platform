@@ -1,4 +1,4 @@
-import { Prisma, type PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient, type MealCheckInState } from "@prisma/client";
 
 import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/api-error";
@@ -39,13 +39,16 @@ export function createMealCheckInRepository(db: PrismaClient) {
             return {
               ...meal,
               id: row?.id ?? null,
-              active: row?.active ?? false,
+              state: row?.state ?? "PENDING",
+              active: row?.state === "EATEN",
               revision: row?.revision ?? 0,
             };
           });
-          const completed = checkIns.filter((r) => r.active).length;
+          const completed = checkIns.filter((r) => r.state === "EATEN").length;
+          const skipped = checkIns.filter((r) => r.state === "SKIPPED").length;
+          const decided = completed + skipped;
           return {
-            contractVersion: 1 as const,
+            contractVersion: 2 as const,
             source: "PLAN_CHECK_INS_ONLY" as const,
             legacyMealLogsExcluded: true,
             unplannedSupported: false,
@@ -55,13 +58,23 @@ export function createMealCheckInRepository(db: PrismaClient) {
             checkIns,
             total: checkIns.length,
             completed,
+            eaten: completed,
+            skipped,
+            pending: checkIns.length - decided,
+            decided,
+            allDecided: checkIns.length > 0 && decided === checkIns.length,
             allDone: checkIns.length > 0 && completed === checkIns.length,
           };
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
       );
     },
-    setState(userId: string, input: CheckInIdentity, active: boolean, expectedRevision: number) {
+    setState(
+      userId: string,
+      input: CheckInIdentity,
+      state: MealCheckInState,
+      expectedRevision: number,
+    ) {
       return db.$transaction(
         async (tx) => {
           const context = await requirePlan(tx, userId, input);
@@ -81,14 +94,15 @@ export function createMealCheckInRepository(db: PrismaClient) {
           const revision = existing?.revision ?? 0;
           // Only the immediate successor is a replay. Older confirms cannot
           // resurrect an undo, including confirm/undo/confirm (ABA).
-          if (existing && revision === expectedRevision + 1 && existing.active === active) {
+          if (existing && revision === expectedRevision + 1 && existing.state === state) {
             return {
               ...input,
               id: existing.id,
-              active,
+              state,
+              active: state === "EATEN",
               revision,
               planVersion: context.planVersion,
-              contractVersion: 1 as const,
+              contractVersion: 2 as const,
             };
           }
           if (revision !== expectedRevision || revision >= 2_147_483_646) {
@@ -97,23 +111,28 @@ export function createMealCheckInRepository(db: PrismaClient) {
               "Meal check-in has changed. Read the current state before a new action.",
               {
                 code: "MEAL_CHECK_IN_REVISION_CONFLICT",
-                details: { active: existing?.active ?? false, revision },
+                details: {
+                  state: existing?.state ?? "PENDING",
+                  active: existing?.state === "EATEN",
+                  revision,
+                },
               },
             );
           }
           const row = existing
             ? await tx.mealCheckIn.update({
                 where: { id: existing.id },
-                data: { active, revision: { increment: 1 } },
+                data: { state, revision: { increment: 1 } },
               })
-            : await tx.mealCheckIn.create({ data: { ...key, active, revision: 1 } });
+            : await tx.mealCheckIn.create({ data: { ...key, state, revision: 1 } });
           return {
             ...input,
             id: row.id,
-            active: row.active,
+            state: row.state,
+            active: row.state === "EATEN",
             revision: row.revision,
             planVersion: context.planVersion,
-            contractVersion: 1 as const,
+            contractVersion: 2 as const,
           };
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },

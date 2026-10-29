@@ -1,4 +1,4 @@
-# G1 / #103 — plan meal check-in contract v1
+# G1 / #103 — plan meal check-in contract v2
 
 Implementation branch: `fix/app13-g1-meal-checkin-phase2`. Backend only; no frontend integration or shared database activation is included.
 
@@ -18,12 +18,15 @@ after a 22:00 meal uses the following local date, while retaining its original
 plan day number/index. No device clock, server timezone or current UTC date
 changes this identity. Missing/ambiguous calendar data is not reconstructed.
 
-GET presents a missing confirmation as `active=false, revision=0, id=null`.
+GET presents a missing decision as `state="PENDING", active=false, revision=0, id=null`.
+The sole authoritative stored field is `state: PENDING | EATEN | SKIPPED`.
+`active` is only a backward-compatible response projection of `state === "EATEN"`;
+it is not stored and must never be used to distinguish SKIPPED from PENDING.
 Every accepted new intent advances the revision, including a deliberate same-state
 intent based on the current revision. An exact replay returns the immediate
 successor only when its target state matches. Any older revision gets 409.
-Undo stores an inactive row; it does not physically delete the state or food logs.
-Undo before the first confirmation also stores a revision, blocking a delayed
+Undo stores a PENDING row; it does not physically delete the state or food logs.
+Undo before the first confirmation also stores a PENDING revision, blocking a delayed
 revision-zero confirmation. A re-confirmation after undo requires a fresh explicit
 user action using the current revision. Never automatically retry 409 with a new
 revision: read and display current state first.
@@ -32,10 +35,11 @@ revision: read and display current state first.
 
 | Operation | Request | Successful response |
 | --- | --- | --- |
-| Read one plan day/date | `GET /meal-check-ins?planId=<uuid>&dayNumber=1&localDate=2026-10-29` | `{success:true,data:{day:{contractVersion:1,source:"PLAN_CHECK_INS_ONLY",legacyMealLogsExcluded:true,unplannedSupported:false,planId,planVersion,dayNumber,localDate,planDate,checkIns,total,completed,allDone}}}` |
-| Explicit “Yedim” | `PUT /meal-check-ins/<planId>/<dayNumber>/<mealIndex>?localDate=YYYY-MM-DD`, header `If-Match: "0"`, empty body | `{success:true,data:{checkIn:{contractVersion:1,planId,planVersion,dayNumber,mealIndex,localDate,id,active:true,revision:1}}}` |
-| Undo confirmation | Same path/query, `DELETE`, header `If-Match: "1"`, empty body | Same identity/ID, `active:false,revision:2` |
-| Exact network retry | Identical method/path/date/expected revision; body remains empty | Same ID/state/revision, status 200 |
+| Read one plan day/date | `GET /meal-check-ins?planId=<uuid>&dayNumber=1&localDate=2026-10-29` | `{success:true,data:{day:{contractVersion:2,source:"PLAN_CHECK_INS_ONLY",legacyMealLogsExcluded:true,unplannedSupported:false,planId,planVersion,dayNumber,localDate,planDate,checkIns,total,completed,allDone}}}` |
+| Explicit “Yedim” | `PUT /meal-check-ins/<planId>/<dayNumber>/<mealIndex>?localDate=YYYY-MM-DD`, header `If-Match: "0"`, empty body | `{success:true,data:{checkIn:{contractVersion:2,planId,planVersion,dayNumber,mealIndex,localDate,id,state:"EATEN",active:true,revision:1}}}` |
+| Explicit “Yemedim” | Same identity path with `/skip` appended before `?localDate=...`, `PUT`, `If-Match: "0"`, empty body | Same identity, `state:"SKIPPED",active:false,revision:1`; no food/calorie write |
+| Undo confirmation | Same path/query, `DELETE`, header `If-Match: "1"`, empty body | Same identity/ID, `state:"PENDING",active:false,revision:2` |
+| Exact network retry | Identical method/path/date/expected revision; body remains empty | Same ID/state/revision, status 200; state equality is required, not active equality |
 
 Mutation responses return an ETag containing the quoted revision. All reads and
 mutations use `Cache-Control: no-store`. Unknown body fields, including userId,
@@ -47,6 +51,7 @@ revision (`MEAL_CHECK_IN_REVISION_CONFLICT`), 422 invalid date/index/header/inpu
 503 missing reviewed storage (`MEAL_CHECK_IN_NOT_READY`). A 503 must not cause
 fallback or dual writes through the legacy endpoint.
 
+Both PUT actions (EATEN and SKIPPED) require the existing health consent.
 GET and DELETE preserve existing read/delete access after consent withdrawal;
 PUT retains the existing health consent guard. No new access policy is introduced.
 
@@ -60,12 +65,19 @@ Food names/macros, a scanner result or an old SNACK log never imply consumption
 of a particular plan meal. New confirmations never write MealLog rows.
 
 An upgraded client must select one confirmation source for a plan/date: after a
-successful v1 GET, use only returned exact identities/states. Do not OR, sum or
+successful v2 GET, use only returned exact identities/states. Do not OR, sum or
 union them with legacy confirmations, foods, local storage or the old slot state.
 No response means unknown/unavailable, not successful consumption. Do not send
 new plan identity fields to the legacy POST: its validation strips those fields.
 
-`completed`, `total`, and `allDone` refer only to the requested **plan day and
+`completed` (also named `eaten`) counts EATEN only. `skipped` counts SKIPPED,
+`pending` counts PENDING, and `decided = eaten + skipped`. `allDone` retains its
+previous meaning: every scoped meal is EATEN. New `allDecided` means every scoped
+meal has an explicit EATEN or SKIPPED decision; it never claims all meals were
+consumed. Both flags are false for zero meals. A SKIPPED decision adds no food,
+calories, macros, consumption total, or MealLog row.
+
+These counters, `total`, and both completion flags refer only to the requested **plan day and
 scheduled local date**, not the whole plan, nutrition totals, water, or all daily
 Journey goals. A post-midnight portion is a separate date response. The client
 must aggregate exact identities for the visible calendar day across applicable
@@ -79,13 +91,19 @@ and is not claimed here. No synthetic plan ID is created.
 
 “Farklı yedim” and scanner returns continue to use existing explicit food entry
 and deviation flows. They must not also confirm a plan meal automatically.
-“Yemedim”, UI wiring, handling an undo button, scanner navigation and Journey
+The backend now supports “Yemedim” for every plan owner, including FREE, without
+calling the paid Kaçamak/deviation SKIPPED operation or checking/changing any
+subscription, entitlement or quota. PUT on the original path still means EATEN;
+DELETE still means reset to PENDING, never SKIPPED. The separate skip path avoids
+silently reinterpreting existing requests. The response version is explicitly 2.
+
+UI wiring for these decisions, the undo button, scanner navigation and Journey
 11-B are future separately assigned frontend work. Existing “Takip dışı” remains
 until the new API is actually available and the UI integration is reviewed.
 
 ## Storage, deployment and rollback boundary
 
-Prisma adds `MealCheckIn`, its two inverse relations and a redundant `(id,userId)`
+Prisma adds `MealCheckIn` with the sole state enum `MealCheckInState`, its two inverse relations and a redundant `(id,userId)`
 unique index on NutritionPlan for an owner-safe composite foreign key. Only the
 new confirmation table has the logical-identity unique constraint and positive
 revision/day/index checks. MealLog columns, indexes, records and all other module
@@ -97,6 +115,10 @@ SQL lives in `prisma/migration-drafts/20261029000100_meal_check_ins/migration.sq
 outside the deployment migration chain. It is reviewed code, not authorization to
 apply it to Neon/Test2/staging/production. The application needs the new table
 before a future separately approved backend rollout; missing storage yields 503.
+The previous boolean-only draft was never applied to a shared database. This
+reviewed create-table draft is updated in place to use state rather than active;
+it is not a data rewrite or an upgrade script for an existing installation. A
+previous draft storage shape yields 503 until separately approved schema work.
 Promotion to the normal migration chain and shared DB application need explicit
 approval. No existing data backfill or destructive cleanup is needed.
 

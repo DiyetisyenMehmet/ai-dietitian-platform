@@ -833,7 +833,13 @@ model MealLog {
   @@map("meal_logs")
 }
 
-/// Explicit plan confirmation only. Reviewed SQL draft is outside migration chain.
+enum MealCheckInState {
+  PENDING
+  EATEN
+  SKIPPED
+}
+
+/// Explicit plan decision only. Reviewed SQL draft is outside migration chain.
 model MealCheckIn {
   id         String   @id @default(uuid())
   userId     String
@@ -843,7 +849,7 @@ model MealCheckIn {
   dayNumber  Int
   mealIndex  Int
   localDate  DateTime @db.Date
-  active     Boolean
+  state      MealCheckInState
   revision   Int
   updatedAt  DateTime @updatedAt
 

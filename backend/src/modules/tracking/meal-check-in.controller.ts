@@ -1,5 +1,5 @@
 import type { Request } from "express";
-import { Prisma } from "@prisma/client";
+import { Prisma, type MealCheckInState } from "@prisma/client";
 
 import { ApiError } from "../../utils/api-error";
 import { sendSuccess } from "../../utils/api-response";
@@ -30,7 +30,7 @@ async function ready<T>(operation: () => Promise<T>): Promise<T> {
     throw error;
   }
 }
-function change(active: boolean) {
+function change(state: MealCheckInState) {
   return asyncHandler(async (req, res) => {
     const revision = checkInRevisionSchema.safeParse(req.get("If-Match"));
     if (!revision.success)
@@ -42,7 +42,7 @@ function change(active: boolean) {
       localDate: req.query.localDate as string,
     };
     const checkIn = await ready(() =>
-      mealCheckInRepository.setState(owner(req), key, active, revision.data),
+      mealCheckInRepository.setState(owner(req), key, state, revision.data),
     );
     res.set("ETag", `"${checkIn.revision}"`).set("Cache-Control", "no-store");
     sendSuccess(res, { checkIn });
@@ -56,6 +56,7 @@ export const mealCheckInController = {
     res.set("Cache-Control", "no-store");
     sendSuccess(res, { day });
   }),
-  confirm: change(true),
-  undo: change(false),
+  confirm: change("EATEN"),
+  skip: change("SKIPPED"),
+  undo: change("PENDING"),
 };

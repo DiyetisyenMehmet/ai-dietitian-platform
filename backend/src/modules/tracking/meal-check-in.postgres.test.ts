@@ -10,11 +10,17 @@ import { Client } from "pg";
 import { localCheckInTestUrl } from "./meal-check-in.local-test-guard";
 
 interface State {
+  state: "PENDING" | "EATEN" | "SKIPPED";
   id: string | null;
   active: boolean;
   revision: number;
 }
 interface Day {
+  eaten: number;
+  skipped: number;
+  pending: number;
+  decided: number;
+  allDecided: boolean;
   total: number;
   completed: number;
   allDone: boolean;
@@ -594,7 +600,7 @@ test(
           dayNumber: row.dayNumber,
           mealIndex: row.mealIndex,
           localDate: row.localDate,
-          active: true,
+          state: "EATEN" as const,
           revision: 1,
         };
         await assert.rejects(
@@ -621,5 +627,212 @@ test(
         assert.equal((await day(p.id)).allDone, false);
       },
     );
+    const skipPath = (id: string, index = 0) => path(id, index).replace("?", "/skip?");
+    await t.test(
+      "FREE plan user can skip without a food, deviation, subscription or quota side effect",
+      async () => {
+        const p = await plan();
+        assert.equal(userA.subscriptionTier, "FREE");
+        const before = await Promise.all([
+          db.mealLog.count({ where: { userId: userA.id } }),
+          db.nutritionPlanDeviation.count({ where: { userId: userA.id } }),
+          db.aiUsageEvent.count({ where: { userId: userA.id } }),
+          db.subscription.count({ where: { userId: userA.id } }),
+        ]);
+        const initial = await day(p.id);
+        assert.equal(initial.checkIns[0].state, "PENDING");
+        assert.equal(initial.checkIns[0].revision, 0);
+        const skipped = await state(await request(skipPath(p.id), { method: "PUT", revision: 0 }));
+        assert.equal(skipped.state, "SKIPPED");
+        assert.equal(skipped.active, false);
+        assert.equal(skipped.revision, 1);
+        assert.equal((await day(p.id)).checkIns[0].state, "SKIPPED");
+        assert.deepEqual(
+          await Promise.all([
+            db.mealLog.count({ where: { userId: userA.id } }),
+            db.nutritionPlanDeviation.count({ where: { userId: userA.id } }),
+            db.aiUsageEvent.count({ where: { userId: userA.id } }),
+            db.subscription.count({ where: { userId: userA.id } }),
+          ]),
+          before,
+        );
+        assert.equal(
+          (await db.user.findUniqueOrThrow({ where: { id: userA.id } })).subscriptionTier,
+          "FREE",
+        );
+      },
+    );
+    await t.test(
+      "skip retries and undo distinguish SKIPPED from PENDING despite both active=false",
+      async () => {
+        const p = await plan();
+        await assert.rejects(
+          request(skipPath(p.id), { method: "PUT", revision: 0, drop: true }),
+          /fetch failed/,
+        );
+        const skipped = await state(
+          await request(skipPath(p.id), { method: "PUT", revision: 0, server: second }),
+        );
+        for (let i = 0; i < 3; i++) {
+          assert.deepEqual(
+            await state(await request(skipPath(p.id), { method: "PUT", revision: 0 })),
+            skipped,
+          );
+        }
+        // A stale undo must not be mistaken for a replay of a skip.
+        assert.equal((await request(path(p.id), { method: "DELETE", revision: 0 })).status, 409);
+        const undone = await state(await request(path(p.id), { method: "DELETE", revision: 1 }));
+        assert.equal(undone.state, "PENDING");
+        assert.equal(undone.active, false);
+        assert.equal(undone.id, skipped.id);
+        assert.equal(undone.revision, 2);
+        assert.equal((await request(skipPath(p.id), { method: "PUT", revision: 0 })).status, 409);
+        assert.equal((await request(path(p.id), { method: "PUT", revision: 0 })).status, 409);
+        const persisted = await db.mealCheckIn.findFirstOrThrow({ where: { planId: p.id } });
+        assert.equal(persisted.state, "PENDING");
+        assert.equal(persisted.revision, 2);
+        assert.equal(await db.mealCheckIn.count({ where: { planId: p.id } }), 1);
+      },
+    );
+    await t.test(
+      "EATEN to SKIPPED blocks delayed eaten; consumption and decision totals remain distinct",
+      async () => {
+        const p = await plan();
+        await state(await request(path(p.id, 1), { method: "PUT", revision: 0 }));
+        const skipped = await state(
+          await request(skipPath(p.id, 1), { method: "PUT", revision: 1 }),
+        );
+        assert.equal(skipped.state, "SKIPPED");
+        assert.equal(skipped.revision, 2);
+        assert.equal((await request(path(p.id, 1), { method: "PUT", revision: 0 })).status, 409);
+        await state(await request(path(p.id, 0), { method: "PUT", revision: 0 }));
+        let summary = await day(p.id);
+        assert.deepEqual(
+          [summary.eaten, summary.completed, summary.skipped, summary.pending, summary.decided],
+          [1, 1, 1, 2, 2],
+        );
+        assert.equal(summary.allDecided, false);
+        assert.equal(summary.allDone, false);
+        for (const index of [2, 3])
+          await state(await request(skipPath(p.id, index), { method: "PUT", revision: 0 }));
+        summary = await day(p.id);
+        assert.deepEqual(
+          [summary.eaten, summary.skipped, summary.pending, summary.decided],
+          [1, 3, 0, 4],
+        );
+        assert.equal(summary.allDecided, true);
+        assert.equal(summary.allDone, false);
+        assert.notEqual(summary.checkIns[1].id, summary.checkIns[3].id);
+        assert.equal(summary.checkIns[1].state, "SKIPPED");
+        assert.equal(summary.checkIns[3].state, "SKIPPED");
+        const zero = await plan(userA.id, { empty: true });
+        const noMeals = await day(zero.id);
+        assert.equal(noMeals.allDecided, false);
+        assert.equal(noMeals.allDone, false);
+        assert.deepEqual(
+          [noMeals.eaten, noMeals.skipped, noMeals.decided, noMeals.pending],
+          [0, 0, 0, 0],
+        );
+      },
+    );
+    await t.test(
+      "two independent PostgreSQL sessions race on SKIPPED and keep a single decision",
+      async () => {
+        const p = await plan();
+        await sql.query("BEGIN");
+        await sql.query("SELECT id FROM users WHERE id=$1 FOR UPDATE", [userA.id]);
+        const left = request(skipPath(p.id), { method: "PUT", revision: 0 });
+        const right = request(skipPath(p.id), { method: "PUT", revision: 0, server: second });
+        let waiting = 0;
+        try {
+          for (let i = 0; i < 100; i++) {
+            waiting = Number(
+              (
+                await sql.query(
+                  "SELECT count(*) FROM pg_stat_activity WHERE application_name LIKE 'app13_worker_%' AND wait_event_type='Lock'",
+                )
+              ).rows[0].count,
+            );
+            if (waiting === 2) break;
+            await sleep(10);
+          }
+          assert.equal(waiting, 2);
+        } finally {
+          await sql.query("COMMIT");
+        }
+        const a = await state(await left),
+          b = await state(await right);
+        assert.deepEqual(a, b);
+        assert.equal(a.state, "SKIPPED");
+        assert.equal(a.revision, 1);
+        assert.equal(await db.mealCheckIn.count({ where: { planId: p.id } }), 1);
+      },
+    );
+    await t.test(
+      "conflicting eaten/skip intents at one revision allow only one winner",
+      async () => {
+        const p = await plan();
+        const replies = await Promise.all([
+          request(path(p.id), { method: "PUT", revision: 0 }),
+          request(skipPath(p.id), { method: "PUT", revision: 0, server: second }),
+        ]);
+        assert.deepEqual(replies.map((r) => r.status).sort(), [200, 409]);
+        const winner = await state(replies.find((r) => r.status === 200)!);
+        const persisted = await db.mealCheckIn.findFirstOrThrow({ where: { planId: p.id } });
+        assert.equal(persisted.state, winner.state);
+        assert.equal(persisted.revision, 1);
+        assert.equal(await db.mealCheckIn.count({ where: { planId: p.id } }), 1);
+      },
+    );
+    await t.test("skip retains session, consent, owner and strict payload guards", async () => {
+      const p = await plan();
+      assert.equal(
+        (await request(skipPath(p.id), { method: "PUT", revision: 0, bearer: null })).status,
+        401,
+      );
+      assert.equal(
+        (await request(skipPath(p.id), { method: "PUT", revision: 0, bearer: token(userB) }))
+          .status,
+        404,
+      );
+      assert.equal(
+        (await request(skipPath(p.id), { method: "PUT", revision: 0, body: { calories: 900 } }))
+          .status,
+        422,
+      );
+      const consent = LEGAL_DOCUMENTS.find((d) => d.type === "KVKK_EXPLICIT_CONSENT")!;
+      const withdrawal = await db.consentRecord.create({
+        data: {
+          userId: userA.id,
+          type: consent.type,
+          documentVersion: consent.version,
+          granted: false,
+        },
+      });
+      try {
+        assert.equal((await request(skipPath(p.id), { method: "PUT", revision: 0 })).status, 403);
+        assert.equal((await day(p.id)).checkIns[0].state, "PENDING");
+        assert.equal(await db.mealCheckIn.count({ where: { planId: p.id } }), 0);
+      } finally {
+        await db.consentRecord.delete({ where: { id: withdrawal.id } });
+      }
+      await state(await request(skipPath(p.id), { method: "PUT", revision: 0 }));
+      const nextWithdrawal = await db.consentRecord.create({
+        data: {
+          userId: userA.id,
+          type: consent.type,
+          documentVersion: consent.version,
+          granted: false,
+        },
+      });
+      try {
+        assert.equal(
+          (await state(await request(path(p.id), { method: "DELETE", revision: 1 }))).state,
+          "PENDING",
+        );
+      } finally {
+        await db.consentRecord.delete({ where: { id: nextWithdrawal.id } });
+      }
+    });
   },
 );
