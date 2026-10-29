@@ -2,6 +2,9 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { PlanMealActions } from "./plan-meal-actions";
+import { readJourneyEntry, samePlanMeal, startJourneyEntry } from "@/application/meals/journey-entry";
 import { Check, ChevronDown, ChevronRight, Clock3, Route, UtensilsCrossed } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { Card, CardContent } from "@/presentation/components/ui/card";
@@ -17,8 +20,7 @@ import {
 import type { JourneyResult } from "@/application/health/journey-engine";
 import type { JourneyPlannedMeal, JourneyPlanDay } from "@/application/health/journey-plan";
 import type { JourneyStep } from "@/domain/health/types";
-import type { MealSlot } from "@/domain/meals/types";
-import { mealsStore, useMeals, useMealsReadiness } from "@/application/meals/meals-store";
+import { useMealsReadiness } from "@/application/meals/meals-store";
 import { authStore, useAuth } from "@/application/auth/auth-store";
 import { dailyTrackingStore, useDailyTracking } from "@/application/health/daily-tracking-store";
 import { localDayKey } from "@/application/health/daily-data-readiness";
@@ -96,7 +98,7 @@ export function StepRow({
       <span className="min-w-0 flex-1">
         <span className="block break-words text-sm font-semibold">{step.label}</span>
         <span className="mt-0.5 block break-words text-xs leading-relaxed text-muted-foreground">
-          {plannedMeal && !complete && plannedMeal.timing
+          {plannedMeal && !complete && plannedMeal.timing && step.hint !== "Öğün kararı doğrulanıyor"
             ? mealTimingLabel[plannedMeal.timing]
             : step.hint}
         </span>
@@ -122,7 +124,7 @@ export function StepRow({
           complete ? "text-emerald-700 dark:text-emerald-300" : "text-muted-foreground",
         )}
       >
-        {complete ? "Tamamlandı" : step.kind === "planned-meal" ? "Takip dışı" : "Bekliyor"}
+        {complete ? "Tamamlandı" : step.hint === "Öğün kararı doğrulanıyor" ? "Doğrulanıyor" : step.kind === "planned-meal" && !plannedMeal?.identity ? "Takip dışı" : "Bekliyor"}
       </span>
       {rowAction && <span className="shrink-0">{rowAction}</span>}
     </div>
@@ -160,6 +162,7 @@ interface DailyJourneyContentProps {
   planReadError?: boolean;
   planRefreshing?: boolean;
   mealControls?: React.ReactNode;
+  mealAction?: (meal: JourneyPlannedMeal) => React.ReactNode;
   feedback?: React.ReactNode;
   waterControls?: React.ReactNode;
   day?: string;
@@ -181,6 +184,7 @@ export function DailyJourneyContent({
   planReadError = false,
   planRefreshing = false,
   mealControls,
+  mealAction,
   feedback,
   waterControls,
   day,
@@ -202,7 +206,7 @@ export function DailyJourneyContent({
       step.state !== "completed" &&
       (step.kind === "water" || step.kind === "weight" || step.kind === "activity"),
   );
-  const unmatched = steps.filter((step) => step.kind === "planned-meal");
+  const unmatched = steps.filter((step) => step.kind === "planned-meal" && step.countsTowardProgress === false);
   const scopedTracking = unmatched.length > 0;
   const list = steps.filter(
     (step) => step.state !== "completed" && !summaries.includes(step) && !unmatched.includes(step),
@@ -317,9 +321,11 @@ export function DailyJourneyContent({
                 Plan güncelleniyor…
               </p>
             )}
-            {status === "all-done" ? (
+            {status === "all-done" && !plannedMeal ? (
               <p className="rounded-2xl bg-emerald-500/10 p-4 text-sm font-semibold text-emerald-800 dark:text-emerald-200">
-                {scopedTracking
+                {plannedMeals.some(meal => meal.identity)
+                  ? "Öğün kararlarını ve günlük kayıt adımlarını tamamladın. Yemedim bir tüketim kaydı değildir; kalori ve besin hedeflerin ayrı takip edilir."
+                  : scopedTracking
                   ? "Takip edilebilir kayıt hedeflerini tamamladın. Eşleştirilemeyen plan öğünleri bu ilerlemeye dahil değil ve tamamlanmış sayılmadı. Kalori ve besin hedeflerin ayrı takip edilir."
                   : "Günlük kayıt adımlarını tamamladın! Kalori ve besin hedeflerin ayrı takip edilir."}
               </p>
@@ -470,6 +476,7 @@ export function DailyJourneyContent({
                         step={step}
                         day={day}
                         plannedMeal={plannedMeals.find((meal) => meal.key === step.id)}
+                        action={mealAction && plannedMeals.find(meal => meal.key === step.id) ? mealAction(plannedMeals.find(meal => meal.key === step.id)!) : undefined}
                         last={
                           index === items.length - 1 && summaries.length === 0 && !scopedTracking
                         }
@@ -504,6 +511,7 @@ export function DailyJourneyContent({
                             step={step}
                             day={day}
                             plannedMeal={plannedMeals.find((meal) => meal.key === step.id)}
+                        action={mealAction && plannedMeals.find(meal => meal.key === step.id) ? mealAction(plannedMeals.find(meal => meal.key === step.id)!) : undefined}
                             last={index === completedSteps.length - 1}
                           />
                         ))}
@@ -524,6 +532,7 @@ export function DailyJourneyContent({
                             step={step}
                             day={day}
                             plannedMeal={plannedMeals.find((meal) => meal.key === step.id)}
+                        action={mealAction && plannedMeals.find(meal => meal.key === step.id) ? mealAction(plannedMeals.find(meal => meal.key === step.id)!) : undefined}
                             last={index === unmatched.length - 1}
                           />
                         ))}
@@ -542,7 +551,7 @@ export function DailyJourneyContent({
 
 /** Local action state is remounted at every account/day boundary. All writes use the existing store. */
 function LiveJourney({ result }: { result: ReturnType<typeof useDailyJourneyResult> }) {
-  const meals = useMeals();
+  const router = useRouter();
   const readiness = useMealsReadiness();
   const tracking = useDailyTracking();
   const storageKey = `diewish:journey-view:${encodeURIComponent(useAuth().user?.id ?? "guest")}:${result.dayKey}`;
@@ -562,8 +571,8 @@ function LiveJourney({ result }: { result: ReturnType<typeof useDailyJourneyResu
   const outerExpanded =
     settled.outer ??
     ((result.planReady || result.planReadError) &&
-      readiness !== "UNKNOWN" &&
-      tracking.waterReadiness !== "UNKNOWN");
+      (result.plannedMeals.length > 0 || readiness !== "UNKNOWN") &&
+      (tracking.waterReadiness !== "UNKNOWN" || Boolean(result.planDecisions.message)));
   const expanded = settled.inner;
   React.useEffect(() => {
     if (!result.dayKey) return;
@@ -577,44 +586,22 @@ function LiveJourney({ result }: { result: ReturnType<typeof useDailyJourneyResu
   const [pending, setPending] = React.useState(false);
   const locked = React.useRef(false);
   const [message, setMessage] = React.useState("");
-  const [savedSlot, setSavedSlot] = React.useState<MealSlot | null>(null);
   const owner = useAuth().user?.id;
-  const selected = result.plannedMeal;
-  const meal = meals.find((entry) => entry.slot === selected?.slot);
-  const saved = meals.find((entry) => entry.slot === savedSlot && entry.checkInId && entry.isEaten);
+  const [focused, setFocused] = React.useState<string | null>(null);
+  const [lastDecision, setLastDecision] = React.useState<string | null>(null);
+  const selected = result.plannedMeals.find(meal => meal.key === focused) ?? result.plannedMeal;
+  React.useEffect(() => {
+    const entry = readJourneyEntry(new URLSearchParams(window.location.search).get("journey"));
+    const meal = entry && result.planValidity.meals.find(m => m.identity && samePlanMeal(m.identity, entry.identity));
+    if (entry && entry.owner === owner && entry.day === result.dayKey && meal) {
+      setFocused(meal.key);
+      setPreference(value => ({ ...value, outer: true }));
+      if (entry.phase === "saved") setMessage("Besin kaydedildi. Öğün kararını ayrıca seç; otomatik Yedim işaretlenmedi.");
+      if (entry.phase === "uncertain" || entry.phase === "saving") setMessage("Besin kaydı doğrulanamadı. Yeniden eklemeden önce Beslenme kayıtlarını kontrol et.");
+    }
+  }, [owner, result.dayKey, result.planValidity]);
   const buttonClass =
     "flex min-h-12 min-w-11 items-center justify-center rounded-xl px-3 py-2.5 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50";
-  async function record(slot: MealSlot, undo = false) {
-    if (
-      locked.current ||
-      readiness === "UNKNOWN" ||
-      authStore.getSnapshot().user?.id !== owner ||
-      localDayKey() !== result.dayKey
-    )
-      return;
-    locked.current = true;
-    setPending(true);
-    setMessage("");
-    try {
-      if (undo) await mealsStore.unmarkMealEaten(slot);
-      else await mealsStore.markMealEaten(slot);
-      if (authStore.getSnapshot().user?.id !== owner || localDayKey() !== result.dayKey) return;
-      const persisted = mealsStore.getSnapshot().find((entry) => entry.slot === slot);
-      if (!undo && !persisted?.checkInId) throw new Error("Missing confirmation");
-      setSavedSlot(undo ? null : slot);
-      setMessage(
-        undo
-          ? "Öğün işareti geri alındı."
-          : "Öğün adımı işaretlendi; besin kaydı henüz oluşturulmadı. Kalori ve besin değerleri eklenmedi.",
-      );
-    } catch {
-      if (authStore.getSnapshot().user?.id === owner && localDayKey() === result.dayKey)
-        setMessage("İşlem tamamlanamadı. Lütfen tekrar dene.");
-    } finally {
-      locked.current = false;
-      setPending(false);
-    }
-  }
   async function addWater() {
     const currentWater = tracking;
     if (
@@ -641,70 +628,29 @@ function LiveJourney({ result }: { result: ReturnType<typeof useDailyJourneyResu
       setPending(false);
     }
   }
-  const controls = selected && (
-    <>
-      {selected.slot && readiness !== "UNKNOWN" && meal ? (
-        <div className="grid grid-cols-2 gap-2" data-journey-meal-actions>
-          {meal.isEaten ? (
-            <button
-              type="button"
-              disabled={pending || !meal.checkInId}
-              onClick={() => void record(meal.slot, true)}
-              className={cn(buttonClass, "bg-primary/10 text-primary")}
-            >
-              {pending ? "Kaydediliyor…" : "İşareti geri al"}
-            </button>
-          ) : meal.foods.length ? (
-            <span className="py-2 text-xs text-muted-foreground">
-              Bu öğünde besin kaydın var; kalori toplamına dahil.
-            </span>
-          ) : (
-            <button
-              type="button"
-              disabled={pending}
-              onClick={() => void record(meal.slot)}
-              className={cn(buttonClass, "bg-primary text-primary-foreground")}
-            >
-              {pending ? "Kaydediliyor…" : "Yedim"}
-            </button>
-          )}
-          <Link
-            href={`/meals/add?slot=${selected.slot}&day=${result.dayKey}&returnTo=/dashboard`}
-            className={cn(buttonClass, "border border-border bg-card")}
-          >
-            Farklı yedim
-          </Link>
-        </div>
-      ) : (
-        <div className="text-xs leading-relaxed text-muted-foreground">
-          <p>
-            {readiness === "UNKNOWN"
-              ? "Öğün kayıtları doğrulanamadı. Kayıt ekranından devam edebilirsin."
-              : "Bu öğün için ayrı onay henüz desteklenmiyor. Planından kontrol edebilirsin."}
-          </p>
-          <Link
-            className={cn(buttonClass, "mt-2 border border-border")}
-            href={
-              selected.slot
-                ? `/meals/add?slot=${selected.slot}&day=${result.dayKey}&returnTo=/dashboard`
-                : "/meals/plan"
-            }
-          >
-            {selected.slot ? "Öğün kaydına git" : "Planı görüntüle"}
-          </Link>
-        </div>
-      )}
-    </>
-  );
+  const controls = selected && <PlanMealActions
+    decision={result.planDecisions.values?.[selected.key]}
+    busy={result.planDecisions.busy}
+    change={state => { setLastDecision(selected.key); void result.planDecisions.change(selected, state); }}
+    different={() => {
+      try { if (owner && result.dayKey) router.push(startJourneyEntry(owner, result.dayKey, selected)); }
+      catch { setMessage("Öğün bağlamı değişti. Güncel planı kontrol et."); }
+    }}
+  />;
   return (
     <DailyJourneyContent
       {...result}
+      plannedMeal={selected}
+      mealAction={meal => <button type="button" className="min-h-11 rounded-xl px-2 text-xs font-semibold text-primary focus-visible:ring-2 focus-visible:ring-ring" onClick={() => {
+        setFocused(meal.key);
+        requestAnimationFrame(() => document.querySelector("[data-journey-focus-card]")?.scrollIntoView({ block: "nearest", behavior: "smooth" }));
+      }}>{!result.planDecisions.values?.[meal.key] ? "Görüntüle" : result.planDecisions.values[meal.key].state === "PENDING" ? "Karar ver" : "Kararı düzenle"}</button>}
       day={result.dayKey ?? undefined}
       status={result.planReady ? result.status : "insufficient-data"}
       progressReady={
         result.planReady &&
-        (result.status === "all-done" ||
-          (readiness !== "UNKNOWN" && tracking.waterReadiness !== "UNKNOWN"))
+        (result.plannedMeals.length ? result.planDecisions.ready : readiness !== "UNKNOWN") &&
+        tracking.waterReadiness !== "UNKNOWN"
       }
       outerExpanded={outerExpanded}
       onOuterExpandedChange={(outer) => setPreference({ ...settled, outer })}
@@ -728,16 +674,12 @@ function LiveJourney({ result }: { result: ReturnType<typeof useDailyJourneyResu
       feedback={
         <div aria-live="polite" aria-atomic="true">
           {message && <p className="text-xs leading-relaxed">{message}</p>}
-          {saved && saved.slot !== selected?.slot && (
-            <button
-              type="button"
-              disabled={pending}
-              onClick={() => void record(saved.slot, true)}
-              className={cn(buttonClass, "text-primary underline")}
-            >
-              Son öğün işaretini geri al
-            </button>
-          )}
+          {result.planDecisions.message && <p className="text-xs leading-relaxed">{result.planDecisions.message}</p>}
+          {result.plannedMeals.length > 0 && !result.planDecisions.ready && <div>
+            <p className="text-xs">Öğün kararları doğrulanmadan tamamlanmış sayılmaz.</p>
+            <button type="button" className={buttonClass} disabled={result.planDecisions.busy} onClick={() => void result.planDecisions.refresh()}>Öğünleri tekrar oku</button>
+          </div>}
+          {lastDecision && result.planDecisions.values?.[lastDecision]?.state !== "PENDING" && result.plannedMeals.some(meal => meal.key === lastDecision) && <button type="button" disabled={result.planDecisions.busy} className={cn(buttonClass, "text-primary underline")} onClick={() => void result.planDecisions.change(result.plannedMeals.find(meal => meal.key === lastDecision)!, "PENDING")}>Son öğün kararını geri al</button>}
         </div>
       }
     />

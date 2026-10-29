@@ -270,3 +270,65 @@ test("11-A: one snack is trackable; duplicate snacks show real menus without sha
     done.steps.filter((s) => s.kind === "planned-meal").every((s) => s.state === "pending"),
   );
 });
+
+const { decisionDay, decisionMutation } = load("application/health/plan-meal-decisions.ts");
+function v2Scenario(states = ["PENDING", "PENDING"]) {
+  const p = { ...plan(), version: 1 };
+  const expected = journeyPlanMeals(p, at());
+  const checkIns = expected.map((m, i) => ({ mealIndex: m.identity.mealIndex, localDate: m.identity.localDate, scheduledTime: m.meal.time,
+    id: states[i] === "PENDING" ? null : `check-${i}`, state: states[i], active: states[i] === "EATEN", revision: states[i] === "PENDING" ? 0 : 1 }));
+  const eaten = states.filter(s => s === "EATEN").length, skipped = states.filter(s => s === "SKIPPED").length;
+  const response = { contractVersion: 2, source: "PLAN_CHECK_INS_ONLY", legacyMealLogsExcluded: true, planId: p.id, planVersion: 1, dayNumber: 1, localDate: "2026-10-23", checkIns,
+    total: 2, completed: eaten, eaten, skipped, pending: 2 - eaten - skipped, decided: eaten + skipped, allDone: eaten === 2, allDecided: eaten + skipped === 2 };
+  return { expected, response };
+}
+test("11-B: the v2 day accepts decisions without treating SKIPPED as consumption", () => {
+  const { expected, response } = v2Scenario(["EATEN", "SKIPPED"]);
+  const values = decisionDay(response, expected);
+  assert.equal(values[expected[0].key].state, "EATEN");
+  assert.equal(values[expected[1].key].state, "SKIPPED");
+});
+for (const patch of [ { contractVersion: 1 }, { planId: "foreign" }, { planVersion: 2 }, { dayNumber: 2 }, { localDate: "2026-10-24" }, { completed: 1 }, { decided: 2 }, { allDone: true } ]) {
+  test(`11-B: fail closed for malformed or foreign decision metadata ${JSON.stringify(patch)}`, () => {
+    const { expected, response } = v2Scenario();
+    assert.throws(() => decisionDay({ ...response, ...patch }, expected));
+  });
+}
+test("11-B: duplicate snack indexes or IDs, wrong time and invalid states are rejected", () => {
+  for (const patch of [ { mealIndex: 0 }, { localDate: "2026-10-24" }, { scheduledTime: "23:59" }, { state: "UNKNOWN" }, { revision: -1 }, { active: true }, { id: "check-0", state: "EATEN", active: true, revision: 1 } ]) {
+    const { expected, response } = v2Scenario(["EATEN", "PENDING"]);
+    response.checkIns[1] = { ...response.checkIns[1], ...patch };
+    assert.throws(() => decisionDay(response, expected));
+  }
+});
+test("11-B: mutation acknowledgement must match exact identity, state and successor revision", () => {
+  const { expected } = v2Scenario();
+  const identity = expected[0].identity;
+  const response = { ...identity, contractVersion: 2, id: "accepted", revision: 1, state: "SKIPPED", active: false };
+  assert.equal(decisionMutation(response, identity, 0, "SKIPPED").state, "SKIPPED");
+  for (const patch of [{ mealIndex: 7 }, { localDate: "2026-10-24" }, { revision: 2 }, { state: "PENDING" }, { contractVersion: 1 }]) assert.throws(() => decisionMutation({ ...response, ...patch }, identity, 0, "SKIPPED"));
+});
+test("11-B: actual plan identities preserve postponed midnight date and original indexes", () => {
+  const p = { ...plan(), version: 3 };
+  p.dailyPlans.durationDays = 1;
+  p.dailyPlans.calendar = [{ dayNumber: 1, cycleIndex: 1, dateOffsetDays: 1 }];
+  p.dailyPlans.cycle[1].meals[0].time = "22:15";
+  p.dailyPlans.cycle[1].meals[1].time = "02:15";
+  const item = journeyPlanMeals(p, at(25))[0];
+  assert.deepEqual(JSON.parse(JSON.stringify(item.identity)), { planId: p.id, planVersion: 3, dayNumber: 1, mealIndex: 1, localDate: "2026-10-25" });
+});
+test("11-B: v2 decisions alone own plan progress; legacy foods and check-ins never OR into it", () => {
+  const { expected, response } = v2Scenario(["PENDING", "SKIPPED"]);
+  const values = decisionDay(response, expected);
+  const input = { plannedMeals: expected, planDecisions: values, nowMs: at().getTime(), localHour: 14,
+    meals: { breakfast: 99, lunch: 99, dinner: 99, snack: 99 }, foodCounts: { breakfast: 99, lunch: 99 },
+    startWeightKg: null, currentWeightKg: null, targetWeightKg: null, waterMl: 0, waterGoalMl: 2500, activityMinutes: null, weight: null };
+  const result = buildJourney(input);
+  assert.equal(result.steps.find(s => s.id === expected[0].key).state === "completed", false);
+  assert.equal(result.steps.find(s => s.id === expected[1].key).state, "completed");
+  assert.match(result.steps.find(s => s.id === expected[1].key).hint, /Yemedim/);
+  assert.equal(result.steps.filter(s => s.countsTowardProgress !== false).length, 3);
+  const unavailable = buildJourney({ ...input, planDecisions: null, waterMl: 2500 });
+  assert.notEqual(unavailable.status, "all-done");
+  assert.ok(unavailable.steps.filter(s => s.id).every(s => s.state !== "completed"));
+});

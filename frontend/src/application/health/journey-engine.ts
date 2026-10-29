@@ -4,9 +4,12 @@ export type GoalDirection = "lose" | "gain" | "maintain";
 export type Sufficiency = "UNKNOWN" | "KNOWN_ZERO" | "KNOWN";
 export type MealKind = "breakfast" | "lunch" | "dinner" | "snack";
 import type { JourneyPlannedMeal } from "./journey-plan";
+import type { PlanMealDecisions } from "./plan-meal-decisions";
 
 export interface JourneyInput {
   plannedMeals?: JourneyPlannedMeal[];
+  /** When supplied, v2 is the sole authority for planned decisions. Null means unknown. */
+  planDecisions?: PlanMealDecisions | null;
   nowMs?: number;
   foodCounts?: Partial<Record<MealKind, number>>;
   localHour: number;
@@ -75,6 +78,7 @@ export function buildJourney(input: JourneyInput): JourneyResult {
     weight: input.weight ? "KNOWN" : "UNKNOWN",
   };
   const steps: JourneyStep[] = [];
+  const exactDecisions = input.planDecisions !== undefined;
   if (input.weight && (input.weight.due || input.weight.recordedToday)) {
     steps.push({
       kind: "weight",
@@ -105,14 +109,22 @@ export function buildJourney(input: JourneyInput): JourneyResult {
   );
   if (planned.length) {
     for (const entry of planned) {
-      const completed = Boolean(entry.slot && data[entry.slot] === "KNOWN");
+      const decision = input.planDecisions?.[entry.key];
+      const completed = exactDecisions
+        ? Boolean(decision && decision.state !== "PENDING")
+        : Boolean(entry.slot && data[entry.slot] === "KNOWN");
       steps.push({
         id: entry.key,
         kind: entry.slot ?? "planned-meal",
         label: entry.meal.name,
         icon: "utensils",
         href: entry.slot ? `/meals/add?slot=${entry.slot}` : "/meals/plan",
-        hint: completed
+        hint: exactDecisions
+          ? !decision ? "Öğün kararı doğrulanıyor"
+            : decision.state === "SKIPPED" ? "Yemedim · Besin ve kalori eklenmedi"
+              : decision.state === "EATEN" ? "Yedim · Besin kaydı ayrı tutulur"
+                : `Planlanan ${entry.meal.time} · Karar verilmedi`
+          : completed
           ? entry.slot && (input.foodCounts?.[entry.slot] ?? 0) > 0
             ? "Besin kaydı var"
             : "Öğün işaretlendi; besin kaydı yok"
@@ -120,7 +132,7 @@ export function buildJourney(input: JourneyInput): JourneyResult {
             ? `Planlanan ${entry.meal.time} · ${goalReason}`
             : `Planlanan ${entry.meal.time} · Tekil kayıtla eşleşmiyor; takip hedeflerine dahil değil.`,
         state: completed ? "completed" : "pending",
-        countsTowardProgress: Boolean(entry.slot),
+        countsTowardProgress: exactDecisions || Boolean(entry.slot),
       });
     }
   } else {
@@ -198,8 +210,10 @@ export function buildJourney(input: JourneyInput): JourneyResult {
     });
   // Prefer the scheduled current/next meal. Earlier unconfirmed meals remain
   // pending in the timeline; elapsed time is never a skipped/eaten decision.
-  const unfinished = planned.filter((entry) => !entry.slot || data[entry.slot] !== "KNOWN");
-  const trackable = unfinished.filter((entry) => entry.slot);
+  const unfinished = planned.filter((entry) => exactDecisions
+    ? !input.planDecisions?.[entry.key] || input.planDecisions[entry.key].state === "PENDING"
+    : !entry.slot || data[entry.slot] !== "KNOWN");
+  const trackable = unfinished.filter((entry) => exactDecisions || entry.slot);
   const clockKnown = Number.isFinite(input.nowMs);
   const candidates = clockKnown ? unfinished : trackable;
   const plannedMeal =
@@ -225,7 +239,9 @@ export function buildJourney(input: JourneyInput): JourneyResult {
     );
   const insufficient =
     (planned.length
-      ? planned.some((entry) => entry.slot && data[entry.slot] === "UNKNOWN")
+      ? exactDecisions
+        ? planned.some((entry) => !input.planDecisions?.[entry.key])
+        : planned.some((entry) => entry.slot && data[entry.slot] === "UNKNOWN")
       : [data.breakfast, data.lunch, data.dinner].includes("UNKNOWN")) ||
     data.water === "UNKNOWN" ||
     !input.waterGoalMl ||

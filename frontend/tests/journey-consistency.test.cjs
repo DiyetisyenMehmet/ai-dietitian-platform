@@ -252,6 +252,13 @@ test("failed confirmation preflight cannot initiate another write", async () => 
 
 test("verified owner plan survives refresh, but never crosses account, day or invalid plan boundaries", () => {
   const h = harness();
+  // This adapter test covers plan ownership/calendar while v2 remains unread.
+  // It must not borrow legacy food completion or pretend an API read occurred.
+  h.mocks["@/application/health/use-plan-meal-decisions"].usePlanMealDecisions = () => ({
+    values: null, ready: false, busy: false, message: "",
+    refresh: async () => {},
+    change: async () => { throw new Error("Unexpected mutation in plan boundary test"); },
+  });
   const plan = {
     id: "synthetic-refresh",
     isActive: true,
@@ -282,6 +289,10 @@ test("verified owner plan survives refresh, but never crosses account, day or in
   };
   h.mocks["@/application/health/nutrition-plan-store"].useNutritionPlan = () => state;
   assert.equal(h.journey().plannedMeal.meal.foods[0].name, "Sentetik");
+  assert.equal(h.journey().steps.find(step => step.id === h.journey().plannedMeal.key).hint, "Öğün kararı doğrulanıyor");
+  assert.notEqual(h.journey().steps.find(step => step.id === h.journey().plannedMeal.key).state, "completed");
+  assert.notEqual(h.journey().status, "all-done");
+  assert.equal(h.journey().planDecisions.ready, false);
   state.loading = true;
   assert.equal(h.journey().planReady, true);
   assert.equal(h.journey().planRefreshing, true);
@@ -466,3 +477,4 @@ test("plan containing only repeated snacks completes water tracking only, never 
   assert.equal(helpers.summarizeJourney(buildJourney({ ...input, waterMl: null }).steps).total, 1);
   assert.notEqual(buildJourney({ ...input, waterGoalMl: null }).status, "all-done");
 });
+

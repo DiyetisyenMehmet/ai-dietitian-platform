@@ -90,6 +90,10 @@ function harness() {
   };
   const mocks = {
     react: react,
+    "@/application/health/use-plan-meal-decisions": { usePlanMealDecisions: (meals) => {
+      if (meals.length) throw new Error("Exact plan decisions require the real React/API browser fixture");
+      return { values: null, ready: false, busy: false, message: "", refresh: async () => {}, change: async () => { throw new Error("Unexpected plan mutation in legacy harness"); } };
+    } },
     "@/infrastructure/tracking/tracking-client": { trackingClient: client },
     "@/infrastructure/tracking/meals-client": { mealsClient },
     "@/infrastructure/activity/activity-client": { activityClient },
@@ -150,6 +154,9 @@ function harness() {
       react: React,
       "react/jsx-runtime": require("react/jsx-runtime"),
       "next/link": { default: wrapper },
+      "next/navigation": { useRouter: () => ({ push() { throw new Error("Unexpected navigation in static renderer"); } }) },
+      "./plan-meal-actions": { PlanMealActions: dummy },
+      "@/application/meals/journey-entry": { readJourneyEntry: () => null, samePlanMeal: () => false, startJourneyEntry() { throw new Error("Unexpected entry navigation in static renderer"); } },
       "lucide-react": new Proxy({}, { get: () => dummy }),
       sonner: { toast: { success() {}, error() {} } },
       "@/shared/lib/utils": { cn: () => "" },

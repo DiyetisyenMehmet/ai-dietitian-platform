@@ -13,6 +13,7 @@ import { authStore, useAuth } from "../auth/auth-store";
 import { journeyPlanDay } from "./journey-plan";
 import { msUntilNextLocalDay } from "./daily-data-readiness";
 import { buildJourney } from "./journey-engine";
+import { usePlanMealDecisions } from "./use-plan-meal-decisions";
 
 /** Shared source adapter. Refreshes wall-clock decisions across midnight and tab resume. */
 export function useJourneyEngine() {
@@ -60,10 +61,12 @@ export function useJourneyEngine() {
   const today = now ? localDateKey(now) : null;
   const planReady =
     auth.status === "authenticated" && plan.ownerUserId === auth.user?.id && plan.hydrated;
-  const planDay = journeyPlanDay(now && planReady ? plan.activePlan : null, now ?? new Date());
+  const planDay = React.useMemo(() => journeyPlanDay(today && planReady ? plan.activePlan : null, today ? new Date(`${today}T12:00:00`) : new Date()), [today, planReady, plan.activePlan]);
+  const planDecisions = usePlanMealDecisions(planDay.meals, auth.user?.id, today);
   return {
     ...buildJourney({
       plannedMeals: planDay.meals,
+      planDecisions: planDecisions.values,
       nowMs: now?.getTime(),
       localHour: now?.getHours() ?? 0,
       startWeightKg: profile.startWeightKg || null,
@@ -109,5 +112,6 @@ export function useJourneyEngine() {
     planValidity: planDay,
     planReadError: plan.readError,
     planRefreshing: plan.loading && planReady,
+    planDecisions,
   };
 }

@@ -253,7 +253,14 @@ test("dashboard home retains approved header, metrics and quick actions around J
   assert.match(journey, /data-journey-next/);
   assert.match(journey, /data-journey-focus-card/);
   assert.match(journey, /data-journey-plan-meal/);
-  assert.match(journey, /<div className="grid grid-cols-2 gap-2" data-journey-meal-actions>/);
+  assert.match(journey, /<PlanMealActions/);
+  const mealActions = read("src/presentation/components/dashboard/plan-meal-actions.tsx");
+  assert.match(mealActions, /data-journey-meal-actions/);
+  assert.match(mealActions, /<div className="grid grid-cols-2 gap-2">/);
+  assert.match(mealActions, /min-h-11/);
+  for (const label of ["Yedim", "Yemedim", "Farklı yedim", "Kararı geri al"]) {
+    assert.ok(mealActions.includes(`>${label}</button>`));
+  }
   assert.match(journey, /const expanded = settled\.inner/);
   assert.match(journey, /settleJourneyDisclosure\(preference, completed\)/);
   assert.match(journey, /data-journey-timeline-step data-step-state=\{step\.state\}/);
@@ -275,3 +282,4 @@ test("dashboard home retains approved header, metrics and quick actions around J
   assert.match(view, /data-daily-journey-section\]\]:!mt-1\.5/);
   assert.match(view, /data-dashboard-personalization\]\]:!mt-1\.5/);
 });
+

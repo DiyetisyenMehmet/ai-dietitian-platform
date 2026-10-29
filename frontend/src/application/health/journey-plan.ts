@@ -5,6 +5,7 @@ import type {
 } from "@/infrastructure/nutrition/nutrition-plan-client";
 import { dateForMealPlanDay, parseMealReminderTime } from "@/domain/account/meal-reminder-plan";
 import { localDayKey } from "./daily-data-readiness";
+import type { PlanMealIdentity } from "./plan-meal-decisions";
 
 export interface JourneyPlannedMeal {
   key: string;
@@ -12,6 +13,8 @@ export interface JourneyPlannedMeal {
   slot: MealSlot | null;
   at: number;
   timing?: "now" | "upcoming" | "earlier";
+  identity?: PlanMealIdentity;
+  foodSlot?: MealSlot | null;
 }
 
 export interface JourneyPlanDay {
@@ -101,6 +104,8 @@ function calendarPlanMeals(plan: NutritionPlanRecord): JourneyPlannedMeal[] | nu
         key: `${plan.id}:${mapping.dayNumber}:${index}`,
         meal,
         slot: journeyMealSlot(meal.name),
+        foodSlot: journeyMealSlot(meal.name),
+        identity: { planId: plan.id, planVersion: plan.version, dayNumber: mapping.dayNumber, mealIndex: index, localDate: localDayKey(at) },
         at: at.getTime(),
       });
     }

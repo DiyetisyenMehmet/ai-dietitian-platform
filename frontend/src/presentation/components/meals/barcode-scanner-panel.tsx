@@ -2,6 +2,8 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useJourneyEntry } from "@/application/meals/journey-entry";
 import {
   Camera,
   Flame,
@@ -171,7 +173,9 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   return <h2 className="text-base font-extrabold uppercase tracking-tight text-primary">{children}</h2>;
 }
 
-export function BarcodeScannerPanel() {
+export function BarcodeScannerPanel({ journeyToken }: { journeyToken?: string } = {}) {
+  const router = useRouter();
+  const journey = useJourneyEntry(journeyToken);
   const [barcode, setBarcode] = React.useState("");
   const [food, setFood] = React.useState<CanonicalFoodDto | null>(null);
   const [scan, setScan] = React.useState<NormalizedNutritionScanDto | null>(null);
@@ -464,14 +468,16 @@ export function BarcodeScannerPanel() {
     }
     setLoggingMeal(true);
     try {
+      const back = await journey.save((slot, loggedAt) => nutritionClient.logMeal((slot?.toUpperCase() as MealTypeDto) ?? mealType, food, personalization, selectedConsumption, { loggedAt, retryOnUnauthorized: false }));
+      if (back) { router.push(back); return; }
       await nutritionClient.logMeal(mealType, food, personalization, selectedConsumption);
       toast.success(selectedConsumption.description + " öğüne eklendi.");
-    } catch {
-      toast.error("Öğüne eklenemedi.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Öğüne eklenemedi.");
     } finally {
       setLoggingMeal(false);
     }
-  }, [food, mealType, personalization, portionDirty, selectedConsumption]);
+  }, [food, mealType, personalization, portionDirty, selectedConsumption, journey, router]);
 
   const addFavorite = React.useCallback(async () => {
     if (!food) return;
@@ -883,7 +889,7 @@ export function BarcodeScannerPanel() {
                     else void logMeal();
                   }}
                   isLoading={loggingMeal}
-                  disabled={loggingMeal || personalizing}
+                  disabled={loggingMeal || personalizing || !journey.loaded || Boolean(journey.requested && (!journey.valid || journey.entry?.phase !== "open"))}
                 >
                   <Plus aria-hidden="true" /> Öğüne ekle
                 </Button>

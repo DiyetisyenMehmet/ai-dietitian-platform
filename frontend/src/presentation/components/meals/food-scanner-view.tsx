@@ -2,6 +2,8 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useJourneyEntry } from "@/application/meals/journey-entry";
 import { toast } from "sonner";
 import {
   Camera,
@@ -184,7 +186,9 @@ function sumIncluded(ingredients: EditableIngredient[]): number {
   ) / 10;
 }
 
-export function FoodScannerView() {
+export function FoodScannerView({ journeyToken }: { journeyToken?: string } = {}) {
+  const router = useRouter();
+  const journey = useJourneyEntry(journeyToken);
   const [preview, setPreview] = React.useState<string | null>(null);
   const [file, setFile] = React.useState<File | null>(null);
   const [analysis, setAnalysis] = React.useState<FoodScanResultDto | null>(null);
@@ -309,6 +313,8 @@ export function FoodScannerView() {
     if (!analysis || loggingMeal || editing || recalculating) return;
     setLoggingMeal(true);
     try {
+      const back = await journey.save((slot, loggedAt) => foodScanClient.logMeal((slot?.toUpperCase() as MealTypeDto) ?? mealType, analysis, { loggedAt, retryOnUnauthorized: false }));
+      if (back) { router.push(back); return; }
       await foodScanClient.logMeal(mealType, analysis);
       toast.success("Öğüne eklendi.");
     } catch (error) {
@@ -316,7 +322,7 @@ export function FoodScannerView() {
     } finally {
       setLoggingMeal(false);
     }
-  }, [analysis, editing, loggingMeal, mealType, recalculating]);
+  }, [analysis, editing, loggingMeal, mealType, recalculating, journey, router]);
 
   const source = analysis ? sourceSummary(analysis) : null;
 
@@ -473,7 +479,7 @@ export function FoodScannerView() {
                   className="min-h-11 w-full"
                   onClick={() => void onLogMeal()}
                   isLoading={loggingMeal}
-                  disabled={editing || recalculating}
+                  disabled={editing || recalculating || !journey.loaded || Boolean(journey.requested && (!journey.valid || journey.entry?.phase !== "open"))}
                   aria-label="Seçilen porsiyonu öğüne ekle"
                 >
                   <Utensils /> Öğüne ekle

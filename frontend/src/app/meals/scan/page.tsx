@@ -7,11 +7,12 @@ export const metadata: Metadata = {
   title: "Besin Tarayıcı",
 };
 
-export default function FoodScanPage() {
+export default async function FoodScanPage({ searchParams }: { searchParams: Promise<{ journey?: string }> }) {
+  const { journey } = await searchParams;
   return (
     <AppShell title="Besin Tarayıcı" showBack hideBottomNav>
       <div className="animate-fade-in">
-        <NutritionScannerView />
+        <NutritionScannerView journeyToken={journey} />
       </div>
     </AppShell>
   );
