@@ -204,5 +204,5 @@ test("all application Zod collection declarations have an explicit leading size 
     }
     scan(area);
   }
-  assert.equal(count, 14);
+  assert.equal(count, 18);
 });
