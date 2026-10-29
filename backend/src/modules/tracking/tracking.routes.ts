@@ -4,6 +4,13 @@ import { authenticate } from "../../middleware/authenticate";
 import { requireConsent } from "../../middleware/require-consent";
 import { validate } from "../../middleware/validate";
 import { trackingController } from "./tracking.controller";
+import { mealCheckInController } from "./meal-check-in.controller";
+import {
+  checkInDaySchema,
+  checkInParamsSchema,
+  checkInDateSchema,
+  checkInEmptyBodySchema,
+} from "./meal-check-in.schemas";
 import {
   createMealLogSchema,
   createWaterLogSchema,
@@ -26,6 +33,37 @@ import { weightEntryController } from "./weight-entry.controller";
  * available after withdrawal so users can access/remove existing data.
  */
 export const trackingRouter = Router();
+
+/** Plan-specific confirmations never read or write the legacy food log. */
+trackingRouter.get(
+  "/meal-check-ins",
+  authenticate,
+  validate({ query: checkInDaySchema }),
+  mealCheckInController.list,
+);
+const checkInPath = "/meal-check-ins/:planId/:dayNumber/:mealIndex";
+trackingRouter.put(
+  checkInPath,
+  authenticate,
+  requireConsent,
+  validate({ params: checkInParamsSchema, query: checkInDateSchema, body: checkInEmptyBodySchema }),
+  mealCheckInController.confirm,
+);
+// A basic plan decision for every tier; never delegates to paid deviations.
+trackingRouter.put(
+  `${checkInPath}/skip`,
+  authenticate,
+  requireConsent,
+  validate({ params: checkInParamsSchema, query: checkInDateSchema, body: checkInEmptyBodySchema }),
+  mealCheckInController.skip,
+);
+// Like existing deletes, undo remains available after consent withdrawal.
+trackingRouter.delete(
+  checkInPath,
+  authenticate,
+  validate({ params: checkInParamsSchema, query: checkInDateSchema, body: checkInEmptyBodySchema }),
+  mealCheckInController.undo,
+);
 
 /** Weight time-series and backend-owned weekly check-in schedule. */
 trackingRouter.get("/weight/check-in", authenticate, trackingController.getWeightCheckIn);

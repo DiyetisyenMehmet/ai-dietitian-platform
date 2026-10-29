@@ -63,6 +63,7 @@ model User {
 
   weightLogs              WeightLog[]
   mealLogs                MealLog[]
+  mealCheckIns            MealCheckIn[]
   waterLogs               WaterLog[]
   aiMemories              AiMemory[]
   aiConversationSummaries AiConversationSummary[]
@@ -468,7 +469,9 @@ model NutritionPlan {
   originPlanId     String?
   nutritionContextHash String?
   deviations       NutritionPlanDeviation[]
+  mealCheckIns     MealCheckIn[]
 
+  @@unique([id, userId], map: "nutrition_plans_checkin_owner_key")
   @@index([userId])
   @@index([userId, duration, isActive])
   @@index([userId, deletedAt])
@@ -828,6 +831,30 @@ model MealLog {
 
   @@index([userId, loggedAt])
   @@map("meal_logs")
+}
+
+enum MealCheckInState {
+  PENDING
+  EATEN
+  SKIPPED
+}
+
+/// Explicit plan decision only. Reviewed SQL draft is outside migration chain.
+model MealCheckIn {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planId     String
+  plan       NutritionPlan @relation(fields: [planId, userId], references: [id, userId], onDelete: Cascade)
+  dayNumber  Int
+  mealIndex  Int
+  localDate  DateTime @db.Date
+  state      MealCheckInState
+  revision   Int
+  updatedAt  DateTime @updatedAt
+
+  @@unique([userId, planId, dayNumber, mealIndex, localDate], map: "meal_check_ins_identity_key")
+  @@map("meal_check_ins")
 }
 
 model WaterLog {
