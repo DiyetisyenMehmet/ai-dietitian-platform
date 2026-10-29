@@ -234,7 +234,9 @@ async function fixture(
     const target = path.match(/^\/tracking\/meal-check-ins\/([^/]+)\/(\d+)\/(\d+)(\/skip)?$/);
     if (target && ["PUT", "DELETE"].includes(method)) {
       const id = decodeURIComponent(target[1]), dayNumber = Number(target[2]), mealIndex = Number(target[3]), localDate = url.searchParams.get("localDate")!;
-      const revision = Number(route.request().headers()["if-match"]?.replaceAll('"', ''));
+      const ifMatch = route.request().headers()["if-match"];
+      expect(ifMatch).toMatch(/^"\d+"$/);
+      const revision = Number(ifMatch?.replaceAll('"', ''));
       const desired = method === "DELETE" ? "PENDING" : target[4] ? "SKIPPED" : "EATEN";
       state.decisionWrites.push({ path, method, revision, desired });
       expect(route.request().postData()).toBeNull();
@@ -923,7 +925,8 @@ for (const days of [7, 14, 30] as const) {
     await expect(card).toContainText("0/4 adım");
     await focus.getByRole("button", { name: "Yedim", exact: true }).click();
     await expect(card).toContainText("1/4 adım");
-    expect(f.state.posts).toEqual([{ mealType: "DINNER" }]);
+    expect(f.state.posts).toHaveLength(0);
+    expect(f.state.decisionWrites).toEqual([{ path: "/tracking/meal-check-ins/synthetic-plan/1/2", method: "PUT", revision: 0, desired: "EATEN" }]);
     expect(f.state.meals.every((entry) => entry.calories == null && entry.name == null)).toBe(true);
   });
 }
@@ -1164,6 +1167,7 @@ for (const mode of ["photo", "barcode"] as const) {
       await expect(page.getByRole("heading", { name: "Sentetik taranan yemek", exact: true })).toBeVisible();
       expect(f.state.photoScans).toBe(1);
       expect(f.state.posts).toHaveLength(0);
+      await page.clock.setFixedTime(new Date(`${today}T14:07:13+03:00`));
       await page.getByRole("button", { name: "Seçilen porsiyonu öğüne ekle", exact: true }).click();
     } else {
       await expect(page.getByRole("tab", { name: "Barkod Tara", exact: true })).toHaveAttribute("aria-selected", "true");
@@ -1173,13 +1177,14 @@ for (const mode of ["photo", "barcode"] as const) {
       expect(f.state.posts).toHaveLength(0);
       await page.getByRole("button", { name: "Öğüne ekle", exact: true }).click();
       await expect(page.getByText("1 paket tüketim", { exact: true })).toBeVisible();
+      await page.clock.setFixedTime(new Date(`${today}T14:07:13+03:00`));
       await page.getByRole("button", { name: "Öğüne ekle", exact: true }).click();
     }
     await expect(section(page)).toBeVisible();
     await expect(section(page)).toContainText("Besin kaydedildi. Öğün kararını ayrıca seç");
     await expect(section(page)).toContainText("1/4 adım");
     expect(f.state.posts).toHaveLength(1); expect(f.state.decisionWrites).toHaveLength(0);
-    expect(f.state.posts[0]).toMatchObject({ mealType: "LUNCH", calories: 100, micronutrients: { iron: 2 }, loggedAt: `${today}T11:00:00.000Z` });
+    expect(f.state.posts[0]).toMatchObject({ mealType: "LUNCH", calories: 100, micronutrients: { iron: 2 }, loggedAt: `${today}T11:07:13.000Z` });
     await section(page).getByRole("button", { name: "Yedim", exact: true }).click();
     await expect(section(page)).toContainText("2/4 adım");
     expect(f.state.posts).toHaveLength(1); expect(f.state.decisionWrites).toHaveLength(1);
