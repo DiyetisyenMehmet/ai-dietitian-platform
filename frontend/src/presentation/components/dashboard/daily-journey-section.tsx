@@ -593,7 +593,7 @@ function LiveJourney({ result }: { result: ReturnType<typeof useDailyJourneyResu
   React.useEffect(() => {
     const entry = readJourneyEntry(new URLSearchParams(window.location.search).get("journey"));
     const meal = entry && result.planValidity.meals.find(m => m.identity && samePlanMeal(m.identity, entry.identity));
-    if (entry?.owner === owner && entry.day === result.dayKey && meal) {
+    if (entry && entry.owner === owner && entry.day === result.dayKey && meal) {
       setFocused(meal.key);
       setPreference(value => ({ ...value, outer: true }));
       if (entry.phase === "saved") setMessage("Besin kaydedildi. Öğün kararını ayrıca seç; otomatik Yedim işaretlenmedi.");

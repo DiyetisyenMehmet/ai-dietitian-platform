@@ -84,7 +84,7 @@ export function useJourneyEntry(explicitToken?: string) {
   function finish(phase: "saved" | "uncertain") {
     if (!token) return;
     const current = readJourneyEntry(token);
-    if (current?.owner === authStore.getSnapshot().user?.id) write(token, { ...current, phase });
+    if (current && current.owner === authStore.getSnapshot().user?.id) write(token, { ...current, phase });
     update();
   }
   async function save(persist: (slot: JourneyPlannedMeal["slot"], loggedAt: string) => Promise<unknown>) {
