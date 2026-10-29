@@ -8,13 +8,13 @@ import express from "express";
 import jwt from "jsonwebtoken";
 
 /**
- * Baseline characterization for G1/#103 Devam 10-B, NOT fix acceptance.
+ * Legacy append-only API compatibility evidence for G1/#103 Devam 10-B.
  * Runs the real router/guards/schema/controller/service/repository, replacing
  * only Prisma with a fail-closed synthetic store. No database client is opened.
- * GAP tests deliberately assert the observed unsafe behavior so the evidence
- * stays reproducible until the plan identity/state contract is approved.
+ * Legacy assertions document the unchanged POST /meals limitation. Planned
+ * check-in acceptance is tested separately with real PostgreSQL.
  */
-test("meal check-in baseline: contract gaps and preserved food/owner behavior", async (t) => {
+test("legacy MealLog compatibility (not planned check-in acceptance)", async (t) => {
   process.env.NODE_ENV = "test";
   process.env.DIEWISH_ENVIRONMENT = "test";
   process.env.DATABASE_URL = "postgresql://synthetic:synthetic@127.0.0.1:1/never_connect";
@@ -183,42 +183,48 @@ test("meal check-in baseline: contract gaps and preserved food/owner behavior", 
   }
   const checkIn = { mealType: "SNACK", loggedAt: "2026-10-27T10:00:00.000Z" };
 
-  await t.test("GAP: three retries produce three IDs for one explicit check-in", async () => {
-    rows = [];
-    const logs = [];
-    for (let i = 0; i < 3; i++) logs.push(await create(checkIn));
-    assert.equal(new Set(logs.map((log) => log.id)).size, 3);
-    assert.equal(rows.length, 3);
-  });
-
-  await t.test("GAP: two authenticated device sessions both insert concurrently", async () => {
-    rows = [];
-    let arrivals = 0;
-    let release!: () => void;
-    const barrier = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    beforeInsert = async () => {
-      if (++arrivals === 2) release();
-      await barrier;
-    };
-    try {
-      const deviceA = token();
-      const deviceB = token();
-      assert.notEqual(deviceA, deviceB);
-      const logs = await Promise.all([create(checkIn, deviceA), create(checkIn, deviceB)]);
-      assert.equal(arrivals, 2);
-      assert.equal(rows.length, 2);
-      assert.notEqual(logs[0].id, logs[1].id);
-      const refresh = await request(undefined, { method: "GET", bearer: deviceB });
-      assert.equal(((await refresh.json()) as { data: { logs: MealLog[] } }).data.logs.length, 2);
-    } finally {
-      beforeInsert = undefined;
-    }
-  });
+  await t.test(
+    "legacy append-only limitation: three retries produce three IDs for one explicit check-in",
+    async () => {
+      rows = [];
+      const logs = [];
+      for (let i = 0; i < 3; i++) logs.push(await create(checkIn));
+      assert.equal(new Set(logs.map((log) => log.id)).size, 3);
+      assert.equal(rows.length, 3);
+    },
+  );
 
   await t.test(
-    "GAP: committed write with lost HTTP response is inserted again on retry",
+    "legacy append-only limitation: two authenticated device sessions both insert concurrently",
+    async () => {
+      rows = [];
+      let arrivals = 0;
+      let release!: () => void;
+      const barrier = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      beforeInsert = async () => {
+        if (++arrivals === 2) release();
+        await barrier;
+      };
+      try {
+        const deviceA = token();
+        const deviceB = token();
+        assert.notEqual(deviceA, deviceB);
+        const logs = await Promise.all([create(checkIn, deviceA), create(checkIn, deviceB)]);
+        assert.equal(arrivals, 2);
+        assert.equal(rows.length, 2);
+        assert.notEqual(logs[0].id, logs[1].id);
+        const refresh = await request(undefined, { method: "GET", bearer: deviceB });
+        assert.equal(((await refresh.json()) as { data: { logs: MealLog[] } }).data.logs.length, 2);
+      } finally {
+        beforeInsert = undefined;
+      }
+    },
+  );
+
+  await t.test(
+    "legacy append-only limitation: committed write with lost HTTP response is inserted again on retry",
     async () => {
       rows = [];
       await assert.rejects(request(checkIn, { loseResponse: true }), /fetch failed/);
@@ -266,7 +272,7 @@ test("meal check-in baseline: contract gaps and preserved food/owner behavior", 
   );
 
   await t.test(
-    "GAP: undo removes one ID; a delayed original request can resurrect it",
+    "legacy append-only limitation: undo removes one ID; a delayed original request can resurrect it",
     async () => {
       rows = [];
       const log = await create(checkIn);
@@ -289,15 +295,18 @@ test("meal check-in baseline: contract gaps and preserved food/owner behavior", 
     );
   });
 
-  await t.test("GAP: distinct planned snacks collapse to the same validated request", () => {
-    const firstSnack = { ...checkIn, planId: randomUUID(), dayNumber: 1, mealIndex: 1 };
-    const secondSnack = { ...firstSnack, mealIndex: 3 };
-    const anotherPlan = { ...firstSnack, planId: randomUUID() };
-    assert.deepEqual(createMealLogSchema.parse(firstSnack), checkIn);
-    assert.deepEqual(createMealLogSchema.parse(secondSnack), checkIn);
-    assert.deepEqual(createMealLogSchema.parse(anotherPlan), checkIn);
-    assert.equal("planId" in createMealLogSchema.parse(firstSnack), false);
-  });
+  await t.test(
+    "legacy append-only limitation: distinct planned snacks collapse to the same validated request",
+    () => {
+      const firstSnack = { ...checkIn, planId: randomUUID(), dayNumber: 1, mealIndex: 1 };
+      const secondSnack = { ...firstSnack, mealIndex: 3 };
+      const anotherPlan = { ...firstSnack, planId: randomUUID() };
+      assert.deepEqual(createMealLogSchema.parse(firstSnack), checkIn);
+      assert.deepEqual(createMealLogSchema.parse(secondSnack), checkIn);
+      assert.deepEqual(createMealLogSchema.parse(anotherPlan), checkIn);
+      assert.equal("planId" in createMealLogSchema.parse(firstSnack), false);
+    },
+  );
 
   await t.test(
     "real authentication and ownership guards reject unauthorized writes/deletes",
