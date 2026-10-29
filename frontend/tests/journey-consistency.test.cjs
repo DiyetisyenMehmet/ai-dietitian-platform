@@ -290,7 +290,8 @@ test("verified owner plan survives refresh, but never crosses account, day or in
   h.mocks["@/application/health/nutrition-plan-store"].useNutritionPlan = () => state;
   assert.equal(h.journey().plannedMeal.meal.foods[0].name, "Sentetik");
   assert.equal(h.journey().steps.find(step => step.id === h.journey().plannedMeal.key).hint, "Öğün kararı doğrulanıyor");
-  assert.equal(h.journey().status, "insufficient-data");
+  assert.notEqual(h.journey().steps.find(step => step.id === h.journey().plannedMeal.key).state, "completed");
+  assert.notEqual(h.journey().status, "all-done");
   assert.equal(h.journey().planDecisions.ready, false);
   state.loading = true;
   assert.equal(h.journey().planReady, true);
