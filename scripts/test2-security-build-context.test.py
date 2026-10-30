@@ -233,5 +233,92 @@ class BuildInputContracts(unittest.TestCase):
         self.assertIn(r.DEFINITION, paths)
 
 
+
+class JourneyBuildInputContracts(unittest.TestCase):
+    def setUp(self):
+        import hashlib
+        self.temp=tempfile.TemporaryDirectory(prefix='g1-journey-source-')
+        self.addCleanup(self.temp.cleanup)
+        self.root=Path(self.temp.name); self.repo=self.root/'repo'; self.repo.mkdir()
+        def git(*args):
+            return subprocess.check_output(['git','-C',str(self.repo),*args],stderr=subprocess.PIPE).decode().strip()
+        self.git=git
+        git('init','-q'); git('config','user.name','Offline fixture'); git('config','user.email','fixture@example.invalid')
+        (self.repo/'backend').mkdir()
+        (self.repo/'backend/package-lock.json').write_text('{"fixture":true}\n')
+        (self.repo/'backend/app.js').write_text('approved fixture\n')
+        git('add','.'); git('commit','-qm','Approved application')
+        baseline=git('rev-parse','HEAD'); tree=git('rev-parse','HEAD:backend')
+        files={}
+        for item in subprocess.check_output(['git','-C',str(self.repo),'ls-tree','-r','-z','HEAD','backend']).split(b'\0'):
+            if item:
+                metadata,name=item.split(b'\t'); mode,kind,oid=metadata.decode().split()
+                files[name.decode()]={'blob':oid,'mode':mode}
+        lock=hashlib.sha256((self.repo/'backend/package-lock.json').read_bytes()).hexdigest()
+        manifest={'format':4,'applicationCommit':baseline,'backendTree':tree,'lockSha256':lock,'files':files}
+        checksum=hashlib.sha256((json.dumps(manifest,sort_keys=True,indent=2)+'\n').encode()).hexdigest()
+        for name in (r.SELF,r.DEFINITION):
+            target=self.repo/name; target.parent.mkdir(parents=True,exist_ok=True); target.write_bytes((REPO/name).read_bytes())
+        git('add','.'); git('commit','-qm','Release preparation')
+        self.ref=git('rev-parse','HEAD')
+        self.source=self.root/'source'
+        patcher=patch.multiple(r,G1_SOURCE=baseline,G1_BACKEND=tree,G1_LOCK=lock,G1_MANIFEST=checksum)
+        patcher.start(); self.addCleanup(patcher.stop)
+        self.args=dict(build_ref=self.ref,harness_ref=baseline,manifest_sha256=checksum,backend_tree=tree,
+                       lock_sha256=lock,image=r.IMAGE_PREFIX+self.ref)
+
+    def prepare(self,**changes):
+        return r.context('prepare',self.repo,self.source,**{**self.args,**changes})
+
+    def verify(self,**changes):
+        return r.context('verify',self.repo,self.source,**{**self.args,**changes})
+
+    def test_exact_reviewed_tree_is_built_and_verified_without_install_or_cloud(self):
+        result=self.prepare()
+        self.assertEqual(result,self.verify())
+        self.assertEqual(result['backendTree'],r.G1_BACKEND)
+        self.assertEqual(json.loads((self.source/'source-manifest.json').read_text())['format'],4)
+        self.assertEqual((self.source/'backend/app.js').read_text(),'approved fixture\n')
+        r.inputs(self.ref,r.HARNESS,r.MANIFEST,r.BACKEND,r.LOCK,r.IMAGE_PREFIX+self.ref)
+
+    def test_missing_wrong_or_mixed_historical_source_inputs_are_rejected(self):
+        for key,value in [('harness_ref',r.HARNESS),('manifest_sha256','0'*64),('backend_tree','0'*40),('lock_sha256','0'*64),('build_ref','HEAD'),('image','backend:latest')]:
+            with self.subTest(key=key),self.assertRaises(RuntimeError): self.prepare(**{key:value})
+            self.assertFalse(self.source.exists())
+
+    def test_source_dependency_and_manifest_edits_are_rejected(self):
+        self.prepare()
+        for relative in ['backend/app.js','backend/package-lock.json','source-manifest.json']:
+            path=self.source/relative; original=path.read_bytes(); path.write_bytes(original+b'edited')
+            with self.subTest(relative=relative),self.assertRaises(RuntimeError): self.verify()
+            path.write_bytes(original)
+
+    def test_injected_files_executable_modes_and_symlink_are_rejected(self):
+        self.prepare()
+        path=self.source/'backend/extra'; path.write_text('unapproved')
+        with self.assertRaises(RuntimeError): self.verify()
+        path.unlink()
+        path=self.source/'backend/app.js'; path.chmod(0o755)
+        with self.assertRaises(RuntimeError): self.verify()
+        path.unlink(); path.symlink_to(self.repo/'backend/app.js')
+        with self.assertRaises(RuntimeError): self.verify()
+
+    def test_wrong_checkout_dirty_guard_and_backend_tree_are_rejected(self):
+        with self.assertRaises(RuntimeError): self.prepare(build_ref='0'*40,image=r.IMAGE_PREFIX+'0'*40)
+        path=self.repo/r.SELF; original=path.read_bytes(); path.write_bytes(original+b'\n# unreviewed\n')
+        with self.assertRaises(RuntimeError): self.prepare()
+        path.write_bytes(original)
+        (self.repo/'backend/app.js').write_text('foreign app')
+        self.git('add','.'); self.git('commit','-qm','Foreign backend')
+        ref=self.git('rev-parse','HEAD')
+        with self.assertRaises(RuntimeError): self.prepare(build_ref=ref,image=r.IMAGE_PREFIX+ref)
+
+    def test_existing_output_and_nested_destination_cannot_be_overwritten(self):
+        self.prepare()
+        with self.assertRaises(RuntimeError): self.prepare()
+        with self.assertRaises(RuntimeError):
+            r.context('prepare',self.repo,self.repo/'inside',**self.args)
+
+
 if __name__ == '__main__':
     unittest.main()

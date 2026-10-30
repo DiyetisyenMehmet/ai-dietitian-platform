@@ -1,4 +1,4 @@
-name: Auth A2 Split-Aware Frontend-Only Staging Release
+name: G1 Split-Aware Staging Release
 # Ordinary push/PR events are offline-only. Owner marker-only pushes are opt-in.
 on:
   push:
@@ -8,6 +8,10 @@ on:
       - .github/cloudbuild/frontend-staging.yaml
       - scripts/staging-frontend-release.py
       - scripts/staging-frontend-release.test.py
+      - scripts/journey-live-acceptance.cjs
+      - scripts/journey-live-acceptance.test.cjs
+      - scripts/test2-security-build-context.py
+      - scripts/test2-security-build-context.test.py
       - .github/staging-deploy-trigger
   pull_request:
     branches: [feature/staging-preview]
@@ -16,14 +20,23 @@ on:
       - .github/cloudbuild/frontend-staging.yaml
       - scripts/staging-frontend-release.py
       - scripts/staging-frontend-release.test.py
+      - scripts/journey-live-acceptance.cjs
+      - scripts/journey-live-acceptance.test.cjs
+      - scripts/test2-security-build-context.py
+      - scripts/test2-security-build-context.test.py
       - .github/staging-deploy-trigger
   workflow_dispatch:
     inputs:
       mode:
-        description: "#103: inspect reads only; release changes only staging frontend"
+        description: "#103: inspect reads only; Journey release updates Test2 backend and frontend"
         type: choice
         options: [inspect, release]
         default: inspect
+      target:
+        description: "Journey releases both reviewed Test2 backend and frontend; no migrations"
+        type: choice
+        options: [journey]
+        default: journey
       inspect_run_id:
         description: "Release only: successful inspect run for this unchanged source (six-hour limit)"
         type: string
@@ -41,6 +54,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       mode: ${{ steps.activation.outputs.mode }}
+      target: ${{ steps.activation.outputs.target }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -51,6 +65,11 @@ jobs:
         run: python3 -m pip install --disable-pip-version-check PyYAML==6.0.3
       - name: Verify source, build, split and rollback guards without cloud access
         run: python3 scripts/staging-frontend-release.test.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify synthetic Journey acceptance guards without network or database
+        run: node --test scripts/journey-live-acceptance.test.cjs
       - name: Admit only an explicit owner activation without cloud identity
         id: activation
         env:
@@ -69,6 +88,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       RELEASE_MODE: ${{ needs.offline-guards.outputs.mode }}
+      RELEASE_TARGET: ${{ needs.offline-guards.outputs.target }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -119,7 +139,13 @@ jobs:
       - uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: project-a2e260c1-839d-4f1d-b90
-      - name: Fresh read-only preflight or explicitly requested frontend release
+      - name: Prepare Prisma only for an explicitly requested Journey release
+        if: ${{ needs.offline-guards.outputs.mode == 'release' && needs.offline-guards.outputs.target == 'journey' }}
+        working-directory: backend
+        run: npm ci --ignore-scripts --no-audit --no-fund && npx prisma generate
+      - name: Fresh read-only preflight or explicitly requested staging release
+        env:
+          NEON_TEST2_DATABASE_URL: ${{ needs.offline-guards.outputs.mode == 'release' && needs.offline-guards.outputs.target == 'journey' && secrets.NEON_TEST2_DATABASE_URL || '' }}
         run: python3 scripts/staging-frontend-release.py "$RELEASE_MODE"
       - name: Retain sanitized source, runtime, rollback and login evidence
         if: always()
