@@ -1,7 +1,7 @@
-"""Frontend-only Journey release under #103. Never mutate a backend, database, secret or IAM.
+"""Existing #103 split release: explicit Journey backend + frontend, never schema or IAM.
 
-Replaces the historical fixed-revision Auth A2 orchestration. Inspect is read-only;
-release captures the real serving revision and rolls only frontend traffic back.
+Inspect is read-only. Owner admission, exact-source gates and prior inspection
+bind the release. Legacy frontend-only activation cannot publish the new G1.
 """
 import argparse
 import copy
@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -21,12 +22,13 @@ import zipfile
 PROJECT = 'project-a2e260c1-839d-4f1d-b90'
 REGION = 'europe-west1'
 REPO = 'DiyetisyenMehmet/ai-dietitian-platform'
-MERGED = 'c73b27147a950e48e58f04df276807cc83b3fd6d'
+MERGED = '51ba9fcef7cff7627792303584448c91b05d70dd'
 OWNER = 'DiyetisyenMehmet'
 OWNER_ID = 301813832
 WORKFLOW = '.github/workflows/staging-auth-a2-frontend-only.yml'
 MARKER = '.github/staging-deploy-trigger'
 INTENTS = {'inspect': 'G1 frontend inspect', 'release': 'G1 frontend release'}
+JOURNEY_INTENTS = {'inspect': 'G1 Journey inspect', 'release': 'G1 Journey release'}
 SNAPSHOT_FIELDS = ['old_frontend', 'backendTraffic', 'backendSpecFingerprint', 'admin', 'test2', 'beforeHealth']
 # Deny the historic security-only image even if a build reports a new source.
 RETIRED_DIGEST = 'sha256:b2de3f9d240cc1adf41e211f974c0b636c7a0bd52fae545e821ebc5b232692d7'
@@ -51,7 +53,9 @@ ROUTER = {'DIEWISH_STAGING_HOST_ROUTING_ENABLED': 'true',
 PREP_FILES = {'.github/workflows/staging-auth-a2-frontend-only.yml',
               '.github/cloudbuild/frontend-staging.yaml',
               'scripts/staging-frontend-release.py',
-              'scripts/staging-frontend-release.test.py', MARKER}
+              'scripts/staging-frontend-release.test.py',
+              'scripts/journey-live-acceptance.cjs', 'scripts/journey-live-acceptance.test.cjs',
+              'scripts/test2-security-build-context.py', 'scripts/test2-security-build-context.test.py', MARKER}
 ASSETS = ['brands/diewish-id-transparent-approved.png',
           'brands/diewish-wordmark-approved.png',
           'brands/diewish-wordmark-dark-approved.png',
@@ -104,12 +108,19 @@ def failure_details(args, result):
 def cloud(*args, optional=False):
     # Only the explicit FRONT service may be mutated. No arbitrary shell command.
     if args[:2] == ('run', 'deploy'):
-        require(args[2] == FRONT and '--no-traffic' in args, 'unsafe deploy target')
+        if args[2] == BACK:
+            require(journey_requested() and '--no-traffic' in args and '--command=npm' in args
+                    and '--args=start' in args and '--tag' in args
+                    and args[args.index('--tag') + 1] == backend_candidate_tag(), 'unsafe backend deploy')
+        else:
+            require(args[2] == FRONT and '--no-traffic' in args, 'unsafe deploy target')
     elif args[:3] == ('run', 'services', 'update-traffic'):
-        require(args[3] == FRONT, 'unsafe traffic target')
+        require(args[3] == FRONT or (args[3] == BACK and journey_requested()
+                and len(args) == 8 and args[4:7] == ('--region', REGION, '--update-tags')
+                and re.fullmatch('diewish-test2=' + BACK + '-[a-z0-9-]+', args[7])), 'unsafe traffic target')
     else:
         require(args[:3] in [('run', 'services', 'describe'), ('run', 'revisions', 'describe'),
-                            ('run', 'revisions', 'list'), ('scheduler', 'jobs', 'describe'), ('builds', 'submit', '--no-source')]
+                            ('run', 'revisions', 'list'), ('scheduler', 'jobs', 'describe'), ('scheduler', 'jobs', 'list'), ('builds', 'submit', '--no-source')]
                 or args[:2] in [('builds', 'describe'), ('logging', 'read')], 'unapproved cloud operation')
     p = subprocess.run(['gcloud', *args, '--project', PROJECT, '--format=json', '--quiet'],
                        capture_output=True, text=True, timeout=600, check=False)
@@ -173,7 +184,7 @@ def activation():
     event_path = os.environ.get('GITHUB_EVENT_PATH')
     require(event_path and Path(event_path).is_file(), 'release requires explicit workflow_dispatch or verified marker event')
     event = json.loads(Path(event_path).read_text())
-    if event_name == 'push' and event.get('head_commit', {}).get('message') not in INTENTS.values():
+    if event_name == 'push' and event.get('head_commit', {}).get('message') not in [*INTENTS.values(), *JOURNEY_INTENTS.values()]:
         return None
     identity()
     require(event.get('repository', {}).get('full_name') == REPO and
@@ -182,6 +193,7 @@ def activation():
     if event_name == 'workflow_dispatch':
         inputs = event.get('inputs', {})
         mode = inputs.get('mode')
+        target = inputs.get('target', 'frontend')
         require(mode in INTENTS, 'invalid explicit dispatch mode')
         run_id = inputs.get('inspect_run_id', '')
         base = os.environ['GITHUB_SHA']
@@ -205,17 +217,22 @@ def activation():
         require(api('/commits/' + sha + '/pulls') == [], 'PR-associated marker commit rejected')
         data = json.loads(Path(MARKER).read_text(), object_pairs_hook=unique_object)
         mode = data.get('mode')
-        require(mode in INTENTS and event['head_commit']['message'] == INTENTS[mode], 'marker intent mismatch')
-        keys = {'version', 'mode', 'source_sha'} | ({'inspect_run_id'} if mode == 'release' else set())
+        target = data.get('target', 'frontend')
+        intents = JOURNEY_INTENTS if target == 'journey' else INTENTS
+        require(mode in intents and event['head_commit']['message'] == intents[mode], 'marker intent mismatch')
+        keys = {'version', 'mode', 'source_sha'} | ({'target'} if 'target' in data else set()) | ({'inspect_run_id'} if mode == 'release' else set())
         require(set(data) == keys and type(data['version']) is int and data['version'] == 1 and
                 data['source_sha'] == base, 'invalid marker schema/source')
         run_id = str(data.get('inspect_run_id', ''))
         require(mode != 'release' or type(data['inspect_run_id']) is int, 'invalid inspect run id')
     require(mode != 'release' or re.fullmatch('[1-9][0-9]{0,19}', run_id) is not None,
             'release requires an explicit prior inspect run id')
+    require(target in ['frontend', 'journey'], 'invalid release target')
+    require(mode != 'release' or target == 'journey', 'G1 requires paired backend/frontend release')
+    require(not os.environ.get('RELEASE_TARGET') or os.environ['RELEASE_TARGET'] == target, 'target mismatch')
     expected = os.environ.get('RELEASE_MODE')
     require(not expected or expected == mode, 'requested mode differs from verified activation')
-    return {'mode': mode, 'inspect_run_id': run_id, 'inspected_source': base}
+    return {'mode': mode, 'inspect_run_id': run_id, 'inspected_source': base, 'target': target}
 
 
 def inspection(request):
@@ -224,7 +241,7 @@ def inspection(request):
     require(request['mode'] == 'release' and re.fullmatch('[1-9][0-9]{0,19}', run_id) is not None,
             'missing inspect evidence')
     run = api('/actions/runs/' + run_id)
-    require(run.get('name') == 'Auth A2 Split-Aware Frontend-Only Staging Release' and
+    require(run.get('name') == 'G1 Split-Aware Staging Release' and
             run.get('path') == WORKFLOW and run.get('head_branch') == 'feature/staging-preview' and
             run.get('head_sha') == request['inspected_source'] and
             run.get('repository', {}).get('full_name') == REPO and
@@ -252,7 +269,8 @@ def inspection(request):
         saved = json.loads(package.read('release.json'))
     require(saved.get('mode') == 'inspect' and saved.get('decision') == 'PREFLIGHT_PASS' and
             saved.get('source') == request['inspected_source'] and
-            saved.get('applicationBaseline') == MERGED and all(k in saved for k in SNAPSHOT_FIELDS),
+            saved.get('applicationBaseline') == MERGED and
+            saved.get('target', 'frontend') == request.get('target', 'frontend') and all(k in saved for k in SNAPSHOT_FIELDS),
             'artifact is not a successful source-bound inspect')
     return saved
 
@@ -331,7 +349,8 @@ def check_backend(back, admin, user):
     require(serving(back) == ADMIN_REV, 'default backend revision drift')
     a, u = tag(back, 'admin-legacy'), tag(back, 'diewish-test2')
     require((a['revisionName'], a['url']) == (ADMIN_REV, ADMIN), 'Admin tag drift')
-    require((u['revisionName'], u['url'], u.get('percent', 0)) == (USER_REV, USER, 0), 'Test2 tag drift')
+    require((u['url'], u.get('percent', 0)) == (USER, 0) and
+            u['revisionName'] == user['metadata']['name'], 'Test2 tag drift')
     ae, ue = env(admin), env(user)
     def secret(e, key):
         return e.get(key, {}).get('valueFrom', {}).get('secretKeyRef', {})
@@ -342,10 +361,17 @@ def check_backend(back, admin, user):
     for key in ['COACH_SYNC_ENABLED', 'STAGING_AUTOMATION_ENABLED', 'SCHEDULER_TRIGGER_ENABLED', 'NUTRITION_JOBS_ENABLED']:
         require(ue.get(key, {}).get('value') == 'false', 'Test2 background flag ' + key)
 
+    for key in ['ACCOUNT_SAFE_LINKING_ENABLED', 'PHONE_PASSWORD_AUTH_ENABLED', 'PHONE_SMS_RECOVERY_ENABLED']:
+        require(ue.get(key, {}).get('value', 'false') == 'false', 'account feature must remain disabled')
+
 
 def scheduler():
     j = cloud('scheduler', 'jobs', 'describe', 'diewish-notification-dispatch-staging', '--location', REGION)
     require(j.get('state') == 'PAUSED', 'notification scheduler not paused')
+    if os.environ.get('RELEASE_TARGET') == 'journey':
+        jobs = cloud('scheduler', 'jobs', 'list', '--location', REGION)
+        selected = [item for item in jobs if item.get('name', '').rsplit('/', 1)[-1].startswith('diewish')]
+        require(selected and all(item.get('state') == 'PAUSED' for item in selected), 'staging scheduler not paused')
 
 
 def get(url):
@@ -394,7 +420,7 @@ def info(obj):
 def snapshot():
     source()
     b, f = service(BACK), service(FRONT)
-    a, u = revision(ADMIN_REV), revision(USER_REV)
+    a, u = revision(ADMIN_REV), revision(tag(b, 'diewish-test2')['revisionName'])
     check_backend(b, a, u)
     old = revision(serving(f))
     check_router(old)
@@ -406,7 +432,13 @@ def snapshot():
 def unchanged(saved, expected_front=None):
     source()
     b, f = service(BACK), service(FRONT)
-    require(rows(b) == saved['backendTraffic'] and fingerprint(b) == saved['backendSpecFingerprint'], 'concurrent backend change')
+    expected_rows = saved.get('candidateBackendTraffic', saved['backendTraffic'])
+    if saved.get('backendActivated'):
+        expected_rows = [{**row, 'revisionName': saved['new_backend']['revision']}
+                         if row.get('tag') == 'diewish-test2' else row for row in expected_rows]
+    require(rows(b) == sorted(expected_rows, key=lambda row: (row.get('tag', ''), row['revisionName'])) and
+            fingerprint(b) == saved.get('candidateBackendSpecFingerprint', saved['backendSpecFingerprint']),
+            'concurrent backend change')
     require(serving(f) == (expected_front or saved['old_frontend']['revision']), 'concurrent frontend traffic change')
     scheduler()
     return f
@@ -488,7 +520,7 @@ def image_version(saved):
     js = r'''const fs=require('fs'), crypto=require('crypto');
     const assets=JSON.parse(process.argv[1]);
     const hashes=Object.fromEntries(assets.map(p=>[p,crypto.createHash('sha256').update(fs.readFileSync('public/'+p)).digest('hex')]));
-    const markers=['data-journey-plan-meal','data-journey-next','data-journey-progress-area'];
+    const markers=['data-journey-plan-meal','data-journey-next','data-journey-progress-area','/tracking/meal-check-ins'];
     const found=new Set();
     function scan(dir){for(const e of fs.readdirSync(dir,{withFileTypes:true})){
       const p=dir+'/'+e.name;
@@ -556,6 +588,8 @@ def release(saved):
     require(saved['source'] == source(), 'snapshot/release source mismatch')
     gates()
     unchanged(saved)
+    if request.get('target') == 'journey':
+        prepare_backend(saved)
     build(saved)
     image_version(saved)
     gates()
@@ -589,6 +623,12 @@ def release(saved):
     saved['decision'] = 'CUTOVER_STARTED'
     save(saved)
     try:
+        if request.get('target') == 'journey':
+            saved['backendActivated'] = True  # Uncertain API responses must also restore the tag.
+            save(saved)
+            backend_tag(saved['new_backend']['revision'])
+            unchanged(saved)
+            require(live() == saved['beforeHealth'], 'backend cutover health drift')
         cloud('run', 'services', 'update-traffic', FRONT, '--region', REGION, '--to-revisions', candidate['revisionName'] + '=100')
         for attempt in range(12):
             try:
@@ -600,25 +640,217 @@ def release(saved):
                     raise
                 time.sleep(4)
         browser_smoke()
+        if request.get('target') == 'journey':
+            journey_acceptance(APP)
         unchanged(saved, candidate['revisionName'])
         saved['decision'] = 'GO'
-        saved['rollback'] = 'NOT_NEEDED; restore only frontend to ' + saved['old_frontend']['revision']
+        saved['rollback'] = 'NOT_NEEDED; restore frontend and, for Journey, previous Test2 tag; retain DB'
         save(saved)
-        print('GO: frontend-only release verified; backend traffic/spec unchanged')
+        print('GO: verified staging release; Admin unchanged, DB retained')
     except BaseException:
         saved['decision'] = 'NO_GO'
         # Covers an uncertain response from the first traffic mutation as well.
         save(saved)
-        active = [row for row in rows(service(FRONT)) if row.get('percent', 0) > 0]
-        require(active and all(row['revisionName'] in [candidate['revisionName'], saved['old_frontend']['revision']] for row in active),
-                'foreign concurrent frontend release; refusing to overwrite it')
-        cloud('run', 'services', 'update-traffic', FRONT, '--region', REGION,
-              '--to-revisions', saved['old_frontend']['revision'] + '=100')
-        require(serving(service(FRONT)) == saved['old_frontend']['revision'], 'rollback traffic not restored')
-        saved['rollbackHealth'] = live()
-        saved['rollback'] = 'RESTORED_AND_HEALTH_VERIFIED'
-        save(saved)
+        try:
+            active = [row for row in rows(service(FRONT)) if row.get('percent', 0) > 0]
+            require(active and all(row['revisionName'] in [candidate['revisionName'], saved['old_frontend']['revision']] for row in active),
+                    'foreign concurrent frontend release; refusing to overwrite it')
+            cloud('run', 'services', 'update-traffic', FRONT, '--region', REGION,
+                  '--to-revisions', saved['old_frontend']['revision'] + '=100')
+            require(serving(service(FRONT)) == saved['old_frontend']['revision'], 'rollback traffic not restored')
+            saved['rollbackHealth'] = live()
+            saved['rollback'] = 'RESTORED_AND_HEALTH_VERIFIED'
+            save(saved)
+        finally:
+            if saved.get('backendActivated'):
+                rollback_backend(saved)
         raise
+
+
+def journey_requested():
+    request = activation()
+    return bool(request and request.get('target') == 'journey' and
+                request['mode'] == 'release' and os.environ.get('RELEASE_MODE') == 'release')
+
+
+def backend_candidate_tag():
+    sha = os.environ.get('GITHUB_SHA', '')
+    require(re.fullmatch('[a-f0-9]{40}', sha) is not None, 'invalid candidate source')
+    return 'g1-' + sha[:12]
+
+
+def backend_tag(name):
+    cloud('run', 'services', 'update-traffic', BACK, '--region', REGION,
+          '--update-tags', 'diewish-test2=' + name)
+
+
+def backend_contract():
+    # Reuse the existing build-only guard, including all six required substitutions.
+    import importlib.util
+    spec = importlib.util.spec_from_file_location('g1_build_inputs', 'scripts/test2-security-build-context.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    require(module.G1_SOURCE == MERGED, 'release/build application baseline mismatch')
+    return module
+
+
+def build_backend(saved):
+    sha, contract = source(), backend_contract()
+    require(saved['source'] == sha, 'backend snapshot/source mismatch')
+    image = contract.IMAGE_PREFIX + sha
+    substitutions = {'_IMAGE': image, '_GIT_SHA': sha, '_SOURCE_HARNESS_SHA': contract.G1_SOURCE,
+                     '_SOURCE_MANIFEST_SHA256': contract.G1_MANIFEST,
+                     '_BACKEND_TREE': contract.G1_BACKEND, '_LOCK_SHA256': contract.G1_LOCK}
+    contract.inputs(sha, contract.G1_SOURCE, contract.G1_MANIFEST, contract.G1_BACKEND, contract.G1_LOCK, image)
+    built = cloud('builds', 'submit', '--no-source', '--config', contract.DEFINITION,
+                  '--substitutions', ','.join(k + '=' + v for k, v in substitutions.items()), '--async')
+    identifier = built.get('id', '')
+    require(re.fullmatch('[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}', identifier), 'invalid backend build id')
+    saved['backendBuildId'] = identifier
+    save(saved)
+    for _ in range(180):
+        result = cloud('builds', 'describe', identifier)
+        require(result.get('id') == identifier and result.get('projectId') == PROJECT
+                and all(result.get('substitutions', {}).get(k) == v for k, v in substitutions.items()),
+                'backend build identity/source inputs mismatch')
+        if result['status'] == 'SUCCESS':
+            images = result.get('results', {}).get('images', [])
+            require(len(images) == 1 and images[0].get('name') == image and
+                    re.fullmatch('sha256:[a-f0-9]{64}', images[0].get('digest', '')), 'backend build digest mismatch')
+            source()
+            saved['newBackendImage'] = image.rsplit(':', 1)[0] + '@' + images[0]['digest']
+            require(saved['newBackendImage'] != saved['test2']['imageDigest'], 'old backend image reused')
+            save(saved)
+            return
+        require(result['status'] in ['PENDING', 'QUEUED', 'WORKING'], 'backend build failed')
+        time.sleep(5)
+    raise RuntimeError('NO_GO: backend build timed out')
+
+
+def backend_image_version(saved):
+    contract = backend_contract()
+    image = saved['newBackendImage']
+    # image_version already authenticates Docker without printing its token.
+    token = subprocess.check_output(['gcloud', 'auth', 'print-access-token'], text=True).strip()
+    subprocess.run(['docker', 'login', '-u', 'oauth2accesstoken', '--password-stdin', REGION + '-docker.pkg.dev'],
+                   input=token, text=True, capture_output=True, check=True)
+    subprocess.run(['docker', 'pull', image], capture_output=True, text=True, check=True)
+    labels = json.loads(subprocess.check_output(['docker', 'image', 'inspect', image,
+                                                '--format', '{{json .Config.Labels}}'], text=True))
+    expected = {'io.diewish.source-kind': 'composed', 'io.diewish.build-definition-sha': saved['source'],
+                'io.diewish.source-harness-sha': MERGED, 'io.diewish.source-manifest-sha256': contract.G1_MANIFEST,
+                'io.diewish.backend-tree': contract.G1_BACKEND, 'io.diewish.lock-sha256': contract.G1_LOCK}
+    require(all((labels or {}).get(k) == v for k, v in expected.items()), 'backend image provenance mismatch')
+    js = """const fs=require('fs'),c=require('crypto');
+    console.log(JSON.stringify({qs:require('qs/package.json').version,
+    states:Object.keys(require('@prisma/client').MealCheckInState).sort(),
+    checkIn:fs.readFileSync('dist/modules/tracking/meal-check-in.controller.js','utf8').includes('MEAL_CHECK_IN_NOT_READY')}));"""
+    report = json.loads(subprocess.check_output(['docker', 'run', '--rm', '--network=none', '--entrypoint', 'node',
+                                                 image, '-e', js], text=True))
+    require(report == {'qs': '6.16.1', 'states': ['EATEN', 'PENDING', 'SKIPPED'], 'checkIn': True},
+            'backend compiled content/Prisma mismatch')
+    saved['backendImageVerified'] = True
+    save(saved)
+
+
+def same_runtime(old, new, image, sha):
+    expected = copy.deepcopy(old['spec'])
+    expected['containers'][0]['image'] = new['spec']['containers'][0]['image']
+    e = env(old)
+    e['DIEWISH_APPLICATION_SHA'] = {'name': 'DIEWISH_APPLICATION_SHA', 'value': sha}
+    actual = copy.deepcopy(new['spec'])
+    expected['containers'][0]['env'] = sorted(e.values(), key=lambda x: x['name'])
+    actual['containers'][0]['env'] = sorted(env(new).values(), key=lambda x: x['name'])
+    require(expected == actual and new['status']['imageDigest'] == image, 'backend candidate runtime drift')
+    for key in ['run.googleapis.com/vpc-access-connector', 'run.googleapis.com/vpc-access-egress',
+                'run.googleapis.com/cloudsql-instances', 'run.googleapis.com/execution-environment']:
+        require(old.get('metadata', {}).get('annotations', {}).get(key) ==
+                new.get('metadata', {}).get('annotations', {}).get(key), 'backend network/runtime annotation drift')
+
+
+def journey_acceptance(base):
+    # The child has a dedicated Test2 URL only; it cannot use a fallback DATABASE_URL.
+    result = subprocess.run(['node', 'scripts/journey-live-acceptance.cjs', base],
+                            capture_output=True, text=True, timeout=180, check=False)
+    require(result.returncode == 0 and result.stdout.strip() == 'PASS: G1 synthetic API persistence',
+            'G1 live acceptance failed; credentials/response bodies withheld')
+
+
+def prepare_backend(saved):
+    require(journey_requested(), 'explicit Journey release required')
+    require(all(row.get('tag') != backend_candidate_tag() for row in rows(service(BACK))),
+            'candidate tag already exists; do not repeat the build')
+    build_backend(saved)
+    backend_image_version(saved)
+    gates()
+    unchanged(saved)
+    before = service(BACK)
+    tag_name = backend_candidate_tag()
+    require(all(row.get('tag') != tag_name for row in rows(before)), 'candidate tag already exists; do not retry')
+    old = revision(saved['test2']['revision'])
+    check_backend(before, revision(ADMIN_REV), old)
+    require(old['spec']['containers'][0].get('command') == ['npm'] and
+            old['spec']['containers'][0].get('args') == ['start'], 'backend startup must be migration-free')
+    values, secrets = {}, []
+    for name, value in env(old).items():
+        if 'value' in value:
+            values[name] = value['value']
+        else:
+            ref = value.get('valueFrom', {}).get('secretKeyRef', {})
+            require(set(ref) == {'name', 'key'}, 'unsupported secret reference')
+            secrets.append(name + '=' + ref['name'] + ':' + ref['key'])
+    values['DIEWISH_APPLICATION_SHA'] = saved['source']
+    require(old['spec'].get('serviceAccountName') == 'diewish-staging-runtime@' + PROJECT + '.iam.gserviceaccount.com',
+            'unexpected backend runtime identity')
+    with tempfile.TemporaryDirectory() as directory:
+        config = Path(directory) / 'env.json'
+        config.write_text(json.dumps(values))
+        config.chmod(0o600)
+        args = ['run', 'deploy', BACK, '--region', REGION, '--image', saved['newBackendImage'],
+                '--no-traffic', '--tag', tag_name, '--command=npm', '--args=start',
+                '--env-vars-file', str(config), '--set-secrets', ','.join(sorted(secrets)),
+                '--service-account', old['spec']['serviceAccountName']]
+        for field, flag in [('containerConcurrency', '--concurrency'), ('timeoutSeconds', '--timeout')]:
+            if field in old['spec']:
+                args += [flag, str(old['spec'][field])]
+        for field in ['cpu', 'memory']:
+            value = old['spec']['containers'][0].get('resources', {}).get('limits', {}).get(field)
+            if value:
+                args += ['--' + field, str(value)]
+        cloud(*args)
+    after = service(BACK)
+    candidate = tag(after, tag_name)
+    expected_rows = sorted(saved['backendTraffic'] + [candidate], key=lambda row: (row.get('tag', ''), row['revisionName']))
+    require(rows(after) == expected_rows and candidate.get('percent', 0) == 0,
+            'backend candidate changed existing routing')
+    new = revision(candidate['revisionName'])
+    same_runtime(old, new, saved['newBackendImage'], saved['source'])
+    require(candidate['url'] == 'https://' + tag_name + '---diewish-backend-staging-2qqqfr7wzq-ew.a.run.app',
+            'wrong backend candidate host')
+    saved.update(candidateBackendTraffic=rows(after), candidateBackendSpecFingerprint=fingerprint(after),
+                 new_backend=info(new), backendCandidateUrl=candidate['url'])
+    save(saved)
+    unchanged(saved)
+    journey_acceptance(candidate['url'])
+    saved['backendAcceptanceVerified'] = True
+    save(saved)
+
+
+def rollback_backend(saved):
+    back = service(BACK)
+    # Refuse foreign Admin/other tag/default changes, even during rollback.
+    check_backend(back, revision(ADMIN_REV), revision(tag(back, 'diewish-test2')['revisionName']))
+    allowed = {saved['test2']['revision'], saved['new_backend']['revision']}
+    require(tag(back, 'diewish-test2')['revisionName'] in allowed, 'foreign backend release; do not overwrite')
+    other = lambda rows_: [x for x in rows_ if x.get('tag') != 'diewish-test2']
+    require(other(rows(back)) == other(saved['candidateBackendTraffic']) and
+            fingerprint(back) == saved['candidateBackendSpecFingerprint'], 'foreign backend drift during rollback')
+    backend_tag(saved['test2']['revision'])
+    saved['backendActivated'] = False
+    unchanged(saved)
+    saved['rollbackHealth'] = live()
+    saved['rollback'] = 'FRONTEND_AND_TEST2_RESTORED_DB_RETAINED'
+    save(saved)
 
 
 def main(mode):
@@ -635,12 +867,14 @@ def main(mode):
             inspection(request)  # Refuse missing/forged evidence before obtaining cloud identity.
         with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
             output.write('mode=' + request['mode'] + '\n')
+            output.write('target=' + request.get('target', 'frontend') + '\n')
         return
     if mode == 'release':
         inspection(request)  # Prior inspect is mandatory even before a fresh cloud snapshot.
     snapshot_data = snapshot()
     snapshot_data['decision'] = 'PREFLIGHT_PASS'
     snapshot_data['mode'] = mode
+    snapshot_data['target'] = request.get('target', 'frontend')
     snapshot_data['applicationBaseline'] = MERGED
     save(snapshot_data)
     print('PASS: fresh read-only split preflight; actual serving frontend', snapshot_data['old_frontend']['revision'])

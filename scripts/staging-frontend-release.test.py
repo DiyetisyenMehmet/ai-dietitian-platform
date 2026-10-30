@@ -287,9 +287,9 @@ class SourceGuards(unittest.TestCase):
             return r.source()
 
     def test_reviewed_baseline_and_release_only_whitelist(self):
-        self.assertEqual(r.MERGED,'c73b27147a950e48e58f04df276807cc83b3fd6d')
+        self.assertEqual(r.MERGED,'51ba9fcef7cff7627792303584448c91b05d70dd')
         self.assertEqual(self.check(changed='\n'.join(sorted(r.PREP_FILES))), 'a'*40)
-        self.assertEqual(r.PREP_FILES, {r.WORKFLOW, '.github/cloudbuild/frontend-staging.yaml', 'scripts/staging-frontend-release.py', 'scripts/staging-frontend-release.test.py', r.MARKER})
+        self.assertEqual(r.PREP_FILES, {r.WORKFLOW, '.github/cloudbuild/frontend-staging.yaml', 'scripts/staging-frontend-release.py', 'scripts/staging-frontend-release.test.py', 'scripts/journey-live-acceptance.cjs', 'scripts/journey-live-acceptance.test.cjs', 'scripts/test2-security-build-context.py', 'scripts/test2-security-build-context.test.py', r.MARKER})
 
     def test_app_auth_dependency_or_non_release_drift_rejected(self):
         for path in ['frontend/src/app/dashboard/page.tsx','frontend/package-lock.json',
@@ -426,7 +426,7 @@ class BuildGuards(unittest.TestCase):
             (root/'node_modules/next/package.json').write_text('{"version":"15.5.28"}')
             (root/'public/approved.png').write_bytes(b'approved-image-bytes')
             bundle=root/'.next/static/dashboard.js'
-            bundle.write_text('"data-journey-plan-meal data-journey-next data-journey-progress-area"')
+            bundle.write_text('"data-journey-plan-meal data-journey-next data-journey-progress-area /tracking/meal-check-ins"')
             def inspect():
                 return json.loads(subprocess.check_output(['node','-e',js,'["approved.png"]'],cwd=root,text=True))
             report=inspect()
@@ -483,12 +483,14 @@ def marker_checkout(mode='inspect', message=None, payload=None, extra=False, mer
         git('commit', '-qm', 'Reviewed preparation')
         before = git('rev-parse', 'HEAD')
         data = {'version':1, 'mode':mode, 'source_sha':before}
-        if mode == 'release': data['inspect_run_id'] = 123
+        if mode == 'release':
+            data['inspect_run_id'] = 123
+            data['target'] = 'journey'
         if payload is not None: data = payload(data)
         marker.write_text(data if isinstance(data,str) else json.dumps(data))
         if extra: (checkout/'foreign.txt').write_text('unexpected')
         git('add', '.')
-        intent = message if message is not None else r.INTENTS[mode]
+        intent = message if message is not None else (r.JOURNEY_INTENTS if mode == 'release' else r.INTENTS)[mode]
         git('commit', '-qm', intent)
         sha = git('rev-parse', 'HEAD')
         if merge:
@@ -548,15 +550,15 @@ class Entrypoint(unittest.TestCase):
         with marker_checkout() as f:
             inspected = f['sha']
             self.assertEqual(r.activation()['mode'],'inspect')
-            f['marker'].write_text(json.dumps({'version':1,'mode':'release','source_sha':inspected,'inspect_run_id':123}))
-            f['git']('add',r.MARKER); f['git']('commit','-qm',r.INTENTS['release'])
+            f['marker'].write_text(json.dumps({'version':1,'mode':'release','source_sha':inspected,'inspect_run_id':123,'target':'journey'}))
+            f['git']('add',r.MARKER); f['git']('commit','-qm',r.JOURNEY_INTENTS['release'])
             released=f['git']('rev-parse','HEAD')
             f['event'].update(before=inspected,after=released,commits=[{'id':released}],
-                              head_commit={'id':released,'message':r.INTENTS['release']})
+                              head_commit={'id':released,'message':r.JOURNEY_INTENTS['release']})
             f['write_event']()
             with patch.dict(os.environ,{'GITHUB_SHA':released,'RELEASE_MODE':'release'}):
                 request=r.activation()
-                self.assertEqual(request,{'mode':'release','inspect_run_id':'123','inspected_source':inspected})
+                self.assertEqual(request,{'mode':'release','inspect_run_id':'123','inspected_source':inspected,'target':'journey'})
             self.assertNotEqual(inspected,released)
 
     def test_ordinary_push_pr_merge_and_multiple_commits_never_admit(self):
@@ -614,7 +616,7 @@ class Entrypoint(unittest.TestCase):
             cloud.assert_not_called()
         with marker_checkout() as f, patch.object(r,'source',return_value=f['sha']), patch.object(r,'cloud') as cloud:
             r.main('authorize')
-            self.assertEqual(f['output'].read_text(), 'mode=inspect\n')
+            self.assertEqual(f['output'].read_text(), 'mode=inspect\ntarget=frontend\n')
             cloud.assert_not_called()
 
     def test_inspect_is_only_snapshot_and_release_requires_proof_before_any_cloud(self):
@@ -634,7 +636,7 @@ class Entrypoint(unittest.TestCase):
     def test_dispatch_retained_with_owner_ref_explicit_mode_and_prior_inspect(self):
         for mode in ['inspect','release']:
             with marker_checkout() as f, patch.dict(os.environ,{'GITHUB_EVENT_NAME':'workflow_dispatch'}):
-                f['event']['inputs']={'mode':mode,'inspect_run_id':'123' if mode=='release' else ''}
+                f['event']['inputs']={'mode':mode,'inspect_run_id':'123' if mode=='release' else '', 'target':'journey'}
                 f['write_event']()
                 self.assertEqual(r.activation()['mode'],mode)
                 if mode=='release':
@@ -652,7 +654,7 @@ class Entrypoint(unittest.TestCase):
 class InspectEvidence(unittest.TestCase):
     def evidence(self, change=None):
         request={'mode':'release','inspect_run_id':'123','inspected_source':'b'*40}
-        run={'name':'Auth A2 Split-Aware Frontend-Only Staging Release','path':r.WORKFLOW,
+        run={'name':'G1 Split-Aware Staging Release','path':r.WORKFLOW,
              'head_branch':'feature/staging-preview','head_sha':'b'*40,'repository':{'full_name':r.REPO},
              'event':'push','status':'completed','conclusion':'success','actor':{'id':r.OWNER_ID},
              'triggering_actor':{'id':r.OWNER_ID},'updated_at':r.datetime.now(r.timezone.utc).isoformat(), 'run_number':50}
@@ -724,6 +726,193 @@ class TriggerIsolation(unittest.TestCase):
             # This pre-existing read-only job runs on EVERY staging push, under
             # its own group; changing marker path cannot eliminate it.
             self.assertEqual(active,[('staging-automation-pause.yml','inspect')])
+
+
+
+class JourneyReleaseGuards(unittest.TestCase):
+    def test_journey_target_is_explicit_and_bound_to_inspection(self):
+        with marker_checkout(payload=lambda data: {**data, 'target': 'journey'},
+                             message=r.JOURNEY_INTENTS['inspect']) as f:
+            self.assertEqual(r.activation()['target'], 'journey')
+        with marker_checkout(payload=lambda data: {**data, 'target': 'journey'}) as f:
+            with self.assertRaisesRegex(RuntimeError, 'intent mismatch'):
+                r.activation()
+
+    def test_backend_cloud_scope_cannot_change_admin_or_default_traffic(self):
+        request = {'mode': 'release', 'target': 'journey'}
+        with patch.object(r, 'activation', return_value=request), patch.dict(os.environ, {'RELEASE_MODE':'release', 'GITHUB_SHA':'a'*40}), patch.object(r.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, '{}', '')) as run:
+            r.cloud('run','services','update-traffic',r.BACK,'--region',r.REGION,'--update-tags', 'diewish-test2='+r.USER_REV)
+            run.reset_mock()
+            for tail in [('--to-latest',), ('--to-revisions', r.ADMIN_REV+'=100'),
+                         ('--update-tags', 'admin-legacy='+r.USER_REV), ('--remove-tags','admin-legacy')]:
+                with self.assertRaises(RuntimeError):
+                    r.cloud('run','services','update-traffic',r.BACK,'--region',r.REGION,*tail)
+            run.assert_not_called()
+        with patch.object(r,'activation',return_value={'mode':'inspect','target':'journey'}), patch.dict(os.environ,{'RELEASE_MODE':'inspect'}), patch.object(r.subprocess,'run') as run:
+            with self.assertRaises(RuntimeError):
+                r.backend_tag(r.USER_REV)
+            run.assert_not_called()
+
+    def test_candidate_runtime_cannot_change_db_flags_identity_or_startup(self):
+        old=revision('old', {'STAGING_AUTOMATION_ENABLED':'false'}, {'DATABASE_URL':{'name':'test2','key':'1'}})
+        old['spec']['containers'][0].update(command=['npm'], args=['start'])
+        old['spec']['serviceAccountName']='existing-runtime'
+        new=copy.deepcopy(old)
+        new['spec']['containers'][0]['image']='new@sha256:digest'
+        new['status']['imageDigest']='new@sha256:digest'
+        new['spec']['containers'][0]['env'].append({'name':'DIEWISH_APPLICATION_SHA','value':'a'*40})
+        r.same_runtime(old,new,'new@sha256:digest','a'*40)
+        for mutate in [lambda obj:obj['spec'].update(serviceAccountName='foreign'),
+                       lambda obj:obj['spec']['containers'][0].update(args=['run','start:migrate']),
+                       lambda obj:obj['spec']['containers'][0]['env'][0].update(value='true'),
+                       lambda obj:obj['spec']['containers'][0]['env'][1]['valueFrom']['secretKeyRef'].update(name='legacy')]:
+            bad=copy.deepcopy(new); mutate(bad)
+            with self.assertRaises(RuntimeError): r.same_runtime(old,bad,'new@sha256:digest','a'*40)
+
+    def test_backend_build_passes_every_mandatory_source_evidence_input(self):
+        contract=r.backend_contract(); sha='a'*40
+        image=contract.IMAGE_PREFIX+sha
+        subs={'_IMAGE':image,'_GIT_SHA':sha,'_SOURCE_HARNESS_SHA':r.MERGED,
+              '_SOURCE_MANIFEST_SHA256':contract.G1_MANIFEST,'_BACKEND_TREE':contract.G1_BACKEND,'_LOCK_SHA256':contract.G1_LOCK}
+        result={'id':BuildGuards.build_id,'projectId':r.PROJECT,'status':'SUCCESS','substitutions':subs,
+                'results':{'images':[{'name':image,'digest':'sha256:'+'b'*64}]}}
+        saved={'source':sha,'test2':{'imageDigest':'old@sha256:x'}}
+        with patch.object(r,'source',return_value=sha), patch.object(r,'save'), patch.object(r,'cloud',side_effect=[{'id':BuildGuards.build_id},result]) as cloud:
+            r.build_backend(saved)
+            self.assertEqual(cloud.call_args_list[0].args[4], contract.DEFINITION)
+            self.assertIn('_SOURCE_MANIFEST_SHA256='+contract.G1_MANIFEST, cloud.call_args_list[0].args[6])
+        for key in subs:
+            bad=copy.deepcopy(result); bad['substitutions'].pop(key)
+            with self.subTest(key=key), patch.object(r,'source',return_value=sha), patch.object(r,'save'), patch.object(r,'cloud',side_effect=[{'id':BuildGuards.build_id},bad]), self.assertRaises(RuntimeError):
+                r.build_backend(saved)
+
+    def test_journey_preacceptance_failure_never_reaches_frontend_build_or_cutover(self):
+        saved={'source':'a'*40}
+        request={'mode':'release','target':'journey','inspect_run_id':'123'}
+        with patch.object(r,'activation',return_value=request), patch.dict(os.environ,{'RELEASE_MODE':'release'}), patch.object(r,'inspection',return_value={k:None for k in r.SNAPSHOT_FIELDS}), patch.object(r,'source',return_value='a'*40), patch.object(r,'gates'), patch.object(r,'unchanged'), patch.object(r,'prepare_backend',side_effect=RuntimeError('candidate acceptance failed')), patch.object(r,'build') as build, patch.object(r,'cloud') as cloud:
+            with self.assertRaisesRegex(RuntimeError,'acceptance failed'): r.release(saved)
+            build.assert_not_called(); cloud.assert_not_called()
+
+    def test_journey_success_order_and_failed_web_acceptance_restore_both(self):
+        original_context=release_context
+        @contextmanager
+        def journey_context(saved):
+            with original_context(saved), patch.object(r,'activation',return_value={'mode':'release','target':'journey','inspect_run_id':'123'}):
+                yield
+        for problem in [None,'browser','uncertain_swap']:
+            events=[]
+            def prepare(saved):
+                saved['new_backend']={'revision':'new-backend'}
+                saved['test2']={'revision':'old-backend'}
+                events.append('candidate-accepted')
+            with patch.dict(globals(),{'release_context':journey_context}), patch.object(r,'prepare_backend',side_effect=prepare), patch.object(r,'backend_tag',side_effect=lambda value:events.append('activate-'+value)), patch.object(r,'journey_acceptance',side_effect=lambda base:events.append('public-accepted')), patch.object(r,'rollback_backend',side_effect=lambda saved:events.append('restore-old-backend')):
+                saved,calls=Guards().run_release(problem)
+            self.assertEqual(events[:2],['candidate-accepted','activate-new-backend'])
+            if problem:
+                self.assertEqual(events[-1],'restore-old-backend')
+                self.assertEqual(calls[-1][-1],'real-serving-old=100')
+            else:
+                self.assertEqual(events[-1],'public-accepted')
+                self.assertEqual(saved['decision'],'GO')
+
+    def test_foreign_backend_tag_or_admin_cannot_be_overwritten_by_rollback(self):
+        back=service([{'revisionName':r.ADMIN_REV,'percent':100,'tag':'admin-legacy','url':r.ADMIN},
+                      {'revisionName':'foreign','tag':'diewish-test2','url':r.USER}])
+        saved={'test2':{'revision':'old'},'new_backend':{'revision':'new'}}
+        with patch.object(r,'service',return_value=back), patch.object(r,'revision'), patch.object(r,'check_backend'), patch.object(r,'backend_tag') as restore, self.assertRaisesRegex(RuntimeError,'foreign backend'):
+            r.rollback_backend(saved)
+        restore.assert_not_called()
+
+    def test_no_migration_or_mascot_workflow_and_secret_is_release_only(self):
+        workflow=yaml.load(Path(r.WORKFLOW).read_text(),Loader=yaml.BaseLoader)
+        self.assertEqual(workflow['on']['workflow_dispatch']['inputs']['target']['options'],['journey'])
+        steps=workflow['jobs']['cutover']['steps']
+        secret=[step for step in steps if 'NEON_TEST2_DATABASE_URL' in step.get('env',{})]
+        self.assertEqual(len(secret),1)
+        expression=secret[0]['env']['NEON_TEST2_DATABASE_URL']
+        self.assertIn("outputs.mode == 'release'",expression)
+        self.assertIn("outputs.target == 'journey'",expression)
+        code=Path('scripts/staging-frontend-release.py').read_text()
+        for forbidden in ['mascot-split-release.py','mascot-test2-database.cjs','migrate deploy','start:migrate','DROP TABLE','TRUNCATE']:
+            self.assertNotIn(forbidden,code)
+        self.assertIn("'--command=npm', '--args=start'",code)
+        self.assertIn("'backendAcceptanceVerified'",code)
+
+
+
+    def test_real_candidate_prepare_requires_zero_traffic_unchanged_admin_and_acceptance(self):
+        sha='a'*40
+        flags={key:'false' for key in ['COACH_SYNC_ENABLED','STAGING_AUTOMATION_ENABLED','SCHEDULER_TRIGGER_ENABLED','NUTRITION_JOBS_ENABLED']}
+        old=revision(r.USER_REV,flags,{'DATABASE_URL':{'name':'diewish-staging-test2-database-url','key':'1'}})
+        old['spec'].update(serviceAccountName='diewish-staging-runtime@'+r.PROJECT+'.iam.gserviceaccount.com')
+        old['spec']['containers'][0].update(command=['npm'],args=['start'])
+        admin=revision(r.ADMIN_REV,secrets={'DATABASE_URL':{'name':'diewish-staging-database-url','key':'latest'}})
+        original=service([{'revisionName':r.ADMIN_REV,'percent':100,'tag':'admin-legacy','url':r.ADMIN},
+                          {'revisionName':r.USER_REV,'tag':'diewish-test2','url':r.USER}])
+        for problem in [None,'traffic','admin','database','acceptance','existing']:
+            before=copy.deepcopy(original); after=copy.deepcopy(before)
+            candidate={'revisionName':r.BACK+'-new','tag':'g1-'+sha[:12],
+                       'url':'https://g1-'+sha[:12]+'---diewish-backend-staging-2qqqfr7wzq-ew.a.run.app'}
+            after['status']['traffic'].append(candidate)
+            if problem=='traffic': candidate['percent']=1
+            if problem=='admin': after['status']['traffic'][0]['url']='https://foreign.invalid'
+            if problem=='existing': before['status']['traffic'].append(candidate)
+            new=copy.deepcopy(old);new['metadata']['name']=candidate['revisionName']
+            new['spec']['containers'][0]['image']='new@sha256:test';new['status']['imageDigest']='new@sha256:test'
+            new['spec']['containers'][0]['env'].append({'name':'DIEWISH_APPLICATION_SHA','value':sha})
+            if problem=='database': new['spec']['containers'][0]['env'][-2]['valueFrom']['secretKeyRef']['name']='legacy'
+            saved={'source':sha,'test2':r.info(old),'backendTraffic':r.rows(before)}
+            calls=[0]
+            def services(_):
+                calls[0]+=1
+                return before if calls[0]<=2 else after
+            def build(s): s['newBackendImage']='new@sha256:test'
+            def rev(name): return old if name==r.USER_REV else admin if name==r.ADMIN_REV else new
+            with self.subTest(problem=problem), patch.dict(os.environ,{'GITHUB_SHA':sha}), patch.object(r,'journey_requested',return_value=True), patch.object(r,'build_backend',side_effect=build), patch.object(r,'backend_image_version'), patch.object(r,'gates'), patch.object(r,'unchanged'), patch.object(r,'service',side_effect=services), patch.object(r,'revision',side_effect=rev), patch.object(r,'save'), patch.object(r,'cloud') as cloud, patch.object(r,'journey_acceptance',side_effect=RuntimeError('bad acceptance') if problem=='acceptance' else None):
+                if problem:
+                    with self.assertRaises(RuntimeError): r.prepare_backend(saved)
+                    self.assertNotIn('backendAcceptanceVerified',saved)
+                else:
+                    r.prepare_backend(saved)
+                    self.assertTrue(saved['backendAcceptanceVerified'])
+                self.assertFalse(any(c.args[:3]==('run','services','update-traffic') for c in cloud.call_args_list))
+                if problem=='existing': cloud.assert_not_called()
+                elif cloud.called:
+                    args=cloud.call_args.args
+                    self.assertIn('--no-traffic',args);self.assertIn('--command=npm',args);self.assertIn('--args=start',args)
+
+    def test_closed_features_and_all_paused_schedulers_are_required(self):
+        with patch.dict(os.environ,{'RELEASE_TARGET':'journey'}):
+            for state in ['PAUSED','ENABLED']:
+                with patch.object(r,'cloud',side_effect=[{'state':'PAUSED'},[{'name':'diewish-coach','state':state}]]) as cloud:
+                    if state=='PAUSED': r.scheduler()
+                    else:
+                        with self.assertRaises(RuntimeError):r.scheduler()
+                    self.assertTrue(all(c.args[0] in ['scheduler'] for c in cloud.call_args_list))
+
+    def test_old_frontend_only_dispatch_cannot_publish_the_new_application(self):
+        with marker_checkout() as f, patch.dict(os.environ,{'GITHUB_EVENT_NAME':'workflow_dispatch'}), patch.object(r,'cloud') as cloud:
+            f['event']['inputs']={'mode':'release','target':'frontend','inspect_run_id':'123'};f['write_event']()
+            with self.assertRaisesRegex(RuntimeError,'paired backend/frontend'):r.main('authorize')
+            cloud.assert_not_called()
+
+    def test_backend_image_requires_source_labels_generated_model_and_fixed_qs(self):
+        contract=r.backend_contract();sha='a'*40
+        labels={'io.diewish.source-kind':'composed','io.diewish.build-definition-sha':sha,
+                'io.diewish.source-harness-sha':r.MERGED,'io.diewish.source-manifest-sha256':contract.G1_MANIFEST,
+                'io.diewish.backend-tree':contract.G1_BACKEND,'io.diewish.lock-sha256':contract.G1_LOCK}
+        for problem in [None,'source','lock','model','qs']:
+            actual=copy.deepcopy(labels);report={'qs':'6.16.1','states':['EATEN','PENDING','SKIPPED'],'checkIn':True}
+            if problem=='source':actual['io.diewish.build-definition-sha']='b'*40
+            if problem=='lock':actual['io.diewish.lock-sha256']='0'*64
+            if problem=='model':report['states']=['EATEN','PENDING']
+            if problem=='qs':report['qs']='6.16.0'
+            saved={'source':sha,'newBackendImage':'image@sha256:test'}
+            with self.subTest(problem=problem),patch.object(r.subprocess,'run') as run,patch.object(r.subprocess,'check_output',side_effect=['private-token',json.dumps(actual),json.dumps(report)]),patch.object(r,'save'):
+                if problem:
+                    with self.assertRaises(RuntimeError):r.backend_image_version(saved)
+                else:r.backend_image_version(saved)
+                self.assertTrue(all(c.kwargs.get('capture_output') for c in run.call_args_list))
 
 
 if __name__ == '__main__':
