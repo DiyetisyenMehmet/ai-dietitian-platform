@@ -276,15 +276,86 @@ ERROR serviceAccount=person@example.com
 
 
 class SourceGuards(unittest.TestCase):
+    approved_test = 'frontend/e2e/admin-entitlement-operations.spec.js'
+    approved_blob = '503fc08f916c089cf5a06408f88e69a23efb9fe0'
+
     def check(self, sha='a'*40, ref='refs/heads/feature/staging-preview', remote=None,
-              changed='', ancestor=0, checkout=None, dirty=''):
+              changed='', ancestor=0, checkout=None, dirty='', entry=None):
         def output(cmd, **kwargs):
             if cmd[1] == 'rev-parse': return checkout or sha
             if cmd[1] == 'status': return dirty
             if cmd[1] == 'diff': return changed
+            if cmd[1] == 'ls-tree':
+                self.assertEqual(cmd, ['git', 'ls-tree', '-z', '--full-tree', sha, '--', self.approved_test])
+                return self.approved_entry() if entry is None else entry
             raise AssertionError(cmd)
         with patch.dict(os.environ, {'GITHUB_SHA':sha,'GITHUB_REF':ref,'GITHUB_REPOSITORY':r.REPO}), patch.object(r,'api',return_value={'object':{'sha':remote or sha}}), patch.object(r.subprocess,'check_output',side_effect=output), patch.object(r.subprocess,'run',return_value=subprocess.CompletedProcess([],ancestor)):
             return r.source()
+
+    def approved_entry(self):
+        return '100644 blob ' + self.approved_blob + '\t' + self.approved_test + '\0'
+
+    def test_only_exact_reviewed_regular_admin_test_is_additionally_allowed(self):
+        self.assertNotIn(self.approved_test, r.PREP_FILES)
+        self.assertEqual(self.check(changed=self.approved_test), 'a'*40)
+        self.assertEqual(self.check(changed='\n'.join([*sorted(r.PREP_FILES), self.approved_test])), 'a'*40)
+
+    def test_admin_exception_rejects_other_blob_deletion_type_mode_path_or_extra_entry(self):
+        approved = self.approved_entry()
+        for entry in ['', approved.replace(self.approved_blob, 'b'*40),
+                      approved.replace('100644', '120000'), approved.replace('100644', '100755'),
+                      approved.replace('100644 blob', '040000 tree'),
+                      approved.replace('100644 blob', '160000 commit'),
+                      approved.replace(self.approved_test, 'frontend/e2e/other-admin.spec.js'),
+                      approved.rstrip('\0'), approved + approved]:
+            with self.subTest(entry=entry), self.assertRaisesRegex(RuntimeError, 'unapproved Admin test tree entry'):
+                self.check(changed=self.approved_test, entry=entry)
+
+    def test_approved_admin_blob_never_allows_another_test_or_product_drift(self):
+        for path in ['frontend/e2e/admin-other.spec.js', 'frontend/src/app/admin/page.tsx',
+                     'frontend/src/app/dashboard/page.tsx', 'backend/src/app.ts',
+                     'backend/prisma/schema.prisma', '.github/workflows/hardening-ci.yml', 'foreign.txt']:
+            with self.subTest(path=path), self.assertRaisesRegex(RuntimeError, 'application drift'):
+                self.check(changed=self.approved_test + '\n' + path)
+
+    def test_admin_exception_does_not_bypass_existing_source_guards(self):
+        for kwargs in [{'sha':'abc'}, {'ref':'refs/heads/main'}, {'remote':'b'*40},
+                       {'ancestor':1}, {'checkout':'b'*40}, {'dirty':' M ' + self.approved_test}]:
+            with self.subTest(kwargs=kwargs), self.assertRaises(RuntimeError):
+                self.check(changed=self.approved_test, **kwargs)
+
+    def test_real_git_admin_entry_accepts_approved_bytes_and_rejects_mutation_deletion_or_symlink(self):
+        content = Path(self.approved_test).read_bytes()
+        for problem in [None, 'content', 'deleted', 'symlink', 'executable', 'extra']:
+            with self.subTest(problem=problem), marker_checkout() as fixture:
+                target = Path(self.approved_test)
+                target.parent.mkdir(parents=True)
+                # Like MERGED in production, the baseline already contains this file.
+                target.write_bytes(b'Previously reviewed Admin test fixture\n')
+                fixture['git']('add', '.')
+                fixture['git']('commit', '-qm', 'Reviewed earlier Admin test')
+                baseline = fixture['git']('rev-parse', 'HEAD')
+                target.write_bytes(content)
+                if problem == 'content': target.write_bytes(content + b'\n// unreviewed\n')
+                if problem == 'symlink':
+                    target.unlink()
+                    target.symlink_to('unapproved-target')
+                if problem == 'executable': target.chmod(0o755)
+                if problem == 'extra': Path('frontend/e2e/admin-other.spec.js').write_text('unreviewed')
+                fixture['git']('add', '.')
+                fixture['git']('commit', '-qm', 'Synthetic Admin test change')
+                if problem == 'deleted':
+                    target.unlink()
+                    fixture['git']('add', '.')
+                    fixture['git']('commit', '-qm', 'Delete synthetic Admin test')
+                sha = fixture['git']('rev-parse', 'HEAD')
+                with patch.object(r, 'MERGED', baseline), patch.dict(os.environ, {'GITHUB_SHA':sha}), patch.object(r, 'api', return_value={'object':{'sha':sha}}):
+                    if problem:
+                        with self.assertRaisesRegex(RuntimeError, 'unapproved Admin test tree entry|application drift'):
+                            r.source()
+                    else:
+                        self.assertEqual(fixture['git']('hash-object', self.approved_test), self.approved_blob)
+                        self.assertEqual(r.source(), sha)
 
     def test_reviewed_baseline_and_release_only_whitelist(self):
         self.assertEqual(r.MERGED,'51ba9fcef7cff7627792303584448c91b05d70dd')
