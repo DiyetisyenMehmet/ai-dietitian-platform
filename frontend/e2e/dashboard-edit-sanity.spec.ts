@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { writeFile } from "node:fs/promises";
 import { createDashboardSession } from "./dashboard-test-session";
 
 const api = process.env.E2E_API_BASE_URL || "http://127.0.0.1:4000/api";
@@ -32,23 +33,26 @@ async function save(page: Page) {
 async function drag(page: Page, sourceSelector: string, targetSelector: string, axis: "x" | "y") {
   const source = page.locator(sourceSelector);
   await source.evaluate((node) => node.scrollIntoView({ block: "center", behavior: "instant" }));
-  await page.waitForTimeout(250);
+  // A viewport resize can finish after the raw scroll call. Wait for a stable,
+  // reachable target and let Playwright scroll again, without sending a click.
+  await source.click({ trial: true });
   const from = (await source.boundingBox())!;
   const to = (await page.locator(targetSelector).boundingBox())!;
   const x = from.x + from.width / 2,
     y = from.y + from.height / 2;
-  const hit = await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.outerHTML, { x, y });
-  await test.info().attach(`drag-hit-${sourceSelector}`, {
-    body: JSON.stringify({ sourceSelector, targetSelector, from, to, x, y, hit }),
-    contentType: "application/json",
-  });
+  const hit = await page.evaluate(
+    ({ x, y, selector }) => {
+      const target = document.elementFromPoint(x, y);
+      return { matches: !!target?.closest(selector), element: target?.outerHTML };
+    },
+    { x, y, selector: sourceSelector },
+  );
+  await writeFile(
+    test.info().outputPath(`drag-hit-${axis}.json`),
+    JSON.stringify({ sourceSelector, targetSelector, viewport: page.viewportSize(), from, to, x, y, hit }),
+  );
   await page.screenshot({ path: test.info().outputPath(`drag-hit-${axis}.png`) });
-  expect(
-    await page.evaluate(
-      ({ x, y, selector }) => !!document.elementFromPoint(x, y)?.closest(selector),
-      { x, y, selector: sourceSelector },
-    ),
-  ).toBe(true);
+  expect(hit.matches).toBe(true);
   await page.mouse.move(x, y);
   await page.mouse.down();
   await page.mouse.move(

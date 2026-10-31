@@ -369,6 +369,7 @@ class SourceGuards(unittest.TestCase):
                      'backend/vendor/minimatch-compat/package.json','backend/vendor/minimatch-compat/index.cjs',
                      'frontend/vendor/minimatch-compat/package.json','frontend/vendor/minimatch-compat/index.cjs',
                      'frontend/e2e/dashboard-edit-sanity.spec.ts','scripts/minimatch-security.test.cjs',
+                     'backend/Dockerfile','frontend/Dockerfile',
                      'frontend/public/brands/diewish-wordmark-approved.png','android/app/build.gradle.kts',
                      'backend/prisma/schema.prisma','backend/prisma/migrations/new/migration.sql',
                      'backend/src/auth.ts','.github/workflows/staging-notification-test-apk.yml',

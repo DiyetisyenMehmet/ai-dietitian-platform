@@ -32,7 +32,7 @@ ENV NODE_ENV=production
 RUN addgroup -S nodejs && adduser -S nodejs -G nodejs
 
 COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
-COPY --from=builder --chown=nodejs:nodejs /app/vendor ./vendor
+COPY --from=builder --chown=nodejs:nodejs /app/vendor/minimatch-compat ./vendor/minimatch-compat
 COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
 COPY --from=builder --chown=nodejs:nodejs /app/prisma ./prisma
 COPY --from=builder --chown=nodejs:nodejs /app/package.json ./package.json

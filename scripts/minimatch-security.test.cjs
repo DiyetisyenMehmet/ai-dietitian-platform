@@ -39,7 +39,14 @@ for (const side of ['backend', 'frontend']) {
     assert.match(engines[0][1].resolved, /\/minimatch-11\.0\.1\.tgz$/);
     assert.match(engines[0][1].integrity, /^sha512-/);
     for (const [path, pkg] of Object.entries(lock.packages)) {
-      if (path.endsWith('/minimatch')) assert.equal(pkg.link, true, path);
+      if (pkg.dependencies?.minimatch) {
+        const consumer = createRequire(join(root, side, path, 'package.json'));
+        assert.equal(consumer('minimatch'), match, path);
+      }
+      if (path.endsWith('/minimatch')) {
+        assert.equal(pkg.link, true, path);
+        assert.equal(pkg.resolved, 'vendor/minimatch-compat', path);
+      }
     }
   });
 
