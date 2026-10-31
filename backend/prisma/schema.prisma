@@ -67,6 +67,7 @@ model User {
   waterLogs               WaterLog[]
   aiMemories              AiMemory[]
   aiConversationSummaries AiConversationSummary[]
+  scanQuotaOperations     ScanQuotaOperation[]
   proactiveMessages       ProactiveMessage[]
   weeklyReviews           WeeklyReview[]
   monthlyReviews          MonthlyReview[]
@@ -611,20 +612,67 @@ enum AiUsageFeature {
   DIETITIAN_CHAT
   BLOOD_TEST_ANALYSIS
   NUTRITION_PLAN
+  PHOTO_SCAN
+  BARCODE_SCAN
 }
 
 model AiUsageEvent {
-  id              String         @id @default(uuid())
+  id              String              @id @default(uuid())
   userId          String
-  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user            User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   feature         AiUsageFeature
   provider        String
   model           String
   estimatedTokens Int?
-  createdAt       DateTime       @default(now())
+  createdAt       DateTime            @default(now())
+  scanOperationId String?             @unique
+  scanOperation   ScanQuotaOperation? @relation(fields: [scanOperationId], references: [id], onDelete: SetNull)
 
   @@index([userId, feature, createdAt])
   @@map("ai_usage_events")
+}
+
+enum ScanQuotaOperationStatus {
+  RESERVED
+  SUCCEEDED
+  FAILED
+  CANCELED
+  EXPIRED
+}
+
+model ScanQuotaOperation {
+  id           String                   @id @default(uuid())
+  userId       String
+  user         User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  feature      AiUsageFeature
+  inputHash    String
+  subjectHash  String?
+  attemptToken String                   @default(uuid())
+  status       ScanQuotaOperationStatus @default(RESERVED)
+  expiresAt    DateTime
+  resultRef    String?
+  createdAt    DateTime                 @default(now())
+  updatedAt    DateTime                 @updatedAt
+  usageEvent   AiUsageEvent?
+  requests     ScanQuotaRequest[]
+
+  @@unique([id, userId, feature])
+  @@index([userId, feature, status, expiresAt])
+  // Barcode subject uniqueness and feature/hash checks are in the migration.
+  @@map("scan_quota_operations")
+}
+
+model ScanQuotaRequest {
+  userId         String
+  feature        AiUsageFeature
+  idempotencyKey String
+  inputHash      String
+  operationId    String
+  operation      ScanQuotaOperation @relation(fields: [operationId, userId, feature], references: [id, userId, feature], onDelete: Cascade)
+  createdAt      DateTime           @default(now())
+
+  @@id([userId, feature, idempotencyKey])
+  @@map("scan_quota_requests")
 }
 
 enum ChatRole {
