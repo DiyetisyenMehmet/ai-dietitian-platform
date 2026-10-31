@@ -45,7 +45,7 @@ APPROVED_ENTRIES = {
 # Pin those new bytes; all other PR #135 entries must remain exactly unchanged.
 APPROVED_CURRENT_ENTRIES = {
     **APPROVED_ENTRIES,
-    'scripts/staging-frontend-release.test.py': '100644 blob 8b15bc74a896d57619d7dd6402a5e29e226cbccc',
+    'scripts/staging-frontend-release.test.py': '100644 blob 2757ffec4dbab46a0fa08a699b3c57dac96caecc',
 }
 OWNER = 'DiyetisyenMehmet'
 OWNER_ID = 301813832

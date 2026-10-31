@@ -669,7 +669,8 @@ def marker_checkout(mode='inspect', message=None, payload=None, extra=False, mer
 
 class Entrypoint(unittest.TestCase):
     def test_real_git_source_accepts_only_reviewed_prep_and_clean_checkout(self):
-        with marker_checkout() as f, patch.object(r,'MERGED',f['before']), patch.object(r,'api',return_value={'object':{'sha':f['sha']}}):
+        # Keep the original baseline/clean-checkout fixture independent of PR #135's real-Git matrix.
+        with marker_checkout() as f, patch.multiple(r,MERGED=f['before'],APPROVED_SOURCE=f['before'],APPROVED_ENTRIES={},APPROVED_CURRENT_ENTRIES={}), patch.object(r,'api',return_value={'object':{'sha':f['sha']}}):
             self.assertEqual(r.source(),f['sha'])
             Path('untracked.py').write_text('unreviewed')
             with self.assertRaisesRegex(RuntimeError,'dirty'): r.source()
