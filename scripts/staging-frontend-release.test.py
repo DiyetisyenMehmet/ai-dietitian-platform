@@ -280,16 +280,26 @@ class SourceGuards(unittest.TestCase):
     approved_blob = '503fc08f916c089cf5a06408f88e69a23efb9fe0'
 
     def check(self, sha='a'*40, ref='refs/heads/feature/staging-preview', remote=None,
-              changed='', ancestor=0, checkout=None, dirty='', entry=None):
+              changed='', ancestor=0, checkout=None, dirty='', entry=None,
+              approved_ancestor=0, reviewed_entries=None, current_entries=None):
         def output(cmd, **kwargs):
             if cmd[1] == 'rev-parse': return checkout or sha
             if cmd[1] == 'status': return dirty
             if cmd[1] == 'diff': return changed
             if cmd[1] == 'ls-tree':
-                self.assertEqual(cmd, ['git', 'ls-tree', '-z', '--full-tree', sha, '--', self.approved_test])
-                return self.approved_entry() if entry is None else entry
+                path = cmd[-1]
+                if path == self.approved_test:
+                    self.assertEqual(cmd, ['git', 'ls-tree', '-z', '--full-tree', sha, '--', path])
+                    return self.approved_entry() if entry is None else entry
+                reviewed = cmd[4] == r.APPROVED_SOURCE
+                entries = r.APPROVED_ENTRIES if reviewed else r.APPROVED_CURRENT_ENTRIES
+                overrides = reviewed_entries if reviewed else current_entries
+                self.assertIn(path, entries)
+                return (overrides or {}).get(path, entries[path] + '\t' + path + '\0')
             raise AssertionError(cmd)
-        with patch.dict(os.environ, {'GITHUB_SHA':sha,'GITHUB_REF':ref,'GITHUB_REPOSITORY':r.REPO}), patch.object(r,'api',return_value={'object':{'sha':remote or sha}}), patch.object(r.subprocess,'check_output',side_effect=output), patch.object(r.subprocess,'run',return_value=subprocess.CompletedProcess([],ancestor)):
+        def ancestry(cmd, **kwargs):
+            return subprocess.CompletedProcess(cmd, ancestor if cmd[3] == r.MERGED else approved_ancestor)
+        with patch.dict(os.environ, {'GITHUB_SHA':sha,'GITHUB_REF':ref,'GITHUB_REPOSITORY':r.REPO}), patch.object(r,'api',return_value={'object':{'sha':remote or sha}}), patch.object(r.subprocess,'check_output',side_effect=output), patch.object(r.subprocess,'run',side_effect=ancestry):
             return r.source()
 
     def approved_entry(self):
@@ -314,7 +324,7 @@ class SourceGuards(unittest.TestCase):
     def test_approved_admin_blob_never_allows_another_test_or_product_drift(self):
         for path in ['frontend/e2e/admin-other.spec.js', 'frontend/src/app/admin/page.tsx',
                      'frontend/src/app/dashboard/page.tsx', 'backend/src/app.ts',
-                     'backend/prisma/schema.prisma', '.github/workflows/hardening-ci.yml', 'foreign.txt']:
+                     'backend/prisma/schema.prisma', '.github/workflows/foreign-hardening.yml', 'foreign.txt']:
             with self.subTest(path=path), self.assertRaisesRegex(RuntimeError, 'application drift'):
                 self.check(changed=self.approved_test + '\n' + path)
 
@@ -349,7 +359,8 @@ class SourceGuards(unittest.TestCase):
                     fixture['git']('add', '.')
                     fixture['git']('commit', '-qm', 'Delete synthetic Admin test')
                 sha = fixture['git']('rev-parse', 'HEAD')
-                with patch.object(r, 'MERGED', baseline), patch.dict(os.environ, {'GITHUB_SHA':sha}), patch.object(r, 'api', return_value={'object':{'sha':sha}}):
+                # Isolate the earlier Admin exception; PR #135 pins have their own real-Git tests below.
+                with patch.multiple(r, MERGED=baseline, APPROVED_SOURCE=baseline, APPROVED_ENTRIES={}, APPROVED_CURRENT_ENTRIES={}), patch.dict(os.environ, {'GITHUB_SHA':sha}), patch.object(r, 'api', return_value={'object':{'sha':sha}}):
                     if problem:
                         with self.assertRaisesRegex(RuntimeError, 'unapproved Admin test tree entry|application drift'):
                             r.source()
@@ -359,6 +370,9 @@ class SourceGuards(unittest.TestCase):
 
     def test_reviewed_baseline_and_release_only_whitelist(self):
         self.assertEqual(r.MERGED,'51ba9fcef7cff7627792303584448c91b05d70dd')
+        self.assertEqual(r.APPROVED_SOURCE,'0ab4fab4f1cec0ea611759fd92df154f27ccd12f')
+        self.assertEqual(len(r.APPROVED_ENTRIES),14)
+        self.assertEqual(set(r.APPROVED_CURRENT_ENTRIES),set(r.APPROVED_ENTRIES))
         self.assertEqual(self.check(changed='\n'.join(sorted(r.PREP_FILES))), 'a'*40)
         self.assertEqual(r.PREP_FILES, {r.WORKFLOW, '.github/cloudbuild/frontend-staging.yaml', 'scripts/staging-frontend-release.py', 'scripts/staging-frontend-release.test.py', 'scripts/journey-live-acceptance.cjs', 'scripts/journey-live-acceptance.test.cjs', 'scripts/test2-security-build-context.py', 'scripts/test2-security-build-context.test.py', r.MARKER})
 
@@ -375,15 +389,73 @@ class SourceGuards(unittest.TestCase):
                      'backend/src/auth.ts','.github/workflows/staging-notification-test-apk.yml',
                      '.github/workflows/staging-test2-backend-notraffic.yml','.github/workflows/staging-preview.yml',
                      '.github/workflows/notification-alerts-native-ci.yml','secrets.env']:
-            with self.subTest(path=path), self.assertRaisesRegex(RuntimeError,'application drift'):
-                self.check(changed=path)
+            if path in r.APPROVED_ENTRIES:
+                with self.subTest(path=path), self.assertRaisesRegex(RuntimeError,'unapproved G1 source tree entry'):
+                    self.check(changed=path, current_entries={path:'100644 blob ' + 'b'*40 + '\t' + path + '\0'})
+            else:
+                with self.subTest(path=path), self.assertRaisesRegex(RuntimeError,'application drift'):
+                    self.check(changed=path)
 
     def test_wrong_sha_ref_staging_advance_checkout_or_baseline_rejected(self):
         for kwargs in [{'sha':'abc'},{'sha':'A'*40},{'sha':'a'*40+';'},
                        {'ref':'refs/heads/main'},{'remote':'b'*40}, {'ancestor':1},
-                       {'checkout':'b'*40},{'dirty':' M scripts/staging-frontend-release.py'},
+                       {'checkout':'b'*40},{'approved_ancestor':1},{'dirty':' M scripts/staging-frontend-release.py'},
                        {'dirty':'?? untracked.py'}]:
             with self.subTest(kwargs=kwargs), self.assertRaises(RuntimeError): self.check(**kwargs)
+
+    def test_every_reviewed_and_current_entry_rejects_missing_wrong_blob_mode_type_path_or_duplicate(self):
+        for reviewed, entries in [(True,r.APPROVED_ENTRIES),(False,r.APPROVED_CURRENT_ENTRIES)]:
+            for path, expected in entries.items():
+                entry=expected+'\t'+path+'\0'
+                for bad in ['',entry.replace(expected.split()[-1],'b'*40),entry.replace('100644','100755'),
+                            entry.replace('100644','120000'),entry.replace('blob','tree'),
+                            entry.replace(path,path+'.foreign'),entry.rstrip('\0'),entry+entry]:
+                    with self.subTest(reviewed=reviewed,path=path,bad=bad), self.assertRaisesRegex(RuntimeError,'unapproved G1 source tree entry'):
+                        self.check(**{'reviewed_entries' if reviewed else 'current_entries':{path:bad}})
+
+    def test_real_git_reviewed_files_pass_and_each_content_mode_deletion_symlink_or_extra_path_fails(self):
+        original=Path.cwd(); test_bytes=Path(__file__).read_bytes()
+        with tempfile.TemporaryDirectory(prefix='g1-approved-files-') as temp:
+            repo=Path(temp)/'repo'
+            subprocess.run(['git','clone','--shared','--no-checkout',str(original),str(repo)],check=True,capture_output=True)
+            def git(*args):
+                return subprocess.check_output(['git','-C',str(repo),*args],stderr=subprocess.PIPE).decode().strip()
+            git('checkout','--detach',r.APPROVED_SOURCE)
+            git('config','user.name','Offline fixture');git('config','user.email','fixture@example.invalid')
+            (repo/'scripts/staging-frontend-release.test.py').write_bytes(test_bytes)
+            git('add','.');git('commit','--allow-empty','-qm','Separately reviewed release tests')
+            accepted=git('rev-parse','HEAD')
+            def check():
+                sha=git('rev-parse','HEAD')
+                with patch.dict(os.environ,{'GITHUB_REPOSITORY':r.REPO,'GITHUB_SHA':sha,'GITHUB_REF':'refs/heads/feature/staging-preview'}), patch.object(r,'api',return_value={'object':{'sha':sha}}):
+                    return r.source()
+            try:
+                os.chdir(repo)
+                self.assertEqual(check(),accepted)
+                for path in r.APPROVED_CURRENT_ENTRIES:
+                    target=repo/path
+                    for problem in ['content','mode','deleted','symlink']:
+                        if problem=='content':target.write_bytes(target.read_bytes()+b'\n')
+                        elif problem=='mode':target.chmod(0o755)
+                        elif problem=='deleted':target.unlink()
+                        else:target.unlink();target.symlink_to('unreviewed-target')
+                        git('add','.');git('commit','-qm','Synthetic unapproved entry')
+                        with self.subTest(path=path,problem=problem), self.assertRaisesRegex(RuntimeError,'unapproved G1 source tree entry'):
+                            check()
+                        git('reset','--hard',accepted)  # Disposable fixture only.
+                extra=repo/'backend/vendor/minimatch-compat/foreign.cjs';extra.write_text('unreviewed')
+                git('add','.');git('commit','-qm','Synthetic extra file')
+                with self.assertRaisesRegex(RuntimeError,'application drift'):check()
+                git('reset','--hard',accepted)
+                # Identical reviewed bytes copied onto an earlier lineage still cannot pass.
+                git('checkout','--detach','5ce15fc4a9d99fadb1f60e9e59501992e8c43431')
+                for path in r.APPROVED_ENTRIES:
+                    target=repo/path;target.parent.mkdir(parents=True,exist_ok=True)
+                    target.write_bytes(subprocess.check_output(['git','-C',str(original),'show',r.APPROVED_SOURCE+':'+path]))
+                (repo/'scripts/staging-frontend-release.test.py').write_bytes(test_bytes)
+                git('add','.');git('commit','-qm','Copied bytes without approved ancestry')
+                with self.assertRaisesRegex(RuntimeError,'approved security source is not an ancestor'):check()
+            finally:os.chdir(original)
 
 
 class Gates(unittest.TestCase):
@@ -597,7 +669,8 @@ def marker_checkout(mode='inspect', message=None, payload=None, extra=False, mer
 
 class Entrypoint(unittest.TestCase):
     def test_real_git_source_accepts_only_reviewed_prep_and_clean_checkout(self):
-        with marker_checkout() as f, patch.object(r,'MERGED',f['before']), patch.object(r,'api',return_value={'object':{'sha':f['sha']}}):
+        # Keep the original baseline/clean-checkout fixture independent of PR #135's real-Git matrix.
+        with marker_checkout() as f, patch.multiple(r,MERGED=f['before'],APPROVED_SOURCE=f['before'],APPROVED_ENTRIES={},APPROVED_CURRENT_ENTRIES={}), patch.object(r,'api',return_value={'object':{'sha':f['sha']}}):
             self.assertEqual(r.source(),f['sha'])
             Path('untracked.py').write_text('unreviewed')
             with self.assertRaisesRegex(RuntimeError,'dirty'): r.source()
@@ -806,6 +879,13 @@ class TriggerIsolation(unittest.TestCase):
 
 
 class JourneyReleaseGuards(unittest.TestCase):
+    def test_backend_contract_keeps_both_baseline_and_new_reviewed_source_binding(self):
+        self.assertEqual(r.backend_contract().G1_SOURCE,r.MERGED)
+        self.assertEqual(r.backend_contract().G1_APPROVED_SOURCE,r.APPROVED_SOURCE)
+        for field in ['MERGED','APPROVED_SOURCE']:
+            with self.subTest(field=field),patch.object(r,field,'b'*40),self.assertRaisesRegex(RuntimeError,'mismatch'):
+                r.backend_contract()
+
     def test_journey_target_is_explicit_and_bound_to_inspection(self):
         with marker_checkout(payload=lambda data: {**data, 'target': 'journey'},
                              message=r.JOURNEY_INTENTS['inspect']) as f:
@@ -848,15 +928,15 @@ class JourneyReleaseGuards(unittest.TestCase):
     def test_backend_build_passes_every_mandatory_source_evidence_input(self):
         contract=r.backend_contract(); sha='a'*40
         image=contract.IMAGE_PREFIX+sha
-        subs={'_IMAGE':image,'_GIT_SHA':sha,'_SOURCE_HARNESS_SHA':r.MERGED,
-              '_SOURCE_MANIFEST_SHA256':contract.G1_MANIFEST,'_BACKEND_TREE':contract.G1_BACKEND,'_LOCK_SHA256':contract.G1_LOCK}
+        subs={'_IMAGE':image,'_GIT_SHA':sha,'_SOURCE_HARNESS_SHA':r.APPROVED_SOURCE,
+              '_SOURCE_MANIFEST_SHA256':contract.G1_APPROVED_MANIFEST,'_BACKEND_TREE':contract.G1_APPROVED_BACKEND,'_LOCK_SHA256':contract.G1_APPROVED_LOCK}
         result={'id':BuildGuards.build_id,'projectId':r.PROJECT,'status':'SUCCESS','substitutions':subs,
                 'results':{'images':[{'name':image,'digest':'sha256:'+'b'*64}]}}
         saved={'source':sha,'test2':{'imageDigest':'old@sha256:x'}}
         with patch.object(r,'source',return_value=sha), patch.object(r,'save'), patch.object(r,'cloud',side_effect=[{'id':BuildGuards.build_id},result]) as cloud:
             r.build_backend(saved)
             self.assertEqual(cloud.call_args_list[0].args[4], contract.DEFINITION)
-            self.assertIn('_SOURCE_MANIFEST_SHA256='+contract.G1_MANIFEST, cloud.call_args_list[0].args[6])
+            self.assertIn('_SOURCE_MANIFEST_SHA256='+contract.G1_APPROVED_MANIFEST, cloud.call_args_list[0].args[6])
         for key in subs:
             bad=copy.deepcopy(result); bad['substitutions'].pop(key)
             with self.subTest(key=key), patch.object(r,'source',return_value=sha), patch.object(r,'save'), patch.object(r,'cloud',side_effect=[{'id':BuildGuards.build_id},bad]), self.assertRaises(RuntimeError):
@@ -975,14 +1055,16 @@ class JourneyReleaseGuards(unittest.TestCase):
     def test_backend_image_requires_source_labels_generated_model_and_fixed_qs(self):
         contract=r.backend_contract();sha='a'*40
         labels={'io.diewish.source-kind':'composed','io.diewish.build-definition-sha':sha,
-                'io.diewish.source-harness-sha':r.MERGED,'io.diewish.source-manifest-sha256':contract.G1_MANIFEST,
-                'io.diewish.backend-tree':contract.G1_BACKEND,'io.diewish.lock-sha256':contract.G1_LOCK}
-        for problem in [None,'source','lock','model','qs']:
-            actual=copy.deepcopy(labels);report={'qs':'6.16.1','states':['EATEN','PENDING','SKIPPED'],'checkIn':True}
+                'io.diewish.source-harness-sha':r.APPROVED_SOURCE,'io.diewish.source-manifest-sha256':contract.G1_APPROVED_MANIFEST,
+                'io.diewish.backend-tree':contract.G1_APPROVED_BACKEND,'io.diewish.lock-sha256':contract.G1_APPROVED_LOCK}
+        for problem in [None,'source','harness','lock','model','qs','minimatch']:
+            actual=copy.deepcopy(labels);report={'qs':'6.16.1','minimatch':'11.0.1','states':['EATEN','PENDING','SKIPPED'],'checkIn':True}
             if problem=='source':actual['io.diewish.build-definition-sha']='b'*40
+            if problem=='harness':actual['io.diewish.source-harness-sha']=r.MERGED
             if problem=='lock':actual['io.diewish.lock-sha256']='0'*64
             if problem=='model':report['states']=['EATEN','PENDING']
             if problem=='qs':report['qs']='6.16.0'
+            if problem=='minimatch':report['minimatch']='3.1.5'
             saved={'source':sha,'newBackendImage':'image@sha256:test'}
             with self.subTest(problem=problem),patch.object(r.subprocess,'run') as run,patch.object(r.subprocess,'check_output',side_effect=['private-token',json.dumps(actual),json.dumps(report)]),patch.object(r,'save'):
                 if problem:
