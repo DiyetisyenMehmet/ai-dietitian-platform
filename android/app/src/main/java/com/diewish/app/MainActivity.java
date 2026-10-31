@@ -1,6 +1,7 @@
 package com.diewish.app;
 
 import android.Manifest;
+import android.app.UiModeManager;
 import android.annotation.SuppressLint;
 import android.content.res.Configuration;
 import android.content.ActivityNotFoundException;
@@ -96,10 +97,20 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
     // WebView#getUrl() from that thread; keep a UI-thread-owned trusted-origin
     // snapshot that bridges may read safely.
     private volatile boolean trustedPageActive = false;
+    private static final String THEME_PREFERENCES = "diewish_presentation";
+
+    private boolean nativeThemeDark() {
+        String preference = getSharedPreferences(THEME_PREFERENCES, MODE_PRIVATE).getString("theme", "system");
+        return "dark".equals(preference) || (!"light".equals(preference)
+            && (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK)
+                == Configuration.UI_MODE_NIGHT_YES);
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // Resolve the saved local choice before WebView reads isLightTheme.
+        applyNativeThemeAttributes();
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             // Keep the actual system composition until the final web frame;
@@ -133,10 +144,7 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
     private void configureRootView() {
         rootView = new FrameLayout(this);
         rootView.setBackgroundColor(Color.WHITE);
-        applySystemBarTheme(
-            (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK)
-                == Configuration.UI_MODE_NIGHT_YES
-        );
+        applySystemBarTheme(nativeThemeDark());
         rootView.addView(
             webView,
             new FrameLayout.LayoutParams(
@@ -152,6 +160,7 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
         rootView.addView(launchCover, new FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT
         ));
+        applySystemBarTheme(nativeThemeDark());
 
         ViewCompat.setOnApplyWindowInsetsListener(rootView, (view, windowInsets) -> {
             int handledInsets = WindowInsetsCompat.Type.systemBars()
@@ -267,10 +276,18 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
         }
     }
 
+    private void applyNativeThemeAttributes() {
+        getTheme().applyStyle(nativeThemeDark()
+            ? R.style.Diewish_Appearance_Dark : R.style.Diewish_Appearance_Light, true);
+    }
+
     @SuppressWarnings("deprecation")
     private void applySystemBarTheme(boolean dark) {
-        int background = dark ? Color.rgb(15, 20, 18) : Color.WHITE;
+        applyNativeThemeAttributes();
+        int background = getColor(dark ? R.color.diewish_surface_dark : R.color.diewish_surface_light);
+        getWindow().setBackgroundDrawable(new ColorDrawable(background));
         if (rootView != null) rootView.setBackgroundColor(background);
+        if (webView != null) webView.setBackgroundColor(background);
         if (systemLaunchSplash != null) systemLaunchSplash.setBackgroundColor(background);
         if (launchCover != null && launchCover.getBackground() instanceof LayerDrawable) {
             // The app's saved theme can differ from the device's launch theme.
@@ -291,12 +308,28 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
         "location.origin===" + JSONObject.quote(BuildConfig.WEB_BASE_URL)
             + "&&document.readyState!=='loading'&&document.body&&document.body.childElementCount>0"
             + "&&!document.querySelector('[data-testid=diewish-brand-splash]')"
-            + "&& !document.querySelector('[data-artwork-state=loading]')";
+            + "&& !document.querySelector('[data-artwork-state=loading]')"
+            // next-themes' synchronous bootstrap resolves stored/system choice
+            // before hydration. This also works with older published web code.
+            + "&&['light','dark'].includes(document.documentElement.style.colorScheme)"
+            + "&&(document.documentElement.classList.contains('dark')==="
+            + "(document.documentElement.style.colorScheme==='dark'))";
 
     private void requestLaunchCoverDismissal() {
         if (launchCover == null || isDestroyed()) return;
-        webView.evaluateJavascript("(function(){return " + LAUNCH_DOM_READY + ";})()", ready -> {
-            if (!"true".equals(ready) || launchCover == null || isDestroyed()) return;
+        webView.evaluateJavascript("(function(){return {ready:(" + LAUNCH_DOM_READY
+            + "),dark:document.documentElement.classList.contains('dark')};})()", result -> {
+            if (launchCover == null || isDestroyed() || !isTrustedPage()) return;
+            try {
+                JSONObject frame = new JSONObject(result);
+                if (!frame.optBoolean("ready")) {
+                    // A configuration/route change can invalidate the frame
+                    // between the observer's signal and this UI-thread check.
+                    watchLaunchPresentation(webView);
+                    return;
+                }
+                applySystemBarTheme(frame.optBoolean("dark"));
+            } catch (JSONException | NullPointerException ignored) { return; }
             webView.postVisualStateCallback(0, new WebView.VisualStateCallback() {
                 @Override public void onComplete(long requestId) { dismissLaunchCover(); }
             });
@@ -318,7 +351,7 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
                 + "delete window.__diewishLaunchWatcher;window.DiewishSystemUi.onLaunchFrameReady();});}"
                 + "var observer=new MutationObserver(check);window.__diewishLaunchWatcher=observer;"
                 + "observer.observe(document.documentElement,{childList:true,subtree:true,attributes:true,"
-                + "attributeFilter:['data-artwork-state']});check();})();",
+                + "attributeFilter:['data-artwork-state','class','style']});check();})();",
             null
         );
     }
@@ -338,6 +371,28 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
     }
 
     public final class SystemUiBridge {
+        /** Only a local appearance choice; no account, session or navigation. */
+        @JavascriptInterface
+        public void setThemePreference(String preference, boolean dark) {
+            if (!"system".equals(preference) && !"light".equals(preference) && !"dark".equals(preference)) return;
+            runOnUiThread(() -> {
+                if (!isTrustedPage()) return;
+                var preferences = getSharedPreferences(THEME_PREFERENCES, MODE_PRIVATE);
+                if (!preference.equals(preferences.getString("theme", "system"))) {
+                    preferences.edit().putString("theme", preference).apply();
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        // AUTO clears this app's night override (UI_MODE_NIGHT_UNDEFINED)
+                        // in UiModeManagerService; never change the device-wide setting.
+                        getSystemService(UiModeManager.class).setApplicationNightMode(
+                            "system".equals(preference) ? UiModeManager.MODE_NIGHT_AUTO
+                                : "dark".equals(preference) ? UiModeManager.MODE_NIGHT_YES : UiModeManager.MODE_NIGHT_NO);
+                    }
+                }
+                // In system mode, the device configuration is authoritative, not
+                // the media query inherited from the preceding manual app theme.
+                applySystemBarTheme("system".equals(preference) ? nativeThemeDark() : dark);
+            });
+        }
         /** Presentation only: no credential, session or navigation capability. */
         @JavascriptInterface
         public void onLaunchFrameReady() {
@@ -403,10 +458,20 @@ public final class MainActivity extends ComponentActivity implements PurchasesUp
     @Override
     protected void onResume() {
         super.onResume();
+        applySystemBarTheme(nativeThemeDark());
         emitCoachVisibility(true);
         WellnessReminderScheduler.rescheduleStored(getApplicationContext());
         emitNotificationState();
         emitPendingNotificationOpen();
+    }
+
+    @Override
+    public void onConfigurationChanged(Configuration configuration) {
+        super.onConfigurationChanged(configuration);
+        // Reapply night-qualified attributes (including isLightTheme) so WebView
+        // can update prefers-color-scheme without losing the document/session.
+        getTheme().applyStyle(R.style.Theme_Diewish, true);
+        applySystemBarTheme(nativeThemeDark());
     }
 
     private void emitCoachVisibility(boolean active) {

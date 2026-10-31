@@ -506,12 +506,9 @@ test("fixed tabs navigate all destinations; Dashboard personalization persists w
       await assertViewport(page, 390, 844);
     }
     for (const theme of ["dark", "light"]) {
-      await page
-        .getByRole("button", {
-          name: theme === "dark" ? "Koyu temaya geç" : "Açık temaya geç",
-          exact: true,
-        })
-        .click();
+      const toggle = page.getByRole("button", { name: /^Görünüm:/ });
+      for (let step = 0; step < 3 && await toggle.getAttribute("data-mode") !== theme; step++)
+        await toggle.click();
       await page.waitForFunction(
         (dark) => document.documentElement.classList.contains("dark") === dark,
         theme === "dark",

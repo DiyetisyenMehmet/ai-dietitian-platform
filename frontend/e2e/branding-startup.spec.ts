@@ -62,7 +62,7 @@ for (const width of [320, 390, 412, 430, 1024, 1440]) {
           .toBe(true);
         const bounds = await brand.boundingBox();
         const headerBounds = await header.boundingBox();
-        const toggle = await header.getByRole("button", { name: /temaya geç/ }).boundingBox();
+        const toggle = await header.getByRole("button", { name: /Görünüm:|temaya geç/ }).boundingBox();
         expect(bounds).not.toBeNull();
         expect(toggle).not.toBeNull();
         expect(bounds!.x).toBeGreaterThanOrEqual(0);

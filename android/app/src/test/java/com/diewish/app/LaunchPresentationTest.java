@@ -38,7 +38,7 @@ public final class LaunchPresentationTest {
         static WebView.VisualStateCallback pending;
         static String artworkReady;
         @Implementation @Override protected void evaluateJavascript(String script, android.webkit.ValueCallback<String> result) {
-            if (result != null && script.contains("data-artwork-state")) result.onReceiveValue(artworkReady);
+            if (result != null && script.contains("data-artwork-state")) result.onReceiveValue("{\"ready\":" + artworkReady + ",\"dark\":false}");
             else super.evaluateJavascript(script, result);
         }
         @Implementation protected void postVisualStateCallback(long id, WebView.VisualStateCallback callback) {
@@ -190,7 +190,7 @@ public final class LaunchPresentationTest {
             View cover = ReflectionHelpers.getField(activity, "launchCover");
             var layers = (android.graphics.drawable.LayerDrawable) cover.getBackground();
             var surface = (android.graphics.drawable.ColorDrawable) layers.findDrawableByLayerId(R.id.diewish_launch_surface);
-            assertEquals(Color.WHITE, surface.getColor());
+            assertEquals(Color.rgb(252, 253, 252), surface.getColor());
             assertEquals(2, layers.getNumberOfLayers());
             assertTrue(layers.getDrawable(1) instanceof android.graphics.drawable.InsetDrawable);
         } finally { host.pause().stop().destroy(); }
@@ -198,7 +198,7 @@ public final class LaunchPresentationTest {
 
     @Test @Config(qualifiers = "night") public void darkLaunchUsesTheExistingDarkSurface() {
         var resources = org.robolectric.RuntimeEnvironment.getApplication().getResources();
-        assertEquals(Color.rgb(15, 20, 18), resources.getColor(R.color.diewish_launch_background, null));
+        assertEquals(Color.rgb(13, 22, 20), resources.getColor(R.color.diewish_launch_background, null));
     }
 
     private WebResourceError error() { return new android.webkit.LaunchTestWebResourceError(); }

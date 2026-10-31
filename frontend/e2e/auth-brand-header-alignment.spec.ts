@@ -33,7 +33,11 @@ for (const width of [390, 412, 430]) {
       const header = page.locator("header").first();
       const brand = header.getByTestId("diewish-brand");
       const name = brand.getByAltText("Diewish", { exact: true });
-      const symbol = brand.locator('img[src="/brands/diewish-id-transparent-approved.png"]');
+      const symbol = brand.locator(
+        before
+          ? 'img[src="/brands/diewish-id-approved.webp"]'
+          : 'img[src="/brands/diewish-id-transparent-approved.png"]',
+      );
       const tagline = brand.getByText("Sağlığın için, her zaman yanında.", { exact: true });
       await brand
         .locator("img")
@@ -49,7 +53,7 @@ for (const width of [390, 412, 430]) {
         name: (await name.boundingBox())!,
         symbol: (await symbol.boundingBox())!,
         tagline: (await tagline.boundingBox())!,
-        toggle: (await header.getByRole("button", { name: /temaya geç/ }).boundingBox())!,
+        toggle: (await header.getByRole("button", { name: /Görünüm:|temaya geç/ }).boundingBox())!,
         form: (await page.locator("form").boundingBox())!,
       };
       expect(rects.brand.x + rects.brand.width + 12).toBeLessThanOrEqual(rects.toggle.x);

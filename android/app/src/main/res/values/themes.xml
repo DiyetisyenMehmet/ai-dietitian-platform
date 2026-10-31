@@ -2,6 +2,8 @@
 <resources>
     <style name="Theme.Diewish" parent="android:style/Theme.Material.Light.NoActionBar">
         <item name="android:fontFamily">sans</item>
+        <item name="android:isLightTheme">true</item>
+        <item name="android:forceDarkAllowed">false</item>
         <item name="android:windowBackground">@drawable/diewish_launch_background</item>
         <item name="android:windowActionModeOverlay">true</item>
         <item name="android:colorAccent">@color/diewish_primary</item>
@@ -9,6 +11,14 @@
         <item name="android:statusBarColor">@color/diewish_background</item>
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:windowLightNavigationBar">true</item>
+    </style>
+
+    <!-- Presentation-only overlays; the saved choice can oppose device night mode. -->
+    <style name="Diewish.Appearance.Light" parent="">
+        <item name="android:isLightTheme">true</item>
+    </style>
+    <style name="Diewish.Appearance.Dark" parent="">
+        <item name="android:isLightTheme">false</item>
     </style>
 
     <style name="Theme.Diewish.Camera" parent="android:style/Theme.Material.NoActionBar">

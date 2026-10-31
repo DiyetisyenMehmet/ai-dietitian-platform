@@ -67,7 +67,9 @@ for (const width of [390, 412, 430]) {
           brand: (await brand.boundingBox())!,
           name: (await name.boundingBox())!,
           form: (await page.locator("form").boundingBox())!,
-          toggle: (await header.getByRole("button", { name: /temaya geç/ }).boundingBox())!,
+          toggle: (await header
+            .getByRole("button", { name: /Görünüm:|temaya geç/ })
+            .boundingBox())!,
         };
         if (!before) {
           const old = JSON.parse(
@@ -113,7 +115,14 @@ for (const width of [390, 412, 430]) {
         });
         if (!before) {
           const count = requests.length;
-          await header.getByRole("button", { name: /temaya geç/ }).click();
+          const toggle = header.getByRole("button", { name: /Görünüm:/ });
+          const target = theme === "dark" ? "light" : "dark";
+          for (
+            let step = 0;
+            step < 3 && (await toggle.getAttribute("data-mode")) !== target;
+            step++
+          )
+            await toggle.click();
           await expect(page.locator("html")).toHaveClass(
             new RegExp(theme === "dark" ? "light" : "dark"),
           );
