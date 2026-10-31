@@ -151,7 +151,13 @@ def source():
     require(subprocess.run(['git', 'merge-base', '--is-ancestor', MERGED, sha], check=False).returncode == 0,
             'reviewed application baseline is not an ancestor')
     changed = subprocess.check_output(['git', 'diff', '--name-only', MERGED, sha], text=True).splitlines()
-    require(set(changed) <= PREP_FILES, 'application drift since reviewed Journey merge')
+    approved_test = 'frontend/e2e/admin-entitlement-operations.spec.js'
+    require(set(changed) <= PREP_FILES | {approved_test}, 'application drift since reviewed Journey merge')
+    if approved_test in changed:
+        # PR #133 permits exactly this regular-file entry, not an Admin/test directory.
+        entry = subprocess.check_output(['git', 'ls-tree', '-z', '--full-tree', sha, '--', approved_test], text=True)
+        require(entry == '100644 blob 503fc08f916c089cf5a06408f88e69a23efb9fe0\t' + approved_test + '\0',
+                'unapproved Admin test tree entry')
     pkg = json.loads(Path('frontend/package.json').read_text())
     lock = json.loads(Path('frontend/package-lock.json').read_text())
     require(pkg['dependencies']['next'] == '15.5.28' and
