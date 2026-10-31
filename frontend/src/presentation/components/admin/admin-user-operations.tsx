@@ -15,6 +15,8 @@ import {
   ModalFooter,
 } from "@/presentation/components/ui/modal";
 
+import type { AdminReadState, UserSessionSummary } from "./admin-user-diagnostics";
+
 type Action =
   | { kind: "status"; isActive: boolean }
   | { kind: "session"; id: string; device: string }
@@ -33,10 +35,12 @@ export function AdminUserOperations({
   user,
   permissions,
   onStatus,
+  onReadState,
 }: {
   user: AdminUserSummary;
   permissions: string[];
   onStatus: (active: boolean) => void;
+  onReadState?: (state: AdminReadState<UserSessionSummary>) => void;
 }) {
   const canManage = permissions.includes("users.manage");
   const canRevoke = permissions.includes("users.sessions.revoke");
@@ -53,9 +57,13 @@ export function AdminUserOperations({
   const inFlight = React.useRef(false);
   const trigger = React.useRef<HTMLElement | null>(null);
   React.useEffect(() => {
-    if (!canRevoke || user.role !== "USER") return;
+    if (!canRevoke || user.role !== "USER") {
+      onReadState?.({ status: "unavailable" });
+      return;
+    }
     let cancelled = false;
     setLoading(true);
+    onReadState?.({ status: "loading" });
     setLoadError("");
     void adminClient
       .getUserSessions(user.id)
@@ -63,10 +71,12 @@ export function AdminUserOperations({
         if (!cancelled) {
           setSessions(data.sessions);
           setTotal(data.total);
+          onReadState?.({ status: "ready", data: { total: data.total } });
         }
       })
       .catch((cause: unknown) => {
         if (cancelled) return;
+        onReadState?.({ status: "error" });
         const status =
           typeof cause === "object" && cause && "status" in cause ? Number(cause.status) : 0;
         if (status === 401) window.location.replace("/admin/login");
@@ -82,7 +92,7 @@ export function AdminUserOperations({
     return () => {
       cancelled = true;
     };
-  }, [canRevoke, user.id, user.role, reload]);
+  }, [canRevoke, user.id, user.role, reload, onReadState]);
   if (user.role !== "USER" || (!canManage && !canRevoke)) return null;
 
   const open = (next: Action, element: HTMLElement) => {

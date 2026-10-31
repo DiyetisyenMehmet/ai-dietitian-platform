@@ -1,7 +1,7 @@
 name: Admin Owner Center CI
 on:
   push:
-    branches: [feature/admin3-owner-control-center-system-health-a1]
+    branches: [feature/admin3-owner-control-center-system-health-a1, feature/admin-a2-user360-diagnostics]
 permissions:
   contents: read
 concurrency:
@@ -72,6 +72,8 @@ jobs:
       - name: Lint frontend
         run: npm run lint
       - run: npm run type-check
+      - name: Read-only user diagnosis contracts
+        run: node --test tests/admin-user-diagnostics.test.cjs
       - run: npm run build
       - name: Select installed browser or install Playwright Chromium
         shell: bash

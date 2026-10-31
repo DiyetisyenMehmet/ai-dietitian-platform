@@ -11,8 +11,7 @@ import { Button } from "@/presentation/components/ui/button";
 import { Input } from "@/presentation/components/ui/input";
 import { Skeleton } from "@/presentation/components/ui/skeleton";
 
-import { AdminUserOperations } from "./admin-user-operations";
-import { AdminUserSubscription } from "./admin-user-subscription";
+import { AdminUser360 } from "./admin-user360";
 
 const date = (value: string | null) =>
   value ? new Date(value).toLocaleString("tr-TR") : "Bilgi yok";
@@ -99,7 +98,8 @@ export function AdminUsers({
           {userId ? "Kullanıcı detayı" : "Kullanıcılar"}
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Hesap bilgilerini ve kayıtlı planı salt okunur olarak inceleyin.
+          Hesap bilgilerini, yetkili olduğunuz operasyon bölümlerini ve salt okunur tanı sonuçlarını
+          inceleyin.
         </p>
       </div>
       {!userId && (
@@ -158,55 +158,14 @@ export function AdminUsers({
           </Button>
         </div>
       ) : user ? (
-        <>
-          <div className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border bg-card/80 p-5">
-            <div className="min-w-0">
-              <h2 className="break-words text-lg font-semibold">
-                {user.fullName || "İsim belirtilmemiş"}
-              </h2>
-              <p className="break-all text-sm text-muted-foreground">{user.email}</p>
-            </div>
-            <Status active={user.isActive} />
-          </div>
-          <div className="grid gap-4 lg:grid-cols-2">
-            <div className="min-w-0 rounded-2xl border bg-card/80 p-5">
-              <h2 className="mb-4 font-semibold">Hesap</h2>
-              <dl className="space-y-3 text-sm">
-                {[
-                  ["Kullanıcı ID", user.id],
-                  ["E-posta", user.email],
-                  ["Hesap rolü", user.role === "ADMIN" ? "Yönetici" : "Kullanıcı"],
-                  ["E-posta doğrulama", user.emailVerifiedAt ? "Doğrulanmış" : "Doğrulanmamış"],
-                  ["Kayıt tarihi", date(user.createdAt)],
-                  ["Son giriş", date(user.lastLoginAt)],
-                  [
-                    "Başlangıç kurulumu",
-                    user.onboardingCompleted ? "Tamamlanmış" : "Tamamlanmamış",
-                  ],
-                  ["Kayıtlı plan", plan(user.subscriptionTier)],
-                ].map(([label, value]) => (
-                  <div key={label}>
-                    <dt className="text-muted-foreground">{label}</dt>
-                    <dd className="mt-0.5 break-all font-medium">{value}</dd>
-                  </div>
-                ))}
-              </dl>
-            </div>
-            <AdminUserSubscription
-              userId={user.id}
-              userEmail={user.email}
-              permissions={permissions}
-            />
-          </div>
-          <AdminUserOperations
-            key={user.id}
-            user={user}
-            permissions={permissions}
-            onStatus={(active) =>
-              setUser((current) => (current ? { ...current, isActive: active } : current))
-            }
-          />
-        </>
+        <AdminUser360
+          key={user.id}
+          user={user}
+          permissions={permissions}
+          onStatus={(active) =>
+            setUser((current) => (current ? { ...current, isActive: active } : current))
+          }
+        />
       ) : (
         result && (
           <>
