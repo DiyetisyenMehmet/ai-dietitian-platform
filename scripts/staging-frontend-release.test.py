@@ -108,15 +108,36 @@ ERROR serviceAccount=person@example.com
                 r.check_router(revision('front', {**r.ROUTER, key: 'https://foreign.invalid'}))
 
     def test_cloud_rejects_backend_and_database_mutations(self):
-        with patch.object(r.subprocess, 'run') as run:
-            for args in [('run','deploy',r.BACK,'--no-traffic'),
-                         ('run','deploy',r.FRONT),
-                         ('run','services','update-traffic',r.BACK),
-                         ('secrets','versions','access','latest'),
-                         ('scheduler','jobs','resume','job')]:
-                with self.assertRaises(RuntimeError):
-                    r.cloud(*args)
-            run.assert_not_called()
+        real_run = subprocess.run
+        for mode in ['neutral', 'inspect', 'release']:
+            marker_mode = 'inspect' if mode == 'neutral' else mode
+            with self.subTest(mode=mode), marker_checkout(
+                    marker_mode, message=r.JOURNEY_INTENTS[marker_mode],
+                    payload=lambda data: {**data, 'target': 'journey'}) as fixture:
+                # Exercise real marker admission, not an ambient CI event or a
+                # mocked rejection. Only these exact local Git reads may run.
+                reads = {('git','rev-list','--parents','-n','1',fixture['sha']),
+                         ('git','diff','--name-status',fixture['before'],fixture['sha']),
+                         ('git','ls-tree',fixture['sha'],'--',r.MARKER)}
+                def read_only_git(args, **kwargs):
+                    self.assertIn(tuple(args), reads, 'unexpected process; cloud execution forbidden')
+                    return real_run(args, **kwargs)
+                environment = {'RELEASE_MODE': marker_mode}
+                if mode == 'neutral':
+                    environment['GITHUB_EVENT_NAME'] = 'pull_request'
+                with patch.dict(os.environ, environment), patch.object(
+                        r.subprocess, 'run', side_effect=read_only_git) as run:
+                    for args, reason in [
+                            (('run','deploy',r.BACK,'--no-traffic'), 'unsafe backend deploy'),
+                            (('run','deploy',r.FRONT), 'unsafe deploy target'),
+                            (('run','services','update-traffic',r.BACK), 'unsafe traffic target'),
+                            (('secrets','versions','access','latest'), 'unapproved cloud operation'),
+                            (('scheduler','jobs','resume','job'), 'unapproved cloud operation')]:
+                        with self.subTest(args=args), self.assertRaisesRegex(RuntimeError, reason):
+                            r.cloud(*args)
+                    actual = [tuple(call.args[0]) for call in run.call_args_list]
+                    self.assertEqual(set(actual), set() if mode == 'neutral' else reads)
+                    self.assertEqual(len(actual), 0 if mode == 'neutral' else 6)
 
     def test_failed_gate_never_builds_or_deploys(self):
         with release_context({'source':'a'*40}), patch.dict(os.environ, {'GITHUB_EVENT_NAME':'workflow_dispatch','RELEASE_MODE':'release'}), patch.object(r, 'source', return_value='a' * 40), patch.object(r, 'gates', side_effect=RuntimeError('gate failed')), patch.object(r, 'cloud') as cloud, patch.object(r, 'build') as build:
