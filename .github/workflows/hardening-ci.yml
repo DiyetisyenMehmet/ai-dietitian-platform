@@ -3,6 +3,7 @@ name: Hardening CI
 on:
   push:
     branches:
+      - fix/app13-g1-minimatch-security-a1
       - fix/production-hardening
       - feature/android-native-scanner
       - feature/staging-preview
@@ -424,6 +425,8 @@ jobs:
           fi
           npx playwright install --with-deps chromium webkit
           npm run build
+      - name: Verify patched minimatch consumer compatibility
+        run: node --test scripts/minimatch-security.test.cjs
       - name: Test Dashboard viewport overflow and scroll containment (63 scenarios)
         working-directory: frontend
         run: node --test tests/dashboard-viewport-layout.test.cjs

@@ -53,7 +53,8 @@
     "swagger-jsdoc": "6.2.8",
     "swagger-ui-express": "5.0.1",
     "tesseract.js": "^5.1.1",
-    "zod": "4.6.6"
+    "zod": "4.6.6",
+    "minimatch": "file:vendor/minimatch-compat"
   },
   "devDependencies": {
     "@eslint/js": "9.19.0",
@@ -80,6 +81,10 @@
   },
   "overrides": {
     "qs": "6.16.1",
-    "braces": "$braces"
+    "braces": "$braces",
+    "minimatch": "$minimatch",
+    "swagger-jsdoc": {
+      "glob": "14.0.0"
+    }
   }
 }
