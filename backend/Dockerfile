@@ -8,6 +8,7 @@ WORKDIR /app
 
 # Install dependencies (including dev) using the lockfile for reproducibility.
 COPY package.json package-lock.json ./
+COPY vendor ./vendor
 RUN npm ci
 
 # Generate the Prisma client, then compile TypeScript to dist/.
@@ -31,6 +32,7 @@ ENV NODE_ENV=production
 RUN addgroup -S nodejs && adduser -S nodejs -G nodejs
 
 COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=nodejs:nodejs /app/vendor ./vendor
 COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
 COPY --from=builder --chown=nodejs:nodejs /app/prisma ./prisma
 COPY --from=builder --chown=nodejs:nodejs /app/package.json ./package.json

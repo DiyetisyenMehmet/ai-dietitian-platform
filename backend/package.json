@@ -84,7 +84,7 @@
     "braces": "$braces",
     "minimatch": "$minimatch",
     "swagger-jsdoc": {
-      "glob": "14.0.0"
+      "glob": "14.0.2"
     }
   }
 }

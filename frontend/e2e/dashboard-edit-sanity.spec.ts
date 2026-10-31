@@ -37,6 +37,12 @@ async function drag(page: Page, sourceSelector: string, targetSelector: string, 
   const to = (await page.locator(targetSelector).boundingBox())!;
   const x = from.x + from.width / 2,
     y = from.y + from.height / 2;
+  const hit = await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.outerHTML, { x, y });
+  await test.info().attach(`drag-hit-${sourceSelector}`, {
+    body: JSON.stringify({ sourceSelector, targetSelector, from, to, x, y, hit }),
+    contentType: "application/json",
+  });
+  await page.screenshot({ path: test.info().outputPath(`drag-hit-${axis}.png`) });
   expect(
     await page.evaluate(
       ({ x, y, selector }) => !!document.elementFromPoint(x, y)?.closest(selector),
