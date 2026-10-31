@@ -26,6 +26,8 @@ import type {
   AdminRoleUpdateInput,
 } from "./admin-governance.schemas";
 
+import { adminUserParamsSchema } from "./admin-users.schemas";
+
 interface RequestIdentity {
   correlationId: string;
   requestId: string;
@@ -634,13 +636,15 @@ export const adminGovernanceService = {
 
     if (input.user) {
       const targets = await prisma.user.findMany({
-        where: {
-          OR: [
-            { id: input.user },
-            { email: { contains: input.user, mode: "insensitive" } },
-            { fullName: { contains: input.user, mode: "insensitive" } },
-          ],
-        },
+        where: adminUserParamsSchema.shape.id.safeParse(input.user).success
+          ? { id: input.user.toLowerCase() }
+          : {
+              OR: [
+                { id: input.user },
+                { email: { contains: input.user, mode: "insensitive" } },
+                { fullName: { contains: input.user, mode: "insensitive" } },
+              ],
+            },
         select: { id: true },
         take: 50,
       });

@@ -3,6 +3,7 @@ export default defineConfig({
   testDir: "./e2e",
   testMatch: [
     "admin-owner-center.spec.ts",
+    "admin-user360.spec.ts",
     "admin-shell.spec.js",
     "admin-users.spec.js",
     "admin-subscription.spec.js",

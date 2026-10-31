@@ -14,6 +14,7 @@ import {
   ModalTrigger,
 } from "@/presentation/components/ui/modal";
 import { AdminNavigation } from "./admin-navigation";
+import { AdminGlobalUserSearch } from "./admin-global-user-search";
 import { AdminProfileMenu } from "./admin-profile-menu";
 
 import type { AdminSession } from "@/infrastructure/admin/admin-client";
@@ -97,6 +98,7 @@ export function AdminShell({
           >
             {environment}
           </span>
+          {session.permissions.includes("users.read") && <AdminGlobalUserSearch />}
           <ThemeToggle />
           <AdminProfileMenu session={session} />
         </div>

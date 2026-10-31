@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/api-error";
 import { buildPaginationMeta } from "../../utils/api-response";
+import { adminUserParamsSchema } from "./admin-users.schemas";
 import type { AdminUsersQuery } from "./admin-users.schemas";
 
 // Security boundary: never fetch profile, health, credential or session relations.
@@ -41,10 +42,9 @@ export const adminUsersService = {
       ...(query.status === "all" ? {} : { isActive: query.status === "active" }),
       ...(query.search
         ? {
-            OR: [
-              { email: { contains: query.search, mode: "insensitive" as const } },
-              { id: query.search },
-            ],
+            ...(adminUserParamsSchema.shape.id.safeParse(query.search).success
+              ? { id: query.search.toLowerCase() }
+              : { email: { contains: query.search, mode: "insensitive" as const } }),
           }
         : {}),
     };

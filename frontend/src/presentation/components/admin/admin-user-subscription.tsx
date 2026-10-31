@@ -12,6 +12,8 @@ import { Button } from "@/presentation/components/ui/button";
 import { Skeleton } from "@/presentation/components/ui/skeleton";
 import { AdminSupportEntitlementOperations } from "./admin-support-entitlement-operations";
 
+import type { AdminReadState } from "./admin-user-diagnostics";
+
 const PLAN_LABEL = {
   FREE: "Free",
   PREMIUM: "Premium",
@@ -58,10 +60,12 @@ export function AdminUserSubscription({
   userId,
   userEmail,
   permissions,
+  onReadState,
 }: {
   userId: string;
   userEmail: string;
   permissions: readonly AdminPermission[];
+  onReadState?: (state: AdminReadState<AdminUserSubscription>) => void;
 }) {
   const allowed = permissions.includes("entitlements.read");
   const [subscription, setSubscription] = React.useState<AdminUserSubscription | null>(null);
@@ -70,17 +74,25 @@ export function AdminUserSubscription({
   const [retry, setRetry] = React.useState(0);
 
   React.useEffect(() => {
-    if (!allowed) return;
+    if (!allowed) {
+      onReadState?.({ status: "unavailable" });
+      return;
+    }
     let cancelled = false;
     setLoading(true);
+    onReadState?.({ status: "loading" });
     setError("");
     void adminClient
       .getUserSubscription(userId)
       .then(({ subscription: next }) => {
-        if (!cancelled) setSubscription(next);
+        if (!cancelled) {
+          setSubscription(next);
+          onReadState?.({ status: "ready", data: next });
+        }
       })
       .catch((reason: unknown) => {
         if (cancelled) return;
+        onReadState?.({ status: "error" });
         const status =
           typeof reason === "object" && reason !== null && "status" in reason
             ? Number(reason.status)
@@ -97,7 +109,7 @@ export function AdminUserSubscription({
     return () => {
       cancelled = true;
     };
-  }, [allowed, retry, userId]);
+  }, [allowed, retry, userId, onReadState]);
 
   if (!allowed) return null;
 
