@@ -23,6 +23,11 @@ G1_SOURCE = '51ba9fcef7cff7627792303584448c91b05d70dd'
 G1_BACKEND = '1314344e010a8d89391bda6a0b1708ec7d9ef213'
 G1_LOCK = 'b2de90e8ab8d70da5e844a64cf798b9cdebcc5605511470d8f81f86b323930c7'
 G1_MANIFEST = '7ea5a37942dcc8a63aabf0c39ec9e598878dc353d627b5dc45e8791609f573eb'
+# Additional owner-reviewed PR #135 tuple; historical contracts above stay valid.
+G1_APPROVED_SOURCE = '0ab4fab4f1cec0ea611759fd92df154f27ccd12f'
+G1_APPROVED_BACKEND = 'fc221769d4da4b7030d1eaf65dc3b201f54ef8fd'
+G1_APPROVED_LOCK = '2bde683cbaffa52976689f649997f64ee43f96d12e339a4fac6ae6f4f29da3d8'
+G1_APPROVED_MANIFEST = 'c935c01ebdd02dce11fa2804cb28701df4940e3526ff50688e9fd9c472e30947'
 
 
 def require(condition, message):
@@ -40,7 +45,8 @@ def inputs(build_ref, harness_ref, manifest_sha256, backend_tree, lock_sha256, i
     require(re.fullmatch(r'[0-9a-f]{40}', build_ref or '') is not None,
             'explicit immutable build-definition commit required')
     require((harness_ref, manifest_sha256, backend_tree, lock_sha256) in
-            [(HARNESS, MANIFEST, BACKEND, LOCK), (G1_SOURCE, G1_MANIFEST, G1_BACKEND, G1_LOCK)],
+            [(HARNESS, MANIFEST, BACKEND, LOCK), (G1_SOURCE, G1_MANIFEST, G1_BACKEND, G1_LOCK),
+             (G1_APPROVED_SOURCE, G1_APPROVED_MANIFEST, G1_APPROVED_BACKEND, G1_APPROVED_LOCK)],
             'inputs differ from accepted composed-source evidence')
     require(image == IMAGE_PREFIX + build_ref, 'only the exact staging composed-build image name is permitted')
 
@@ -68,8 +74,8 @@ def trusted_composer(repo, build_ref):
 
 def context(mode, repo, source, build_ref, harness_ref, manifest_sha256, backend_tree, lock_sha256, image):
     inputs(build_ref, harness_ref, manifest_sha256, backend_tree, lock_sha256, image)
-    if harness_ref == G1_SOURCE:
-        return journey_context(mode, repo, source, build_ref, image)
+    if harness_ref in (G1_SOURCE, G1_APPROVED_SOURCE):
+        return journey_context(mode, repo, source, build_ref, image, harness_ref)
     repo, source = Path(repo).resolve(), Path(source).absolute()
     composer = trusted_composer(repo, build_ref)
     if mode == 'prepare':
@@ -95,12 +101,16 @@ def context(mode, repo, source, build_ref, harness_ref, manifest_sha256, backend
             'dockerContext': str(source / 'backend'), 'imageNameOnly': image}
 
 
-def journey_context(mode, repo, source, build_ref, image):
+def journey_context(mode, repo, source, build_ref, image, harness_ref):
     """Additional explicitly pinned G1 source; the historical composed contract stays intact."""
+    require(harness_ref in (G1_SOURCE, G1_APPROVED_SOURCE), 'unapproved G1 source')
+    manifest_sha256, backend_tree, lock_sha256 = (
+        (G1_MANIFEST, G1_BACKEND, G1_LOCK) if harness_ref == G1_SOURCE else
+        (G1_APPROVED_MANIFEST, G1_APPROVED_BACKEND, G1_APPROVED_LOCK))
     repo, source = Path(repo).resolve(), Path(source).absolute()
     require(git(repo, 'rev-parse', 'HEAD').decode().strip() == build_ref, 'build checkout mismatch')
-    git(repo, 'merge-base', '--is-ancestor', G1_SOURCE, build_ref)
-    require(git(repo, 'rev-parse', build_ref + ':backend').decode().strip() == G1_BACKEND,
+    git(repo, 'merge-base', '--is-ancestor', harness_ref, build_ref)
+    require(git(repo, 'rev-parse', build_ref + ':backend').decode().strip() == backend_tree,
             'G1 backend drift')
     for relative in (SELF, DEFINITION):
         path = repo / relative
@@ -118,12 +128,12 @@ def journey_context(mode, repo, source, build_ref, image):
         require(kind == 'blob' and permission in ('100644', '100755')
                 and name.startswith('backend/') and '..' not in Path(name).parts, 'unsafe G1 entry')
         files[name] = {'blob': oid, 'mode': permission}
-    manifest = {'format': 4, 'applicationCommit': G1_SOURCE, 'backendTree': G1_BACKEND,
-                'lockSha256': G1_LOCK, 'files': files}
+    manifest = {'format': 4, 'applicationCommit': harness_ref, 'backendTree': backend_tree,
+                'lockSha256': lock_sha256, 'files': files}
     encoded = (json.dumps(manifest, sort_keys=True, indent=2) + '\n').encode()
-    require(hashlib.sha256(encoded).hexdigest() == G1_MANIFEST, 'G1 manifest mismatch')
+    require(hashlib.sha256(encoded).hexdigest() == manifest_sha256, 'G1 manifest mismatch')
     require(hashlib.sha256(git(repo, 'show', build_ref + ':backend/package-lock.json')).hexdigest()
-            == G1_LOCK, 'G1 dependency lock mismatch')
+            == lock_sha256, 'G1 dependency lock mismatch')
     require(not source.is_symlink() and not source.resolve().is_relative_to(repo)
             and not repo.is_relative_to(source.resolve()), 'unsafe output root')
     if mode == 'prepare':
@@ -156,9 +166,9 @@ def journey_context(mode, repo, source, build_ref, image):
             actual.add(relative)
     require(actual == set(files), 'G1 inventory mismatch')
     return {'result': 'PASS', 'purpose': 'VERIFIED_SOURCE_INPUT_NOT_AN_IMAGE_OR_RELEASE',
-            'buildDefinitionCommit': build_ref, 'sourceHarnessCommit': G1_SOURCE,
-            'sourceManifestSha256': G1_MANIFEST, 'backendTree': G1_BACKEND,
-            'lockSha256': G1_LOCK, 'dockerContext': str(source / 'backend'), 'imageNameOnly': image}
+            'buildDefinitionCommit': build_ref, 'sourceHarnessCommit': harness_ref,
+            'sourceManifestSha256': manifest_sha256, 'backendTree': backend_tree,
+            'lockSha256': lock_sha256, 'dockerContext': str(source / 'backend'), 'imageNameOnly': image}
 
 
 def main():

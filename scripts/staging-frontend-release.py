@@ -23,6 +23,30 @@ PROJECT = 'project-a2e260c1-839d-4f1d-b90'
 REGION = 'europe-west1'
 REPO = 'DiyetisyenMehmet/ai-dietitian-platform'
 MERGED = '51ba9fcef7cff7627792303584448c91b05d70dd'
+# PR #135: reviewed application source, independent of the original G1 baseline.
+APPROVED_SOURCE = '0ab4fab4f1cec0ea611759fd92df154f27ccd12f'
+APPROVED_ENTRIES = {
+    '.github/workflows/hardening-ci.yml': '100644 blob af3e54266fecac05a89bcc12764b5c58178d64c1',
+    'backend/Dockerfile': '100644 blob 6739fcc58c0e16050c6380a8fd5aba2b1462354f',
+    'backend/package-lock.json': '100644 blob 527c1a8c4c43b99872d72a1c9f2f0ecd4969324a',
+    'backend/package.json': '100644 blob 0b7766c93c05c31bf139083c16c43a7adb060d77',
+    'backend/vendor/minimatch-compat/index.cjs': '100644 blob 9ff0f1bdc126703d5f5ac64513674ef1d0a5443a',
+    'backend/vendor/minimatch-compat/package.json': '100644 blob 2e5fc1f012de69bdd53005bceb8a7b3e6d92fbd2',
+    'frontend/Dockerfile': '100644 blob 6f0a83a0f30b1bd3395edbb77bca9849d161ecfe',
+    'frontend/e2e/dashboard-edit-sanity.spec.ts': '100644 blob cebaa07114d719edd35cfcdf427ad8ae0bfda18e',
+    'frontend/package-lock.json': '100644 blob a180950147d61b9126b3f7fd8518af6ae763d136',
+    'frontend/package.json': '100644 blob 389e2f0811f9e0c350b63fde2d4a4dcbcefcd797',
+    'frontend/vendor/minimatch-compat/index.cjs': '100644 blob 9ff0f1bdc126703d5f5ac64513674ef1d0a5443a',
+    'frontend/vendor/minimatch-compat/package.json': '100644 blob 2e5fc1f012de69bdd53005bceb8a7b3e6d92fbd2',
+    'scripts/minimatch-security.test.cjs': '100644 blob cacff68e91770d6e133a87cd78c131a7f66fc7b6',
+    'scripts/staging-frontend-release.test.py': '100644 blob bf8bac150496812002bcf6735a3cb2c70559b5b0',
+}
+# The release-test file is also changed by this separately reviewed guard PR.
+# Pin those new bytes; all other PR #135 entries must remain exactly unchanged.
+APPROVED_CURRENT_ENTRIES = {
+    **APPROVED_ENTRIES,
+    'scripts/staging-frontend-release.test.py': '100644 blob 8b15bc74a896d57619d7dd6402a5e29e226cbccc',
+}
 OWNER = 'DiyetisyenMehmet'
 OWNER_ID = 301813832
 WORKFLOW = '.github/workflows/staging-auth-a2-frontend-only.yml'
@@ -150,9 +174,16 @@ def source():
     require(not subprocess.check_output(['git', 'status', '--porcelain'], text=True).strip(), 'dirty release checkout')
     require(subprocess.run(['git', 'merge-base', '--is-ancestor', MERGED, sha], check=False).returncode == 0,
             'reviewed application baseline is not an ancestor')
+    require(subprocess.run(['git', 'merge-base', '--is-ancestor', APPROVED_SOURCE, sha], check=False).returncode == 0,
+            'approved security source is not an ancestor')
     changed = subprocess.check_output(['git', 'diff', '--name-only', MERGED, sha], text=True).splitlines()
     approved_test = 'frontend/e2e/admin-entitlement-operations.spec.js'
-    require(set(changed) <= PREP_FILES | {approved_test}, 'application drift since reviewed Journey merge')
+    require(set(changed) <= PREP_FILES | {approved_test} | set(APPROVED_ENTRIES),
+            'application drift since reviewed Journey merge')
+    for ref, entries in [(APPROVED_SOURCE, APPROVED_ENTRIES), (sha, APPROVED_CURRENT_ENTRIES)]:
+        for path, expected in entries.items():
+            entry = subprocess.check_output(['git', 'ls-tree', '-z', '--full-tree', ref, '--', path], text=True)
+            require(entry == expected + '\t' + path + '\0', 'unapproved G1 source tree entry: ' + path)
     if approved_test in changed:
         # PR #133 permits exactly this regular-file entry, not an Admin/test directory.
         entry = subprocess.check_output(['git', 'ls-tree', '-z', '--full-tree', sha, '--', approved_test], text=True)
@@ -697,6 +728,7 @@ def backend_contract():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     require(module.G1_SOURCE == MERGED, 'release/build application baseline mismatch')
+    require(module.G1_APPROVED_SOURCE == APPROVED_SOURCE, 'release/build approved source mismatch')
     return module
 
 
@@ -704,10 +736,11 @@ def build_backend(saved):
     sha, contract = source(), backend_contract()
     require(saved['source'] == sha, 'backend snapshot/source mismatch')
     image = contract.IMAGE_PREFIX + sha
-    substitutions = {'_IMAGE': image, '_GIT_SHA': sha, '_SOURCE_HARNESS_SHA': contract.G1_SOURCE,
-                     '_SOURCE_MANIFEST_SHA256': contract.G1_MANIFEST,
-                     '_BACKEND_TREE': contract.G1_BACKEND, '_LOCK_SHA256': contract.G1_LOCK}
-    contract.inputs(sha, contract.G1_SOURCE, contract.G1_MANIFEST, contract.G1_BACKEND, contract.G1_LOCK, image)
+    substitutions = {'_IMAGE': image, '_GIT_SHA': sha, '_SOURCE_HARNESS_SHA': contract.G1_APPROVED_SOURCE,
+                     '_SOURCE_MANIFEST_SHA256': contract.G1_APPROVED_MANIFEST,
+                     '_BACKEND_TREE': contract.G1_APPROVED_BACKEND, '_LOCK_SHA256': contract.G1_APPROVED_LOCK}
+    contract.inputs(sha, contract.G1_APPROVED_SOURCE, contract.G1_APPROVED_MANIFEST,
+                    contract.G1_APPROVED_BACKEND, contract.G1_APPROVED_LOCK, image)
     built = cloud('builds', 'submit', '--no-source', '--config', contract.DEFINITION,
                   '--substitutions', ','.join(k + '=' + v for k, v in substitutions.items()), '--async')
     identifier = built.get('id', '')
@@ -744,16 +777,20 @@ def backend_image_version(saved):
     labels = json.loads(subprocess.check_output(['docker', 'image', 'inspect', image,
                                                 '--format', '{{json .Config.Labels}}'], text=True))
     expected = {'io.diewish.source-kind': 'composed', 'io.diewish.build-definition-sha': saved['source'],
-                'io.diewish.source-harness-sha': MERGED, 'io.diewish.source-manifest-sha256': contract.G1_MANIFEST,
-                'io.diewish.backend-tree': contract.G1_BACKEND, 'io.diewish.lock-sha256': contract.G1_LOCK}
+                'io.diewish.source-harness-sha': contract.G1_APPROVED_SOURCE,
+                'io.diewish.source-manifest-sha256': contract.G1_APPROVED_MANIFEST,
+                'io.diewish.backend-tree': contract.G1_APPROVED_BACKEND,
+                'io.diewish.lock-sha256': contract.G1_APPROVED_LOCK}
     require(all((labels or {}).get(k) == v for k, v in expected.items()), 'backend image provenance mismatch')
     js = """const fs=require('fs'),c=require('crypto');
     console.log(JSON.stringify({qs:require('qs/package.json').version,
+    minimatch:require('minimatch-engine/package.json').version,
     states:Object.keys(require('@prisma/client').MealCheckInState).sort(),
     checkIn:fs.readFileSync('dist/modules/tracking/meal-check-in.controller.js','utf8').includes('MEAL_CHECK_IN_NOT_READY')}));"""
     report = json.loads(subprocess.check_output(['docker', 'run', '--rm', '--network=none', '--entrypoint', 'node',
                                                  image, '-e', js], text=True))
-    require(report == {'qs': '6.16.1', 'states': ['EATEN', 'PENDING', 'SKIPPED'], 'checkIn': True},
+    require(report == {'qs': '6.16.1', 'minimatch': '11.0.1',
+                       'states': ['EATEN', 'PENDING', 'SKIPPED'], 'checkIn': True},
             'backend compiled content/Prisma mismatch')
     saved['backendImageVerified'] = True
     save(saved)

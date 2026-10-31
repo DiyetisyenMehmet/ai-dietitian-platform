@@ -320,5 +320,68 @@ class JourneyBuildInputContracts(unittest.TestCase):
             r.context('prepare',self.repo,self.repo/'inside',**self.args)
 
 
+class ApprovedSecurityBuildInputs(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.temp=tempfile.TemporaryDirectory(prefix='g1-reviewed-security-')
+        cls.addClassCleanup(cls.temp.cleanup)
+        cls.root=Path(cls.temp.name);cls.source=cls.root/'source'
+        cls.ref=r.git(REPO,'rev-parse','HEAD').decode().strip()
+        cls.args=dict(build_ref=cls.ref,harness_ref=r.G1_APPROVED_SOURCE,
+                      manifest_sha256=r.G1_APPROVED_MANIFEST,backend_tree=r.G1_APPROVED_BACKEND,
+                      lock_sha256=r.G1_APPROVED_LOCK,image=r.IMAGE_PREFIX+cls.ref)
+        with git_objects_only():cls.report=r.context('prepare',REPO,cls.source,**cls.args)
+
+    def verify(self,path=None,**changes):
+        with git_objects_only():return r.context('verify',REPO,path or self.source,**{**self.args,**changes})
+
+    def test_exact_approved_context_matches_all_manifest_bytes_and_preserves_both_old_contracts(self):
+        self.assertEqual(self.report,self.verify())
+        self.assertEqual(self.report['backendTree'],'fc221769d4da4b7030d1eaf65dc3b201f54ef8fd')
+        self.assertEqual(self.report['sourceHarnessCommit'],'0ab4fab4f1cec0ea611759fd92df154f27ccd12f')
+        self.assertEqual(json.loads((self.source/'source-manifest.json').read_bytes())['format'],4)
+        for values in [(r.HARNESS,r.MANIFEST,r.BACKEND,r.LOCK),(r.G1_SOURCE,r.G1_MANIFEST,r.G1_BACKEND,r.G1_LOCK)]:
+            r.inputs(self.ref,*values,r.IMAGE_PREFIX+self.ref)
+        self.assertEqual(r.G1_SOURCE,'51ba9fcef7cff7627792303584448c91b05d70dd')
+
+    def test_each_mixed_old_or_wrong_new_tuple_value_fails_before_creating_output(self):
+        for key,value in [('harness_ref',r.G1_SOURCE),('manifest_sha256',r.G1_MANIFEST),
+                          ('backend_tree',r.G1_BACKEND),('lock_sha256',r.G1_LOCK),
+                          ('harness_ref','b'*40),('manifest_sha256','b'*64)]:
+            output=self.root/'must-not-create'
+            with self.subTest(key=key),git_objects_only(),self.assertRaises(RuntimeError):
+                r.context('prepare',REPO,output,**{**self.args,key:value})
+            self.assertFalse(output.exists())
+
+    def test_copied_context_rejects_byte_mode_deletion_symlink_extra_path_and_rehashed_manifest(self):
+        for problem in ['byte','mode','deleted','symlink','extra','manifest']:
+            path=Path(tempfile.mkdtemp(dir=self.root))/'copy';shutil.copytree(self.source,path)
+            target=path/'backend/vendor/minimatch-compat/index.cjs'
+            if problem=='byte':target.write_bytes(target.read_bytes()+b'\n')
+            elif problem=='mode':target.chmod(0o755)
+            elif problem=='deleted':target.unlink()
+            elif problem=='symlink':target.unlink();target.symlink_to(self.source/'backend/vendor/minimatch-compat/index.cjs')
+            elif problem=='extra':(target.parent/'foreign.cjs').write_text('unapproved')
+            else:
+                manifest=path/'source-manifest.json';data=json.loads(manifest.read_bytes())
+                data['backendTree']='b'*40;manifest.write_text(json.dumps(data))
+            with self.subTest(problem=problem),self.assertRaises(RuntimeError):self.verify(path)
+            if problem=='manifest':
+                import hashlib
+                with self.assertRaises(RuntimeError):self.verify(path,manifest_sha256=hashlib.sha256(manifest.read_bytes()).hexdigest())
+
+    def test_identical_backend_without_reviewed_ancestry_is_rejected(self):
+        repo=self.root/'unrelated'
+        subprocess.run(['git','clone','--shared','--no-checkout',str(REPO),str(repo)],check=True,capture_output=True)
+        for key,value in [('user.name','Offline fixture'),('user.email','fixture@example.invalid')]:
+            subprocess.run(['git','-C',str(repo),'config',key,value],check=True)
+        tree=r.git(REPO,'rev-parse',self.ref+'^{tree}').decode().strip()
+        root=subprocess.check_output(['git','-C',str(repo),'commit-tree',tree,'-m','No reviewed parent']).decode().strip()
+        subprocess.run(['git','-C',str(repo),'checkout','--detach',root],check=True,capture_output=True)
+        self.assertEqual(r.git(repo,'rev-parse',root+':backend').decode().strip(),r.G1_APPROVED_BACKEND)
+        with git_objects_only(),self.assertRaises(RuntimeError):
+            r.context('prepare',repo,self.root/'unrelated-output',**{**self.args,'build_ref':root,'image':r.IMAGE_PREFIX+root})
+
+
 if __name__ == '__main__':
     unittest.main()
