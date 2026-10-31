@@ -40,6 +40,8 @@ function activeSupport(updatedAt = "2026-09-30T12:00:00.000Z") {
 }
 
 async function setup(page, options = {}) {
+  // Keep expiry fixtures deterministic without freezing timers or weakening date validation.
+  await page.clock.setFixedTime(new Date("2026-10-01T12:00:00.000Z"));
   let subscription = options.subscription || baseSubscription();
   let stale = Boolean(options.stale);
   let holdMutation = Boolean(options.holdMutation);
