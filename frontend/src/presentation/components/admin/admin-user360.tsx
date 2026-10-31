@@ -100,7 +100,6 @@ export function AdminUser360({
             {user.fullName || "İsim belirtilmemiş"}
           </h2>
           <p className="mt-1 break-all text-sm text-muted-foreground">{user.email}</p>
-          <p className="mt-2 break-all font-mono text-xs text-muted-foreground">{user.id}</p>
         </div>
         <span
           className={`rounded-full border px-3 py-1 text-xs font-semibold ${user.isActive ? "text-emerald-700 dark:text-emerald-300" : "text-destructive"}`}

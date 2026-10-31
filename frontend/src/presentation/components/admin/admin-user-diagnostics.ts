@@ -69,7 +69,7 @@ export function userDiagnoses(
   ];
   const unavailable = (status: string, label: string) =>
     status === "loading"
-      ? `${label} yükleniyor; henüz doğrulanamadı.`
+      ? `${label} kontrolü sürüyor; henüz doğrulanamadı.`
       : status === "unavailable"
         ? `${label} için gerekli yetki yok veya bu hesap türünde desteklenmiyor.`
         : `${label} alınamadı; diğer bölümler kullanılabilir.`;
