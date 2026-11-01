@@ -27,81 +27,156 @@ jobs:
         shell: bash
         run: |
           python3 - <<'PY'
-          import json, subprocess
-          PROJECT='project-a2e260c1-839d-4f1d-b90'
-          REGION='europe-west1'
-          def gcloud(*args):
-              result=subprocess.run(['gcloud',*args,'--project',PROJECT,'--format=json'],
-                                    capture_output=True,text=True,timeout=45,check=False)
-              if result.returncode:
-                  return None
+          import copy, hashlib, json, re, subprocess
+
+          PROJECT = 'project-a2e260c1-839d-4f1d-b90'
+          REGION = 'europe-west1'
+          BACK, FRONT = 'diewish-backend-staging', 'diewish-frontend-staging'
+          OLD, NEW = BACK + '-00481-biq', BACK + '-00485-kot'
+          REVISIONS = (OLD, BACK + '-00484-nov', NEW, FRONT + '-00247-muc', FRONT + '-00249-ban')
+          SOURCE = '84d843ca9ac4711ca3e41081a6ef5bd5e5076dbf'
+          # Exact historical release.json, artifact 13087330240; no raw spec or secret values.
+          ARCHIVE = '6f330d0fc5eb5c7db8aedbb24bff4404c38373372c84921987ee34f68a849e40'
+          BASE_SPEC = '5e52ef3894577b1dbc19a561e0f5436f6f8a76710f5bc14c38db7bf32041f3d9'
+          BASE_STATUS = '524cb23021fe440079322fbfe54eb80219812ac303483ba7d219180264361351'
+          IMAGE_PREFIX = REGION + '-docker.pkg.dev/' + PROJECT + '/diewish-staging/'
+          FLAGS = ('STAGING_AUTOMATION_ENABLED', 'SCHEDULER_TRIGGER_ENABLED', 'COACH_SYNC_ENABLED', 'NUTRITION_JOBS_ENABLED')
+
+          class NoGo(Exception):
+              pass
+
+          def require(ok, code):
+              if not ok:
+                  raise NoGo(code)
+
+          def digest(value):
+              # Match the existing release guard's canonical serialization exactly.
+              return hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
+
+          def read(kind, name):
+              allowed = {'services': (BACK, FRONT), 'revisions': REVISIONS, 'scheduler': ('diewish',)}
+              require(name in allowed.get(kind, ()), 'TARGET_NOT_ALLOWED')
+              args = (['scheduler', 'jobs', 'list', '--location', REGION] if kind == 'scheduler' else
+                      ['run', kind, 'describe', name, '--region', REGION])
+              label = kind + ':' + name
               try:
-                  return json.loads(result.stdout)
-              except (ValueError,TypeError):
-                  return None
-          def revision_data(name):
-              obj=gcloud('run','revisions','describe',name,'--region',REGION)
-              if not obj: return {'revision':name,'state':'METADATA_UNAVAILABLE'}
-              spec=obj.get('spec',{})
-              container=(spec.get('containers') or [{}])[0]
-              secret_refs={}
-              flags={}
-              for item in container.get('env',[]):
-                  key=item.get('name','')
-                  ref=item.get('valueFrom',{}).get('secretKeyRef')
-                  if key in ('DATABASE_URL','DIRECT_DATABASE_URL','JWT_ACCESS_SECRET','JWT_REFRESH_SECRET'):
-                      secret_refs[key]=({'name':ref.get('name'),'version':ref.get('key')} if ref else 'NOT_SECRET_REFERENCE')
-                  if key in ('DIEWISH_ENVIRONMENT','DIEWISH_APPLICATION_SHA','STAGING_AUTOMATION_ENABLED','SCHEDULER_TRIGGER_ENABLED','COACH_SYNC_ENABLED','NUTRITION_JOBS_ENABLED','DIEWISH_STAGING_HOST_ROUTING_ENABLED'):
-                      flags[key]=item.get('value','SECRET_REFERENCE_OR_ABSENT')
-              return {'revision':name,'image':container.get('image'),'imageDigest':obj.get('status',{}).get('imageDigest'),
-                      'serviceAccount':spec.get('serviceAccountName'),'secretReferences':secret_refs,
-                      'flags':flags,'containerConcurrency':spec.get('containerConcurrency'),
-                      'resources':container.get('resources'), 'timeoutSeconds':spec.get('timeoutSeconds')}
-          out={'mode':'READ_ONLY','project':PROJECT,'region':REGION,'decision':'NO_GO_PENDING_REVIEW'}
-          for name,label in [('diewish-backend-staging','backend'),('diewish-frontend-staging','frontend')]:
-              item=gcloud('run','services','describe',name,'--region',REGION)
-              if not item:
-                  out[label]={'error':'CLOUD_RUN_METADATA_UNAVAILABLE'}
-                  continue
-              state=item.get('status',{})
-              traffic=state.get('traffic',[])
-              revisions=sorted(set([x.get('revisionName') for x in traffic if x.get('revisionName')]+
-                                   [state.get('latestReadyRevisionName')] if state.get('latestReadyRevisionName') else
-                                   [x.get('revisionName') for x in traffic if x.get('revisionName')]))
-              out[label]={'service':name,'url':state.get('url'),
-                          'latestReadyRevision':state.get('latestReadyRevisionName'),
-                          'traffic':[{k:x.get(k) for k in ('revisionName','percent','tag','url') if k in x} for x in traffic],
-                          'revisions':[revision_data(x) for x in revisions]}
-          def secret_metadata_status(*args):
-              p=subprocess.run(['gcloud',*args,'--project',PROJECT,'--format=json'],
-                               capture_output=True,text=True,timeout=45,check=False)
-              if p.returncode==0: return 'READABLE'
-              error=(p.stderr or '').upper()
-              if 'PERMISSION_DENIED' in error or '403' in error: return 'PERMISSION_DENIED'
-              if 'NOT_FOUND' in error or '404' in error or 'NOT FOUND' in error: return 'NOT_FOUND'
-              if 'UNAUTHENTICATED' in error or '401' in error: return 'UNAUTHENTICATED'
-              return 'UNKNOWN_UNAVAILABLE'
-          status=secret_metadata_status('secrets','describe','diewish-staging-test2-database-url')
-          out['test2SecretMetadataStatus']=status
-          out['dedicatedTest2SecretExists']='CONFIRMED' if status=='READABLE' else 'NOT_CONFIRMED'
-          new=gcloud('secrets','describe','diewish-staging-test2-database-url') if status=='READABLE' else None
-          if new:
-              versions=gcloud('secrets','versions','list','--secret','diewish-staging-test2-database-url')
-              out['test2SecretVersions']=({'status':'METADATA_OK','versions':[
-                  {'version':v.get('name','').rsplit('/',1)[-1],'state':v.get('state')}
-                  for v in versions]} if isinstance(versions,list) else {'status':'METADATA_UNAVAILABLE'})
-              policy=gcloud('secrets','get-iam-policy','diewish-staging-test2-database-url')
-              runtime='serviceAccount:diewish-staging-runtime@'+PROJECT+'.iam.gserviceaccount.com'
-              if isinstance(policy,dict):
-                  direct=any(x.get('role')=='roles/secretmanager.secretAccessor' and
-                             runtime in x.get('members',[]) and not x.get('condition')
-                             for x in policy.get('bindings',[]))
-                  out['test2SecretRuntimeAccessor']={'directBinding':direct,'inheritedBinding':'NOT_CHECKED'}
+                  p = subprocess.run(['gcloud', *args, '--project', PROJECT, '--format=json'],
+                                     capture_output=True, text=True, timeout=30, check=False)
+              except (OSError, subprocess.TimeoutExpired):
+                  raise NoGo(label + ':READ_UNAVAILABLE') from None
+              if p.returncode:
+                  error = (p.stderr or '').upper()
+                  reason = next((x for x in ('PERMISSION_DENIED', 'UNAUTHENTICATED', 'NOT_FOUND') if x in error), 'READ_FAILED')
+                  raise NoGo(label + ':' + reason)
+              try:
+                  obj = json.loads(p.stdout)
+              except (ValueError, TypeError):
+                  raise NoGo(label + ':INVALID_JSON') from None
+              if kind == 'scheduler':
+                  require(isinstance(obj, list), 'SCHEDULER_INVALID_RESPONSE')
               else:
-                  out['test2SecretRuntimeAccessor']={'status':'IAM_METADATA_UNAVAILABLE'}
-          jobs=gcloud('scheduler','jobs','list','--location',REGION)
-          out['schedulerStates']=([{'name':j.get('name','').rsplit('/',1)[-1],'state':j.get('state')} for j in jobs
-                                   if j.get('name','').rsplit('/',1)[-1].startswith('diewish')] if isinstance(jobs,list)
-                                  else 'UNAVAILABLE')
-          print(json.dumps(out,indent=2,sort_keys=True))
+                  require(isinstance(obj, dict) and obj.get('metadata', {}).get('name') == name, 'RESOURCE_IDENTITY_MISMATCH')
+              return obj
+
+          def traffic(rows):
+              require(isinstance(rows, list) and rows, 'TRAFFIC_UNAVAILABLE')
+              result = []
+              for row in rows:
+                  require(isinstance(row, dict), 'TRAFFIC_INVALID')
+                  out = {}
+                  for key in ('revisionName', 'tag'):
+                      if key in row:
+                          require(isinstance(row[key], str) and re.fullmatch(r'[a-z][a-z0-9-]{0,62}', row[key]), 'TRAFFIC_ID_INVALID')
+                          out[key] = row[key]
+                  if 'percent' in row:
+                      require(type(row['percent']) is int and 0 <= row['percent'] <= 100, 'TRAFFIC_PERCENT_INVALID')
+                      out['percent'] = row['percent']
+                  if 'latestRevision' in row:
+                      require(type(row['latestRevision']) is bool, 'TRAFFIC_LATEST_INVALID')
+                      out['latestRevision'] = row['latestRevision']
+                  result.append(out)
+              return result
+
+          def rows_at_old(rows):
+              # Diagnostic only: inverse of exactly one known zero-default-traffic tag move.
+              traffic(rows)
+              result = copy.deepcopy(rows)
+              selected = [x for x in result if x.get('tag') == 'diewish-test2']
+              require(len(selected) == 1, 'TEST2_TAG_AMBIGUOUS')
+              row = selected[0]
+              require(row.get('revisionName') in (OLD, NEW) and row.get('percent', 0) == 0 and
+                      not row.get('latestRevision', False), 'TEST2_TAG_FOREIGN_OR_AMBIGUOUS')
+              row['revisionName'] = OLD
+              return result
+
+          def observation(obj):
+              require(isinstance(obj.get('spec'), dict), 'SPEC_UNAVAILABLE')
+              state, meta = obj.get('status', {}), obj['metadata']
+              require(meta.get('generation') is not None and str(meta['generation']) == str(state.get('observedGeneration')) and
+                      any(x.get('type') == 'Ready' and x.get('status') == 'True' for x in state.get('conditions', [])),
+                      'SERVICE_NOT_RECONCILED')
+              return {'specHash': digest(obj['spec']), 'specTraffic': traffic(obj['spec'].get('traffic')),
+                      'statusTraffic': traffic(state.get('traffic')),
+                      'statusTrafficHash': digest(state['traffic']), 'generation': str(meta['generation'])}
+
+          def revision_data(obj):
+              spec = obj.get('spec', {})
+              containers = spec.get('containers', [])
+              require(len(containers) == 1, 'REVISION_CONTAINER_INVALID')
+              container = containers[0]
+              image, image_digest = container.get('image', ''), obj.get('status', {}).get('imageDigest', '')
+              for value in (image, image_digest):
+                  require(isinstance(value, str) and re.fullmatch(re.escape(IMAGE_PREFIX) + r'(backend|frontend)(?:@sha256:[a-f0-9]{64}|:[a-zA-Z0-9_.-]{1,128})', value), 'IMAGE_ID_INVALID')
+              env = {x['name']: x for x in container.get('env', [])}
+              source = env.get('DIEWISH_APPLICATION_SHA', {}).get('value', '')
+              return {'revision': obj['metadata']['name'], 'image': image, 'imageDigest': image_digest,
+                      'specHash': digest(spec), 'matchesReleaseSource': source == SOURCE,
+                      'backendAutomationDisabled': (all(env.get(k, {}).get('value') == 'false' for k in FLAGS)
+                      if obj['metadata']['name'].startswith(BACK + '-') else None)}
+
+          def run():
+              backend, frontend = read('services', BACK), read('services', FRONT)
+              before = {BACK: observation(backend), FRONT: observation(frontend)}
+              revisions = [revision_data(read('revisions', name)) for name in REVISIONS]
+              jobs = read('scheduler', 'diewish')
+              schedulers = []
+              for job in jobs:
+                  name = job.get('name', '').rsplit('/', 1)[-1]
+                  if name.startswith('diewish'):
+                      require(re.fullmatch(r'diewish[a-z0-9-]{0,56}', name) is not None, 'SCHEDULER_NAME_INVALID')
+                      state = job.get('state')
+                      require(state in ('PAUSED', 'ENABLED', 'DISABLED', 'UPDATE_FAILED', 'STATE_UNSPECIFIED'), 'SCHEDULER_STATE_INVALID')
+                      schedulers.append({'name': name, 'state': state})
+              stable = all(observation(read('services', name)) == before[name] for name in (BACK, FRONT))
+              out = {'mode': 'READ_ONLY', 'decision': 'NO_GO_PENDING_REVIEW', 'baselineArtifact': 13087330240,
+                     'baselineArchiveSha256': ARCHIVE, 'baselineSource': SOURCE, 'services': before, 'revisions': revisions,
+                     'schedulerStates': schedulers, 'allSchedulersPaused': bool(schedulers) and all(x['state'] == 'PAUSED' for x in schedulers),
+                     'observationsStable': stable,
+                     'candidateDefaultTraffic': {name: sum(x.get('percent', 0) for x in backend['status']['traffic']
+                                                         if x.get('revisionName') == name) for name in REVISIONS[1:3]},
+                     'backendSpecAtOldTagMatchesBaseline': False, 'backendStatusAtOldTagMatchesBaseline': False}
+              tags = [x for x in backend['status']['traffic'] if x.get('tag') == 'diewish-test2']
+              out['test2State'] = ('OLD' if tags[0].get('revisionName') == OLD else
+                                   'APPROVED_CANDIDATE' if tags[0].get('revisionName') == NEW else 'FOREIGN') if len(tags) == 1 else 'AMBIGUOUS'
+              try:
+                  spec = copy.deepcopy(backend['spec'])
+                  spec['traffic'] = rows_at_old(spec.get('traffic'))
+                  status = sorted(rows_at_old(backend['status'].get('traffic')), key=lambda x: (x.get('tag', ''), x.get('revisionName', '')))
+                  out['backendSpecAtOldTagMatchesBaseline'] = digest(spec) == BASE_SPEC
+                  out['backendStatusAtOldTagMatchesBaseline'] = digest(status) == BASE_STATUS
+              except NoGo:
+                  pass  # Preserve the safe observed traffic, but never accept an unknown transform.
+              print(json.dumps(out, indent=2, sort_keys=True))
+              require(stable, 'CONCURRENT_SERVICE_CHANGE')
+              require(out['allSchedulersPaused'], 'SCHEDULER_NOT_PAUSED_OR_MISSING')
+              require(out['backendSpecAtOldTagMatchesBaseline'] and out['backendStatusAtOldTagMatchesBaseline'], 'BACKEND_DIFF_REQUIRES_REVIEW')
+
+          try:
+              run()
+          except NoGo as error:
+              print(json.dumps({'mode': 'READ_ONLY', 'decision': 'NO_GO', 'reason': str(error)}))
+              raise SystemExit(1) from None
+          except Exception:
+              print(json.dumps({'mode': 'READ_ONLY', 'decision': 'NO_GO', 'reason': 'INVALID_METADATA_OR_INTERNAL_ERROR'}))
+              raise SystemExit(1) from None
           PY
