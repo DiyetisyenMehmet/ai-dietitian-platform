@@ -46,12 +46,13 @@ test('no generic database fallback, migration, destructive cleanup or Admin oper
 
 function fixture(problem) {
   const plans = new Map(); let email, food = 0, water = 0, deleted = false, writes = 0;
+  let consented = false, onboarded = false;
   const userId = '11111111-1111-4111-8111-111111111111';
   const response = (data, status = 200) => ({ status, headers: { getSetCookie: () => [] }, json: async () => status < 400 ? { success: true, data } : { success: false, error: { code: 'EXPECTED_NEGATIVE' } } });
   const db = {
     $queryRawUnsafe: async () => [{ name: 'diewish_staging_test2', ready: true }],
     user: { findUnique: async () => ({ id: userId, email, role: problem === 'foreign-role' ? 'ADMIN' : 'USER', createdAt: new Date() }) },
-    nutritionPlan: { create: async ({ data }) => { assert.equal(data.userId, userId); writes++; const id = require('node:crypto').randomUUID(); plans.set(id, { data, rows: new Map() }); return { id }; } },
+    nutritionPlan: { create: async ({ data }) => { assert.equal(data.userId, userId); assert.equal(onboarded, true); writes++; const id = require('node:crypto').randomUUID(); plans.set(id, { data, rows: new Map() }); return { id }; } },
     mealLog: { count: async ({ where }) => { assert.equal(where.userId, userId); return food; } },
     waterLog: { count: async ({ where }) => { assert.equal(where.userId, userId); return water; } },
     mealCheckIn: { findMany: async ({ where }) => { assert.equal(where.userId, userId); return problem === 'missing-persistence' ? [] : [...plans.get(where.planId).rows.values()]; } },
@@ -60,9 +61,22 @@ function fixture(problem) {
     assert.equal(init.redirect, 'error');
     const address = new URL(url); const path = address.pathname.slice(4);
     if (path === '/auth/register') { email = JSON.parse(init.body).email; return response({ tokens: { accessToken: 'synthetic' } }, 201); }
-    if (path === '/auth/me') return response({ user: { id: userId, email, role: 'USER' } });
+    if (path === '/auth/me') return response({ user: { id: userId, email, role: 'USER', onboardingCompleted: onboarded } });
     if (path === '/legal/documents') return response({ documents: [{ type: 'KVKK_EXPLICIT_CONSENT', consentable: true }] });
-    if (path === '/legal/consents') return response({});
+    if (path === '/legal/consents') { consented = true; return response({}); }
+    if (path === '/onboarding/') {
+      assert.equal(init.method, 'POST');
+      assert.equal(consented, true);
+      const profile = JSON.parse(init.body);
+      assert.equal(profile.fullName, 'Synthetic G1 Journey');
+      assert.deepEqual(profile.healthConditions, []);
+      assert.deepEqual(profile.allergies, []);
+      if (problem === 'onboarding-rejected') return response({}, 403);
+      if (problem === 'onboarding-unconfirmed') return response({ onboardingCompleted: false });
+      onboarded = problem !== 'onboarding-false-success';
+      return response({ onboardingCompleted: true });
+    }
+    if (path.startsWith('/tracking/') && !onboarded) return response({}, 403);
     if (path.startsWith('/tracking/meal-check-ins')) {
       const parts = path.split('/'); const id = address.searchParams.get('planId') || parts[3]; const plan = plans.get(id);
       if (init.method === 'GET') {
@@ -97,11 +111,14 @@ test('the complete acceptance runner verifies real-contract ordering with synthe
   await run({ base: 'https://staging.diewish.com', sha, databaseUrl: url, ...f });
   assert.deepEqual(f.inspect(), { writes: 3, deleted: true });
 });
-for (const problem of ['foreign-role', 'missing-persistence', 'wrong-revision', 'skip-adds-calories', 'food-auto-confirms']) {
+for (const problem of ['foreign-role', 'missing-persistence', 'wrong-revision', 'skip-adds-calories', 'food-auto-confirms', 'onboarding-rejected', 'onboarding-unconfirmed', 'onboarding-false-success']) {
   test(`the runner rejects ${problem} rather than reporting successful live acceptance`, async () => {
     const f = fixture(problem);
     await assert.rejects(run({ base: 'https://staging.diewish.com', sha, databaseUrl: url, ...f }));
     if (problem === 'foreign-role') assert.deepEqual(f.inspect(), { writes: 0, deleted: false });
-    else assert.equal(f.inspect().deleted, true);
+    else {
+      assert.equal(f.inspect().deleted, true);
+      if (problem.startsWith('onboarding-')) assert.equal(f.inspect().writes, 0);
+    }
   });
 }
