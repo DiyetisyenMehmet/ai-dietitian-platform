@@ -36,7 +36,7 @@ async function run({ base, sha, databaseUrl, db, request = fetch }) {
   let token, owned = false;
   const cookies = new Map();
   async function call(path, method = 'GET', body, revision, expected = 200, auth = true) {
-    assert.ok(/^\/(auth|legal|tracking|account)\//.test(path));
+    assert.ok(/^\/(auth|legal|onboarding|tracking|account)\//.test(path));
     const headers = { Origin: APP, 'Content-Type': 'application/json' };
     if (auth && token) headers.Authorization = `Bearer ${token}`;
     if (cookies.size) headers.Cookie = [...cookies].map(([key, value]) => `${key}=${value}`).join('; ');
@@ -68,6 +68,18 @@ async function run({ base, sha, databaseUrl, db, request = fetch }) {
   try {
     for (const doc of (await call('/legal/documents')).documents.filter(d => d.consentable))
       await call('/legal/consents', 'POST', { type: doc.type });
+    // Use the normal consent-protected API; never bypass the first-run gate.
+    const onboarding = await call('/onboarding/', 'POST', {
+      fullName: 'Synthetic G1 Journey', dateOfBirth: '1990-01-01',
+      gender: 'PREFER_NOT_TO_SAY', heightCm: 170, currentWeightKg: 70, targetWeightKg: 70,
+      activityLevel: 'SEDENTARY', healthConditions: [], allergies: [],
+      dietaryPreference: 'OMNIVORE', dailyWaterGoalMl: 2000,
+    });
+    assert.equal(onboarding.onboardingCompleted, true);
+    const onboarded = (await call('/auth/me')).user;
+    assert.equal(onboarded.id, user.id);
+    assert.equal(onboarded.role, 'USER');
+    assert.equal(onboarded.onboardingCompleted, true);
     const date = new Date().toISOString().slice(0, 10);
     for (const days of [7, 14, 30]) {
       const plan = await db.nutritionPlan.create({ data: planData(user.id, days, date) });
