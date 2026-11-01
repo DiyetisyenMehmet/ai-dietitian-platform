@@ -254,7 +254,7 @@ ERROR serviceAccount=person@example.com
             self.assertIn(guard, cutover['if'])
         self.assertEqual(cutover['environment'], 'staging')
         self.assertEqual(cutover['permissions'], {'contents':'read','actions':'read','id-token':'write'})
-        self.assertEqual(workflow['concurrency'], {'group':'diewish-staging-preview','cancel-in-progress':'false'})
+        self.assert_release_concurrency(workflow)
         steps=cutover['steps']
         auth=next(i for i,s in enumerate(steps) if s.get('uses','').startswith('google-github-actions/auth@'))
         self.assertTrue(any(s.get('run') == 'python3 scripts/staging-frontend-release.py authorize' for s in steps[:auth]))
@@ -265,6 +265,36 @@ ERROR serviceAccount=person@example.com
         builder=Path('.github/cloudbuild/frontend-staging.yaml').read_text()
         self.assertIn('--label=DIEWISH_APPLICATION_SHA=${_GIT_SHA}',builder)
         self.assertIn('test "$(git rev-parse HEAD)" = "${_GIT_SHA}"',builder)
+
+    def assert_release_concurrency(self, workflow):
+        self.assertEqual(workflow.get('concurrency'),
+                         {'group':'diewish-g1-staging-release','cancel-in-progress':'false','queue':'max'})
+        self.assertEqual(workflow['jobs']['cutover'].get('concurrency'),
+                         {'group':'diewish-staging-preview','cancel-in-progress':'false','queue':'max'})
+        self.assertNotIn('concurrency', workflow['jobs']['offline-guards'])
+        # Other existing publishers still share the exact cloud mutation lock.
+        staging = yaml.load(Path('.github/workflows/staging-preview.yml').read_text(), Loader=yaml.BaseLoader)
+        automation = yaml.load(Path('.github/workflows/staging-automation-pause.yml').read_text(), Loader=yaml.BaseLoader)
+        shared = workflow['jobs']['cutover']['concurrency']['group']
+        self.assertEqual(shared, staging['concurrency']['group'])
+        self.assertEqual(shared, automation['jobs']['release']['concurrency']['group'])
+        self.assertNotEqual(workflow['concurrency']['group'].lower(), shared.lower())
+
+    def test_release_queue_rejects_missing_shared_lock_cancellation_or_self_deadlock(self):
+        workflow = yaml.load(Path(r.WORKFLOW).read_text(), Loader=yaml.BaseLoader)
+        self.assert_release_concurrency(workflow)
+        for scope in ['workflow', 'cutover']:
+            for field, value in [('group','foreign'), ('group','diewish-g1-staging-release' if scope == 'cutover' else 'diewish-staging-preview'),
+                                 ('cancel-in-progress','true'), ('queue','single'), ('queue',None)]:
+                bad = copy.deepcopy(workflow)
+                lock = bad['concurrency'] if scope == 'workflow' else bad['jobs']['cutover']['concurrency']
+                if value is None: del lock[field]
+                else: lock[field] = value
+                with self.subTest(scope=scope, field=field, value=value), self.assertRaises(AssertionError):
+                    self.assert_release_concurrency(bad)
+        bad = copy.deepcopy(workflow)
+        del bad['jobs']['cutover']['concurrency']
+        with self.assertRaises(AssertionError): self.assert_release_concurrency(bad)
 
     def test_paused_scheduler_is_required_without_mutation(self):
         with patch.object(r,'cloud',return_value={'state':'PAUSED'}) as cloud:
